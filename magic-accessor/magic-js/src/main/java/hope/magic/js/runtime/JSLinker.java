@@ -323,136 +323,18 @@ public class JSLinker {
 	}
 	//endregion
 
-	//region ChainedCallSite (IC 状态机与 Megamorphic 防护)
-
-	public static class ChainedCallSite extends MutableCallSite {
-		public static final int          MAX_CHAIN_DEPTH = 5; // Shape 种类 <= 5 时使用链式 Guard (覆盖常见 4~5 形态多态), > 5 时自动演化为 Megamorphic 缓存表
-		private             int          chainDepth      = 0;
-		private volatile    boolean      megamorphic     = false;
-		private             MethodHandle megamorphicTarget;
-
-		// Offset-Equivalent IC (同偏移多态状态)
-		private       int                             commonOffset     = -1;
-		private       byte                            commonType       = -1;
-		private       boolean                         offsetEquivalent = true;
-		/** shape → observed-offset（插入有序，用于 tableSwitch 构造） */
-		private final LinkedHashMap<JSShape, Integer> shapeOffsetMap   = new LinkedHashMap<>(4);
-
-		// Megamorphic 多槽直接映射表 (Direct Mapped Fast Shape->Offset Cache)
-		public static final int       CACHE_SIZE  = 8;
-		public static final int       CACHE_MASK  = CACHE_SIZE - 1;
-		public final        JSShape[] shapeCache  = new JSShape[CACHE_SIZE];
-		public final        int[]     offsetCache = new int[CACHE_SIZE];
-
-		public ChainedCallSite(MethodType type, MethodHandle megamorphicTarget) {
-			super(type);
-			this.megamorphicTarget = megamorphicTarget;
-		}
-
-		public void setMegamorphicTarget(MethodHandle target) {
-			this.megamorphicTarget = target;
-		}
-
-		public MethodHandle getMegamorphicTarget() {
-			return this.megamorphicTarget;
-		}
-
-		private MethodHandle initialFallback;
-
-		public void setInitialFallback(MethodHandle initialFallback) {
-			this.initialFallback = initialFallback;
-		}
-
-		public MethodHandle getInitialFallback() {
-			return initialFallback;
-		}
-
-		public boolean isMegamorphic() {
-			return megamorphic;
-		}
-
-		public int getChainDepth() {
-			return chainDepth;
-		}
-
-		public synchronized void recordShape(JSShape shape, int offset, byte type) {
-			if (!shapeOffsetMap.containsKey(shape)) {
-				shapeOffsetMap.put(shape, offset);
-				if (commonOffset == -1) {
-					commonOffset = offset;
-					commonType = type;
-				} else if (commonOffset != offset || commonType != type) {
-					offsetEquivalent = false;
-				}
-			}
-		}
-
-		public boolean isOffsetEquivalent() {
-			return offsetEquivalent && commonOffset >= 0 && shapeOffsetMap.size() >= 2;
-		}
-
-		public int getCommonOffset() {
-			return commonOffset;
-		}
-
-		public byte getCommonType() {
-			return commonType;
-		}
-
-		/** 返回已观测到的 Shape 列表（保持插入顺序）。 */
-		public List<JSShape> getObservedShapes() {
-			return new ArrayList<>(shapeOffsetMap.keySet());
-		}
-
-		/** 快照当前所有 (JSShape, offset) 对（插入顺序），用于构建 tableSwitch。 */
-		public synchronized PolySnapshot snapshotPoly() {
-			int       n       = shapeOffsetMap.size();
-			JSShape[] shapes  = new JSShape[n];
-			int[]     offsets = new int[n];
-			int       i       = 0;
-			for (Map.Entry<JSShape, Integer> e : shapeOffsetMap.entrySet()) {
-				shapes[i] = e.getKey();
-				offsets[i] = e.getValue();
-				i++;
-			}
-			return new PolySnapshot(shapes, offsets);
-		}
-
-		public synchronized boolean installGuardOrSwitchMegamorphic(MethodHandle test, MethodHandle fastTarget) {
-			if (megamorphic) return false;
-			chainDepth++;
-			if (chainDepth > MAX_CHAIN_DEPTH) {
-				megamorphic = true;
-				if (megamorphicTarget != null) setTarget(megamorphicTarget.asType(type()));
-				return false;
-			}
-			MethodHandle guard = MethodHandles.guardWithTest(test, fastTarget.asType(type()), getTarget());
-			setTarget(guard);
-			return true;
-		}
-
-		/**
-		 * 挂载扁平多态 Jump-Table 守卫（单层 switch，彻底消除 N 层 LambdaForm 嵌套）。
-		 * 仅在 chainDepth >= 2 && !offsetEquivalent 时由 Fallback 方法调用。
-		 */
-		public synchronized void installFlatPolyGuard(MethodHandle flatSwitch) {
-			if (!megamorphic) setTarget(flatSwitch.asType(type()));
-		}
-	}
-	//endregion
-
 	//region PolySnapshot & Flat Polymorphic Jump-Table Guard (扁平多态 Switch 守卫)
 
 	/** 多态 IC 快照：shape 数组（插入顺序）+ 每个 shape 对应的槽位 offset。 */
 	public record PolySnapshot(JSShape[] shapes, int[] offsets) { }
 
 	/** JDK 17+ 是否可用 MethodHandles.tableSwitch（反射探测，类加载时确定）。 */
-	private static final boolean                  SUPPORTS_TABLE_SWITCH;
-	private static final java.lang.reflect.Method MTH_TABLE_SWITCH;
+	private static final boolean SUPPORTS_TABLE_SWITCH;
+	private static final Method  MTH_TABLE_SWITCH;
 
 	static {
-		boolean                  ok = false;
-		java.lang.reflect.Method m  = null;
+		boolean ok = false;
+		Method  m  = null;
 		try {
 			m = MethodHandles.class.getMethod("tableSwitch", MethodHandle.class, MethodHandle[].class);
 			ok = true;
@@ -538,9 +420,7 @@ public class JSLinker {
 		return buildFlatPolySwitchObjectLinear(shapes, offsets, n, fallback);
 	}
 
-	/**
-	 * 构建异槽多态扁平 Switch 守卫（double getter 版）。签名 {@code (Object) -> double}。
-	 */
+	/** 构建异槽多态扁平 Switch 守卫（double getter 版）。签名 {@code (Object) -> double}。 */
 	public static MethodHandle buildFlatPolySwitchDouble(PolySnapshot snap, MethodHandle fallback) {
 		JSShape[] shapes  = snap.shapes();
 		int[]     offsets = snap.offsets();
@@ -584,102 +464,182 @@ public class JSLinker {
 		return buildFlatPolySwitchDoubleLinear(shapes, offsets, n, fallback);
 	}
 
-	/**
-	 * 构建异槽多态扁平 Switch 守卫（Object setter 版）。签名 {@code (Object, Object) -> void}。
-	 */
+	/** 构建异槽多态扁平 Switch 守卫（int getter 版）。签名 {@code (Object) -> int}。 */
+	public static MethodHandle buildFlatPolySwitchInt(PolySnapshot snap, MethodHandle fallback) {
+		JSShape[] shapes  = snap.shapes();
+		int[]     offsets = snap.offsets();
+		int       n       = shapes.length;
+
+		if (!SUPPORTS_TABLE_SWITCH || n == 0) return buildFlatPolySwitchIntLinear(shapes, offsets, n, fallback);
+
+		try {
+			int minId = Integer.MAX_VALUE, maxId = Integer.MIN_VALUE;
+			for (JSShape s : shapes) {
+				minId = Math.min(minId, s.id);
+				maxId = Math.max(maxId, s.id);
+			}
+			int span = maxId - minId + 1;
+
+			if (span <= n * 4 && span <= 64) {
+				MethodHandle fallbackWithSel = MethodHandles.dropArguments(fallback, 0, int.class);
+
+				MethodHandle[] targets = new MethodHandle[span];
+				Arrays.fill(targets, fallbackWithSel);
+
+				for (int i = 0; i < n; i++) {
+					int          idx        = shapes[i].id - minId;
+					int          off        = offsets[i];
+					MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_INT, 0, off);
+
+					MethodHandle exactTest     = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
+					MethodHandle guardedGetter = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), fallback);
+
+					targets[idx] = MethodHandles.dropArguments(guardedGetter, 0, int.class);
+				}
+
+				MethodHandle ts       = invokeTableSwitch(fallbackWithSel, targets);
+				MethodHandle selector = buildShapeIdSelector(minId, span);
+				return MethodHandles.foldArguments(ts, selector);
+			}
+		} catch (Throwable ignored) { }
+
+		return buildFlatPolySwitchIntLinear(shapes, offsets, n, fallback);
+	}
+
+	/** 构建异槽多态扁平 Switch 守卫（long getter 版）。签名 {@code (Object) -> long}。 */
+	public static MethodHandle buildFlatPolySwitchLong(PolySnapshot snap, MethodHandle fallback) {
+		JSShape[] shapes  = snap.shapes();
+		int[]     offsets = snap.offsets();
+		int       n       = shapes.length;
+
+		if (!SUPPORTS_TABLE_SWITCH || n == 0) return buildFlatPolySwitchLongLinear(shapes, offsets, n, fallback);
+
+		try {
+			int minId = Integer.MAX_VALUE, maxId = Integer.MIN_VALUE;
+			for (JSShape s : shapes) {
+				minId = Math.min(minId, s.id);
+				maxId = Math.max(maxId, s.id);
+			}
+			int span = maxId - minId + 1;
+
+			if (span <= n * 4 && span <= 64) {
+				MethodHandle fallbackWithSel = MethodHandles.dropArguments(fallback, 0, int.class);
+
+				MethodHandle[] targets = new MethodHandle[span];
+				Arrays.fill(targets, fallbackWithSel);
+
+				for (int i = 0; i < n; i++) {
+					int          idx        = shapes[i].id - minId;
+					int          off        = offsets[i];
+					MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_LONG, 0, off);
+
+					MethodHandle exactTest     = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
+					MethodHandle guardedGetter = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), fallback);
+
+					targets[idx] = MethodHandles.dropArguments(guardedGetter, 0, int.class);
+				}
+
+				MethodHandle ts       = invokeTableSwitch(fallbackWithSel, targets);
+				MethodHandle selector = buildShapeIdSelector(minId, span);
+				return MethodHandles.foldArguments(ts, selector);
+			}
+		} catch (Throwable ignored) { }
+
+		return buildFlatPolySwitchLongLinear(shapes, offsets, n, fallback);
+	}
+
+	/** 构建异槽多态扁平 Switch 守卫（Object setter 版）。签名 {@code (Object, Object) -> void}。 */
 	public static MethodHandle buildFlatPolySwitchSetterObject(PolySnapshot snap, MethodHandle fallback) {
 		JSShape[] shapes  = snap.shapes();
 		int[]     offsets = snap.offsets();
 		int       n       = shapes.length;
 
-		if (SUPPORTS_TABLE_SWITCH && n > 0) {
-			try {
-				int minId = Integer.MAX_VALUE, maxId = Integer.MIN_VALUE;
-				for (JSShape s : shapes) {
-					minId = Math.min(minId, s.id);
-					maxId = Math.max(maxId, s.id);
+		if (!SUPPORTS_TABLE_SWITCH || n == 0) return buildFlatPolySwitchSetterObjectLinear(shapes, offsets, n, fallback);
+
+		try {
+			int minId = Integer.MAX_VALUE, maxId = Integer.MIN_VALUE;
+			for (JSShape s : shapes) {
+				minId = Math.min(minId, s.id);
+				maxId = Math.max(maxId, s.id);
+			}
+			int span = maxId - minId + 1;
+
+			if (span <= n * 4 && span <= 64) {
+				// Fallback: (Object, Object) -> void  ==>  (int, Object, Object) -> void
+				MethodHandle fallbackWithSel = MethodHandles.dropArguments(fallback, 0, int.class);
+
+				MethodHandle[] targets = new MethodHandle[span];
+				Arrays.fill(targets, fallbackWithSel);
+
+				for (int i = 0; i < n; i++) {
+					int idx = shapes[i].id - minId;
+					int off = offsets[i];
+					MethodHandle fastSetter = off < 8
+					 ? MH_SET_SLOT_OBJECT[off]
+					 : MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT, 0, off);
+
+					MethodHandle exactTest     = MH_IS_EXACT_SHAPE_SETTER_OBJECT.bindTo(shapes[i]);
+					MethodHandle guardedSetter = MethodHandles.guardWithTest(exactTest, fastSetter.asType(fallback.type()), fallback);
+
+					targets[idx] = MethodHandles.dropArguments(guardedSetter, 0, int.class);
 				}
-				int span = maxId - minId + 1;
 
-				if (span <= n * 4 && span <= 64) {
-					// Fallback: (Object, Object) -> void  ==>  (int, Object, Object) -> void
-					MethodHandle fallbackWithSel = MethodHandles.dropArguments(fallback, 0, int.class);
+				// ts 签名: (int, Object, Object) -> void
+				MethodHandle ts = invokeTableSwitch(fallbackWithSel, targets);
+				// selector 签名: (Object target) -> int
+				MethodHandle selector = buildShapeIdSelector(minId, span);
 
-					MethodHandle[] targets = new MethodHandle[span];
-					Arrays.fill(targets, fallbackWithSel);
-
-					for (int i = 0; i < n; i++) {
-						int idx = shapes[i].id - minId;
-						int off = offsets[i];
-						MethodHandle fastSetter = off < 8
-						 ? MH_SET_SLOT_OBJECT[off]
-						 : MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT, 0, off);
-
-						MethodHandle exactTest     = MH_IS_EXACT_SHAPE_SETTER_OBJECT.bindTo(shapes[i]);
-						MethodHandle guardedSetter = MethodHandles.guardWithTest(exactTest, fastSetter.asType(fallback.type()), fallback);
-
-						targets[idx] = MethodHandles.dropArguments(guardedSetter, 0, int.class);
-					}
-
-					// ts 签名: (int, Object, Object) -> void
-					MethodHandle ts = invokeTableSwitch(fallbackWithSel, targets);
-					// selector 签名: (Object target) -> int
-					MethodHandle selector = buildShapeIdSelector(minId, span);
-
-					// foldArguments 将 selector(arg0) 的结果注入给 ts 的第 0 个参数，
-					// 剩余 (Object, Object) 保持不变传递，最终输出 (Object, Object) -> void
-					return MethodHandles.foldArguments(ts, selector);
-				}
-			} catch (Throwable ignored) { }
-		}
+				// foldArguments 将 selector(arg0) 的结果注入给 ts 的第 0 个参数，
+				// 剩余 (Object, Object) 保持不变传递，最终输出 (Object, Object) -> void
+				return MethodHandles.foldArguments(ts, selector);
+			}
+		} catch (Throwable ignored) { }
 
 		return buildFlatPolySwitchSetterObjectLinear(shapes, offsets, n, fallback);
 	}
 
-	/**
-	 * 构建异槽多态扁平 Switch 守卫（double setter 版）。签名 {@code (Object, double) -> void}。
-	 */
+	/** 构建异槽多态扁平 Switch 守卫（double setter 版）。签名 {@code (Object, double) -> void}。 */
 	public static MethodHandle buildFlatPolySwitchSetterDouble(PolySnapshot snap, MethodHandle fallback) {
 		JSShape[] shapes  = snap.shapes();
 		int[]     offsets = snap.offsets();
 		int       n       = shapes.length;
 
-		if (SUPPORTS_TABLE_SWITCH && n > 0) {
-			try {
-				int minId = Integer.MAX_VALUE, maxId = Integer.MIN_VALUE;
-				for (JSShape s : shapes) {
-					minId = Math.min(minId, s.id);
-					maxId = Math.max(maxId, s.id);
+		if (!SUPPORTS_TABLE_SWITCH || n <= 0) return buildFlatPolySwitchSetterDoubleLinear(shapes, offsets, n, fallback);
+
+		try {
+			int minId = Integer.MAX_VALUE, maxId = Integer.MIN_VALUE;
+			for (JSShape s : shapes) {
+				minId = Math.min(minId, s.id);
+				maxId = Math.max(maxId, s.id);
+			}
+			int span = maxId - minId + 1;
+
+			if (span <= n * 4 && span <= 64) {
+				// Fallback: (Object, double) -> void  ==>  (int, Object, double) -> void
+				MethodHandle fallbackWithSel = MethodHandles.dropArguments(fallback, 0, int.class);
+
+				MethodHandle[] targets = new MethodHandle[span];
+				Arrays.fill(targets, fallbackWithSel);
+
+				for (int i = 0; i < n; i++) {
+					int idx = shapes[i].id - minId;
+					int off = offsets[i];
+					MethodHandle fastSetter = off < 8
+					 ? MH_SET_SLOT_DOUBLE[off]
+					 : MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT_DOUBLE, 0, off);
+
+					MethodHandle exactTest     = MH_IS_EXACT_SHAPE_SETTER_DOUBLE.bindTo(shapes[i]);
+					MethodHandle guardedSetter = MethodHandles.guardWithTest(exactTest, fastSetter.asType(fallback.type()), fallback);
+
+					targets[idx] = MethodHandles.dropArguments(guardedSetter, 0, int.class);
 				}
-				int span = maxId - minId + 1;
 
-				if (span <= n * 4 && span <= 64) {
-					// Fallback: (Object, double) -> void  ==>  (int, Object, double) -> void
-					MethodHandle fallbackWithSel = MethodHandles.dropArguments(fallback, 0, int.class);
+				MethodHandle ts       = invokeTableSwitch(fallbackWithSel, targets);
+				MethodHandle selector = buildShapeIdSelector(minId, span);
 
-					MethodHandle[] targets = new MethodHandle[span];
-					Arrays.fill(targets, fallbackWithSel);
-
-					for (int i = 0; i < n; i++) {
-						int idx = shapes[i].id - minId;
-						int off = offsets[i];
-						MethodHandle fastSetter = off < 8
-						 ? MH_SET_SLOT_DOUBLE[off]
-						 : MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT_DOUBLE, 0, off);
-
-						MethodHandle exactTest     = MH_IS_EXACT_SHAPE_SETTER_DOUBLE.bindTo(shapes[i]);
-						MethodHandle guardedSetter = MethodHandles.guardWithTest(exactTest, fastSetter.asType(fallback.type()), fallback);
-
-						targets[idx] = MethodHandles.dropArguments(guardedSetter, 0, int.class);
-					}
-
-					MethodHandle ts       = invokeTableSwitch(fallbackWithSel, targets);
-					MethodHandle selector = buildShapeIdSelector(minId, span);
-
-					return MethodHandles.foldArguments(ts, selector);
-				}
-			} catch (Throwable ignored) { }
-		}
+				return MethodHandles.foldArguments(ts, selector);
+			}
+		} catch (Throwable ignored) { }
 
 		return buildFlatPolySwitchSetterDoubleLinear(shapes, offsets, n, fallback);
 	}
@@ -701,7 +661,8 @@ public class JSLinker {
 	public static int shapeIdSelector(int minId, int span, Object target) {
 		if (target instanceof JSObject jsObj) {
 			int idx = jsObj.shape.id - minId;
-			if (idx >= 0 && idx < span) return idx;
+			// 无符号比较：若 idx < 0，转为无符号将是巨大的正数，自然 >= span
+			if (Integer.compareUnsigned(idx, span) < 0) return idx;
 		}
 		return -1; // 负数强制命中 tableSwitch 的 defaultCase (fallback)
 	}
@@ -730,6 +691,47 @@ public class JSLinker {
 			}
 		}
 		return (double) fallback.invoke(target);
+	}
+
+	/** 路线 B：int getter 线性扫描静态代理。 */
+	public static int polyGetInt(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target)
+	 throws Throwable {
+		if (target instanceof JSObject jsObj) {
+			JSShape s = jsObj.shape;
+			for (int i = 0, n = shapes.length; i < n; i++) {
+				if (s == shapes[i]) return JSOps.toInt(jsObj.getSlot(offsets[i]));
+			}
+		}
+		return (int) fallback.invoke(target);
+	}
+
+	/** 路线 B：long getter 线性扫描静态代理。 */
+	public static long polyGetLong(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target)
+	 throws Throwable {
+		if (target instanceof JSObject jsObj) {
+			JSShape s = jsObj.shape;
+			for (int i = 0, n = shapes.length; i < n; i++) {
+				if (s == shapes[i]) return JSOps.toLong(jsObj.getSlot(offsets[i]));
+			}
+		}
+		return (long) fallback.invoke(target);
+	}
+	private static MethodHandle buildFlatPolySwitchIntLinear(JSShape[] shapes, int[] offsets, int n,
+	                                                         MethodHandle fallback) {
+		try {
+			MethodHandle base = LOOKUP.findStatic(JSLinker.class, "polyGetInt",
+			 MethodType.methodType(int.class, JSShape[].class, int[].class, MethodHandle.class, Object.class));
+			return MethodHandles.insertArguments(base, 0, shapes, offsets, fallback);
+		} catch (Throwable t) { throw new RuntimeException(t); }
+	}
+
+	private static MethodHandle buildFlatPolySwitchLongLinear(JSShape[] shapes, int[] offsets, int n,
+	                                                          MethodHandle fallback) {
+		try {
+			MethodHandle base = LOOKUP.findStatic(JSLinker.class, "polyGetLong",
+			 MethodType.methodType(long.class, JSShape[].class, int[].class, MethodHandle.class, Object.class));
+			return MethodHandles.insertArguments(base, 0, shapes, offsets, fallback);
+		} catch (Throwable t) { throw new RuntimeException(t); }
 	}
 
 	/** 路线 B：Object setter 线性扫描静态代理。 */
@@ -1166,19 +1168,29 @@ public class JSLinker {
 
 	public static Object getPropMegamorphic(ChainedCallSite site, Object target, String propName) {
 		if (target instanceof JSObject jsObj) {
-			if (site.isOffsetEquivalent()) {
-				return jsObj.getSlot(site.getCommonOffset());
-			}
 			JSShape s   = jsObj.shape;
-			int     idx = s.id & ChainedCallSite.CACHE_MASK;
-			if (site.shapeCache[idx] == s) {
-				return jsObj.getSlot(site.offsetCache[idx]);
+			int     idx = (s.id ^ (s.id >>> 4)) & ChainedCallSite.CACHE_MASK;
+
+			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
+			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
+			if (entry != 0L && (int) (entry >>> 32) == s.id) {
+				int    offset = (int) entry;
+				Object raw    = jsObj.getRawObjectSlot(offset);
+				if (raw != JSObject.DELETED) {
+					return jsObj.getSlot(offset);
+				}
+				return jsObj.get(propName);
 			}
+
 			int offset = s.getOffset(propName);
 			if (offset >= 0) {
-				site.shapeCache[idx] = s;
-				site.offsetCache[idx] = offset;
-				return jsObj.getSlot(offset);
+				// 64-bit 原子无锁写入 (高位 shape.id, 低位 offset)
+				long newEntry = ((long) s.id << 32) | (offset & 0xFFFFFFFFL);
+				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, newEntry);
+				Object raw = jsObj.getRawObjectSlot(offset);
+				if (raw != JSObject.DELETED) {
+					return jsObj.getSlot(offset);
+				}
 			}
 			return jsObj.get(propName);
 		}
@@ -1188,18 +1200,18 @@ public class JSLinker {
 
 	public static double getPropDoubleMegamorphic(ChainedCallSite site, Object target, String propName) {
 		if (target instanceof JSObject jsObj) {
-			if (site.isOffsetEquivalent()) {
-				return jsObj.getDoubleSlot(site.getCommonOffset());
-			}
 			JSShape s   = jsObj.shape;
-			int     idx = s.id & ChainedCallSite.CACHE_MASK;
-			if (site.shapeCache[idx] == s) {
-				return jsObj.getDoubleSlot(site.offsetCache[idx]);
+			int     idx = (s.id ^ (s.id >>> 4)) & ChainedCallSite.CACHE_MASK;
+
+			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
+			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
+			if (entry != 0L && (int) (entry >>> 32) == s.id) {
+				return jsObj.getDoubleSlot((int) entry);
 			}
+
 			int offset = s.getOffset(propName);
 			if (offset >= 0) {
-				site.shapeCache[idx] = s;
-				site.offsetCache[idx] = offset;
+				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
 				return jsObj.getDoubleSlot(offset);
 			}
 			return jsObj.getAsDouble(propName);
@@ -1210,18 +1222,18 @@ public class JSLinker {
 
 	public static int getPropIntMegamorphic(ChainedCallSite site, Object target, String propName) {
 		if (target instanceof JSObject jsObj) {
-			if (site.isOffsetEquivalent()) {
-				return (int) jsObj.getDoubleSlot(site.getCommonOffset());
-			}
 			JSShape s   = jsObj.shape;
-			int     idx = s.id & ChainedCallSite.CACHE_MASK;
-			if (site.shapeCache[idx] == s) {
-				return (int) jsObj.getDoubleSlot(site.offsetCache[idx]);
+			int     idx = (s.id ^ (s.id >>> 4)) & ChainedCallSite.CACHE_MASK;
+
+			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
+			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
+			if (entry != 0L && (int) (entry >>> 32) == s.id) {
+				return (int) jsObj.getDoubleSlot((int) entry);
 			}
+
 			int offset = s.getOffset(propName);
 			if (offset >= 0) {
-				site.shapeCache[idx] = s;
-				site.offsetCache[idx] = offset;
+				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
 				return (int) jsObj.getDoubleSlot(offset);
 			}
 			return JSOps.toInt(jsObj.get(propName));
@@ -1232,18 +1244,18 @@ public class JSLinker {
 
 	public static long getPropLongMegamorphic(ChainedCallSite site, Object target, String propName) {
 		if (target instanceof JSObject jsObj) {
-			if (site.isOffsetEquivalent()) {
-				return (long) jsObj.getDoubleSlot(site.getCommonOffset());
-			}
 			JSShape s   = jsObj.shape;
-			int     idx = s.id & ChainedCallSite.CACHE_MASK;
-			if (site.shapeCache[idx] == s) {
-				return (long) jsObj.getDoubleSlot(site.offsetCache[idx]);
+			int     idx = (s.id ^ (s.id >>> 4)) & ChainedCallSite.CACHE_MASK;
+
+			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
+			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
+			if (entry != 0L && (int) (entry >>> 32) == s.id) {
+				return (long) jsObj.getDoubleSlot((int) entry);
 			}
+
 			int offset = s.getOffset(propName);
 			if (offset >= 0) {
-				site.shapeCache[idx] = s;
-				site.offsetCache[idx] = offset;
+				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
 				return (long) jsObj.getDoubleSlot(offset);
 			}
 			return JSOps.toLong(jsObj.get(propName));
@@ -1254,20 +1266,19 @@ public class JSLinker {
 
 	public static void setPropMegamorphic(ChainedCallSite site, Object target, Object value, String propName) {
 		if (target instanceof JSObject jsObj) {
-			if (site.isOffsetEquivalent()) {
-				jsObj.setSlot(site.getCommonOffset(), value);
-				return;
-			}
 			JSShape s   = jsObj.shape;
-			int     idx = s.id & ChainedCallSite.CACHE_MASK;
-			if (site.shapeCache[idx] == s) {
-				jsObj.setSlot(site.offsetCache[idx], value);
+			int     idx = (s.id ^ (s.id >>> 4)) & ChainedCallSite.CACHE_MASK;
+
+			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
+			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
+			if (entry != 0L && (int) (entry >>> 32) == s.id) {
+				jsObj.setSlot((int) entry, value);
 				return;
 			}
+
 			int offset = s.getOffset(propName);
 			if (offset >= 0) {
-				site.shapeCache[idx] = s;
-				site.offsetCache[idx] = offset;
+				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
 				jsObj.setSlot(offset, value);
 				return;
 			}
@@ -1279,20 +1290,18 @@ public class JSLinker {
 
 	public static void setPropDoubleMegamorphic(ChainedCallSite site, Object target, double value, String propName) {
 		if (target instanceof JSObject jsObj) {
-			if (site.isOffsetEquivalent()) {
-				jsObj.setDoubleSlot(site.getCommonOffset(), value);
-				return;
-			}
 			JSShape s   = jsObj.shape;
-			int     idx = s.id & ChainedCallSite.CACHE_MASK;
-			if (site.shapeCache[idx] == s) {
-				jsObj.setDoubleSlot(site.offsetCache[idx], value);
+			int     idx = (s.id ^ (s.id >>> 4)) & ChainedCallSite.CACHE_MASK;
+
+			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
+			if (entry != 0L && (int) (entry >>> 32) == s.id) {
+				jsObj.setDoubleSlot((int) entry, value);
 				return;
 			}
+
 			int offset = s.getOffset(propName);
 			if (offset >= 0) {
-				site.shapeCache[idx] = s;
-				site.offsetCache[idx] = offset;
+				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
 				jsObj.setDoubleSlot(offset, value);
 				return;
 			}
@@ -1415,7 +1424,9 @@ public class JSLinker {
 			field.setByte(target, (byte) JSOps.toInt(value));
 		} else if (type == char.class) {
 			field.setChar(target, (value instanceof Character ch) ? ch : (value != null && !value.toString().isEmpty()) ? value.toString().charAt(0) : '\0');
-		} else if (type == boolean.class) { field.setBoolean(target, JSOps.isTruthy(value)); } else {
+		} else if (type == boolean.class) {
+			field.setBoolean(target, JSOps.isTruthy(value));
+		} else {
 			field.set(target, value);
 		}
 	}
@@ -2049,6 +2060,20 @@ public class JSLinker {
 		if (target instanceof JSObject jsObj) {
 			Object member = jsObj.get(methodName);
 			if (member instanceof JSFunction func) {
+				int ownOffset = jsObj.shape.getOffset(methodName);
+				// 只有当方法不在自身槽位上（offset < 0，即来自原型链）时，函数实例才恒定，方可绑定常量
+				if (ownOffset < 0) {
+					MethodHandle test = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
+					if (site.type().parameterCount() > 1) {
+						test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+					}
+					MethodHandle exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL, 1, (Object) null)
+					 .bindTo(func)
+					 .asCollector(1, Object[].class, args.length)
+					 .asType(site.type());
+					site.installGuardOrSwitchMegamorphic(test, exactFuncCall);
+				}
+				// 若为自有闭包属性，则不绑定死常量，保持动态调用
 				return func.call(null, jsObj, args);
 			}
 		}
@@ -2135,6 +2160,12 @@ public class JSLinker {
 		return false;
 	}
 
+	private static final ClassValue<MethodHandle> INTERFACE_FILTER_CACHE = new ClassValue<>() {
+		@Override
+		protected MethodHandle computeValue(Class<?> type) {
+			return MethodHandles.insertArguments(MH_TO_INTERFACE, 0, type);
+		}
+	};
 	public static MethodHandle getArgumentFilter(Class<?> targetType) {
 		if (targetType == int.class) return MH_TO_INT;
 		if (targetType == long.class) return MH_TO_LONG;
@@ -2146,7 +2177,7 @@ public class JSLinker {
 		if (targetType == boolean.class) return MH_TO_BOOLEAN;
 		if (targetType == String.class) return MH_TO_STRING;
 		if (targetType.isInterface() && targetType != JSFunction.class && targetType != JSObject.class) {
-			return MethodHandles.insertArguments(MH_TO_INTERFACE, 0, targetType);
+			return INTERFACE_FILTER_CACHE.get(targetType);
 		}
 		return null;
 	}
@@ -2300,11 +2331,18 @@ public class JSLinker {
 			return;
 		}
 	}
+	private static final String[] SMALL_INT_STRINGS = new String[256];
 
+	static {
+		for (int i = 0; i < 256; i++) SMALL_INT_STRINGS[i] = String.valueOf(i).intern();
+	}
+
+	public static String fastIntToString(int i) {
+		if (i >= 0 && i < 256) return SMALL_INT_STRINGS[i];
+		return String.valueOf(i);
+	}
 	public static Object getIndex(Object target, int index) {
-		if (target instanceof JSArray jsArr) {
-			return jsArr.getElement(index);
-		}
+		if (target instanceof JSArray jsArr) return jsArr.getElement(index);
 		if (target instanceof Object[] a) {
 			return (index >= 0 && index < a.length) ? a[index] : JSUndefined.INSTANCE;
 		}
@@ -2315,7 +2353,13 @@ public class JSLinker {
 			return getArrayElement(target, index);
 		}
 		if (target instanceof JSObject jsObj) {
-			return jsObj.get(String.valueOf(index));
+			return jsObj.get(fastIntToString(index));
+		}
+		if (target instanceof CharSequence seq) {
+			return (index >= 0 && index < seq.length()) ? String.valueOf(seq.charAt(index)) : JSUndefined.INSTANCE;
+		}
+		if (target instanceof Map map) {
+			return map.get(index);
 		}
 		return getIndex(target, Integer.valueOf(index));
 	}
@@ -2343,7 +2387,11 @@ public class JSLinker {
 			return;
 		}
 		if (target instanceof JSObject jsObj) {
-			jsObj.put(String.valueOf(index), value);
+			jsObj.put(fastIntToString(index), value);
+			return;
+		}
+		if (target instanceof Map map) {
+			map.put(index, value);
 			return;
 		}
 		setIndex(target, Integer.valueOf(index), value);
@@ -2355,7 +2403,7 @@ public class JSLinker {
 			return getIndex(target, i.intValue());
 		}
 		if (index instanceof Double d) {
-			double val = d.doubleValue();
+			double val = d;
 			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
 				return getIndex(target, (int) val);
 			}
@@ -2363,7 +2411,7 @@ public class JSLinker {
 		if (target instanceof JSArray jsArr) {
 			Long idx = JSArray.toValidArrayIndex(index);
 			if (idx != null) {
-				return jsArr.getElement(idx.longValue());
+				return jsArr.getElement(idx);
 			}
 			return jsArr.get(JSArray.toPropertyKey(index));
 		}
@@ -2384,8 +2432,12 @@ public class JSLinker {
 			}
 			return JSUndefined.INSTANCE;
 		}
-		if (target instanceof Map) {
-			return ((Map<?, ?>) target).get(index);
+		if (target instanceof CharSequence seq) {
+			Integer idx = JSArray.toValidJavaArrayIndex(index);
+			if (idx != null && idx >= 0 && idx < seq.length()) {
+				return String.valueOf(seq.charAt(idx));
+			}
+			return JSUndefined.INSTANCE;
 		}
 		return JSUndefined.INSTANCE;
 	}
@@ -2397,7 +2449,7 @@ public class JSLinker {
 			return;
 		}
 		if (index instanceof Double d) {
-			double val = d.doubleValue();
+			double val = d;
 			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
 				setIndex(target, (int) val, value);
 				return;
@@ -2406,7 +2458,7 @@ public class JSLinker {
 		if (target instanceof JSArray jsArr) {
 			Long idx = JSArray.toValidArrayIndex(index);
 			if (idx != null) {
-				jsArr.setElement(idx.longValue(), value);
+				jsArr.setElement(idx, value);
 				return;
 			}
 			jsArr.put(JSArray.toPropertyKey(index), value);
@@ -2435,8 +2487,8 @@ public class JSLinker {
 			}
 			return;
 		}
-		if (target instanceof Map) {
-			((Map<Object, Object>) target).put(index, value);
+		if (target instanceof Map map) {
+			map.put(index, value);
 		}
 	}
 	//endregion
@@ -2492,46 +2544,103 @@ public class JSLinker {
 	public static double getSlot6Double(Object target) { return UNSAFE.getDouble(target, PRIM_6_OFFSET); }
 	public static double getSlot7Double(Object target) { return UNSAFE.getDouble(target, PRIM_7_OFFSET); }
 
-	public static void setSlot0Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_0_OFFSET, val); }
-	public static void setSlot1Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_1_OFFSET, val); }
-	public static void setSlot2Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_2_OFFSET, val); }
-	public static void setSlot3Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_3_OFFSET, val); }
-	public static void setSlot4Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_4_OFFSET, val); }
-	public static void setSlot5Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_5_OFFSET, val); }
-	public static void setSlot6Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_6_OFFSET, val); }
-	public static void setSlot7Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_7_OFFSET, val); }
+	public static void setSlot0Double(Object target, double val) {
+		JSObject obj = (JSObject) target;
+		obj.doubleFieldMask |= 1L;
+		UNSAFE.putDouble(target, PRIM_0_OFFSET, val);
+		obj.obj0 = null;
+	}
+	public static void setSlot1Double(Object target, double val) {
+		JSObject obj = (JSObject) target;
+		obj.doubleFieldMask |= 2L;
+		UNSAFE.putDouble(target, PRIM_1_OFFSET, val);
+		obj.obj1 = null;
+	}
+	public static void setSlot2Double(Object target, double val) {
+		JSObject obj = (JSObject) target;
+		obj.doubleFieldMask |= 4L;
+		UNSAFE.putDouble(target, PRIM_2_OFFSET, val);
+		obj.obj2 = null;
+	}
+	public static void setSlot3Double(Object target, double val) {
+		JSObject obj = (JSObject) target;
+		obj.doubleFieldMask |= 8L;
+		UNSAFE.putDouble(target, PRIM_3_OFFSET, val);
+		obj.obj3 = null;
+	}
+	public static void setSlot4Double(Object target, double val) {
+		JSObject obj = (JSObject) target;
+		obj.doubleFieldMask |= 16L;
+		UNSAFE.putDouble(target, PRIM_4_OFFSET, val);
+		obj.obj4 = null;
+	}
+	public static void setSlot5Double(Object target, double val) {
+		JSObject obj = (JSObject) target;
+		obj.doubleFieldMask |= 32L;
+		UNSAFE.putDouble(target, PRIM_5_OFFSET, val);
+		obj.obj5 = null;
+	}
+	public static void setSlot6Double(Object target, double val) {
+		JSObject obj = (JSObject) target;
+		obj.doubleFieldMask |= 64L;
+		UNSAFE.putDouble(target, PRIM_6_OFFSET, val);
+		obj.obj6 = null;
+	}
+	public static void setSlot7Double(Object target, double val) {
+		JSObject obj = (JSObject) target;
+		obj.doubleFieldMask |= 128L;
+		UNSAFE.putDouble(target, PRIM_7_OFFSET, val);
+		obj.obj7 = null;
+	}
+
 
 	public static Object getSlot0Object(Object target) {
 		JSObject obj = (JSObject) target;
-		return (obj.doubleFieldMask & 1L) != 0L ? Double.valueOf(Double.longBitsToDouble(obj.prim0)) : obj.obj0;
+		if ((obj.doubleFieldMask & 1L) != 0L) return Double.longBitsToDouble(obj.prim0);
+		Object val = obj.obj0;
+		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
 	public static Object getSlot1Object(Object target) {
 		JSObject obj = (JSObject) target;
-		return (obj.doubleFieldMask & 2L) != 0L ? Double.valueOf(Double.longBitsToDouble(obj.prim1)) : obj.obj1;
+		if ((obj.doubleFieldMask & 2L) != 0L) return Double.longBitsToDouble(obj.prim1);
+		Object val = obj.obj1;
+		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
 	public static Object getSlot2Object(Object target) {
 		JSObject obj = (JSObject) target;
-		return (obj.doubleFieldMask & 4L) != 0L ? Double.valueOf(Double.longBitsToDouble(obj.prim2)) : obj.obj2;
+		if ((obj.doubleFieldMask & 4L) != 0L) return Double.longBitsToDouble(obj.prim2);
+		Object val = obj.obj2;
+		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
 	public static Object getSlot3Object(Object target) {
 		JSObject obj = (JSObject) target;
-		return (obj.doubleFieldMask & 8L) != 0L ? Double.valueOf(Double.longBitsToDouble(obj.prim3)) : obj.obj3;
+		if ((obj.doubleFieldMask & 8L) != 0L) return Double.longBitsToDouble(obj.prim3);
+		Object val = obj.obj3;
+		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
 	public static Object getSlot4Object(Object target) {
 		JSObject obj = (JSObject) target;
-		return (obj.doubleFieldMask & 16L) != 0L ? Double.valueOf(Double.longBitsToDouble(obj.prim4)) : obj.obj4;
+		if ((obj.doubleFieldMask & 16L) != 0L) return Double.longBitsToDouble(obj.prim4);
+		Object val = obj.obj4;
+		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
 	public static Object getSlot5Object(Object target) {
 		JSObject obj = (JSObject) target;
-		return (obj.doubleFieldMask & 32L) != 0L ? Double.valueOf(Double.longBitsToDouble(obj.prim5)) : obj.obj5;
+		if ((obj.doubleFieldMask & 32L) != 0L) return Double.longBitsToDouble(obj.prim5);
+		Object val = obj.obj5;
+		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
 	public static Object getSlot6Object(Object target) {
 		JSObject obj = (JSObject) target;
-		return (obj.doubleFieldMask & 64L) != 0L ? Double.valueOf(Double.longBitsToDouble(obj.prim6)) : obj.obj6;
+		if ((obj.doubleFieldMask & 64L) != 0L) return Double.longBitsToDouble(obj.prim6);
+		Object val = obj.obj6;
+		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
 	public static Object getSlot7Object(Object target) {
 		JSObject obj = (JSObject) target;
-		return (obj.doubleFieldMask & 128L) != 0L ? Double.valueOf(Double.longBitsToDouble(obj.prim7)) : obj.obj7;
+		if ((obj.doubleFieldMask & 128L) != 0L) return Double.longBitsToDouble(obj.prim7);
+		Object val = obj.obj7;
+		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
 
 	public static void setSlot0Object(Object target, Object val) { ((JSObject) target).setSlot(0, val); }
@@ -2548,7 +2657,9 @@ public class JSLinker {
 		Class<?>     fType = field.getType();
 		MethodHandle mh;
 		if (requestedPrim == int.class) {
-			if (fType == int.class) { mh = FieldMH.GET_INT_PRIM; } else if (fType == double.class) {
+			if (fType == int.class) {
+				mh = FieldMH.GET_INT_PRIM;
+			} else if (fType == double.class) {
 				mh = FieldMH.GET_DOUBLE_AS_INT;
 			} else if (fType == long.class) {
 				mh = FieldMH.GET_LONG_AS_INT;
@@ -2564,7 +2675,9 @@ public class JSLinker {
 				mh = FieldMH.GET_BOOLEAN_AS_INT;
 			} else { mh = FieldMH.GET_OBJECT_AS_INT; }
 		} else if (requestedPrim == double.class) {
-			if (fType == double.class) { mh = FieldMH.GET_DOUBLE_PRIM; } else if (fType == int.class) {
+			if (fType == double.class) {
+				mh = FieldMH.GET_DOUBLE_PRIM;
+			} else if (fType == int.class) {
 				mh = FieldMH.GET_INT_AS_DOUBLE;
 			} else if (fType == long.class) {
 				mh = FieldMH.GET_LONG_AS_DOUBLE;
@@ -2624,14 +2737,22 @@ public class JSLinker {
 					int          commonOff        = site.getCommonOffset();
 					MethodHandle test             = buildMultiShapeGuard(site.getObservedShapes());
 					MethodHandle directSlotGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_INT, 0, commonOff);
-					MethodHandle fallbackTarget   = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget() : site.getTarget();
+					MethodHandle fallbackTarget = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget()
+					 : (site.getInitialFallback() != null ? site.getInitialFallback() : site.getTarget());
 					site.setTarget(MethodHandles.guardWithTest(test, directSlotGetter.asType(site.type()), fallbackTarget.asType(site.type())));
 					return JSOps.toInt(jsObj.getSlot(commonOff));
 				}
 
-				MethodHandle test             = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
-				MethodHandle directSlotGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_INT, 0, offset);
-				site.installGuardOrSwitchMegamorphic(test, directSlotGetter);
+				// 异槽多态：chainDepth >= 2 时挂载扁平 switch，消除 LambdaForm 嵌套深度
+				if (site.getChainDepth() >= 2) {
+					MethodHandle fb = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget()
+					 : (site.getInitialFallback() != null ? site.getInitialFallback() : site.getTarget());
+					site.installFlatPolyGuard(buildFlatPolySwitchInt(site.snapshotPoly(), fb));
+				} else {
+					MethodHandle test             = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
+					MethodHandle directSlotGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_INT, 0, offset);
+					site.installGuardOrSwitchMegamorphic(test, directSlotGetter);
+				}
 				return JSOps.toInt(jsObj.getSlot(offset));
 			}
 		}
@@ -2657,42 +2778,55 @@ public class JSLinker {
 	public static double getPropDoubleFallback(ChainedCallSite site, Object target, String propName) {
 		if (target == null || target == JSUndefined.INSTANCE) return Double.NaN;
 
+		// JSObject Fast路径：Shape 守护 + In-Object 裸双精度槽直读
 		if (target instanceof JSObject jsObj) {
 			int offset = jsObj.shape.getOffset(propName);
 			if (offset >= 0) {
 				byte type = jsObj.shape.getSlotType(offset);
 				site.recordShape(jsObj.shape, offset, type);
 
-				if (site.isOffsetEquivalent()) {
-					int          commonOff = site.getCommonOffset();
-					MethodHandle test      = buildMultiShapeGuard(site.getObservedShapes());
-					MethodHandle directSlotGetter = (commonOff >= 0 && commonOff < 8)
-					 ? MH_GET_SLOT_DOUBLE[commonOff]
-					 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE, 0, commonOff);
-					MethodHandle fallbackTarget = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget() : (site.getInitialFallback() != null ? site.getInitialFallback() : site.getTarget());
-					site.setTarget(MethodHandles.guardWithTest(test, directSlotGetter.asType(site.type()), fallbackTarget.asType(site.type())));
-					return jsObj.getDoubleSlot(commonOff);
+				// 根据槽位实际类型选择 Getter (纯 double 走 Unsafe 汇编直读，Object 槽走安全解包)
+				MethodHandle directSlotGetter;
+				if (type == JSShape.TYPE_DOUBLE && offset < 8) {
+					directSlotGetter = MH_GET_SLOT_DOUBLE[offset];
+				} else {
+					directSlotGetter = MethodHandles.insertArguments(PropMH.GET_DOUBLE_SLOT, 0, offset);
 				}
 
-				// 异槽多态：chainDepth >= 2 时挂载扁平 switch
+				// A. 同偏移多态坍缩 (Offset-Equivalent Polymorphism)
+				if (site.isOffsetEquivalent()) {
+					int          commonOff  = site.getCommonOffset();
+					byte         commonType = site.getCommonType();
+					MethodHandle test       = buildMultiShapeGuard(site.getObservedShapes());
+					MethodHandle fastGetter = (commonType == JSShape.TYPE_DOUBLE && commonOff < 8)
+					 ? MH_GET_SLOT_DOUBLE[commonOff]
+					 : MethodHandles.insertArguments(PropMH.GET_DOUBLE_SLOT, 0, commonOff);
+
+					MethodHandle fallbackTarget = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget()
+					 : (site.getInitialFallback() != null ? site.getInitialFallback() : site.getTarget());
+					site.setTarget(MethodHandles.guardWithTest(test, fastGetter.asType(site.type()), fallbackTarget.asType(site.type())));
+					return (commonType == JSShape.TYPE_DOUBLE) ? jsObj.getDoubleSlot(commonOff) : JSOps.toDouble(jsObj.getSlot(commonOff));
+				}
+
+				// B. 异槽多态：chainDepth >= 2 时挂载扁平 Jump-Table (tableSwitch)
 				if (site.getChainDepth() >= 2) {
 					MethodHandle fb = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget()
 					 : (site.getInitialFallback() != null ? site.getInitialFallback() : site.getTarget());
 					site.installFlatPolyGuard(buildFlatPolySwitchDouble(site.snapshotPoly(), fb));
 				} else {
+					// C. 单态 / 双态 GWT 链
 					MethodHandle test = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
-					MethodHandle directSlotGetter = offset < 8
-					 ? MH_GET_SLOT_DOUBLE[offset]
-					 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE, 0, offset);
 					site.installGuardOrSwitchMegamorphic(test, directSlotGetter);
 				}
-				return jsObj.getDoubleSlot(offset);
+
+				return (type == JSShape.TYPE_DOUBLE) ? jsObj.getDoubleSlot(offset) : JSOps.toDouble(jsObj.getSlot(offset));
 			}
 		}
 
 		if (target.getClass().isArray() && "length".equals(propName)) {
 			return Array.getLength(target);
 		}
+
 		Class<?> targetClass = target.getClass();
 
 		try {
@@ -2705,6 +2839,22 @@ public class JSLinker {
 		} catch (Throwable ignored) {
 		}
 
+		Method getterMethod = MethodResolver.findGetterMethod(targetClass, propName);
+		if (getterMethod != null) {
+			try {
+				MethodHandle mh = Magic.lookup.unreflect(getterMethod);
+				// 若 getter 返回类型不是 double，注入自动拓宽/收窄转换 Filter
+				if (getterMethod.getReturnType() != double.class) {
+					mh = MethodHandles.filterReturnValue(mh, MH_TO_DOUBLE);
+				}
+				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
+				site.installGuardOrSwitchMegamorphic(test, mh.asType(site.type()));
+				return (double) mh.invoke(target);
+			} catch (Throwable ignored) {
+			}
+		}
+
+		// 兜底通用反射读取
 		return getPropDoubleGeneric(target, propName);
 	}
 
@@ -2721,14 +2871,22 @@ public class JSLinker {
 					int          commonOff        = site.getCommonOffset();
 					MethodHandle test             = buildMultiShapeGuard(site.getObservedShapes());
 					MethodHandle directSlotGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_LONG, 0, commonOff);
-					MethodHandle fallbackTarget   = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget() : site.getTarget();
+					MethodHandle fallbackTarget = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget()
+					 : (site.getInitialFallback() != null ? site.getInitialFallback() : site.getTarget());
 					site.setTarget(MethodHandles.guardWithTest(test, directSlotGetter.asType(site.type()), fallbackTarget.asType(site.type())));
 					return JSOps.toLong(jsObj.getSlot(commonOff));
 				}
 
-				MethodHandle test             = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
-				MethodHandle directSlotGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_LONG, 0, offset);
-				site.installGuardOrSwitchMegamorphic(test, directSlotGetter);
+				// 异槽多态：chainDepth >= 2 时挂载扁平 switch
+				if (site.getChainDepth() >= 2) {
+					MethodHandle fb = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget()
+					 : (site.getInitialFallback() != null ? site.getInitialFallback() : site.getTarget());
+					site.installFlatPolyGuard(buildFlatPolySwitchLong(site.snapshotPoly(), fb));
+				} else {
+					MethodHandle test             = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
+					MethodHandle directSlotGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_LONG, 0, offset);
+					site.installGuardOrSwitchMegamorphic(test, directSlotGetter);
+				}
 				return JSOps.toLong(jsObj.getSlot(offset));
 			}
 		}

@@ -9,7 +9,7 @@ import java.util.*;
 public class JSObject {
 	//region 初始化
 	/** 内部删除哨兵（Tombstone），专用于区分“属性不存在”与“属性值为 undefined” */
-	private static final Object DELETED = new Object() {
+	static final Object DELETED = new Object() {
 		@Override
 		public String toString() {
 			return "<deleted>";
@@ -241,7 +241,11 @@ public class JSObject {
 	}
 
 	public Object get(String key) {
-		return get(SymbolTable.id(key));
+		int symId = SymbolTable.lookupId(key);
+		if (symId == SymbolTable.NO_SYMBOL) {
+			return (prototype != null) ? prototype.get(key) : JSUndefined.INSTANCE;
+		}
+		return get(symId);
 	}
 
 	public double getAsDouble(int propId) {
@@ -259,7 +263,11 @@ public class JSObject {
 	}
 
 	public double getAsDouble(String key) {
-		return getAsDouble(SymbolTable.id(key));
+		int symId = SymbolTable.lookupId(key);
+		if (symId == SymbolTable.NO_SYMBOL) {
+			return (prototype != null) ? prototype.getAsDouble(key) : Double.NaN;
+		}
+		return getAsDouble(symId);
 	}
 
 	private Object getSlow(int propId) {
@@ -283,7 +291,7 @@ public class JSObject {
 
 	public static final int SENTINEL_PROP_ID = Integer.MIN_VALUE;
 
-	@SuppressWarnings("DataFlowIssue")
+	@SuppressWarnings({"DataFlowIssue", "DuplicatedCode"})
 	private void putDoubleSlow(int propId, double value) {
 		int offset = shape.getOffset(propId);
 		if (offset < 0) {
@@ -294,47 +302,10 @@ public class JSObject {
 
 		if (propId == SENTINEL_PROP_ID) {
 			switch (propId) {
-				case 1:
-				case 2:
-				case 3:
-				case 4:
-				case 5:
-				case 6:
-				case 7:
-				case 8:
-				case 9:
-				case 10:
-				case 11:
-				case 12:
-				case 13:
-				case 14:
-				case 15:
-				case 16:
-				case 17:
-				case 18:
-				case 19:
-				case 20:
-				case 21:
-				case 22:
-				case 23:
-				case 24:
-				case 25:
-				case 26:
-				case 27:
-				case 28:
-				case 29:
-				case 30:
-				case 31:
-				case 32:
-				case 33:
-				case 34:
-				case 35:
-				case 36:
-				case 37:
-				case 38:
-				case 39:
-				case 40:
+				case 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+				     30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40 -> {
 					return;
+				}
 			}
 		}
 	}
@@ -357,54 +328,17 @@ public class JSObject {
 		putSlow(propId, value);
 	}
 
-	@SuppressWarnings("DataFlowIssue")
+	@SuppressWarnings({"DataFlowIssue", "DuplicatedCode"})
 	private void putSlow(int propId, Object value) {
 		shape = shape.addProperty(propId, JSShape.TYPE_OBJECT);
 		setSlot(shape.propertyCount - 1, value);
 
 		if (propId == SENTINEL_PROP_ID) {
 			switch (propId) {
-				case 1:
-				case 2:
-				case 3:
-				case 4:
-				case 5:
-				case 6:
-				case 7:
-				case 8:
-				case 9:
-				case 10:
-				case 11:
-				case 12:
-				case 13:
-				case 14:
-				case 15:
-				case 16:
-				case 17:
-				case 18:
-				case 19:
-				case 20:
-				case 21:
-				case 22:
-				case 23:
-				case 24:
-				case 25:
-				case 26:
-				case 27:
-				case 28:
-				case 29:
-				case 30:
-				case 31:
-				case 32:
-				case 33:
-				case 34:
-				case 35:
-				case 36:
-				case 37:
-				case 38:
-				case 39:
-				case 40:
+				case 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+				     30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40 -> {
 					return;
+				}
 			}
 		}
 	}
@@ -429,7 +363,11 @@ public class JSObject {
 	}
 
 	public boolean has(String key) {
-		return has(SymbolTable.id(key));
+		int symId = SymbolTable.lookupId(key);
+		if (symId == SymbolTable.NO_SYMBOL) {
+			return prototype != null && prototype.has(key);
+		}
+		return has(symId);
 	}
 
 	public void delete(int propId) {
@@ -457,8 +395,8 @@ public class JSObject {
 		Set<String> activeKeys = new LinkedHashSet<>(count);
 		for (int i = 0; i < count; i++) {
 			if ((doubleFieldMask & (1L << i)) != 0L || getRawObjectSlot(i) != DELETED) {
-				int keyId = shape.getKeyId(i);
-				String name = SymbolTable.name(keyId);
+				int    keyId = shape.getKeyId(i);
+				String name  = SymbolTable.name(keyId);
 				if (name != null) activeKeys.add(name);
 			}
 		}

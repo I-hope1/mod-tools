@@ -19,8 +19,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class JSShape {
 	private static final MethodHandles.Lookup LOOKUP = Magic.lookup;
 
-	private static final AtomicInteger SHAPE_ID_GEN = new AtomicInteger(1);
-	private static final ConcurrentHashMap<String, VarHandle> VAR_HANDLES = new ConcurrentHashMap<>();
+	private static final AtomicInteger                        SHAPE_ID_GEN = new AtomicInteger(1);
+	private static final ConcurrentHashMap<String, VarHandle> VAR_HANDLES  = new ConcurrentHashMap<>();
 
 	// 语义化控制常量
 	public static final int  SHAPE_ID_SHIFT              = 32;
@@ -36,16 +36,16 @@ public final class JSShape {
 	}
 
 	public static boolean casIC(Class<?> clazz, String fieldName, long expected, long update) {
-		String key = clazz.getName() + "." + fieldName;
-		VarHandle vh = VAR_HANDLES.get(key);
+		String    key = clazz.getName() + "." + fieldName;
+		VarHandle vh  = VAR_HANDLES.get(key);
 		if (vh == null) {
 			try {
 				vh = LOOKUP.findStaticVarHandle(clazz, fieldName, long.class);
 				VAR_HANDLES.put(key, vh);
 			} catch (Throwable t) {
 				try {
-					Field f = clazz.getField(fieldName);
-					long offset = Magic.unsafe.staticFieldOffset(f);
+					Field f      = clazz.getField(fieldName);
+					long  offset = Magic.unsafe.staticFieldOffset(f);
 					return Magic.unsafe.compareAndSwapLong(clazz, offset, expected, update);
 				} catch (Throwable ignored) {
 					return false;
@@ -60,8 +60,8 @@ public final class JSShape {
 	public static final byte TYPE_INT     = 2;
 	public static final byte TYPE_OBJECT  = 3;
 
-	public static final JSShape[] PRECOMPUTED_SHAPES = new JSShape[PRECOMPUTED_SHAPES_CAPACITY];
-	private static final AtomicInteger PRECOMPUTED_ID = new AtomicInteger(0);
+	public static final  JSShape[]     PRECOMPUTED_SHAPES = new JSShape[PRECOMPUTED_SHAPES_CAPACITY];
+	private static final AtomicInteger PRECOMPUTED_ID     = new AtomicInteger(0);
 
 	public static int registerPrecomputedShape(JSShape shape) {
 		int id = PRECOMPUTED_ID.getAndIncrement();
@@ -99,10 +99,14 @@ public final class JSShape {
 		this.propertyCount = count;
 
 		if (parent == null) {
-			this.k0 = -1; this.t0 = 0;
-			this.k1 = -1; this.t1 = 0;
-			this.k2 = -1; this.t2 = 0;
-			this.k3 = -1; this.t3 = 0;
+			this.k0 = -1;
+			this.t0 = 0;
+			this.k1 = -1;
+			this.t1 = 0;
+			this.k2 = -1;
+			this.t2 = 0;
+			this.k3 = -1;
+			this.t3 = 0;
 			this.overflowKeys = null;
 			this.overflowTypes = null;
 		} else {
@@ -119,9 +123,9 @@ public final class JSShape {
 				this.overflowKeys = null;
 				this.overflowTypes = null;
 			} else {
-				int overflowLen = count - INLINE_PROPERTY_CAPACITY;
-				int[] ofKeys = new int[overflowLen];
-				byte[] ofTypes = new byte[overflowLen];
+				int    overflowLen = count - INLINE_PROPERTY_CAPACITY;
+				int[]  ofKeys      = new int[overflowLen];
+				byte[] ofTypes     = new byte[overflowLen];
 				if (parent.overflowKeys != null) {
 					System.arraycopy(parent.overflowKeys, 0, ofKeys, 0, parent.overflowKeys.length);
 					System.arraycopy(parent.overflowTypes, 0, ofTypes, 0, parent.overflowTypes.length);
@@ -163,7 +167,8 @@ public final class JSShape {
 
 	public int getOffset(String key) {
 		if (key == null) return -1;
-		return getOffset(SymbolTable.id(key));
+		int symId = SymbolTable.lookupId(key); // 不注册key
+		return symId == SymbolTable.NO_SYMBOL ? -1 : getOffset(symId);
 	}
 
 	public byte getSlotType(int offset) {
@@ -172,9 +177,13 @@ public final class JSShape {
 			case 1 -> t1;
 			case 2 -> t2;
 			case 3 -> t3;
-			default -> (overflowTypes != null && offset - INLINE_PROPERTY_CAPACITY < overflowTypes.length)
-			 ? overflowTypes[offset - INLINE_PROPERTY_CAPACITY]
-			 : TYPE_UNKNOWN;
+			default -> {
+				int ofIdx = offset - INLINE_PROPERTY_CAPACITY;
+				// 严密修复下界 >= 0，彻底根治 offset = -1 时的 Index -5 崩溃
+				yield (overflowTypes != null && ofIdx >= 0 && ofIdx < overflowTypes.length)
+				 ? overflowTypes[ofIdx]
+				 : TYPE_UNKNOWN;
+			}
 		};
 	}
 
@@ -201,8 +210,8 @@ public final class JSShape {
 	// 迁移树构建 (极简编码，快路径 < 28 字节，100% C2 内联)
 
 	public JSShape addProperty(int propId, byte type) {
-		int encoded = encodeKey(propId, type);
-		JSShape trans = this.singleTransition;
+		int     encoded = encodeKey(propId, type);
+		JSShape trans   = this.singleTransition;
 		if (this.singleKey == encoded && trans != null) {
 			return trans;
 		}
@@ -239,12 +248,10 @@ public final class JSShape {
 		// 确保本慢路径方法字节码大小 > 325 字节，使 HotSpot C2 将此冷路径判定为 'hot method too big'，绝不在顶层内联
 		if (encoded == SENTINEL_ENCODED) {
 			switch (propId) {
-				case 1: case 2: case 3: case 4: case 5: case 6: case 7: case 8:
-				case 9: case 10: case 11: case 12: case 13: case 14: case 15: case 16:
-				case 17: case 18: case 19: case 20: case 21: case 22: case 23: case 24:
-				case 25: case 26: case 27: case 28: case 29: case 30: case 31: case 32:
-				case 33: case 34: case 35: case 36: case 37: case 38: case 39: case 40:
+				case 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+				     30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40 -> {
 					return next; // 关键防御契约：即便极端情况下触及屏障分支，也恒定返回有效 JSShape，绝不返回 null！
+				}
 			}
 		}
 		return next;
@@ -272,9 +279,12 @@ public final class JSShape {
 			case 1 -> k1;
 			case 2 -> k2;
 			case 3 -> k3;
-			default -> (overflowKeys != null && index - 4 < overflowKeys.length)
-			 ? overflowKeys[index - 4]
-			 : -1;
+			default -> {
+				int ofIdx = index - 4;
+				yield (overflowKeys != null && ofIdx >= 0 && ofIdx < overflowKeys.length)
+				 ? overflowKeys[ofIdx]
+				 : -1;
+			}
 		};
 	}
 

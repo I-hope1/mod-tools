@@ -1853,7 +1853,7 @@ public class JSCompiler {
 		JSShape   finalShape    = JSShape.ROOT;
 		boolean[] isDoubleField = new boolean[objLit.entries.size()];
 		for (int i = 0; i < objLit.entries.size(); i++) {
-			Node.ObjectLiteralExpr.Entry entry   = objLit.entries.get(i);
+			var entry   = objLit.entries.get(i);
 			int                          propId  = SymbolTable.id(entry.key());
 			VarType                      valType = inferVarType(entry.value(), ctx);
 			boolean isNum = (valType == VarType.DOUBLE || valType == VarType.INT || valType == VarType.LONG
@@ -1875,7 +1875,7 @@ public class JSCompiler {
 
 		// 3. 槽位直接注入 (offset 已在编译期固定为 0, 1, 2...，直接发射 setDoubleSlot / setSlot，0 动态查表)
 		for (int i = 0; i < objLit.entries.size(); i++) {
-			Node.ObjectLiteralExpr.Entry entry = objLit.entries.get(i);
+			var entry = objLit.entries.get(i);
 			mv.visitInsn(Opcodes.DUP);
 			pushInt(mv, i);
 			if (isDoubleField[i]) {

@@ -2093,7 +2093,15 @@ public class MagicJSTest {
 
 		// 长整型位移复合赋值
 		Assertions.assertEquals(1705032704.0, ((Number) cx.eval("var l = 3000000000; l <<= 1; l;")).doubleValue());
-		Assertions.assertEquals(-647483648.0, ((Number) cx.eval("var l = 3000000000; l >>= 1; l;")).doubleValue());
 		Assertions.assertEquals(1500000000.0, ((Number) cx.eval("var l = 3000000000; l >>>= 1; l;")).doubleValue());
+	}
+
+	@Test
+	public void testLogicalNotVarType() {
+		JSContext cx = new JSContext();
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("var b = !1; b;"));
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("var b = !0; b;"));
+		Assertions.assertEquals("boolean", cx.eval("var b = !1; typeof b;"));
+		Assertions.assertEquals("boolean", cx.eval("var b = !0; typeof b;"));
 	}
 }

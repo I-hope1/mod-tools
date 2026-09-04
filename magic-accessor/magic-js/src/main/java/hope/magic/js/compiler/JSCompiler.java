@@ -349,7 +349,10 @@ public class JSCompiler {
 				VarType inner = inferVarType(un.expr, ctx);
 				return inner.isPrimitive() ? inner : VarType.DOUBLE;
 			}
-			if (op == TokenType.NOT || op == TokenType.BIT_NOT) {
+			if (op == TokenType.NOT) {
+				return VarType.OBJECT;
+			}
+			if (op == TokenType.BIT_NOT) {
 				return VarType.INT;
 			}
 		}

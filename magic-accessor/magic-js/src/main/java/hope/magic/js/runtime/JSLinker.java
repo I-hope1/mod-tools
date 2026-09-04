@@ -71,10 +71,10 @@ public class JSLinker {
 			MH_SET_JS_OBJ_SLOT_DOUBLE = LOOKUP.findStatic(JSLinker.class, "setJSObjSlotDouble", MethodType.methodType(void.class, int.class, Object.class, double.class));
 
 			for (int i = 0; i < 8; i++) {
-				MH_GET_SLOT_DOUBLE[i] = LOOKUP.findStatic(JSLinker.class, "getSlot" + i + "Double", MethodType.methodType(double.class, Object.class));
-				MH_SET_SLOT_DOUBLE[i] = LOOKUP.findStatic(JSLinker.class, "setSlot" + i + "Double", MethodType.methodType(void.class, Object.class, double.class));
-				MH_GET_SLOT_OBJECT[i] = LOOKUP.findStatic(JSLinker.class, "getSlot" + i + "Object", MethodType.methodType(Object.class, Object.class));
-				MH_SET_SLOT_OBJECT[i] = LOOKUP.findStatic(JSLinker.class, "setSlot" + i + "Object", MethodType.methodType(void.class, Object.class, Object.class));
+				MH_GET_SLOT_DOUBLE[i] = LOOKUP.findStatic(JSLinker.class, "getSlot" + i + "Double", MethodType.methodType(double.class, JSObject.class));
+				MH_SET_SLOT_DOUBLE[i] = LOOKUP.findStatic(JSLinker.class, "setSlot" + i + "Double", MethodType.methodType(void.class, JSObject.class, double.class));
+				MH_GET_SLOT_OBJECT[i] = LOOKUP.findStatic(JSLinker.class, "getSlot" + i + "Object", MethodType.methodType(Object.class, JSObject.class));
+				MH_SET_SLOT_OBJECT[i] = LOOKUP.findStatic(JSLinker.class, "setSlot" + i + "Object", MethodType.methodType(void.class, JSObject.class, Object.class));
 			}
 			MH_IS_EXACT_SHAPE_SETTER_DOUBLE = LOOKUP.findStatic(JSLinker.class, "isExactShapeSetterDouble", MethodType.methodType(boolean.class, JSShape.class, Object.class, double.class));
 			MH_IS_EXACT_SHAPE_SETTER_OBJECT = LOOKUP.findStatic(JSLinker.class, "isExactShapeSetterObject", MethodType.methodType(boolean.class, JSShape.class, Object.class, Object.class));
@@ -2601,85 +2601,77 @@ public class JSLinker {
 	// ----------------------------------------------------
 	// 针对 In-Object Top 8 槽位的单层扁平方法 (内联深度为 1，直接发射单条 vmovsd 汇编指令)
 	// ----------------------------------------------------
-	public static double getSlot0Double(Object target) { return UNSAFE.getDouble(target, PRIM_0_OFFSET); }
-	public static double getSlot1Double(Object target) { return UNSAFE.getDouble(target, PRIM_1_OFFSET); }
-	public static double getSlot2Double(Object target) { return UNSAFE.getDouble(target, PRIM_2_OFFSET); }
-	public static double getSlot3Double(Object target) { return UNSAFE.getDouble(target, PRIM_3_OFFSET); }
-	public static double getSlot4Double(Object target) { return UNSAFE.getDouble(target, PRIM_4_OFFSET); }
-	public static double getSlot5Double(Object target) { return UNSAFE.getDouble(target, PRIM_5_OFFSET); }
-	public static double getSlot6Double(Object target) { return UNSAFE.getDouble(target, PRIM_6_OFFSET); }
-	public static double getSlot7Double(Object target) { return UNSAFE.getDouble(target, PRIM_7_OFFSET); }
+	public static double getSlot0Double(JSObject target) { return Double.longBitsToDouble(target.prim0); }
+	public static double getSlot1Double(JSObject target) { return Double.longBitsToDouble(target.prim1); }
+	public static double getSlot2Double(JSObject target) { return Double.longBitsToDouble(target.prim2); }
+	public static double getSlot3Double(JSObject target) { return Double.longBitsToDouble(target.prim3); }
+	public static double getSlot4Double(JSObject target) { return Double.longBitsToDouble(target.prim4); }
+	public static double getSlot5Double(JSObject target) { return Double.longBitsToDouble(target.prim5); }
+	public static double getSlot6Double(JSObject target) { return Double.longBitsToDouble(target.prim6); }
+	public static double getSlot7Double(JSObject target) { return Double.longBitsToDouble(target.prim7); }
 
 	// 安全性说明：如果该槽位之前存的是 Object，
 	// 第一次变 Double 时走的是 setPropDoubleFallback -> jsObj.setDoubleSlot，
 	// 在 fallback 里已经执行了 setDoubleMask 和 obj0 = null。因此在缓存命中（Fast Path）的热路径上，
 	// 直接裸写 UNSAFE.putDouble 是完全安全的。
-	public static void setSlot0Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_0_OFFSET, val); }
-	public static void setSlot1Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_1_OFFSET, val); }
-	public static void setSlot2Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_2_OFFSET, val); }
-	public static void setSlot3Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_3_OFFSET, val); }
-	public static void setSlot4Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_4_OFFSET, val); }
-	public static void setSlot5Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_5_OFFSET, val); }
-	public static void setSlot6Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_6_OFFSET, val); }
-	public static void setSlot7Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_7_OFFSET, val); }
+	public static void setSlot0Double(JSObject target, double val) { target.prim0 = Double.doubleToRawLongBits(val); }
+	public static void setSlot1Double(JSObject target, double val) { target.prim1 = Double.doubleToRawLongBits(val); }
+	public static void setSlot2Double(JSObject target, double val) { target.prim2 = Double.doubleToRawLongBits(val); }
+	public static void setSlot3Double(JSObject target, double val) { target.prim3 = Double.doubleToRawLongBits(val); }
+	public static void setSlot4Double(JSObject target, double val) { target.prim4 = Double.doubleToRawLongBits(val); }
+	public static void setSlot5Double(JSObject target, double val) { target.prim5 = Double.doubleToRawLongBits(val); }
+	public static void setSlot6Double(JSObject target, double val) { target.prim6 = Double.doubleToRawLongBits(val); }
+	public static void setSlot7Double(JSObject target, double val) { target.prim7 = Double.doubleToRawLongBits(val); }
 
-	public static Object getSlot0Object(Object target) {
-		JSObject obj = (JSObject) target;
+	public static Object getSlot0Object(JSObject obj) {
 		if ((obj.doubleFieldMask & 1L) != 0L) return Double.longBitsToDouble(obj.prim0);
 		Object val = obj.obj0;
 		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
-	public static Object getSlot1Object(Object target) {
-		JSObject obj = (JSObject) target;
+	public static Object getSlot1Object(JSObject obj) {
 		if ((obj.doubleFieldMask & 2L) != 0L) return Double.longBitsToDouble(obj.prim1);
 		Object val = obj.obj1;
 		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
-	public static Object getSlot2Object(Object target) {
-		JSObject obj = (JSObject) target;
+	public static Object getSlot2Object(JSObject obj) {
 		if ((obj.doubleFieldMask & 4L) != 0L) return Double.longBitsToDouble(obj.prim2);
 		Object val = obj.obj2;
 		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
-	public static Object getSlot3Object(Object target) {
-		JSObject obj = (JSObject) target;
+	public static Object getSlot3Object(JSObject obj) {
 		if ((obj.doubleFieldMask & 8L) != 0L) return Double.longBitsToDouble(obj.prim3);
 		Object val = obj.obj3;
 		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
-	public static Object getSlot4Object(Object target) {
-		JSObject obj = (JSObject) target;
+	public static Object getSlot4Object(JSObject obj) {
 		if ((obj.doubleFieldMask & 16L) != 0L) return Double.longBitsToDouble(obj.prim4);
 		Object val = obj.obj4;
 		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
-	public static Object getSlot5Object(Object target) {
-		JSObject obj = (JSObject) target;
+	public static Object getSlot5Object(JSObject obj) {
 		if ((obj.doubleFieldMask & 32L) != 0L) return Double.longBitsToDouble(obj.prim5);
 		Object val = obj.obj5;
 		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
-	public static Object getSlot6Object(Object target) {
-		JSObject obj = (JSObject) target;
+	public static Object getSlot6Object(JSObject obj) {
 		if ((obj.doubleFieldMask & 64L) != 0L) return Double.longBitsToDouble(obj.prim6);
 		Object val = obj.obj6;
 		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
-	public static Object getSlot7Object(Object target) {
-		JSObject obj = (JSObject) target;
+	public static Object getSlot7Object(JSObject obj) {
 		if ((obj.doubleFieldMask & 128L) != 0L) return Double.longBitsToDouble(obj.prim7);
 		Object val = obj.obj7;
 		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
 
-	public static void setSlot0Object(Object target, Object val) { ((JSObject) target).setSlot(0, val); }
-	public static void setSlot1Object(Object target, Object val) { ((JSObject) target).setSlot(1, val); }
-	public static void setSlot2Object(Object target, Object val) { ((JSObject) target).setSlot(2, val); }
-	public static void setSlot3Object(Object target, Object val) { ((JSObject) target).setSlot(3, val); }
-	public static void setSlot4Object(Object target, Object val) { ((JSObject) target).setSlot(4, val); }
-	public static void setSlot5Object(Object target, Object val) { ((JSObject) target).setSlot(5, val); }
-	public static void setSlot6Object(Object target, Object val) { ((JSObject) target).setSlot(6, val); }
-	public static void setSlot7Object(Object target, Object val) { ((JSObject) target).setSlot(7, val); }
+	public static void setSlot0Object(JSObject target, Object val) { target.setSlot(0, val); }
+	public static void setSlot1Object(JSObject target, Object val) { target.setSlot(1, val); }
+	public static void setSlot2Object(JSObject target, Object val) { target.setSlot(2, val); }
+	public static void setSlot3Object(JSObject target, Object val) { target.setSlot(3, val); }
+	public static void setSlot4Object(JSObject target, Object val) { target.setSlot(4, val); }
+	public static void setSlot5Object(JSObject target, Object val) { target.setSlot(5, val); }
+	public static void setSlot6Object(JSObject target, Object val) { target.setSlot(6, val); }
+	public static void setSlot7Object(JSObject target, Object val) { target.setSlot(7, val); }
 
 	private static MethodHandle buildPrimFieldGetter(Class<?> targetClass, Field field, long offset,
 	                                                 Class<?> requestedPrim) {

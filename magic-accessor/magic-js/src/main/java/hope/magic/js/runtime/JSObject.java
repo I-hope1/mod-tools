@@ -38,7 +38,31 @@ public class JSObject {
 	}
 
 	public JSShape shape = JSShape.ROOT;
-	public long    doubleFieldMask/*  = 0L */; // 记录哪些 offset 槽位存储的是 double
+	public long    doubleFieldMask/*  = 0L */; // 记录哪些 offset 槽位存储的是 double (低 64 位)
+	public long[]  overflowDoubleMask;
+
+	public boolean isDoubleSlot(int offset) {
+		if (offset < 64) {
+			return (doubleFieldMask & (1L << offset)) != 0L;
+		}
+		int wordIdx = (offset >> 6) - 1;
+		long[] ofm = overflowDoubleMask;
+		return ofm != null && wordIdx < ofm.length && (ofm[wordIdx] & (1L << (offset & 63))) != 0L;
+	}
+
+	public void setDoubleMask(int offset) {
+		if (offset < 64) {
+			doubleFieldMask |= (1L << offset);
+		} else {
+			int wordIdx = (offset >> 6) - 1;
+			if (overflowDoubleMask == null) {
+				overflowDoubleMask = new long[Math.max(2, wordIdx + 1)];
+			} else if (wordIdx >= overflowDoubleMask.length) {
+				overflowDoubleMask = Arrays.copyOf(overflowDoubleMask, Math.max(overflowDoubleMask.length * 2, wordIdx + 1));
+			}
+			overflowDoubleMask[wordIdx] |= (1L << (offset & 63));
+		}
+	}
 
 	public long prim0, prim1, prim2, prim3, prim4, prim5, prim6, prim7;
 	public long[] overflowPrim/*  = null */;
@@ -84,7 +108,7 @@ public class JSObject {
 	}
 
 	public void setDoubleSlot(int offset, double value) {
-		doubleFieldMask |= (1L << offset);
+		setDoubleMask(offset);
 		long raw = Double.doubleToRawLongBits(value);
 		switch (offset) {
 			case 0 -> {
@@ -176,7 +200,15 @@ public class JSObject {
 	}
 
 	public void clearDoubleMask(int offset) {
-		doubleFieldMask &= ~(1L << offset);
+		if (offset < 64) {
+			doubleFieldMask &= ~(1L << offset);
+		} else {
+			int wordIdx = (offset >> 6) - 1;
+			long[] ofm = overflowDoubleMask;
+			if (ofm != null && wordIdx < ofm.length) {
+				ofm[wordIdx] &= ~(1L << (offset & 63));
+			}
+		}
 	}
 
 	private void clearPrimSlot(int offset) {
@@ -214,7 +246,7 @@ public class JSObject {
 	 * 供 Linker / IC 快速读槽位：若为 DELETED，严格返回 JSUndefined.INSTANCE，绝不泄露内部哨兵
 	 */
 	public Object getSlot(int offset) {
-		if ((doubleFieldMask & (1L << offset)) == 0L) {
+		if (!isDoubleSlot(offset)) {
 			return getObjectSlot(offset);
 		}
 		return getBoxedDouble(offset);
@@ -229,7 +261,7 @@ public class JSObject {
 	public Object get(int propId) {
 		int offset = shape.getOffset(propId);
 		if (offset >= 0) {
-			if ((doubleFieldMask & (1L << offset)) != 0L) {
+			if (isDoubleSlot(offset)) {
 				return getBoxedDouble(offset);
 			}
 			Object val = getRawObjectSlot(offset);
@@ -251,7 +283,7 @@ public class JSObject {
 	public double getAsDouble(int propId) {
 		int offset = shape.getOffset(propId);
 		if (offset >= 0) {
-			if ((doubleFieldMask & (1L << offset)) != 0L) {
+			if (isDoubleSlot(offset)) {
 				return getDoubleSlot(offset);
 			}
 			Object val = getRawObjectSlot(offset);
@@ -361,7 +393,7 @@ public class JSObject {
 	public boolean has(int propId) {
 		int offset = shape.getOffset(propId);
 		if (offset >= 0) {
-			if ((doubleFieldMask & (1L << offset)) != 0L) {
+			if (isDoubleSlot(offset)) {
 				return true;
 			}
 			// 只有 DELETED 表示不存在；null 和 undefined 均为对象上的有效属性
@@ -402,7 +434,7 @@ public class JSObject {
 
 		Set<String> activeKeys = new LinkedHashSet<>(count);
 		for (int i = 0; i < count; i++) {
-			if ((doubleFieldMask & (1L << i)) != 0L || getRawObjectSlot(i) != DELETED) {
+			if (isDoubleSlot(i) || getRawObjectSlot(i) != DELETED) {
 				int    keyId = shape.getKeyId(i);
 				String name  = SymbolTable.name(keyId);
 				if (name != null) activeKeys.add(name);
@@ -419,7 +451,7 @@ public class JSObject {
 
 		Map<String, Object> map = new LinkedHashMap<>(count);
 		for (int i = 0; i < count; i++) {
-			if ((doubleFieldMask & (1L << i)) != 0L) {
+			if (isDoubleSlot(i)) {
 				int    keyId = shape.getKeyId(i);
 				String name  = SymbolTable.name(keyId);
 				if (name != null) {

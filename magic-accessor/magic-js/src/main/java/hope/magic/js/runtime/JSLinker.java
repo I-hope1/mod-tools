@@ -1208,7 +1208,7 @@ public class JSLinker {
 			if (entry != 0L && (int) (entry >>> 32) == s.id) {
 				int offset = (int) entry;
 				// 必须验证该槽位当前存储的是不是原生 double
-				if ((jsObj.doubleFieldMask & (1L << offset)) != 0L) {
+				if (jsObj.isDoubleSlot(offset)) {
 					return jsObj.getDoubleSlot(offset);
 				}
 				return jsObj.getAsDouble(propName);
@@ -1235,7 +1235,7 @@ public class JSLinker {
 			if (entry != 0L && (int) (entry >>> 32) == s.id) {
 				int offset = (int) entry;
 				// 必须验证该槽位当前存储的是不是原生 double
-				if ((jsObj.doubleFieldMask & (1L << offset)) != 0L) {
+				if (jsObj.isDoubleSlot(offset)) {
 					return (int) jsObj.getDoubleSlot(offset);
 				}
 				return (int) jsObj.getAsDouble(propName);
@@ -1262,7 +1262,7 @@ public class JSLinker {
 			if (entry != 0L && (int) (entry >>> 32) == s.id) {
 				int offset = (int) entry;
 				// 必须验证该槽位当前存储的是不是原生 double
-				if ((jsObj.doubleFieldMask & (1L << offset)) != 0L) {
+				if (jsObj.isDoubleSlot(offset)) {
 					return (long) jsObj.getDoubleSlot(offset);
 				}
 				return (long) jsObj.getAsDouble(propName);

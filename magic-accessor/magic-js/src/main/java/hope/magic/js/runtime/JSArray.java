@@ -306,7 +306,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		}
 		int offset = shape.getOffset(propId);
 		if (offset >= 0) {
-			if ((doubleFieldMask & (1L << offset)) != 0L) {
+			if (isDoubleSlot(offset)) {
 				return getDoubleSlot(offset);
 			}
 			return JSOps.toDouble(getObjectSlot(offset));

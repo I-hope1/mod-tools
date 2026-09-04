@@ -2070,4 +2070,17 @@ public class MagicJSTest {
 		Assertions.assertEquals(true, cx.eval("var s1 = 'apple', s2 = 'apple'; s1 <= s2;"));
 		Assertions.assertEquals(true, cx.eval("var s1 = 'apple', s2 = 'apple'; s1 >= s2;"));
 	}
+
+	@Test
+	public void testMemberAndIndexCompoundAssignment() {
+		JSContext cx = new JSContext();
+
+		// 对象属性复合赋值
+		Assertions.assertEquals(15.0, ((Number) cx.eval("var o = { x: 10 }; o.x += 5; o.x;")).doubleValue());
+		Assertions.assertEquals(20.0, ((Number) cx.eval("var o = { x: 10 }; o.x *= 2;")).doubleValue());
+
+		// 数组索引复合赋值
+		Assertions.assertEquals(105.0, ((Number) cx.eval("var a = [100]; a[0] += 5; a[0];")).doubleValue());
+		Assertions.assertEquals(200.0, ((Number) cx.eval("var a = [100]; a[0] *= 2;")).doubleValue());
+	}
 }

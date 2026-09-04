@@ -1446,12 +1446,21 @@ public class JSCompiler {
 		}
 
 		if (assign.target instanceof Node.MemberAccessExpr member) {
-			compileSetProp(member.target, member.property, assign.value, ctx, needResult);
+			if (assign.op == TokenType.ASSIGN) {
+				compileSetProp(member.target, member.property, assign.value, ctx, needResult);
+			} else {
+				compileCompoundSetProp(member.target, member.property, assign.op, assign.value, ctx, needResult);
+			}
 			return;
 		}
 
 		if (assign.target instanceof Node.IndexAccessExpr idxAccess) {
-			compileAssignIndex(idxAccess, assign.value, ctx, needResult);
+			if (assign.op == TokenType.ASSIGN) {
+				compileAssignIndex(idxAccess, assign.value, ctx, needResult);
+			} else {
+				compileCompoundAssignIndex(idxAccess, assign.op, assign.value, ctx, needResult);
+			}
+			return;
 		}
 	}
 
@@ -1543,6 +1552,90 @@ public class JSCompiler {
 			mv.visitInsn(Opcodes.DUP_X1);
 		}
 		mv.visitInvokeDynamicInsn("setProp", "(Ljava/lang/Object;Ljava/lang/Object;)V", BSM_SET_PROP, prop);
+	}
+
+	private static void compileCompoundSetProp(Node target, String prop, TokenType op, Node value,
+	                                           CompileContext ctx, boolean needResult) {
+		MethodVisitor mv   = ctx.mv;
+		int           mark = ctx.markTempSlots();
+		try {
+			int targetSlot = ctx.allocTempSlot();
+			compileNode(target, ctx, true);
+			mv.visitVarInsn(Opcodes.ASTORE, targetSlot);
+
+			mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+			mv.visitInvokeDynamicInsn("getProp", "(Ljava/lang/Object;)Ljava/lang/Object;", BSM_GET_PROP, prop);
+
+			compileNode(value, ctx, true);
+
+			String opStr = getBinaryOpStr(op);
+			mv.visitInvokeDynamicInsn("op", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", BSM_BINARY_OP, opStr);
+
+			if (needResult) {
+				int resSlot = ctx.allocTempSlot();
+				mv.visitInsn(Opcodes.DUP);
+				mv.visitVarInsn(Opcodes.ASTORE, resSlot);
+				int writeSlot = ctx.allocTempSlot();
+				mv.visitVarInsn(Opcodes.ASTORE, writeSlot);
+				mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+				mv.visitVarInsn(Opcodes.ALOAD, writeSlot);
+				mv.visitInvokeDynamicInsn("setProp", "(Ljava/lang/Object;Ljava/lang/Object;)V", BSM_SET_PROP, prop);
+				mv.visitVarInsn(Opcodes.ALOAD, resSlot);
+			} else {
+				int writeSlot = ctx.allocTempSlot();
+				mv.visitVarInsn(Opcodes.ASTORE, writeSlot);
+				mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+				mv.visitVarInsn(Opcodes.ALOAD, writeSlot);
+				mv.visitInvokeDynamicInsn("setProp", "(Ljava/lang/Object;Ljava/lang/Object;)V", BSM_SET_PROP, prop);
+			}
+		} finally {
+			ctx.resetTempSlots(mark);
+		}
+	}
+
+	private static void compileCompoundAssignIndex(Node.IndexAccessExpr idxAccess, TokenType op, Node value,
+	                                               CompileContext ctx, boolean needResult) {
+		MethodVisitor mv   = ctx.mv;
+		int           mark = ctx.markTempSlots();
+		try {
+			int targetSlot = ctx.allocTempSlot();
+			int indexSlot  = ctx.allocTempSlot();
+			compileNode(idxAccess.target, ctx, true);
+			mv.visitVarInsn(Opcodes.ASTORE, targetSlot);
+			compileNode(idxAccess.index, ctx, true);
+			mv.visitVarInsn(Opcodes.ASTORE, indexSlot);
+
+			mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+			mv.visitVarInsn(Opcodes.ALOAD, indexSlot);
+			mv.visitInvokeDynamicInsn("getIndex", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", BSM_GET_INDEX);
+
+			compileNode(value, ctx, true);
+
+			String opStr = getBinaryOpStr(op);
+			mv.visitInvokeDynamicInsn("op", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", BSM_BINARY_OP, opStr);
+
+			if (needResult) {
+				int resSlot = ctx.allocTempSlot();
+				mv.visitInsn(Opcodes.DUP);
+				mv.visitVarInsn(Opcodes.ASTORE, resSlot);
+				int writeSlot = ctx.allocTempSlot();
+				mv.visitVarInsn(Opcodes.ASTORE, writeSlot);
+				mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+				mv.visitVarInsn(Opcodes.ALOAD, indexSlot);
+				mv.visitVarInsn(Opcodes.ALOAD, writeSlot);
+				mv.visitInvokeDynamicInsn("setIndex", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V", BSM_SET_INDEX);
+				mv.visitVarInsn(Opcodes.ALOAD, resSlot);
+			} else {
+				int writeSlot = ctx.allocTempSlot();
+				mv.visitVarInsn(Opcodes.ASTORE, writeSlot);
+				mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+				mv.visitVarInsn(Opcodes.ALOAD, indexSlot);
+				mv.visitVarInsn(Opcodes.ALOAD, writeSlot);
+				mv.visitInvokeDynamicInsn("setIndex", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V", BSM_SET_INDEX);
+			}
+		} finally {
+			ctx.resetTempSlots(mark);
+		}
 	}
 
 	private static void compileTernary(Node.TernaryExpr ternary, CompileContext ctx, boolean needResult) {

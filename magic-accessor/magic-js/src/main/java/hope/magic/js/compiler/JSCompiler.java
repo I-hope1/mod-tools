@@ -1235,7 +1235,8 @@ public class JSCompiler {
 					mv.visitInsn(Opcodes.L2I);
 				} else if (var.isDouble()) {
 					mv.visitVarInsn(Opcodes.DLOAD, var.slot);
-					mv.visitInsn(Opcodes.D2I);
+					mv.visitInsn(Opcodes.D2L);
+					mv.visitInsn(Opcodes.L2I);
 				} else {
 					mv.visitVarInsn(Opcodes.ALOAD, var.slot);
 					mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
@@ -1354,7 +1355,8 @@ public class JSCompiler {
 			mv.visitInsn(dOpcode);
 			return;
 		}
-		mv.visitInsn(Opcodes.D2I);
+		mv.visitInsn(Opcodes.D2L);
+		mv.visitInsn(Opcodes.L2I);
 		compileNodeAsInt(assign.value, ctx);
 		if (assign.op == TokenType.USHR_ASSIGN) {
 			mv.visitInsn(Opcodes.IUSHR);
@@ -1387,6 +1389,12 @@ public class JSCompiler {
 				if (var.isInt()) {
 					if (assign.op == TokenType.ASSIGN) {
 						compileNodeAsInt(assign.value, ctx);
+					} else if (assign.op == TokenType.SLASH_ASSIGN) {
+						mv.visitVarInsn(Opcodes.ILOAD, var.slot);
+						mv.visitInsn(Opcodes.I2D);
+						compileNodeAsDouble(assign.value, ctx);
+						mv.visitInsn(Opcodes.DDIV);
+						mv.visitInsn(Opcodes.D2I);
 					} else if (isIntCompound) {
 						mv.visitVarInsn(Opcodes.ILOAD, var.slot);
 						compileNodeAsInt(assign.value, ctx);
@@ -1399,6 +1407,24 @@ public class JSCompiler {
 				if (var.isLong()) {
 					if (assign.op == TokenType.ASSIGN) {
 						compileNodeAsLong(assign.value, ctx);
+					} else if (assign.op == TokenType.SHL_ASSIGN || assign.op == TokenType.SHR_ASSIGN || assign.op == TokenType.USHR_ASSIGN) {
+						mv.visitVarInsn(Opcodes.LLOAD, var.slot);
+						mv.visitInsn(Opcodes.L2I);
+						compileNodeAsInt(assign.value, ctx);
+						int shiftOp = switch (assign.op) {
+							case SHL_ASSIGN -> Opcodes.ISHL;
+							case SHR_ASSIGN -> Opcodes.ISHR;
+							case USHR_ASSIGN -> Opcodes.IUSHR;
+							default -> 0;
+						};
+						mv.visitInsn(shiftOp);
+						if (assign.op == TokenType.USHR_ASSIGN) {
+							mv.visitInsn(Opcodes.I2L);
+							pushLong(mv, MASK_UINT32);
+							mv.visitInsn(Opcodes.LAND);
+						} else {
+							mv.visitInsn(Opcodes.I2L);
+						}
 					} else if (isCompound) {
 						mv.visitVarInsn(Opcodes.LLOAD, var.slot);
 						compileNodeAsLong(assign.value, ctx);
@@ -2572,7 +2598,8 @@ public class JSCompiler {
 
 		// 通用降级
 		compileNodeAsDouble(node, ctx);
-		mv.visitInsn(Opcodes.D2I);
+		mv.visitInsn(Opcodes.D2L);
+		mv.visitInsn(Opcodes.L2I);
 	}
 
 	private static void compileNodeAsLong(Node node, CompileContext ctx) {

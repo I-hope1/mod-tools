@@ -2083,4 +2083,17 @@ public class MagicJSTest {
 		Assertions.assertEquals(105.0, ((Number) cx.eval("var a = [100]; a[0] += 5; a[0];")).doubleValue());
 		Assertions.assertEquals(200.0, ((Number) cx.eval("var a = [100]; a[0] *= 2;")).doubleValue());
 	}
+
+	@Test
+	public void testIntAndLongCompoundAssignment() {
+		JSContext cx = new JSContext();
+
+		// 整型 /= 复合赋值
+		Assertions.assertEquals(5.0, ((Number) cx.eval("var x = 10; x /= 2; x;")).doubleValue());
+
+		// 长整型位移复合赋值
+		Assertions.assertEquals(1705032704.0, ((Number) cx.eval("var l = 3000000000; l <<= 1; l;")).doubleValue());
+		Assertions.assertEquals(-647483648.0, ((Number) cx.eval("var l = 3000000000; l >>= 1; l;")).doubleValue());
+		Assertions.assertEquals(1500000000.0, ((Number) cx.eval("var l = 3000000000; l >>>= 1; l;")).doubleValue());
+	}
 }

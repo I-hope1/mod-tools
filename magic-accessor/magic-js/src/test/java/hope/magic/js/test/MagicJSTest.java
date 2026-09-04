@@ -1567,6 +1567,11 @@ public class MagicJSTest {
 		Assertions.assertEquals(0.0, cx.eval("5 + -5"));
 
 		Assertions.assertEquals(Double.NaN, cx.eval("0 / 0"));
+		Assertions.assertFalse((Boolean) cx.eval("null === NaN"));
+		Double d1 = Double.NaN, d2 = Double.NaN;
+		Assertions.assertFalse(d1 == d2);
+		Assertions.assertTrue((Boolean) cx.eval("null !== NaN"));
+		Assertions.assertFalse((Boolean) cx.eval("NaN === NaN"));
 	}
 
 	@Test
@@ -1903,7 +1908,7 @@ public class MagicJSTest {
 		Assertions.assertNotNull(res, "Defensive contract: addPropertySlow must NEVER return null even if sentinel is hit!");
 	}
 
-	/* @Test
+	@Test
 	public void testLotOfShape() {
 		JSContext cx = new JSContext();
 		Assertions.assertEquals("hello", cx.eval("""
@@ -1917,7 +1922,7 @@ public class MagicJSTest {
 		 obj.p64 = 999.0;
 		 obj.p0
 		 """));
-	} */
+	}
 
 	@Test
 	public void testContextCreationBenchmark() {
@@ -1939,5 +1944,47 @@ public class MagicJSTest {
 		Assertions.assertNotNull(c1);
 		Assertions.assertTrue(coldNs < 50_000_000L, "First new JSContext() should take less than 50ms");
 		Assertions.assertTrue(warmNs < 50_000L, "Warm new JSContext() should take less than 50µs");
+	}
+
+	@Test
+	public void testFixedIssuesReview() {
+		JSContext cx = new JSContext();
+
+		// 1. 字符串字典序比较
+		Assertions.assertEquals(true, cx.eval("'apple' < 'banana';"));
+		Assertions.assertEquals(true, cx.eval("'b' > 'a';"));
+		Assertions.assertEquals(true, cx.eval("'10' < '2';"));
+		Assertions.assertEquals(true, cx.eval("'a' <= 'a';"));
+		Assertions.assertEquals(true, cx.eval("'a' >= 'a';"));
+		Assertions.assertEquals(false, cx.eval("'b' < 'a';"));
+
+		// 2. ToNumber(null) === 0
+		Assertions.assertEquals(1.0, ((Number) cx.eval("1 + null;")).doubleValue());
+		Assertions.assertEquals(0.0, ((Number) cx.eval("+null;")).doubleValue());
+		Assertions.assertEquals(0.0, ((Number) cx.eval("null * 5;")).doubleValue());
+
+		// 3. 未初始化变量默认为 undefined
+		Assertions.assertEquals(true, cx.eval("var uninit; uninit === undefined;"));
+		Assertions.assertEquals(JSUndefined.INSTANCE, cx.eval("var uninit; uninit;"));
+
+		// 4. 对象与数组字面量尾逗号
+		Assertions.assertEquals(3.0, ((Number) cx.eval("var obj = { x: 1, y: 2, }; obj.x + obj.y;")).doubleValue());
+		Assertions.assertEquals(2.0, ((Number) cx.eval("var arr = [10, 20, ]; arr.length;")).doubleValue());
+
+		// 5. 前置点浮点数
+		Assertions.assertEquals(0.75, ((Number) cx.eval(".5 + .25;")).doubleValue(), 0.0001);
+
+		// 6. 控制语句后紧跟正则字面量
+		Assertions.assertEquals(true, cx.eval("var ok = false; if (true) ok = /hello/.test('hello world'); ok;"));
+
+		// 7. 空属性名无越界
+		Assertions.assertEquals(JSUndefined.INSTANCE, cx.get(""));
+
+		// 8. 预计算 Shape 动态扩容不越界
+		Assertions.assertDoesNotThrow(() -> {
+			for (int i = 0; i < 100; i++) {
+				JSShape.registerPrecomputedShape(JSShape.ROOT);
+			}
+		});
 	}
 }

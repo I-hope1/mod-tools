@@ -276,6 +276,51 @@ public class GradientShapeBenchmark {
 		System.out.println("Shape-8  MagicJS: " + bench.magic_shape_08() + ", GraalJS: " + bench.graal_shape_08());
 		System.out.println("Shape-64 MagicJS: " + bench.magic_shape_64() + ", GraalJS: " + bench.graal_shape_64());
 
+		System.out.println("\n--------------------------------------------------------------------------------");
+		System.out.println("【纯多态属性访问基准 (2000 次 item.val 读取)】[5 次采样批次 x 200 轮稳态]");
+		System.out.println("--------------------------------------------------------------------------------");
+		System.out.printf("%-14s | %-20s | %-20s | %-16s | %-14s%n",
+			"Shape 数量", "MagicJS (Mean ± Std)", "GraalJS (Mean ± Std)", "MagicJS 单次/op", "性能对比");
+		System.out.println("--------------------------------------------------------------------------------");
+
+		int[] gradients = {1, 2, 4, 8, 64};
+		for (int n : gradients) {
+			Runnable magicTask = switch (n) {
+				case 1 -> () -> { try { bench.magic_shape_01(); } catch (Throwable t) { throw new RuntimeException(t); } };
+				case 2 -> () -> { try { bench.magic_shape_02(); } catch (Throwable t) { throw new RuntimeException(t); } };
+				case 4 -> () -> { try { bench.magic_shape_04(); } catch (Throwable t) { throw new RuntimeException(t); } };
+				case 8 -> () -> { try { bench.magic_shape_08(); } catch (Throwable t) { throw new RuntimeException(t); } };
+				default -> () -> { try { bench.magic_shape_64(); } catch (Throwable t) { throw new RuntimeException(t); } };
+			};
+			Runnable graalTask = switch (n) {
+				case 1 -> bench::graal_shape_01;
+				case 2 -> bench::graal_shape_02;
+				case 4 -> bench::graal_shape_04;
+				case 8 -> bench::graal_shape_08;
+				default -> bench::graal_shape_64;
+			};
+
+			StatResult mStat = measureStats(magicTask, 200, 5, 200);
+			StatResult gStat = measureStats(graalTask, 200, 5, 200);
+
+			double ratio = gStat.meanUs / mStat.meanUs;
+			String compareStr = ratio >= 1.0
+				? String.format("MagicJS 快 %.2fx", ratio)
+				: String.format("GraalJS 快 %.2fx", 1.0 / ratio);
+
+			String shapeLabel = switch (n) {
+				case 1 -> "1 (单态)";
+				case 2 -> "2 (双态)";
+				case 4 -> "4 (多态-4)";
+				case 8 -> "8 (多态-8)";
+				case 64 -> "64 (巨态-64)";
+				default -> String.valueOf(n);
+			};
+
+			System.out.printf("%-14s | %8.2f ± %5.2f µs | %8.2f ± %5.2f µs | %10.2f ns/op   | %s%n",
+				shapeLabel, mStat.meanUs, mStat.stdDevUs, gStat.meanUs, gStat.stdDevUs, (mStat.meanUs * 1000.0 / 2000.0), compareStr);
+		}
+
 		bench.tearDown();
 		System.out.println(">>> [PASS] TearDown 终态校验全部通过！验证大获全胜！");
 	}

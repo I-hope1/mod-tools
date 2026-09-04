@@ -48,6 +48,7 @@ public class JSLinker {
 	public static final MethodHandle[] MH_SET_SLOT_OBJECT = new MethodHandle[8];
 	public static final MethodHandle   MH_IS_EXACT_SHAPE_SETTER_DOUBLE;
 	public static final MethodHandle   MH_IS_EXACT_SHAPE_SETTER_OBJECT;
+	public static final MethodHandle   MH_IS_MATCH_MASK;
 
 	static {
 		try {
@@ -78,6 +79,7 @@ public class JSLinker {
 			}
 			MH_IS_EXACT_SHAPE_SETTER_DOUBLE = LOOKUP.findStatic(JSLinker.class, "isExactShapeSetterDouble", MethodType.methodType(boolean.class, JSShape.class, Object.class, double.class));
 			MH_IS_EXACT_SHAPE_SETTER_OBJECT = LOOKUP.findStatic(JSLinker.class, "isExactShapeSetterObject", MethodType.methodType(boolean.class, JSShape.class, Object.class, Object.class));
+			MH_IS_MATCH_MASK = LOOKUP.findStatic(JSLinker.class, "isMatchMask", MethodType.methodType(boolean.class, long.class, Object.class));
 		} catch (Throwable e) {
 			throw new ExceptionInInitializerError(e);
 		}
@@ -371,9 +373,30 @@ public class JSLinker {
 		JSShape[] shapes  = snap.shapes();
 		int[]     offsets = snap.offsets();
 		int       n       = shapes.length;
+		if (n == 0) return fallback;
+
+		// ── 优化 ①：小规模多态 (n <= 4) 展开式级联 GWT ──
+		if (n <= 4) {
+			MethodHandle chain = fallback;
+			for (int i = n - 1; i >= 0; i--) {
+				int off = offsets[i];
+				MethodHandle fastGetter = off < 8
+				 ? MH_GET_SLOT_OBJECT[off]
+				 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, off);
+				MethodHandle exactTest = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
+				chain = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), chain);
+			}
+			return chain;
+		}
+
+		// ── 优化 ②：多态/巨态按 Offset 分组聚合位掩码 (Offset-Class Mask Dispatch) ──
+		MethodHandle maskChain = tryBuildOffsetMaskDispatchObject(shapes, offsets, n, fallback);
+		if (maskChain != null) {
+			return maskChain;
+		}
 
 		// 路线 A：JDK 17+ 原生硬件跳转表
-		if (SUPPORTS_TABLE_SWITCH && n > 0) {
+		if (SUPPORTS_TABLE_SWITCH) {
 			try {
 				int minId = Integer.MAX_VALUE, maxId = Integer.MIN_VALUE;
 				for (JSShape s : shapes) {
@@ -383,10 +406,8 @@ public class JSLinker {
 				int span = maxId - minId + 1;
 
 				if (span <= n * 4 && span <= 64) {
-					// 1. Fallback 包装：(Object) -> Object  ==>  (int, Object) -> Object
 					MethodHandle fallbackWithSel = MethodHandles.dropArguments(fallback, 0, int.class);
 
-					// 2. 构造 span 大小的 targets 数组（空洞槽位填充 fallbackWithSel）
 					MethodHandle[] targets = new MethodHandle[span];
 					Arrays.fill(targets, fallbackWithSel);
 
@@ -400,24 +421,16 @@ public class JSLinker {
 						MethodHandle exactTest     = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
 						MethodHandle guardedGetter = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), fallback);
 
-						// 目标包装为 (int, Object) -> Object
 						targets[idx] = MethodHandles.dropArguments(guardedGetter, 0, int.class);
 					}
 
-					// 3. 构建核心 tableSwitch: (int selector, Object target) -> Object
-					MethodHandle ts = invokeTableSwitch(fallbackWithSel, targets);
-
-					// 4. 构建选择器: (Object target) -> int
+					MethodHandle ts       = invokeTableSwitch(fallbackWithSel, targets);
 					MethodHandle selector = buildShapeIdSelector(minId, span);
-
-					// 5. 使用 foldArguments 将 selector(target) 的结果作为第 0 个参数喂给 ts
-					// 输出最终签名: (Object) -> Object (内联深度 = 1)
 					return MethodHandles.foldArguments(ts, selector);
 				}
 			} catch (Throwable ignored) { }
 		}
 
-		// 路线 B：线性扫描静态方法（低版本兼容路径）
 		return buildFlatPolySwitchObjectLinear(shapes, offsets, n, fallback);
 	}
 
@@ -426,8 +439,29 @@ public class JSLinker {
 		JSShape[] shapes  = snap.shapes();
 		int[]     offsets = snap.offsets();
 		int       n       = shapes.length;
+		if (n == 0) return fallback;
 
-		if (SUPPORTS_TABLE_SWITCH && n > 0) {
+		// ── 优化 ①：小规模多态 (n <= 4) 展开式级联 GWT ──
+		if (n <= 4) {
+			MethodHandle chain = fallback;
+			for (int i = n - 1; i >= 0; i--) {
+				int off = offsets[i];
+				MethodHandle fastGetter = off < 8
+				 ? MH_GET_SLOT_DOUBLE[off]
+				 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE, 0, off);
+				MethodHandle exactTest = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
+				chain = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), chain);
+			}
+			return chain;
+		}
+
+		// ── 优化 ②：多态/巨态按 Offset 分组聚合位掩码 (Offset-Class Mask Dispatch) ──
+		MethodHandle maskChain = tryBuildOffsetMaskDispatchDouble(shapes, offsets, n, fallback);
+		if (maskChain != null) {
+			return maskChain;
+		}
+
+		if (SUPPORTS_TABLE_SWITCH) {
 			try {
 				int minId = Integer.MAX_VALUE, maxId = Integer.MIN_VALUE;
 				for (JSShape s : shapes) {
@@ -470,39 +504,58 @@ public class JSLinker {
 		JSShape[] shapes  = snap.shapes();
 		int[]     offsets = snap.offsets();
 		int       n       = shapes.length;
+		if (n == 0) return fallback;
 
-		if (!SUPPORTS_TABLE_SWITCH || n == 0) return buildFlatPolySwitchIntLinear(shapes, offsets, n, fallback);
-
-		try {
-			int minId = Integer.MAX_VALUE, maxId = Integer.MIN_VALUE;
-			for (JSShape s : shapes) {
-				minId = Math.min(minId, s.id);
-				maxId = Math.max(maxId, s.id);
+		// ── 优化 ①：小规模多态 (n <= 4) 展开式级联 GWT ──
+		if (n <= 4) {
+			MethodHandle chain = fallback;
+			for (int i = n - 1; i >= 0; i--) {
+				int          off        = offsets[i];
+				MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_INT, 0, off);
+				MethodHandle exactTest  = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
+				chain = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), chain);
 			}
-			int span = maxId - minId + 1;
+			return chain;
+		}
 
-			if (span <= n * 4 && span <= 64) {
-				MethodHandle fallbackWithSel = MethodHandles.dropArguments(fallback, 0, int.class);
+		// ── 优化 ②：多态/巨态按 Offset 分组聚合位掩码 (Offset-Class Mask Dispatch) ──
+		MethodHandle maskChain = tryBuildOffsetMaskDispatchInt(shapes, offsets, n, fallback);
+		if (maskChain != null) {
+			return maskChain;
+		}
 
-				MethodHandle[] targets = new MethodHandle[span];
-				Arrays.fill(targets, fallbackWithSel);
-
-				for (int i = 0; i < n; i++) {
-					int          idx        = shapes[i].id - minId;
-					int          off        = offsets[i];
-					MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_INT, 0, off);
-
-					MethodHandle exactTest     = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
-					MethodHandle guardedGetter = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), fallback);
-
-					targets[idx] = MethodHandles.dropArguments(guardedGetter, 0, int.class);
+		if (SUPPORTS_TABLE_SWITCH) {
+			try {
+				int minId = Integer.MAX_VALUE, maxId = Integer.MIN_VALUE;
+				for (JSShape s : shapes) {
+					minId = Math.min(minId, s.id);
+					maxId = Math.max(maxId, s.id);
 				}
+				int span = maxId - minId + 1;
 
-				MethodHandle ts       = invokeTableSwitch(fallbackWithSel, targets);
-				MethodHandle selector = buildShapeIdSelector(minId, span);
-				return MethodHandles.foldArguments(ts, selector);
-			}
-		} catch (Throwable ignored) { }
+				if (span <= n * 4 && span <= 64) {
+					MethodHandle fallbackWithSel = MethodHandles.dropArguments(fallback, 0, int.class);
+
+					MethodHandle[] targets = new MethodHandle[span];
+					Arrays.fill(targets, fallbackWithSel);
+
+					for (int i = 0; i < n; i++) {
+						int          idx        = shapes[i].id - minId;
+						int          off        = offsets[i];
+						MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_INT, 0, off);
+
+						MethodHandle exactTest     = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
+						MethodHandle guardedGetter = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), fallback);
+
+						targets[idx] = MethodHandles.dropArguments(guardedGetter, 0, int.class);
+					}
+
+					MethodHandle ts       = invokeTableSwitch(fallbackWithSel, targets);
+					MethodHandle selector = buildShapeIdSelector(minId, span);
+					return MethodHandles.foldArguments(ts, selector);
+				}
+			} catch (Throwable ignored) { }
+		}
 
 		return buildFlatPolySwitchIntLinear(shapes, offsets, n, fallback);
 	}
@@ -512,41 +565,154 @@ public class JSLinker {
 		JSShape[] shapes  = snap.shapes();
 		int[]     offsets = snap.offsets();
 		int       n       = shapes.length;
+		if (n == 0) return fallback;
 
-		if (!SUPPORTS_TABLE_SWITCH || n == 0) return buildFlatPolySwitchLongLinear(shapes, offsets, n, fallback);
-
-		try {
-			int minId = Integer.MAX_VALUE, maxId = Integer.MIN_VALUE;
-			for (JSShape s : shapes) {
-				minId = Math.min(minId, s.id);
-				maxId = Math.max(maxId, s.id);
+		// ── 优化 ①：小规模多态 (n <= 4) 展开式级联 GWT ──
+		if (n <= 4) {
+			MethodHandle chain = fallback;
+			for (int i = n - 1; i >= 0; i--) {
+				int          off        = offsets[i];
+				MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_LONG, 0, off);
+				MethodHandle exactTest  = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
+				chain = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), chain);
 			}
-			int span = maxId - minId + 1;
+			return chain;
+		}
 
-			if (span <= n * 4 && span <= 64) {
-				MethodHandle fallbackWithSel = MethodHandles.dropArguments(fallback, 0, int.class);
+		// ── 优化 ②：多态/巨态按 Offset 分组聚合位掩码 (Offset-Class Mask Dispatch) ──
+		MethodHandle maskChain = tryBuildOffsetMaskDispatchLong(shapes, offsets, n, fallback);
+		if (maskChain != null) {
+			return maskChain;
+		}
 
-				MethodHandle[] targets = new MethodHandle[span];
-				Arrays.fill(targets, fallbackWithSel);
-
-				for (int i = 0; i < n; i++) {
-					int          idx        = shapes[i].id - minId;
-					int          off        = offsets[i];
-					MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_LONG, 0, off);
-
-					MethodHandle exactTest     = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
-					MethodHandle guardedGetter = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), fallback);
-
-					targets[idx] = MethodHandles.dropArguments(guardedGetter, 0, int.class);
+		if (SUPPORTS_TABLE_SWITCH) {
+			try {
+				int minId = Integer.MAX_VALUE, maxId = Integer.MIN_VALUE;
+				for (JSShape s : shapes) {
+					minId = Math.min(minId, s.id);
+					maxId = Math.max(maxId, s.id);
 				}
+				int span = maxId - minId + 1;
 
-				MethodHandle ts       = invokeTableSwitch(fallbackWithSel, targets);
-				MethodHandle selector = buildShapeIdSelector(minId, span);
-				return MethodHandles.foldArguments(ts, selector);
-			}
-		} catch (Throwable ignored) { }
+				if (span <= n * 4 && span <= 64) {
+					MethodHandle fallbackWithSel = MethodHandles.dropArguments(fallback, 0, int.class);
+
+					MethodHandle[] targets = new MethodHandle[span];
+					Arrays.fill(targets, fallbackWithSel);
+
+					for (int i = 0; i < n; i++) {
+						int          idx        = shapes[i].id - minId;
+						int          off        = offsets[i];
+						MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_LONG, 0, off);
+
+						MethodHandle exactTest     = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
+						MethodHandle guardedGetter = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), fallback);
+
+						targets[idx] = MethodHandles.dropArguments(guardedGetter, 0, int.class);
+					}
+
+					MethodHandle ts       = invokeTableSwitch(fallbackWithSel, targets);
+					MethodHandle selector = buildShapeIdSelector(minId, span);
+					return MethodHandles.foldArguments(ts, selector);
+				}
+			} catch (Throwable ignored) { }
+		}
 
 		return buildFlatPolySwitchLongLinear(shapes, offsets, n, fallback);
+	}
+
+	// ── 偏移类聚合位掩码辅助函数 (Offset-Class Mask Dispatch Helpers) ──────────
+
+	private static MethodHandle tryBuildOffsetMaskDispatchDouble(JSShape[] shapes, int[] offsets, int n, MethodHandle fallback) {
+		Map<Integer, Long> offsetMaskMap = new LinkedHashMap<>();
+		for (int i = 0; i < n; i++) {
+			JSShape s = shapes[i];
+			if (s.mask == 0L) return null; // 存在 id >= 64 的 Shape，掩码溢出，安全回落
+			offsetMaskMap.merge(offsets[i], s.mask, (m1, m2) -> m1 | m2);
+		}
+
+		if (offsetMaskMap.size() > 8) return null; // offset 种类过多时回落
+
+		MethodHandle chain = fallback;
+		List<Map.Entry<Integer, Long>> entries = new ArrayList<>(offsetMaskMap.entrySet());
+		for (int i = entries.size() - 1; i >= 0; i--) {
+			int off = entries.get(i).getKey();
+			long mask = entries.get(i).getValue();
+			MethodHandle fastGetter = off < 8
+			 ? MH_GET_SLOT_DOUBLE[off]
+			 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE, 0, off);
+			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_MASK, 0, mask);
+			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
+		}
+		return chain;
+	}
+
+	private static MethodHandle tryBuildOffsetMaskDispatchObject(JSShape[] shapes, int[] offsets, int n, MethodHandle fallback) {
+		Map<Integer, Long> offsetMaskMap = new LinkedHashMap<>();
+		for (int i = 0; i < n; i++) {
+			JSShape s = shapes[i];
+			if (s.mask == 0L) return null;
+			offsetMaskMap.merge(offsets[i], s.mask, (m1, m2) -> m1 | m2);
+		}
+
+		if (offsetMaskMap.size() > 8) return null;
+
+		MethodHandle chain = fallback;
+		List<Map.Entry<Integer, Long>> entries = new ArrayList<>(offsetMaskMap.entrySet());
+		for (int i = entries.size() - 1; i >= 0; i--) {
+			int off = entries.get(i).getKey();
+			long mask = entries.get(i).getValue();
+			MethodHandle fastGetter = off < 8
+			 ? MH_GET_SLOT_OBJECT[off]
+			 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, off);
+			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_MASK, 0, mask);
+			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
+		}
+		return chain;
+	}
+
+	private static MethodHandle tryBuildOffsetMaskDispatchInt(JSShape[] shapes, int[] offsets, int n, MethodHandle fallback) {
+		Map<Integer, Long> offsetMaskMap = new LinkedHashMap<>();
+		for (int i = 0; i < n; i++) {
+			JSShape s = shapes[i];
+			if (s.mask == 0L) return null;
+			offsetMaskMap.merge(offsets[i], s.mask, (m1, m2) -> m1 | m2);
+		}
+
+		if (offsetMaskMap.size() > 8) return null;
+
+		MethodHandle chain = fallback;
+		List<Map.Entry<Integer, Long>> entries = new ArrayList<>(offsetMaskMap.entrySet());
+		for (int i = entries.size() - 1; i >= 0; i--) {
+			int off = entries.get(i).getKey();
+			long mask = entries.get(i).getValue();
+			MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_INT, 0, off);
+			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_MASK, 0, mask);
+			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
+		}
+		return chain;
+	}
+
+	private static MethodHandle tryBuildOffsetMaskDispatchLong(JSShape[] shapes, int[] offsets, int n, MethodHandle fallback) {
+		Map<Integer, Long> offsetMaskMap = new LinkedHashMap<>();
+		for (int i = 0; i < n; i++) {
+			JSShape s = shapes[i];
+			if (s.mask == 0L) return null;
+			offsetMaskMap.merge(offsets[i], s.mask, (m1, m2) -> m1 | m2);
+		}
+
+		if (offsetMaskMap.size() > 8) return null;
+
+		MethodHandle chain = fallback;
+		List<Map.Entry<Integer, Long>> entries = new ArrayList<>(offsetMaskMap.entrySet());
+		for (int i = entries.size() - 1; i >= 0; i--) {
+			int off = entries.get(i).getKey();
+			long mask = entries.get(i).getValue();
+			MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_LONG, 0, off);
+			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_MASK, 0, mask);
+			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
+		}
+		return chain;
 	}
 
 	/** 构建异槽多态扁平 Switch 守卫（Object setter 版）。签名 {@code (Object, Object) -> void}。 */

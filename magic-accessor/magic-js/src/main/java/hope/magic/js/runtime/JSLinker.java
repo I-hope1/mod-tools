@@ -251,8 +251,9 @@ public class JSLinker {
 
 	public static final class IndexMH {
 		public static final MethodHandle
-		 GET = findMH(JSLinker.class, "getIndex", MethodType.methodType(Object.class, Object.class, Object.class)),
-		 SET = findMH(JSLinker.class, "setIndex", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
+		 GET          = findMH(JSLinker.class, "getIndex", MethodType.methodType(Object.class, Object.class, Object.class)),
+		 SET          = findMH(JSLinker.class, "setIndex", MethodType.methodType(void.class, Object.class, Object.class, Object.class)),
+		 GET_FALLBACK = findMH(JSLinker.class, "getIndexDynamicFallback", MethodType.methodType(Object.class, ChainedCallSite.class, Object.class, Object.class));
 	}
 
 	public static final class FieldMH {
@@ -1148,7 +1149,14 @@ public class JSLinker {
 	 String name,
 	 MethodType type
 	) {
-		return new ConstantCallSite(IndexMH.GET.asType(type));
+		ChainedCallSite site = new ChainedCallSite(type, IndexMH.GET.asType(type));
+
+		// 绑定 Fallback 处理器
+		MethodHandle fallback = IndexMH.GET_FALLBACK.bindTo(site).asType(type);
+
+		site.setInitialFallback(fallback);
+		site.setTarget(fallback);
+		return site;
 	}
 
 	public static CallSite bootstrapSetIndex(
@@ -1161,6 +1169,43 @@ public class JSLinker {
 	//endregion
 
 	//region Fallback 与 Inline Cache 实现
+
+	/** 双重守卫：Shape 相同且 Key 相同（先做引用比较 ==，失败再做 equals） */
+	@SuppressWarnings("EqualsReplaceableByObjectsCall")
+	public static boolean isExactShapeAndKey(JSShape expectedShape, String expectedKey, Object target, Object key) {
+		return target instanceof JSObject jsObj
+		       && jsObj.shape == expectedShape
+		       && (key == expectedKey || (key != null && key.equals(expectedKey)));
+	}
+
+	/** 动态对象索引读取的通用 Fallback 入口 */
+	public static Object getIndexDynamicFallback(ChainedCallSite site, Object target, Object index) throws Throwable {
+		if (target instanceof JSObject jsObj && index instanceof String strKey) {
+			JSShape s      = jsObj.shape;
+			int     offset = s.getOffset(strKey);
+
+			// 只有当属性命中且缓存深度 < 3 时挂载 Keyed IC 单态/多态分支
+			if (offset >= 0 && site.getChainDepth() < 3) {
+				MethodHandle test = LOOKUP.findStatic(
+				 JSLinker.class,
+				 "isExactShapeAndKey",
+				 MethodType.methodType(boolean.class, JSShape.class, String.class, Object.class, Object.class)
+				).bindTo(s).bindTo(strKey);
+
+				// 构造极速直读 Handle：(target, key) -> target.getSlot(offset)
+				MethodHandle getter = offset < 8
+				 ? MH_GET_SLOT_OBJECT[offset]
+				 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, offset);
+				// 丢弃第 1 个参数 key，适配签名 (Object, Object) -> Object
+				MethodHandle directTarget = MethodHandles.dropArguments(getter, 1, Object.class);
+
+				site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
+				return jsObj.getSlot(offset);
+			}
+		}
+		// 降级走原有的全量查找
+		return getIndex(target, index);
+	}
 
 	public static double getJSObjDoubleSlot(int slot, Object target) {
 		return ((JSObject) target).getDoubleSlot(slot);
@@ -2565,55 +2610,18 @@ public class JSLinker {
 	public static double getSlot6Double(Object target) { return UNSAFE.getDouble(target, PRIM_6_OFFSET); }
 	public static double getSlot7Double(Object target) { return UNSAFE.getDouble(target, PRIM_7_OFFSET); }
 
-	public static void setSlot0Double(Object target, double val) {
-		JSObject obj = (JSObject) target;
-		obj.doubleFieldMask |= 1L;
-		UNSAFE.putDouble(target, PRIM_0_OFFSET, val);
-		obj.obj0 = null;
-	}
-	public static void setSlot1Double(Object target, double val) {
-		JSObject obj = (JSObject) target;
-		obj.doubleFieldMask |= 2L;
-		UNSAFE.putDouble(target, PRIM_1_OFFSET, val);
-		obj.obj1 = null;
-	}
-	public static void setSlot2Double(Object target, double val) {
-		JSObject obj = (JSObject) target;
-		obj.doubleFieldMask |= 4L;
-		UNSAFE.putDouble(target, PRIM_2_OFFSET, val);
-		obj.obj2 = null;
-	}
-	public static void setSlot3Double(Object target, double val) {
-		JSObject obj = (JSObject) target;
-		obj.doubleFieldMask |= 8L;
-		UNSAFE.putDouble(target, PRIM_3_OFFSET, val);
-		obj.obj3 = null;
-	}
-	public static void setSlot4Double(Object target, double val) {
-		JSObject obj = (JSObject) target;
-		obj.doubleFieldMask |= 16L;
-		UNSAFE.putDouble(target, PRIM_4_OFFSET, val);
-		obj.obj4 = null;
-	}
-	public static void setSlot5Double(Object target, double val) {
-		JSObject obj = (JSObject) target;
-		obj.doubleFieldMask |= 32L;
-		UNSAFE.putDouble(target, PRIM_5_OFFSET, val);
-		obj.obj5 = null;
-	}
-	public static void setSlot6Double(Object target, double val) {
-		JSObject obj = (JSObject) target;
-		obj.doubleFieldMask |= 64L;
-		UNSAFE.putDouble(target, PRIM_6_OFFSET, val);
-		obj.obj6 = null;
-	}
-	public static void setSlot7Double(Object target, double val) {
-		JSObject obj = (JSObject) target;
-		obj.doubleFieldMask |= 128L;
-		UNSAFE.putDouble(target, PRIM_7_OFFSET, val);
-		obj.obj7 = null;
-	}
-
+	// 安全性说明：如果该槽位之前存的是 Object，
+	// 第一次变 Double 时走的是 setPropDoubleFallback -> jsObj.setDoubleSlot，
+	// 在 fallback 里已经执行了 setDoubleMask 和 obj0 = null。因此在缓存命中（Fast Path）的热路径上，
+	// 直接裸写 UNSAFE.putDouble 是完全安全的。
+	public static void setSlot0Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_0_OFFSET, val); }
+	public static void setSlot1Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_1_OFFSET, val); }
+	public static void setSlot2Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_2_OFFSET, val); }
+	public static void setSlot3Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_3_OFFSET, val); }
+	public static void setSlot4Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_4_OFFSET, val); }
+	public static void setSlot5Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_5_OFFSET, val); }
+	public static void setSlot6Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_6_OFFSET, val); }
+	public static void setSlot7Double(Object target, double val) { UNSAFE.putDouble(target, PRIM_7_OFFSET, val); }
 
 	public static Object getSlot0Object(Object target) {
 		JSObject obj = (JSObject) target;

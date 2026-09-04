@@ -324,18 +324,30 @@ public class JSOps {
 	}
 
 	public static Object lt(Object a, Object b) {
+		if (a instanceof CharSequence sa && b instanceof CharSequence sb) {
+			return sa.toString().compareTo(sb.toString()) < 0 ? Boolean.TRUE : Boolean.FALSE;
+		}
 		return toDouble(a) < toDouble(b) ? Boolean.TRUE : Boolean.FALSE;
 	}
 
 	public static Object lte(Object a, Object b) {
+		if (a instanceof CharSequence sa && b instanceof CharSequence sb) {
+			return sa.toString().compareTo(sb.toString()) <= 0 ? Boolean.TRUE : Boolean.FALSE;
+		}
 		return toDouble(a) <= toDouble(b) ? Boolean.TRUE : Boolean.FALSE;
 	}
 
 	public static Object gt(Object a, Object b) {
+		if (a instanceof CharSequence sa && b instanceof CharSequence sb) {
+			return sa.toString().compareTo(sb.toString()) > 0 ? Boolean.TRUE : Boolean.FALSE;
+		}
 		return toDouble(a) > toDouble(b) ? Boolean.TRUE : Boolean.FALSE;
 	}
 
 	public static Object gte(Object a, Object b) {
+		if (a instanceof CharSequence sa && b instanceof CharSequence sb) {
+			return sa.toString().compareTo(sb.toString()) >= 0 ? Boolean.TRUE : Boolean.FALSE;
+		}
 		return toDouble(a) >= toDouble(b) ? Boolean.TRUE : Boolean.FALSE;
 	}
 

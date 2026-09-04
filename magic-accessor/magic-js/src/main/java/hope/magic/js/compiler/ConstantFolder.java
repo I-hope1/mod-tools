@@ -320,7 +320,22 @@ public class ConstantFolder {
 	}
 
 	private static Node foldBinaryLiterals(Object lVal, TokenType op, Object rVal, int line, int column) {
-		// 1. 字符串拼接
+		// 1. 字符串拼接与比较
+		if (lVal instanceof String lStr && rVal instanceof String rStr) {
+			if (op == TokenType.PLUS) {
+				return new Node.LiteralExpr(lStr + rStr, line, column);
+			}
+			int cmp = lStr.compareTo(rStr);
+			return switch (op) {
+				case LT -> new Node.LiteralExpr(cmp < 0, line, column);
+				case LTE -> new Node.LiteralExpr(cmp <= 0, line, column);
+				case GT -> new Node.LiteralExpr(cmp > 0, line, column);
+				case GTE -> new Node.LiteralExpr(cmp >= 0, line, column);
+				case EQ, EQ_EQ -> new Node.LiteralExpr(cmp == 0, line, column);
+				case NOT_EQ, NOT_EQ_EQ -> new Node.LiteralExpr(cmp != 0, line, column);
+				default -> null;
+			};
+		}
 		if (op == TokenType.PLUS && (lVal instanceof String || rVal instanceof String)) {
 			return new Node.LiteralExpr(JSOps.toStr(lVal) + JSOps.toStr(rVal), line, column);
 		}

@@ -107,21 +107,23 @@ tasks.register('jmhJS', JavaExec) {
 	classpath = sourceSets.main.runtimeClasspath
 	mainClass = 'org.openjdk.jmh.Main'
 	jvmArgs(
-			"-Dpolyglot.engine.WarnInterpreterOnly=true",
+			/*"-Dpolyglot.engine.WarnInterpreterOnly=true",
 			'-XX:+EnableJVMCI',
-			'-XX:+UseJVMCICompiler',
+			'-XX:+UseJVMCICompiler',*/
 	)
+
 	args = [
-			'hope.magic.example.MagicJSBenchmark',
-			'-f', '3',
+			'hope.magic.example.MagicJSBenchmark.*dynamic_obj',
+			'-f', '2',
 			'-wi', '3',
 			'-i', '5',
 			'-bm', 'avgt',
 			'-tu', 'ns',
 			'-prof', 'gc',
+//			'-prof', 'xperfasm'
 	]
-	if (jsBenchmarkJdk.exists()) {
-		executable = jsBenchmarkJdk.absolutePath
+	if (openJdk.exists()) {
+		executable = openJdk.absolutePath
 	}
 }
 
@@ -150,6 +152,17 @@ tasks.register('coldJS', JavaExec) {
 }
 
 tasks.register('gradientJS', JavaExec) {
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'org.openjdk.jmh.Main'
+	args = [
+			'hope.magic.example.GradientShapeBenchmark'
+	]
+	if (jsBenchmarkJdk.exists()) {
+		executable = jsBenchmarkJdk.absolutePath
+	}
+}
+
+tasks.register('testGradient', JavaExec) {
 	classpath = sourceSets.main.runtimeClasspath
 	mainClass = 'hope.magic.example.GradientShapeBenchmark'
 	if (jsBenchmarkJdk.exists()) {

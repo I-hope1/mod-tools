@@ -940,7 +940,7 @@ public class MagicJSTest {
 	}
 
 	@Test
-	public void testMegamorphicCallSite() {
+	public void testMegamorphicCallSite() throws Throwable {
 		JSContext cx = new JSContext();
 		Object[] javaObjects = new Object[]{
 		 new MegaType0(), new MegaType1(), new MegaType2(), new MegaType3(), new MegaType4(),
@@ -988,6 +988,59 @@ public class MagicJSTest {
 		 	sumA;
 		 """);
 		Assertions.assertEquals(55.0, ((Number) r3).doubleValue());
+
+
+		var magicScript_1 = JSCompiler.compile(generateGradientCode(1));
+		var magicScript_2 = JSCompiler.compile(generateGradientCode(2));
+		var magicScript_4 = JSCompiler.compile(generateGradientCode(4));
+		var magicScript_8 = JSCompiler.compile(generateGradientCode(8));
+		var magicScript_64 = JSCompiler.compile(generateGradientCode(64));
+
+		// System.out.println(generateGradientCode(64));
+
+		Assertions.assertEquals(21000.0, magicScript_1.runDouble(cx));
+		Assertions.assertEquals(22000.0, magicScript_2.runDouble(cx));
+		Assertions.assertEquals(24000.0, magicScript_4.runDouble(cx));
+		Assertions.assertEquals(28000.0, magicScript_8.runDouble(cx));
+		Assertions.assertEquals(83616.0, magicScript_64.runDouble(cx));
+
+		// Assertions.assertEquals(21000.0, magicScript_64.runDouble(cx));
+
+		// 预热
+		for (int i = 0; i < 200000; i++) {
+			magicScript_1.runDouble(cx);
+			magicScript_2.runDouble(cx);
+			magicScript_4.runDouble(cx);
+			magicScript_8.runDouble(cx);
+			// magicScript_64.runDouble(cx);
+		}
+
+		Assertions.assertEquals(21000.0, magicScript_1.runDouble(cx));
+		Assertions.assertEquals(22000.0, magicScript_2.runDouble(cx));
+		Assertions.assertEquals(24000.0, magicScript_4.runDouble(cx));
+		Assertions.assertEquals(28000.0, magicScript_8.runDouble(cx));
+		Assertions.assertEquals(83616.0, magicScript_64.runDouble(cx));
+
+	}
+
+	public static String generateGradientCode(int numShapes) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("var pool = [\n");
+		for (int i = 0; i < numShapes; i++) {
+			sb.append("    { type: ").append(i)
+			 .append(", val: ").append(10.5 + i)
+			 .append(", prop_").append(i).append(": ").append(i * 10)
+			 .append(" }");
+			if (i < numShapes - 1) sb.append(",\n");
+		}
+		sb.append("\n];\n\n");
+		sb.append("var total = 0;\n");
+		sb.append("for (var i = 0; i < 2000; i++) {\n");
+		sb.append("    var item = pool[i % ").append(numShapes).append("];\n");
+		sb.append("    total = total + item.val;\n");
+		sb.append("}\n");
+		sb.append("total;\n");
+		return sb.toString();
 	}
 
 	@Test
@@ -2126,3 +2179,4 @@ public class MagicJSTest {
 		Assertions.assertEquals(7.0, ((Number) res).doubleValue());
 	}
 }
+

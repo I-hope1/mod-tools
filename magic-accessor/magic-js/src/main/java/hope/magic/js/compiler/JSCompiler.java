@@ -2800,28 +2800,30 @@ public class JSCompiler {
 
 				// 特化 3: DOUBLE / 数值 / 通用关系比较 (LT, LTE, GT, GTE)
 				if (op == TokenType.LT || op == TokenType.LTE || op == TokenType.GT || op == TokenType.GTE) {
-					if (isStringExpr(bin.left) && isStringExpr(bin.right)) {
-						compileNode(bin.left, ctx, true);
-						compileNode(bin.right, ctx, true);
-						String opMethod = switch (op) {
-							case LT -> "lt";
-							case LTE -> "lte";
-							case GT -> "gt";
-							case GTE -> "gte";
-							default -> throw new IllegalStateException();
-						};
-						mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, opMethod, "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
-						mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "isTruthy", "(Ljava/lang/Object;)Z", false);
-						mv.visitJumpInsn(jumpOnTrue ? Opcodes.IFNE : Opcodes.IFEQ, targetLabel);
+					boolean isBothNumeric = (isNumeric(leftType) && isNumeric(rightType))
+					                        || (isNumericExpr(bin.left) && isNumericExpr(bin.right));
+					if (isBothNumeric) {
+						compileNodeAsDouble(bin.left, ctx);
+						compileNodeAsDouble(bin.right, ctx);
+						// IEEE 754 规范: 与 NaN 比较恒为 false
+						// < 和 <= 使用 DCMPG (遇到 NaN 产出 1, IFLT/IFLE 判定失败)
+						// > 和 >= 必须使用 DCMPL (遇到 NaN 产出 -1, IFGT/IFGE 判定失败)
+						mv.visitInsn((op == TokenType.LT || op == TokenType.LTE) ? Opcodes.DCMPG : Opcodes.DCMPL);
+						mv.visitJumpInsn(getZeroCompareOpcode(op, jumpOnTrue), targetLabel);
 						return;
 					}
-					compileNodeAsDouble(bin.left, ctx);
-					compileNodeAsDouble(bin.right, ctx);
-					// IEEE 754 规范: 与 NaN 比较恒为 false
-					// < 和 <= 使用 DCMPG (遇到 NaN 产出 1, IFLT/IFLE 判定失败)
-					// > 和 >= 必须使用 DCMPL (遇到 NaN 产出 -1, IFGT/IFGE 判定失败)
-					mv.visitInsn((op == TokenType.LT || op == TokenType.LTE) ? Opcodes.DCMPG : Opcodes.DCMPL);
-					mv.visitJumpInsn(getZeroCompareOpcode(op, jumpOnTrue), targetLabel);
+					compileNode(bin.left, ctx, true);
+					compileNode(bin.right, ctx, true);
+					String opMethod = switch (op) {
+						case LT -> "lt";
+						case LTE -> "lte";
+						case GT -> "gt";
+						case GTE -> "gte";
+						default -> throw new IllegalStateException();
+					};
+					mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, opMethod, "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
+					mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "isTruthy", "(Ljava/lang/Object;)Z", false);
+					mv.visitJumpInsn(jumpOnTrue ? Opcodes.IFNE : Opcodes.IFEQ, targetLabel);
 					return;
 				}
 

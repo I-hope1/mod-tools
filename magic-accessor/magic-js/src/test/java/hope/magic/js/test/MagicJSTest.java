@@ -2059,4 +2059,15 @@ public class MagicJSTest {
 		Assertions.assertEquals(true, cx.eval("var x = 0; 0 <= x;"));
 		Assertions.assertEquals(true, cx.eval("var x = 0; 0 >= x;"));
 	}
+
+	@Test
+	public void testStringVariableRelationalComparison() {
+		JSContext cx = new JSContext();
+
+		Assertions.assertEquals(true, cx.eval("var s1 = 'apple', s2 = 'banana'; s1 < s2;"));
+		Assertions.assertEquals(false, cx.eval("var s1 = 'banana', s2 = 'apple'; s1 < s2;"));
+		Assertions.assertEquals(true, cx.eval("var s1 = 'banana', s2 = 'apple'; s1 > s2;"));
+		Assertions.assertEquals(true, cx.eval("var s1 = 'apple', s2 = 'apple'; s1 <= s2;"));
+		Assertions.assertEquals(true, cx.eval("var s1 = 'apple', s2 = 'apple'; s1 >= s2;"));
+	}
 }

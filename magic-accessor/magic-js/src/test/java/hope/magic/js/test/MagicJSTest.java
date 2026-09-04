@@ -859,6 +859,11 @@ public class MagicJSTest {
 		Assertions.assertEquals(2.0, ((Number) cx.eval("16 >> 3")).doubleValue());
 		Assertions.assertEquals(-1.0, ((Number) cx.eval("-4 >> 2")).doubleValue());
 
+		Assertions.assertEquals(0.0, ((Number) cx.eval("Infinity | 0")).doubleValue());
+		Assertions.assertEquals(1661992960.0, ((Number)cx.eval("1e20 | 0")).doubleValue());
+		Assertions.assertEquals(-1661992960.0, ((Number)cx.eval("-1e20 | 0")).doubleValue());
+
+
 		// 零填充右移 (>>>) 与无符号 32 位溢出转换
 		Assertions.assertEquals(4294967295.0, ((Number) cx.eval("-1 >>> 0")).doubleValue());
 		Assertions.assertEquals(1073741823.0, ((Number) cx.eval("-4 >>> 2")).doubleValue());

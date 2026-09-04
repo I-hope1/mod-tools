@@ -409,17 +409,27 @@ public class JSOps {
 		return (long) toDouble(val);
 	}
 
+	public static int toInt(double d) {
+		if (Double.isNaN(d) || Double.isInfinite(d) || d == 0.0) {
+			return 0; // 核心：ECMAScript 规范要求非有限数必须返回 0
+		}
+		// 快速路径：绝大多数数值在 long 范围内，直接硬件强转
+    if (d >= -9.2233720368547758E18 && d <= 9.2233720368547758E18) {
+        return (int) (long) d;
+    }
+		return (int) (long) (d % 4294967296.0);
+	}
+
 	public static int toInt(Object val) {
 		if (val instanceof Integer i) return i;
-		if (val instanceof Double d) return d.intValue();
+		if (val instanceof Double d) return toInt(d.doubleValue());
 		return toIntSlow(val);
 	}
 
 	public static int toIntSlow(Object val) {
-		if (val instanceof Number n) return n.intValue();
 		if (val == null || val == JSUndefined.INSTANCE) return 0;
 		if (val instanceof Boolean b) return b ? 1 : 0;
-		return (int) toDouble(val);
+		return toInt(toDouble(val)); // 不要直接 (int) toDouble(val)，要走 toInt(double)
 	}
 
 	public static float toFloat(Object val) {

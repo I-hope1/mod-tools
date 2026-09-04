@@ -1238,8 +1238,7 @@ public class JSCompiler {
 					mv.visitInsn(Opcodes.L2I);
 				} else if (var.isDouble()) {
 					mv.visitVarInsn(Opcodes.DLOAD, var.slot);
-					mv.visitInsn(Opcodes.D2L);
-					mv.visitInsn(Opcodes.L2I);
+					mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toInt", "(D)I", false);
 				} else {
 					mv.visitVarInsn(Opcodes.ALOAD, var.slot);
 					mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
@@ -1358,8 +1357,7 @@ public class JSCompiler {
 			mv.visitInsn(dOpcode);
 			return;
 		}
-		mv.visitInsn(Opcodes.D2L);
-		mv.visitInsn(Opcodes.L2I);
+		mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toInt", "(D)I", false);
 		compileNodeAsInt(assign.value, ctx);
 		if (assign.op == TokenType.USHR_ASSIGN) {
 			mv.visitInsn(Opcodes.IUSHR);
@@ -2526,7 +2524,7 @@ public class JSCompiler {
 
 		if (node instanceof Node.LiteralExpr lit) {
 			if (lit.value instanceof Number num) {
-				pushInt(mv, num.intValue());
+				pushInt(mv, JSOps.toInt(num.doubleValue()));
 				return;
 			}
 			if (lit.value instanceof Boolean b) {
@@ -2608,8 +2606,7 @@ public class JSCompiler {
 
 		// 通用降级
 		compileNodeAsDouble(node, ctx);
-		mv.visitInsn(Opcodes.D2L);
-		mv.visitInsn(Opcodes.L2I);
+		mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toInt", "(D)I", false);
 	}
 
 	private static void compileNodeAsLong(Node node, CompileContext ctx) {
@@ -3174,7 +3171,7 @@ public class JSCompiler {
 			return;
 		}
 		compileIndexAccessAsDouble(idxAccess, ctx);
-		mv.visitInsn(Opcodes.D2I);
+		mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toInt", "(D)I", false);
 	}
 
 	private static void compileIndexAccessAsLong(Node.IndexAccessExpr idxAccess, CompileContext ctx) {

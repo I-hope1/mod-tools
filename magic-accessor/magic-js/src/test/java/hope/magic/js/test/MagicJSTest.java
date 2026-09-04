@@ -1987,4 +1987,22 @@ public class MagicJSTest {
 			}
 		});
 	}
+
+	@Test
+	public void testIncDecStackBalance() {
+		JSContext cx = new JSContext();
+
+		// Double 前置与后置自增
+		Assertions.assertEquals(2.5, ((Number) cx.eval("var d = 1.5; ++d;")).doubleValue(), 0.0001);
+		Assertions.assertEquals(1.5, ((Number) cx.eval("var d = 1.5; d++;")).doubleValue(), 0.0001);
+		Assertions.assertEquals(3.5, ((Number) cx.eval("var d = 1.5; var a = ++d; a + 1.0;")).doubleValue(), 0.0001);
+
+		// Long 前置与后置自增
+		Assertions.assertEquals(3000000001.0, ((Number) cx.eval("var l = 3000000000; ++l;")).doubleValue(), 0.0001);
+		Assertions.assertEquals(3000000000.0, ((Number) cx.eval("var l = 3000000000; l++;")).doubleValue(), 0.0001);
+
+		// Object 槽位前置与后置自增
+		Assertions.assertEquals(11.0, ((Number) cx.eval("var o = '10'; ++o;")).doubleValue(), 0.0001);
+		Assertions.assertEquals(10.0, ((Number) cx.eval("var o = '10'; o++;")).doubleValue(), 0.0001);
+	}
 }

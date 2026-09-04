@@ -1670,10 +1670,12 @@ public class JSCompiler {
 			mv.visitInsn(isInc ? Opcodes.LADD : Opcodes.LSUB);
 			if (un.isPrefix && needResult) {
 				mv.visitInsn(Opcodes.DUP2);
+				mv.visitVarInsn(Opcodes.LSTORE, var.slot);
 				mv.visitInsn(Opcodes.L2D);
 				boxDouble(mv);
+			} else {
+				mv.visitVarInsn(Opcodes.LSTORE, var.slot);
 			}
-			mv.visitVarInsn(Opcodes.LSTORE, var.slot);
 			return;
 		}
 
@@ -1687,28 +1689,37 @@ public class JSCompiler {
 			mv.visitInsn(isInc ? Opcodes.DADD : Opcodes.DSUB);
 			if (un.isPrefix && needResult) {
 				mv.visitInsn(Opcodes.DUP2);
+				mv.visitVarInsn(Opcodes.DSTORE, var.slot);
 				boxDouble(mv);
+			} else {
+				mv.visitVarInsn(Opcodes.DSTORE, var.slot);
 			}
-			mv.visitVarInsn(Opcodes.DSTORE, var.slot);
 			return;
 		}
 
 		mv.visitVarInsn(Opcodes.ALOAD, var.slot);
 		mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toDouble", "(Ljava/lang/Object;)D", false);
 		if (!un.isPrefix && needResult) {
-			// 后置运算且需要结果：保留旧值
+			int oldValSlot = ctx.allocTempSlot();
 			mv.visitInsn(Opcodes.DUP2);
 			boxDouble(mv);
+			mv.visitVarInsn(Opcodes.ASTORE, oldValSlot);
+			mv.visitInsn(Opcodes.DCONST_1);
+			mv.visitInsn(isInc ? Opcodes.DADD : Opcodes.DSUB);
+			boxDouble(mv);
+			mv.visitVarInsn(Opcodes.ASTORE, var.slot);
+			mv.visitVarInsn(Opcodes.ALOAD, oldValSlot);
+			return;
 		}
 		mv.visitInsn(Opcodes.DCONST_1);
 		mv.visitInsn(isInc ? Opcodes.DADD : Opcodes.DSUB);
-		if (un.isPrefix && needResult) {
-			// 前置运算且需要结果：保留新值
-			mv.visitInsn(Opcodes.DUP2);
-			boxDouble(mv);
-		}
 		boxDouble(mv);
-		mv.visitVarInsn(Opcodes.ASTORE, var.slot);
+		if (un.isPrefix && needResult) {
+			mv.visitInsn(Opcodes.DUP);
+			mv.visitVarInsn(Opcodes.ASTORE, var.slot);
+		} else {
+			mv.visitVarInsn(Opcodes.ASTORE, var.slot);
+		}
 	}
 
 	private static void compileUnary(Node.UnaryExpr un, CompileContext ctx, boolean needResult) {

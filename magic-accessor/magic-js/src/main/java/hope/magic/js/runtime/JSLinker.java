@@ -381,7 +381,7 @@ public class JSLinker {
 		int       n       = shapes.length;
 		if (n == 0) return fallback;
 
-		// ── 优化 ①：小规模多态 (n <= 4) 展开式级联 GWT ──
+		// ── 优化 ①：小规模多态 (n <= 4) 展开式级联 GWT (纯指针比较，零掩码与归属校验开销) ──
 		if (n <= 4) {
 			MethodHandle chain = fallback;
 			for (int i = n - 1; i >= 0; i--) {
@@ -447,7 +447,7 @@ public class JSLinker {
 		int       n       = shapes.length;
 		if (n == 0) return fallback;
 
-		// ── 优化 ①：小规模多态 (n <= 4) 展开式级联 GWT ──
+		// ── 优化 ①：小规模多态 (n <= 4) 展开式级联 GWT (纯指针比较，零掩码与归属校验开销) ──
 		if (n <= 4) {
 			MethodHandle chain = fallback;
 			for (int i = n - 1; i >= 0; i--) {
@@ -512,7 +512,7 @@ public class JSLinker {
 		int       n       = shapes.length;
 		if (n == 0) return fallback;
 
-		// ── 优化 ①：小规模多态 (n <= 4) 展开式级联 GWT ──
+		// ── 优化 ①：小规模多态 (n <= 4) 展开式级联 GWT (纯指针比较，零掩码与归属校验开销) ──
 		if (n <= 4) {
 			MethodHandle chain = fallback;
 			for (int i = n - 1; i >= 0; i--) {
@@ -573,7 +573,7 @@ public class JSLinker {
 		int       n       = shapes.length;
 		if (n == 0) return fallback;
 
-		// ── 优化 ①：小规模多态 (n <= 4) 展开式级联 GWT ──
+		// ── 优化 ①：小规模多态 (n <= 4) 展开式级联 GWT (纯指针比较，零掩码与归属校验开销) ──
 		if (n <= 4) {
 			MethodHandle chain = fallback;
 			for (int i = n - 1; i >= 0; i--) {
@@ -1702,8 +1702,8 @@ public class JSLinker {
 					return jsObj.getSlot(commonOff);
 				}
 
-				// 异槽多态：chainDepth >= 2 时挂载扁平 switch，避免继续堆叠 guardWithTest 层
-				if (site.getChainDepth() >= 2) {
+				// 异槽多态：一旦观测到 >= 2 个异槽 Shape，挂载扁平 switch，避免继续堆叠 guardWithTest 层
+				if (site.getObservedShapes().size() >= 2) {
 					MethodHandle fb = getAdaptiveFallback(site);
 					PolySnapshot snap = site.snapshotPoly();
 					site.installFlatPolyGuard(buildFlatPolySwitchObject(snap, fb));
@@ -2938,8 +2938,8 @@ public class JSLinker {
 					return JSOps.toInt(jsObj.getSlot(commonOff));
 				}
 
-				// 异槽多态：chainDepth >= 2 时挂载扁平 switch，消除 LambdaForm 嵌套深度
-				if (site.getChainDepth() >= 2) {
+				// 异槽多态：一旦观测到 >= 2 个异槽 Shape，挂载扁平 switch，消除 LambdaForm 嵌套深度
+				if (site.getObservedShapes().size() >= 2) {
 					MethodHandle fb = getAdaptiveFallback(site);
 					site.installFlatPolyGuard(buildFlatPolySwitchInt(site.snapshotPoly(), fb));
 				} else {
@@ -3002,8 +3002,8 @@ public class JSLinker {
 					return (commonType == JSShape.TYPE_DOUBLE) ? jsObj.getDoubleSlot(commonOff) : JSOps.toDouble(jsObj.getSlot(commonOff));
 				}
 
-				// B. 异槽多态：chainDepth >= 2 时挂载扁平 Jump-Table (tableSwitch)
-				if (site.getChainDepth() >= 2) {
+				// B. 异槽多态：一旦观测到 >= 2 个异槽 Shape，挂载扁平 Jump-Table / 掩码分发
+				if (site.getObservedShapes().size() >= 2) {
 					MethodHandle fb = getAdaptiveFallback(site);
 					site.installFlatPolyGuard(buildFlatPolySwitchDouble(site.snapshotPoly(), fb));
 				} else {
@@ -3070,8 +3070,8 @@ public class JSLinker {
 					return JSOps.toLong(jsObj.getSlot(commonOff));
 				}
 
-				// 异槽多态：chainDepth >= 2 时挂载扁平 switch
-				if (site.getChainDepth() >= 2) {
+				// 异槽多态：一旦观测到 >= 2 个异槽 Shape，挂载扁平 switch
+				if (site.getObservedShapes().size() >= 2) {
 					MethodHandle fb = getAdaptiveFallback(site);
 					site.installFlatPolyGuard(buildFlatPolySwitchLong(site.snapshotPoly(), fb));
 				} else {

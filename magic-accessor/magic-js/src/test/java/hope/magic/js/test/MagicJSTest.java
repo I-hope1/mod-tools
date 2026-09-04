@@ -2005,4 +2005,44 @@ public class MagicJSTest {
 		Assertions.assertEquals(11.0, ((Number) cx.eval("var o = '10'; ++o;")).doubleValue(), 0.0001);
 		Assertions.assertEquals(10.0, ((Number) cx.eval("var o = '10'; o++;")).doubleValue(), 0.0001);
 	}
+
+	@Test
+	public void testGlobalMemberIndexIncDec() {
+		JSContext cx = new JSContext();
+
+		// 全局变量自增自减
+		cx.eval("g = 10;");
+		Assertions.assertEquals(11.0, ((Number) cx.eval("++g;")).doubleValue());
+		Assertions.assertEquals(11.0, ((Number) cx.eval("g++;")).doubleValue());
+		Assertions.assertEquals(12.0, ((Number) cx.eval("g;")).doubleValue());
+		Assertions.assertEquals(11.0, ((Number) cx.eval("--g;")).doubleValue());
+		Assertions.assertEquals(11.0, ((Number) cx.eval("g--;")).doubleValue());
+		Assertions.assertEquals(10.0, ((Number) cx.eval("g;")).doubleValue());
+
+		// 对象成员属性自增自减
+		cx.eval("obj = { count: 5 };");
+		Assertions.assertEquals(6.0, ((Number) cx.eval("++obj.count;")).doubleValue());
+		Assertions.assertEquals(6.0, ((Number) cx.eval("obj.count++;")).doubleValue());
+		Assertions.assertEquals(7.0, ((Number) cx.eval("obj.count;")).doubleValue());
+		Assertions.assertEquals(6.0, ((Number) cx.eval("--obj.count;")).doubleValue());
+		Assertions.assertEquals(6.0, ((Number) cx.eval("obj.count--;")).doubleValue());
+		Assertions.assertEquals(5.0, ((Number) cx.eval("obj.count;")).doubleValue());
+
+		// 局部变量对象成员自增自减
+		Assertions.assertEquals(6.0, ((Number) cx.eval("var locObj = { c: 5 }; ++locObj.c;")).doubleValue());
+		Assertions.assertEquals(5.0, ((Number) cx.eval("var locObj = { c: 5 }; locObj.c++;")).doubleValue());
+
+		// 数组索引自增自减
+		cx.eval("arr = [100, 200];");
+		Assertions.assertEquals(101.0, ((Number) cx.eval("++arr[0];")).doubleValue());
+		Assertions.assertEquals(101.0, ((Number) cx.eval("arr[0]++;")).doubleValue());
+		Assertions.assertEquals(102.0, ((Number) cx.eval("arr[0];")).doubleValue());
+		Assertions.assertEquals(101.0, ((Number) cx.eval("--arr[0];")).doubleValue());
+		Assertions.assertEquals(101.0, ((Number) cx.eval("arr[0]--;")).doubleValue());
+		Assertions.assertEquals(100.0, ((Number) cx.eval("arr[0];")).doubleValue());
+
+		// 局部变量数组索引自增自减
+		Assertions.assertEquals(101.0, ((Number) cx.eval("var locArr = [100, 200]; ++locArr[0];")).doubleValue());
+		Assertions.assertEquals(100.0, ((Number) cx.eval("var locArr = [100, 200]; locArr[0]++;")).doubleValue());
+	}
 }

@@ -1722,6 +1722,142 @@ public class JSCompiler {
 		}
 	}
 
+	private static void compileGlobalIncDec(Node.UnaryExpr un, String name, CompileContext ctx, boolean needResult) {
+		MethodVisitor mv   = ctx.mv;
+		int           mark = ctx.markTempSlots();
+		try {
+			int oldValSlot = ctx.allocTempSlot();
+			int newValSlot = ctx.allocTempSlot();
+			int slot       = JSContext.getGlobalSlot(name);
+
+			mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+			pushInt(mv, slot);
+			mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "getSlot", "(I)Ljava/lang/Object;", false);
+			mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toDouble", "(Ljava/lang/Object;)D", false);
+
+			if (!un.isPrefix && needResult) {
+				mv.visitInsn(Opcodes.DUP2);
+				boxDouble(mv);
+				mv.visitVarInsn(Opcodes.ASTORE, oldValSlot);
+			}
+
+			mv.visitInsn(Opcodes.DCONST_1);
+			mv.visitInsn(un.op == TokenType.PLUS_PLUS ? Opcodes.DADD : Opcodes.DSUB);
+			boxDouble(mv);
+
+			if (un.isPrefix && needResult) {
+				mv.visitInsn(Opcodes.DUP);
+				mv.visitVarInsn(Opcodes.ASTORE, newValSlot);
+			}
+
+			int writeSlot = ctx.allocTempSlot();
+			mv.visitVarInsn(Opcodes.ASTORE, writeSlot);
+			mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+			pushInt(mv, slot);
+			mv.visitVarInsn(Opcodes.ALOAD, writeSlot);
+			mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "setSlot", "(ILjava/lang/Object;)V", false);
+
+			if (needResult) {
+				mv.visitVarInsn(Opcodes.ALOAD, un.isPrefix ? newValSlot : oldValSlot);
+			}
+		} finally {
+			ctx.resetTempSlots(mark);
+		}
+	}
+
+	private static void compileMemberIncDec(Node.UnaryExpr un, Node.MemberAccessExpr member, CompileContext ctx, boolean needResult) {
+		MethodVisitor mv   = ctx.mv;
+		int           mark = ctx.markTempSlots();
+		try {
+			int targetSlot = ctx.allocTempSlot();
+			int oldValSlot = ctx.allocTempSlot();
+			int newValSlot = ctx.allocTempSlot();
+
+			compileNode(member.target, ctx, true);
+			mv.visitVarInsn(Opcodes.ASTORE, targetSlot);
+
+			mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+			mv.visitInvokeDynamicInsn("getProp", "(Ljava/lang/Object;)Ljava/lang/Object;", BSM_GET_PROP, member.property);
+			mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toDouble", "(Ljava/lang/Object;)D", false);
+
+			if (!un.isPrefix && needResult) {
+				mv.visitInsn(Opcodes.DUP2);
+				boxDouble(mv);
+				mv.visitVarInsn(Opcodes.ASTORE, oldValSlot);
+			}
+
+			mv.visitInsn(Opcodes.DCONST_1);
+			mv.visitInsn(un.op == TokenType.PLUS_PLUS ? Opcodes.DADD : Opcodes.DSUB);
+			boxDouble(mv);
+
+			if (un.isPrefix && needResult) {
+				mv.visitInsn(Opcodes.DUP);
+				mv.visitVarInsn(Opcodes.ASTORE, newValSlot);
+			}
+
+			int writeSlot = ctx.allocTempSlot();
+			mv.visitVarInsn(Opcodes.ASTORE, writeSlot);
+			mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+			mv.visitVarInsn(Opcodes.ALOAD, writeSlot);
+			mv.visitInvokeDynamicInsn("setProp", "(Ljava/lang/Object;Ljava/lang/Object;)V", BSM_SET_PROP, member.property);
+
+			if (needResult) {
+				mv.visitVarInsn(Opcodes.ALOAD, un.isPrefix ? newValSlot : oldValSlot);
+			}
+		} finally {
+			ctx.resetTempSlots(mark);
+		}
+	}
+
+	private static void compileIndexIncDec(Node.UnaryExpr un, Node.IndexAccessExpr idxAccess, CompileContext ctx, boolean needResult) {
+		MethodVisitor mv   = ctx.mv;
+		int           mark = ctx.markTempSlots();
+		try {
+			int targetSlot = ctx.allocTempSlot();
+			int idxSlot    = ctx.allocTempSlot();
+			int oldValSlot = ctx.allocTempSlot();
+			int newValSlot = ctx.allocTempSlot();
+
+			compileNode(idxAccess.target, ctx, true);
+			mv.visitVarInsn(Opcodes.ASTORE, targetSlot);
+			compileNode(idxAccess.index, ctx, true);
+			mv.visitVarInsn(Opcodes.ASTORE, idxSlot);
+
+			mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+			mv.visitVarInsn(Opcodes.ALOAD, idxSlot);
+			mv.visitInvokeDynamicInsn("getIndex", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", BSM_GET_INDEX);
+			mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toDouble", "(Ljava/lang/Object;)D", false);
+
+			if (!un.isPrefix && needResult) {
+				mv.visitInsn(Opcodes.DUP2);
+				boxDouble(mv);
+				mv.visitVarInsn(Opcodes.ASTORE, oldValSlot);
+			}
+
+			mv.visitInsn(Opcodes.DCONST_1);
+			mv.visitInsn(un.op == TokenType.PLUS_PLUS ? Opcodes.DADD : Opcodes.DSUB);
+			boxDouble(mv);
+
+			if (un.isPrefix && needResult) {
+				mv.visitInsn(Opcodes.DUP);
+				mv.visitVarInsn(Opcodes.ASTORE, newValSlot);
+			}
+
+			int writeSlot = ctx.allocTempSlot();
+			mv.visitVarInsn(Opcodes.ASTORE, writeSlot);
+			mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+			mv.visitVarInsn(Opcodes.ALOAD, idxSlot);
+			mv.visitVarInsn(Opcodes.ALOAD, writeSlot);
+			mv.visitInvokeDynamicInsn("setIndex", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V", BSM_SET_INDEX);
+
+			if (needResult) {
+				mv.visitVarInsn(Opcodes.ALOAD, un.isPrefix ? newValSlot : oldValSlot);
+			}
+		} finally {
+			ctx.resetTempSlots(mark);
+		}
+	}
+
 	private static void compileUnary(Node.UnaryExpr un, CompileContext ctx, boolean needResult) {
 		MethodVisitor mv = ctx.mv;
 		if (un.op == TokenType.BIT_NOT) {
@@ -1759,7 +1895,18 @@ public class JSCompiler {
 				LocalVar var = ctx.getLocal(ident.name);
 				if (var != null) {
 					compileIncDec(un, var, ctx, needResult);
+				} else {
+					compileGlobalIncDec(un, ident.name, ctx, needResult);
 				}
+				return;
+			}
+			if (un.expr instanceof Node.MemberAccessExpr member) {
+				compileMemberIncDec(un, member, ctx, needResult);
+				return;
+			}
+			if (un.expr instanceof Node.IndexAccessExpr idxAccess) {
+				compileIndexIncDec(un, idxAccess, ctx, needResult);
+				return;
 			}
 		} else if (un.op == TokenType.DELETE) {
 			if (un.expr instanceof Node.MemberAccessExpr member) {

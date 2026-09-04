@@ -2212,8 +2212,15 @@ public class JSCompiler {
 	}
 
 	private static void compileFunctionDecl(Node.FunctionDecl funcDecl, CompileContext ctx, boolean needResult) {
-		MethodVisitor mv  = ctx.mv;
-		LocalVar      var = ctx.getLocal(funcDecl.name);
+		MethodVisitor mv = ctx.mv;
+		if (!ctx.isFunction) {
+			// 顶层函数已在 __initGlobals__ 中统一实例化并注册到全局槽位，执行阶段无需重复生成类或赋值
+			if (needResult) {
+				visitUndefined(mv);
+			}
+			return;
+		}
+		LocalVar var = ctx.getLocal(funcDecl.name);
 		if (var == null) {
 			String funcClass = generateFunctionClass(funcDecl.name, funcDecl.params, funcDecl.body);
 			int    slot      = JSContext.getGlobalSlot(funcDecl.name);

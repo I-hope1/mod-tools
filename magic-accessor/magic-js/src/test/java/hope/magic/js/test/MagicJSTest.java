@@ -2112,4 +2112,12 @@ public class MagicJSTest {
 		cx.eval("function getVal() { return 10; }");
 		Assertions.assertEquals(12.5, ((Number) cx.eval("var d = 2.5 + getVal(); d;")).doubleValue());
 	}
+
+	@Test
+	public void testTopLevelFunctionDeclNoDuplicateClassGeneration() {
+		JSContext cx = new JSContext();
+		// 顶层函数声明执行不应抛错，且可正常被调用
+		Object res = cx.eval("function add(a, b) { return a + b; } add(3, 4);");
+		Assertions.assertEquals(7.0, ((Number) res).doubleValue());
+	}
 }

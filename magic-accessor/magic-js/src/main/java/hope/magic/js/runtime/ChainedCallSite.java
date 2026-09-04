@@ -15,6 +15,15 @@ public class ChainedCallSite extends MutableCallSite {
 	private int     commonOffset     = -1;
 	private byte    commonType       = -1;
 	private boolean offsetEquivalent = true;
+	private int     propId           = -1;
+
+	public void setPropId(int propId) {
+		this.propId = propId;
+	}
+
+	public int getPropId() {
+		return propId;
+	}
 
 	/** shape → observed-offset（插入有序，用于 tableSwitch 构造） */
 	private final LinkedHashMap<JSShape, Integer> shapeOffsetMap = new LinkedHashMap<>(4);
@@ -103,7 +112,7 @@ public class ChainedCallSite extends MutableCallSite {
 			offsets[i] = e.getValue();
 			i++;
 		}
-		return new PolySnapshot(shapes, offsets);
+		return new PolySnapshot(shapes, offsets, propId);
 	}
 
 	public synchronized boolean installGuardOrSwitchMegamorphic(MethodHandle test, MethodHandle fastTarget) {

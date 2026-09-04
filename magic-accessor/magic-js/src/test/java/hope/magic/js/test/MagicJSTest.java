@@ -690,6 +690,56 @@ public class MagicJSTest {
 		 "❌ 致命 Bug：isOffsetEquivalent 无条件短路，导致读出了 slot 0 的错误属性！"
 		);
 	}
+
+	@Test
+	public void testOffsetMaskDispatchAttributionSafety() throws Throwable {
+		// 验证：聚合掩码分发（Offset-Class Mask Dispatch）必须严格校验 Shape 归属，
+		// 防止由于位掩码匹配导致读取了无关异构对象的脏槽位。
+		String propName = "propTarget_" + System.nanoTime();
+		int targetPropId = SymbolTable.id(propName);
+
+		// 1. 构造 5 个 Shape，使得 "propTarget" 位于 slot 0
+		JSShape[] shapes = new JSShape[5];
+		int[] offsets = new int[5];
+		for (int i = 0; i < 5; i++) {
+			JSShape s = JSShape.ROOT.addProperty(targetPropId, JSShape.TYPE_DOUBLE);
+			for (int j = 0; j < i; j++) {
+				s = s.addProperty("dummy_" + i + "_" + j, JSShape.TYPE_DOUBLE);
+			}
+			shapes[i] = s;
+			offsets[i] = 0;
+		}
+
+		JSLinker.PolySnapshot snap = new JSLinker.PolySnapshot(shapes, offsets, targetPropId);
+		MethodHandle fallback = MethodHandles.dropArguments(
+		 MethodHandles.constant(double.class, Double.NaN), 0, Object.class
+		);
+
+		MethodHandle switchMH = JSLinker.buildFlatPolySwitchDouble(snap, fallback);
+
+		// 2. 正确包含 targetPropId 的对象，读取成功
+		JSObject validObj = new JSObject();
+		validObj.shape = shapes[0];
+		validObj.setDoubleSlot(0, 42.0);
+		double validRes = (double) switchMH.invokeExact((Object) validObj);
+		Assertions.assertEquals(42.0, validRes, 0.0001);
+
+		// 3. 构造一个异构对象，其 slot 0 存放的是 otherPropId
+		int otherPropId = SymbolTable.id("otherProp_" + System.nanoTime());
+		JSShape alienShape = JSShape.ROOT.addProperty(otherPropId, JSShape.TYPE_DOUBLE);
+
+		Assertions.assertFalse(alienShape.hasPropertyAt(targetPropId, 0));
+		Assertions.assertTrue(alienShape.hasPropertyAt(otherPropId, 0));
+
+		JSObject alienObj = new JSObject();
+		alienObj.shape = alienShape;
+		alienObj.setDoubleSlot(0, 999.0);
+
+		// 异构对象经过 switchMH，绝不能读出 999.0，而必须回落到 fallback 返回 NaN
+		double alienRes = (double) switchMH.invokeExact((Object) alienObj);
+		Assertions.assertTrue(Double.isNaN(alienRes), "异构对象不应命中 targetProp 的 slot 0，必须安全回退到 fallback 返回 NaN！");
+	}
+
 	@Test
 	public void testSymbolTableLeak() {
 		String nonExistentKey = "ghost_property_" + System.nanoTime();

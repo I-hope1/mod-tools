@@ -174,6 +174,22 @@ public final class JSShape {
 		return symId == SymbolTable.NO_SYMBOL ? -1 : getOffset(symId);
 	}
 
+	/**
+	 * Shape 归属验证：验证当前 Shape 在指定的 offset 槽位上确为指定的 propId。
+	 * 常数时间 O(1)，无任何循环或哈希查找，C2 可完美内联为单条内存比较指令。
+	 */
+	public boolean hasPropertyAt(int propId, int offset) {
+		if (offset == 0) return k0 == propId;
+		if (offset == 1) return k1 == propId;
+		if (offset == 2) return k2 == propId;
+		if (offset == 3) return k3 == propId;
+		if (overflowKeys != null) {
+			int ofIdx = offset - INLINE_PROPERTY_CAPACITY;
+			return ofIdx >= 0 && ofIdx < overflowKeys.length && overflowKeys[ofIdx] == propId;
+		}
+		return false;
+	}
+
 	public byte getSlotType(int offset) {
 		return switch (offset) {
 			case 0 -> t0;

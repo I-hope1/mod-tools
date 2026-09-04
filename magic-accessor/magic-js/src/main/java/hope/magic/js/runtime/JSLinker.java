@@ -49,6 +49,7 @@ public class JSLinker {
 	public static final MethodHandle   MH_IS_EXACT_SHAPE_SETTER_DOUBLE;
 	public static final MethodHandle   MH_IS_EXACT_SHAPE_SETTER_OBJECT;
 	public static final MethodHandle   MH_IS_MATCH_MASK;
+	public static final MethodHandle   MH_IS_MATCH_MASK_AND_PROP;
 
 	static {
 		try {
@@ -80,6 +81,7 @@ public class JSLinker {
 			MH_IS_EXACT_SHAPE_SETTER_DOUBLE = LOOKUP.findStatic(JSLinker.class, "isExactShapeSetterDouble", MethodType.methodType(boolean.class, JSShape.class, Object.class, double.class));
 			MH_IS_EXACT_SHAPE_SETTER_OBJECT = LOOKUP.findStatic(JSLinker.class, "isExactShapeSetterObject", MethodType.methodType(boolean.class, JSShape.class, Object.class, Object.class));
 			MH_IS_MATCH_MASK = LOOKUP.findStatic(JSLinker.class, "isMatchMask", MethodType.methodType(boolean.class, long.class, Object.class));
+			MH_IS_MATCH_MASK_AND_PROP = LOOKUP.findStatic(JSLinker.class, "isMatchMaskAndPropAt", MethodType.methodType(boolean.class, long.class, int.class, int.class, Object.class));
 		} catch (Throwable e) {
 			throw new ExceptionInInitializerError(e);
 		}
@@ -328,8 +330,12 @@ public class JSLinker {
 
 	//region PolySnapshot & Flat Polymorphic Jump-Table Guard (扁平多态 Switch 守卫)
 
-	/** 多态 IC 快照：shape 数组（插入顺序）+ 每个 shape 对应的槽位 offset。 */
-	public record PolySnapshot(JSShape[] shapes, int[] offsets) { }
+	/** 多态 IC 快照：shape 数组（插入顺序）+ 每个 shape 对应的槽位 offset + 目标属性 propId。 */
+	public record PolySnapshot(JSShape[] shapes, int[] offsets, int propId) {
+		public PolySnapshot(JSShape[] shapes, int[] offsets) {
+			this(shapes, offsets, -1);
+		}
+	}
 
 	/** JDK 17+ 是否可用 MethodHandles.tableSwitch（反射探测，类加载时确定）。 */
 	private static final boolean SUPPORTS_TABLE_SWITCH;
@@ -390,7 +396,7 @@ public class JSLinker {
 		}
 
 		// ── 优化 ②：多态/巨态按 Offset 分组聚合位掩码 (Offset-Class Mask Dispatch) ──
-		MethodHandle maskChain = tryBuildOffsetMaskDispatchObject(shapes, offsets, n, fallback);
+		MethodHandle maskChain = tryBuildOffsetMaskDispatchObject(shapes, offsets, n, snap.propId(), fallback);
 		if (maskChain != null) {
 			return maskChain;
 		}
@@ -456,7 +462,7 @@ public class JSLinker {
 		}
 
 		// ── 优化 ②：多态/巨态按 Offset 分组聚合位掩码 (Offset-Class Mask Dispatch) ──
-		MethodHandle maskChain = tryBuildOffsetMaskDispatchDouble(shapes, offsets, n, fallback);
+		MethodHandle maskChain = tryBuildOffsetMaskDispatchDouble(shapes, offsets, n, snap.propId(), fallback);
 		if (maskChain != null) {
 			return maskChain;
 		}
@@ -519,7 +525,7 @@ public class JSLinker {
 		}
 
 		// ── 优化 ②：多态/巨态按 Offset 分组聚合位掩码 (Offset-Class Mask Dispatch) ──
-		MethodHandle maskChain = tryBuildOffsetMaskDispatchInt(shapes, offsets, n, fallback);
+		MethodHandle maskChain = tryBuildOffsetMaskDispatchInt(shapes, offsets, n, snap.propId(), fallback);
 		if (maskChain != null) {
 			return maskChain;
 		}
@@ -580,7 +586,7 @@ public class JSLinker {
 		}
 
 		// ── 优化 ②：多态/巨态按 Offset 分组聚合位掩码 (Offset-Class Mask Dispatch) ──
-		MethodHandle maskChain = tryBuildOffsetMaskDispatchLong(shapes, offsets, n, fallback);
+		MethodHandle maskChain = tryBuildOffsetMaskDispatchLong(shapes, offsets, n, snap.propId(), fallback);
 		if (maskChain != null) {
 			return maskChain;
 		}
@@ -623,7 +629,8 @@ public class JSLinker {
 
 	// ── 偏移类聚合位掩码辅助函数 (Offset-Class Mask Dispatch Helpers) ──────────
 
-	private static MethodHandle tryBuildOffsetMaskDispatchDouble(JSShape[] shapes, int[] offsets, int n, MethodHandle fallback) {
+	private static MethodHandle tryBuildOffsetMaskDispatchDouble(JSShape[] shapes, int[] offsets, int n, int propId, MethodHandle fallback) {
+		if (propId < 0) return null; // 缺少 propId 时无法进行严格属性归属验证，安全回落
 		Map<Integer, Long> offsetMaskMap = new LinkedHashMap<>();
 		for (int i = 0; i < n; i++) {
 			JSShape s = shapes[i];
@@ -641,13 +648,14 @@ public class JSLinker {
 			MethodHandle fastGetter = off < 8
 			 ? MH_GET_SLOT_DOUBLE[off]
 			 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE, 0, off);
-			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_MASK, 0, mask);
+			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, mask, propId, off);
 			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
 		}
 		return chain;
 	}
 
-	private static MethodHandle tryBuildOffsetMaskDispatchObject(JSShape[] shapes, int[] offsets, int n, MethodHandle fallback) {
+	private static MethodHandle tryBuildOffsetMaskDispatchObject(JSShape[] shapes, int[] offsets, int n, int propId, MethodHandle fallback) {
+		if (propId < 0) return null;
 		Map<Integer, Long> offsetMaskMap = new LinkedHashMap<>();
 		for (int i = 0; i < n; i++) {
 			JSShape s = shapes[i];
@@ -665,13 +673,14 @@ public class JSLinker {
 			MethodHandle fastGetter = off < 8
 			 ? MH_GET_SLOT_OBJECT[off]
 			 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, off);
-			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_MASK, 0, mask);
+			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, mask, propId, off);
 			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
 		}
 		return chain;
 	}
 
-	private static MethodHandle tryBuildOffsetMaskDispatchInt(JSShape[] shapes, int[] offsets, int n, MethodHandle fallback) {
+	private static MethodHandle tryBuildOffsetMaskDispatchInt(JSShape[] shapes, int[] offsets, int n, int propId, MethodHandle fallback) {
+		if (propId < 0) return null;
 		Map<Integer, Long> offsetMaskMap = new LinkedHashMap<>();
 		for (int i = 0; i < n; i++) {
 			JSShape s = shapes[i];
@@ -687,13 +696,14 @@ public class JSLinker {
 			int off = entries.get(i).getKey();
 			long mask = entries.get(i).getValue();
 			MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_INT, 0, off);
-			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_MASK, 0, mask);
+			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, mask, propId, off);
 			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
 		}
 		return chain;
 	}
 
-	private static MethodHandle tryBuildOffsetMaskDispatchLong(JSShape[] shapes, int[] offsets, int n, MethodHandle fallback) {
+	private static MethodHandle tryBuildOffsetMaskDispatchLong(JSShape[] shapes, int[] offsets, int n, int propId, MethodHandle fallback) {
+		if (propId < 0) return null;
 		Map<Integer, Long> offsetMaskMap = new LinkedHashMap<>();
 		for (int i = 0; i < n; i++) {
 			JSShape s = shapes[i];
@@ -709,7 +719,7 @@ public class JSLinker {
 			int off = entries.get(i).getKey();
 			long mask = entries.get(i).getValue();
 			MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_LONG, 0, off);
-			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_MASK, 0, mask);
+			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, mask, propId, off);
 			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
 		}
 		return chain;
@@ -975,6 +985,18 @@ public class JSLinker {
 		return target instanceof JSObject jsObj && (jsObj.shape.mask & expectedMask) != 0L;
 	}
 
+	/**
+	 * 安全位掩码分发守卫（包含严格的 Shape 归属验证）：
+	 * 1. 快速位掩码初筛（单条 TEST 指令，过滤非本 offset 候选类的绝大部分对象）；
+	 * 2. Shape 归属验证：验证该 Shape 在指定 offset 槽位上的属性确为 propId；
+	 * 严密防范异构对象因掩码位巧合碰撞导致的未定义属性误读与脏读。
+	 */
+	public static boolean isMatchMaskAndPropAt(long expectedMask, int propId, int offset, Object target) {
+		return target instanceof JSObject jsObj
+		 && (jsObj.shape.mask & expectedMask) != 0L
+		 && jsObj.shape.hasPropertyAt(propId, offset);
+	}
+
 	public static boolean isShapeN(JSShape[] shapes, Object target) {
 		if (target instanceof JSObject jsObj) {
 			JSShape s = jsObj.shape;
@@ -1091,6 +1113,7 @@ public class JSLinker {
 	) {
 		String          sym         = SymbolTable.symbol(propName);
 		ChainedCallSite site        = new ChainedCallSite(type, null);
+		site.setPropId(SymbolTable.id(sym));
 		MethodHandle    megamorphic = MethodHandles.insertArguments(PropMH.GET_MEGAMORPHIC, 2, sym).bindTo(site);
 		site.setMegamorphicTarget(megamorphic);
 		MethodHandle fallback = MethodHandles.insertArguments(PropMH.GET_FALLBACK, 2, sym).bindTo(site);
@@ -1108,6 +1131,7 @@ public class JSLinker {
 	) {
 		String          sym         = SymbolTable.symbol(propName);
 		ChainedCallSite site        = new ChainedCallSite(type, null);
+		site.setPropId(SymbolTable.id(sym));
 		MethodHandle    megamorphic = MethodHandles.insertArguments(PropMH.GET_INT_MEGAMORPHIC, 2, sym).bindTo(site);
 		site.setMegamorphicTarget(megamorphic);
 		MethodHandle fallback = MethodHandles.insertArguments(PropMH.GET_INT_FALLBACK, 2, sym).bindTo(site);
@@ -1125,6 +1149,7 @@ public class JSLinker {
 	) {
 		String          sym         = SymbolTable.symbol(propName);
 		ChainedCallSite site        = new ChainedCallSite(type, null);
+		site.setPropId(SymbolTable.id(sym));
 		MethodHandle    megamorphic = MethodHandles.insertArguments(PropMH.GET_DOUBLE_MEGAMORPHIC, 2, sym).bindTo(site);
 		site.setMegamorphicTarget(megamorphic);
 		MethodHandle fallback = MethodHandles.insertArguments(PropMH.GET_DOUBLE_FALLBACK, 2, sym).bindTo(site);
@@ -1142,6 +1167,7 @@ public class JSLinker {
 	) {
 		String          sym         = SymbolTable.symbol(propName);
 		ChainedCallSite site        = new ChainedCallSite(type, null);
+		site.setPropId(SymbolTable.id(sym));
 		MethodHandle    megamorphic = MethodHandles.insertArguments(PropMH.GET_LONG_MEGAMORPHIC, 2, sym).bindTo(site);
 		site.setMegamorphicTarget(megamorphic);
 		MethodHandle fallback = MethodHandles.insertArguments(PropMH.GET_LONG_FALLBACK, 2, sym).bindTo(site);
@@ -1159,6 +1185,7 @@ public class JSLinker {
 	) {
 		String          sym         = SymbolTable.symbol(propName);
 		ChainedCallSite site        = new ChainedCallSite(type, null);
+		site.setPropId(SymbolTable.id(sym));
 		MethodHandle    megamorphic = MethodHandles.insertArguments(PropMH.SET_MEGAMORPHIC, 3, sym).bindTo(site);
 		site.setMegamorphicTarget(megamorphic);
 		MethodHandle fallback = MethodHandles.insertArguments(PropMH.SET_FALLBACK, 3, sym).bindTo(site);
@@ -1176,6 +1203,7 @@ public class JSLinker {
 	) {
 		String          sym         = SymbolTable.symbol(propName);
 		ChainedCallSite site        = new ChainedCallSite(type, null);
+		site.setPropId(SymbolTable.id(sym));
 		MethodHandle    megamorphic = MethodHandles.insertArguments(PropMH.SET_DOUBLE_MEGAMORPHIC, 3, sym).bindTo(site);
 		site.setMegamorphicTarget(megamorphic);
 		MethodHandle fallback = MethodHandles.insertArguments(PropMH.SET_DOUBLE_FALLBACK, 3, sym).bindTo(site);
@@ -1680,6 +1708,7 @@ public class JSLinker {
 	}
 
 	public static Object getPropFallback(ChainedCallSite site, Object target, String propName) {
+		if (site.getPropId() < 0) site.setPropId(SymbolTable.id(propName));
 		if (target == null || target == JSUndefined.INSTANCE) {
 			return JSUndefined.INSTANCE;
 		}
@@ -1776,6 +1805,7 @@ public class JSLinker {
 	}
 
 	public static void setPropFallback(ChainedCallSite site, Object target, Object value, String propName) {
+		if (site.getPropId() < 0) site.setPropId(SymbolTable.id(propName));
 		if (target == null || target == JSUndefined.INSTANCE) return;
 
 		if (target instanceof JSObject jsObj) {
@@ -1865,6 +1895,7 @@ public class JSLinker {
 	}
 
 	public static void setPropDoubleFallback(ChainedCallSite site, Object target, double value, String propName) {
+		if (site.getPropId() < 0) site.setPropId(SymbolTable.id(propName));
 		if (target == null || target == JSUndefined.INSTANCE) return;
 
 		if (target instanceof JSObject jsObj) {
@@ -2918,6 +2949,7 @@ public class JSLinker {
 	}
 
 	public static int getPropIntFallback(ChainedCallSite site, Object target, String propName) {
+		if (site.getPropId() < 0) site.setPropId(SymbolTable.id(propName));
 		if (target == null || target == JSUndefined.INSTANCE) return 0;
 
 		if (target instanceof JSObject jsObj) {
@@ -2969,6 +3001,7 @@ public class JSLinker {
 	}
 
 	public static double getPropDoubleFallback(ChainedCallSite site, Object target, String propName) {
+		if (site.getPropId() < 0) site.setPropId(SymbolTable.id(propName));
 		if (target == null || target == JSUndefined.INSTANCE) return Double.NaN;
 
 		// JSObject Fast路径：Shape 守护 + In-Object 裸双精度槽直读
@@ -3052,6 +3085,7 @@ public class JSLinker {
 	}
 
 	public static long getPropLongFallback(ChainedCallSite site, Object target, String propName) {
+		if (site.getPropId() < 0) site.setPropId(SymbolTable.id(propName));
 		if (target == null || target == JSUndefined.INSTANCE) return 0L;
 
 		if (target instanceof JSObject jsObj) {

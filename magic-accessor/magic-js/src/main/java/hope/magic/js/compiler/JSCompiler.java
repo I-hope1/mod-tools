@@ -2553,19 +2553,32 @@ public class JSCompiler {
 		}
 
 		if (node instanceof Node.BinaryExpr bin) {
+			// ── Tree Reassociation for PLUS ──────────────────────────────────────
+			if (bin.op == TokenType.PLUS) {
+				List<Node> operands = new ArrayList<>();
+				collectPlusChain(bin, operands);
+				if (operands.size() >= 4) {
+					emitBalancedIntAdd(operands, 0, operands.size(), ctx);
+					return;
+				}
+				compileNodeAsInt(bin.left, ctx);
+				compileNodeAsInt(bin.right, ctx);
+				mv.visitInsn(Opcodes.IADD);
+				return;
+			}
+			// ─────────────────────────────────────────────────────────────────────
 			int opcode = switch (bin.op) {
-				case STAR -> Opcodes.IMUL;
+				case STAR    -> Opcodes.IMUL;
 				case PERCENT -> Opcodes.IREM;
-				case MINUS -> Opcodes.ISUB;
-				case PLUS -> Opcodes.IADD;
-				case SLASH -> Opcodes.IDIV;
-				case BIT_OR -> Opcodes.IOR;
+				case MINUS   -> Opcodes.ISUB;
+				case SLASH   -> Opcodes.IDIV;
+				case BIT_OR  -> Opcodes.IOR;
 				case BIT_AND -> Opcodes.IAND;
 				case BIT_XOR -> Opcodes.IXOR;
-				case SHL -> Opcodes.ISHL;
-				case SHR -> Opcodes.ISHR;
-				case USHR -> Opcodes.IUSHR;
-				default -> 0;
+				case SHL     -> Opcodes.ISHL;
+				case SHR     -> Opcodes.ISHR;
+				case USHR    -> Opcodes.IUSHR;
+				default      -> 0;
 			};
 			if (opcode != 0) {
 				compileNodeAsInt(bin.left, ctx);
@@ -2653,13 +2666,26 @@ public class JSCompiler {
 		}
 
 		if (node instanceof Node.BinaryExpr bin) {
+			// ── Tree Reassociation for PLUS ──────────────────────────────────────
+			if (bin.op == TokenType.PLUS) {
+				List<Node> operands = new ArrayList<>();
+				collectPlusChain(bin, operands);
+				if (operands.size() >= 4) {
+					emitBalancedLongAdd(operands, 0, operands.size(), ctx);
+					return;
+				}
+				compileNodeAsLong(bin.left, ctx);
+				compileNodeAsLong(bin.right, ctx);
+				mv.visitInsn(Opcodes.LADD);
+				return;
+			}
+			// ─────────────────────────────────────────────────────────────────────
 			int opcode = switch (bin.op) {
-				case STAR -> Opcodes.LMUL;
+				case STAR    -> Opcodes.LMUL;
 				case PERCENT -> Opcodes.LREM;
-				case MINUS -> Opcodes.LSUB;
-				case PLUS -> Opcodes.LADD;
-				case SLASH -> Opcodes.LDIV;
-				default -> 0;
+				case MINUS   -> Opcodes.LSUB;
+				case SLASH   -> Opcodes.LDIV;
+				default      -> 0;
 			};
 			if (opcode != 0) {
 				compileNodeAsLong(bin.left, ctx);
@@ -2719,13 +2745,29 @@ public class JSCompiler {
 		}
 
 		if (node instanceof Node.BinaryExpr bin) {
+			// ── Tree Reassociation for PLUS ──────────────────────────────────────
+			// 展平左结合 + 链（IdentifierExpr / MemberAccessExpr / LiteralExpr 均包含），
+			// 若操作数 ≥ 4 则按平衡二叉树顺序 emit DADD，降低 JVM 操作数栈峰值深度。
+			if (bin.op == TokenType.PLUS) {
+				List<Node> operands = new ArrayList<>();
+				collectPlusChain(bin, operands);
+				if (operands.size() >= 4) {
+					emitBalancedDoubleAdd(operands, 0, operands.size(), ctx);
+					return;
+				}
+				// 链短（≤ 3 个操作数）：直接 left + right，不改变
+				compileNodeAsDouble(bin.left, ctx);
+				compileNodeAsDouble(bin.right, ctx);
+				mv.visitInsn(Opcodes.DADD);
+				return;
+			}
+			// ─────────────────────────────────────────────────────────────────────
 			int opcode = switch (bin.op) {
-				case STAR -> Opcodes.DMUL;
-				case SLASH -> Opcodes.DDIV;
+				case STAR    -> Opcodes.DMUL;
+				case SLASH   -> Opcodes.DDIV;
 				case PERCENT -> Opcodes.DREM;
-				case MINUS -> Opcodes.DSUB;
-				case PLUS -> Opcodes.DADD;
-				default -> 0;
+				case MINUS   -> Opcodes.DSUB;
+				default      -> 0;
 			};
 			if (opcode != 0) {
 				compileNodeAsDouble(bin.left, ctx);
@@ -3243,4 +3285,71 @@ public class JSCompiler {
 		mv.visitFieldInsn(Opcodes.GETSTATIC, IN_JSUndefined, "INSTANCE", "L" + IN_JSUndefined + ";");
 	}
 	//endregion
+
+	// ═══════════════════════════════════════════════════════════════════════════
+	// Tree Reassociation / Rebalancing — Numeric Addition Chain Helpers
+	// ═══════════════════════════════════════════════════════════════════════════
+
+	/**
+	 * 展平一棵左结合加法链，把所有叶操作数按从左到右的顺序收入 {@code out}。
+	 *
+	 * <p>只要遇到 {@code PLUS} 节点就向下递归，其他节点（{@link Node.IdentifierExpr}、
+	 * {@link Node.MemberAccessExpr}、{@link Node.LiteralExpr} 等）均视为叶子收入列表。
+	 * 调用方已处于 typed-compile 上下文（{@code compileNodeAsDouble/Int/Long}），
+	 * 因此无需额外的数值类型守卫。
+	 */
+	private static void collectPlusChain(Node node, List<Node> out) {
+		if (node instanceof Node.BinaryExpr bin && bin.op == TokenType.PLUS) {
+			collectPlusChain(bin.left, out);
+			collectPlusChain(bin.right, out);
+		} else {
+			out.add(node);
+		}
+	}
+
+	/**
+	 * 将 {@code ops[lo..hi)} 以平衡二叉树方式递归 emit 为 {@code double} 加法字节码。
+	 * 奇数段时左半比右半少一个操作数：mid = lo + len/2（向下取整）。
+	 */
+	private static void emitBalancedDoubleAdd(List<Node> ops, int lo, int hi, CompileContext ctx) {
+		int len = hi - lo;
+		if (len == 1) {
+			compileNodeAsDouble(ops.get(lo), ctx);
+			return;
+		}
+		int mid = lo + len / 2;
+		emitBalancedDoubleAdd(ops, lo, mid, ctx);
+		emitBalancedDoubleAdd(ops, mid, hi, ctx);
+		ctx.mv.visitInsn(Opcodes.DADD);
+	}
+
+	/**
+	 * 将 {@code ops[lo..hi)} 以平衡二叉树方式递归 emit 为 {@code int} 加法字节码。
+	 */
+	private static void emitBalancedIntAdd(List<Node> ops, int lo, int hi, CompileContext ctx) {
+		int len = hi - lo;
+		if (len == 1) {
+			compileNodeAsInt(ops.get(lo), ctx);
+			return;
+		}
+		int mid = lo + len / 2;
+		emitBalancedIntAdd(ops, lo, mid, ctx);
+		emitBalancedIntAdd(ops, mid, hi, ctx);
+		ctx.mv.visitInsn(Opcodes.IADD);
+	}
+
+	/**
+	 * 将 {@code ops[lo..hi)} 以平衡二叉树方式递归 emit 为 {@code long} 加法字节码。
+	 */
+	private static void emitBalancedLongAdd(List<Node> ops, int lo, int hi, CompileContext ctx) {
+		int len = hi - lo;
+		if (len == 1) {
+			compileNodeAsLong(ops.get(lo), ctx);
+			return;
+		}
+		int mid = lo + len / 2;
+		emitBalancedLongAdd(ops, lo, mid, ctx);
+		emitBalancedLongAdd(ops, mid, hi, ctx);
+		ctx.mv.visitInsn(Opcodes.LADD);
+	}
 }

@@ -1007,11 +1007,11 @@ public class JSLinker {
 		return false;
 	}
 
-	private static MethodHandle buildMultiShapeGuard(List<JSShape> shapes) {
+	private static MethodHandle buildMultiShapeGuard(List<JSShape> shapes, int propId, int commonOff) {
 		int n = shapes.size();
 		if (n == 1) return MH_IS_EXACT_SHAPE.bindTo(shapes.get(0));
 
-		// 位掩码多态守卫 (Bitmask-Based Multi-Shape Guard): 汇编级单条 TEST 指令，无分支比对
+		// 位掩码多态守卫 (包含严格的属性归属验证)
 		long    combinedMask = 0L;
 		boolean allHaveMask  = true;
 		for (JSShape s : shapes) {
@@ -1022,16 +1022,11 @@ public class JSLinker {
 			combinedMask |= s.mask;
 		}
 
-		if (allHaveMask && combinedMask != 0L) {
-			MethodHandle mh = findMH(JSLinker.class, "isMatchMask", MethodType.methodType(boolean.class, long.class, Object.class));
-			return MethodHandles.insertArguments(mh, 0, combinedMask);
+		if (allHaveMask && combinedMask != 0L && propId >= 0 && commonOff >= 0) {
+			return MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, combinedMask, propId, commonOff);
 		}
 
 		return findMH(JSLinker.class, "isShapeN", MethodType.methodType(boolean.class, JSShape[].class, Object.class)).bindTo(shapes.toArray(new JSShape[0]));
-	}
-
-	public static boolean isMatchMaskSetterDouble(long expectedMask, Object target, double val) {
-		return target instanceof JSObject jsObj && (jsObj.shape.mask & expectedMask) != 0L;
 	}
 
 	public static boolean isShapeNSetterDouble(JSShape[] shapes, Object target, double val) {
@@ -1047,27 +1042,8 @@ public class JSLinker {
 	private static MethodHandle buildMultiShapeGuardSetterDouble(List<JSShape> shapes) {
 		int n = shapes.size();
 		if (n == 1) return MH_IS_EXACT_SHAPE_SETTER_DOUBLE.bindTo(shapes.get(0));
-
-		long    combinedMask = 0L;
-		boolean allHaveMask  = true;
-		for (JSShape s : shapes) {
-			if (s.mask == 0L) {
-				allHaveMask = false;
-				break;
-			}
-			combinedMask |= s.mask;
-		}
-
-		if (allHaveMask && combinedMask != 0L) {
-			MethodHandle mh = findMH(JSLinker.class, "isMatchMaskSetterDouble", MethodType.methodType(boolean.class, long.class, Object.class, double.class));
-			return MethodHandles.insertArguments(mh, 0, combinedMask);
-		}
-
+		// Setter 严格沿用精确 Shape 比较，禁止松散位掩码，杜绝类型混淆与原始槽脏写
 		return findMH(JSLinker.class, "isShapeNSetterDouble", MethodType.methodType(boolean.class, JSShape[].class, Object.class, double.class)).bindTo(shapes.toArray(new JSShape[0]));
-	}
-
-	public static boolean isMatchMaskSetterObject(long expectedMask, Object target, Object val) {
-		return target instanceof JSObject jsObj && (jsObj.shape.mask & expectedMask) != 0L;
 	}
 
 	public static boolean isShapeNSetterObject(JSShape[] shapes, Object target, Object val) {
@@ -1083,23 +1059,19 @@ public class JSLinker {
 	private static MethodHandle buildMultiShapeGuardSetterObject(List<JSShape> shapes) {
 		int n = shapes.size();
 		if (n == 1) return MH_IS_EXACT_SHAPE_SETTER_OBJECT.bindTo(shapes.get(0));
-
-		long    combinedMask = 0L;
-		boolean allHaveMask  = true;
-		for (JSShape s : shapes) {
-			if (s.mask == 0L) {
-				allHaveMask = false;
-				break;
-			}
-			combinedMask |= s.mask;
-		}
-
-		if (allHaveMask && combinedMask != 0L) {
-			MethodHandle mh = findMH(JSLinker.class, "isMatchMaskSetterObject", MethodType.methodType(boolean.class, long.class, Object.class, Object.class));
-			return MethodHandles.insertArguments(mh, 0, combinedMask);
-		}
-
+		// Setter 严格沿用精确 Shape 比较，禁止松散位掩码
 		return findMH(JSLinker.class, "isShapeNSetterObject", MethodType.methodType(boolean.class, JSShape[].class, Object.class, Object.class)).bindTo(shapes.toArray(new JSShape[0]));
+	}
+
+	/**
+	 * 自适应 Fallback 句柄：
+	 * 当已观测 Shape 数量 < 64 且 CallSite 未进入超态时，返回 initialFallback（继续捕获新 Shape 并触发动态重新快照/Relink）；
+	 * 当 Shape 数量到达 64 阈值后，返回 megamorphicTarget 终结演化。
+	 */
+	private static MethodHandle getAdaptiveFallback(ChainedCallSite site) {
+		return (site.getObservedShapes().size() < 64 && site.getInitialFallback() != null)
+		 ? site.getInitialFallback()
+		 : (site.getMegamorphicTarget() != null ? site.getMegamorphicTarget() : site.getTarget());
 	}
 	//endregion
 
@@ -1721,19 +1693,18 @@ public class JSLinker {
 
 				if (site.isOffsetEquivalent()) {
 					int          commonOff = site.getCommonOffset();
-					MethodHandle test      = buildMultiShapeGuard(site.getObservedShapes());
+					MethodHandle test      = buildMultiShapeGuard(site.getObservedShapes(), site.getPropId(), commonOff);
 					MethodHandle directSlotGetter = (commonOff >= 0 && commonOff < 8)
 					 ? MH_GET_SLOT_OBJECT[commonOff]
 					 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, commonOff);
-					MethodHandle fallbackTarget = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget() : (site.getInitialFallback() != null ? site.getInitialFallback() : site.getTarget());
+					MethodHandle fallbackTarget = getAdaptiveFallback(site);
 					site.setTarget(MethodHandles.guardWithTest(test, directSlotGetter.asType(site.type()), fallbackTarget.asType(site.type())));
 					return jsObj.getSlot(commonOff);
 				}
 
 				// 异槽多态：chainDepth >= 2 时挂载扁平 switch，避免继续堆叠 guardWithTest 层
 				if (site.getChainDepth() >= 2) {
-					MethodHandle fb = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget()
-					 : (site.getInitialFallback() != null ? site.getInitialFallback() : site.getTarget());
+					MethodHandle fb = getAdaptiveFallback(site);
 					PolySnapshot snap = site.snapshotPoly();
 					site.installFlatPolyGuard(buildFlatPolySwitchObject(snap, fb));
 				} else {
@@ -2960,18 +2931,16 @@ public class JSLinker {
 
 				if (site.isOffsetEquivalent()) {
 					int          commonOff        = site.getCommonOffset();
-					MethodHandle test             = buildMultiShapeGuard(site.getObservedShapes());
+					MethodHandle test             = buildMultiShapeGuard(site.getObservedShapes(), site.getPropId(), commonOff);
 					MethodHandle directSlotGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_INT, 0, commonOff);
-					MethodHandle fallbackTarget = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget()
-					 : (site.getInitialFallback() != null ? site.getInitialFallback() : site.getTarget());
+					MethodHandle fallbackTarget   = getAdaptiveFallback(site);
 					site.setTarget(MethodHandles.guardWithTest(test, directSlotGetter.asType(site.type()), fallbackTarget.asType(site.type())));
 					return JSOps.toInt(jsObj.getSlot(commonOff));
 				}
 
 				// 异槽多态：chainDepth >= 2 时挂载扁平 switch，消除 LambdaForm 嵌套深度
 				if (site.getChainDepth() >= 2) {
-					MethodHandle fb = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget()
-					 : (site.getInitialFallback() != null ? site.getInitialFallback() : site.getTarget());
+					MethodHandle fb = getAdaptiveFallback(site);
 					site.installFlatPolyGuard(buildFlatPolySwitchInt(site.snapshotPoly(), fb));
 				} else {
 					MethodHandle test             = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
@@ -3023,21 +2992,19 @@ public class JSLinker {
 				if (site.isOffsetEquivalent()) {
 					int          commonOff  = site.getCommonOffset();
 					byte         commonType = site.getCommonType();
-					MethodHandle test       = buildMultiShapeGuard(site.getObservedShapes());
+					MethodHandle test       = buildMultiShapeGuard(site.getObservedShapes(), site.getPropId(), commonOff);
 					MethodHandle fastGetter = (commonType == JSShape.TYPE_DOUBLE && commonOff < 8)
 					 ? MH_GET_SLOT_DOUBLE[commonOff]
 					 : MethodHandles.insertArguments(PropMH.GET_DOUBLE_SLOT, 0, commonOff);
 
-					MethodHandle fallbackTarget = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget()
-					 : (site.getInitialFallback() != null ? site.getInitialFallback() : site.getTarget());
+					MethodHandle fallbackTarget = getAdaptiveFallback(site);
 					site.setTarget(MethodHandles.guardWithTest(test, fastGetter.asType(site.type()), fallbackTarget.asType(site.type())));
 					return (commonType == JSShape.TYPE_DOUBLE) ? jsObj.getDoubleSlot(commonOff) : JSOps.toDouble(jsObj.getSlot(commonOff));
 				}
 
 				// B. 异槽多态：chainDepth >= 2 时挂载扁平 Jump-Table (tableSwitch)
 				if (site.getChainDepth() >= 2) {
-					MethodHandle fb = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget()
-					 : (site.getInitialFallback() != null ? site.getInitialFallback() : site.getTarget());
+					MethodHandle fb = getAdaptiveFallback(site);
 					site.installFlatPolyGuard(buildFlatPolySwitchDouble(site.snapshotPoly(), fb));
 				} else {
 					// C. 单态 / 双态 GWT 链
@@ -3096,18 +3063,16 @@ public class JSLinker {
 
 				if (site.isOffsetEquivalent()) {
 					int          commonOff        = site.getCommonOffset();
-					MethodHandle test             = buildMultiShapeGuard(site.getObservedShapes());
+					MethodHandle test             = buildMultiShapeGuard(site.getObservedShapes(), site.getPropId(), commonOff);
 					MethodHandle directSlotGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_LONG, 0, commonOff);
-					MethodHandle fallbackTarget = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget()
-					 : (site.getInitialFallback() != null ? site.getInitialFallback() : site.getTarget());
+					MethodHandle fallbackTarget   = getAdaptiveFallback(site);
 					site.setTarget(MethodHandles.guardWithTest(test, directSlotGetter.asType(site.type()), fallbackTarget.asType(site.type())));
 					return JSOps.toLong(jsObj.getSlot(commonOff));
 				}
 
 				// 异槽多态：chainDepth >= 2 时挂载扁平 switch
 				if (site.getChainDepth() >= 2) {
-					MethodHandle fb = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget()
-					 : (site.getInitialFallback() != null ? site.getInitialFallback() : site.getTarget());
+					MethodHandle fb = getAdaptiveFallback(site);
 					site.installFlatPolyGuard(buildFlatPolySwitchLong(site.snapshotPoly(), fb));
 				} else {
 					MethodHandle test             = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);

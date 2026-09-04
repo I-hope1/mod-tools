@@ -741,6 +741,49 @@ public class MagicJSTest {
 	}
 
 	@Test
+	public void testPolymorphicShapeExpansionAndRelink() throws Throwable {
+		// 验证：在多态演进期（1 -> 2 -> 4 态扩张），CallSite 能够顺利触发 Relink，
+		// 动态扩充 snapshotPoly 并在扁平跳转表/掩码分发中接纳新 Shape，而不是早熟固化或死死抛异常
+		String propName = "expansionProp_" + System.nanoTime();
+		int propId = SymbolTable.id(propName);
+
+		MethodType type = MethodType.methodType(double.class, Object.class);
+		CallSite site = JSLinker.bootstrapGetPropDouble(MethodHandles.lookup(), "getPropDouble", type, propName);
+
+		// 构造 4 个异槽对象（val 位于 offset 0, 1, 2, 3）
+		JSObject[] objs = new JSObject[4];
+		for (int i = 0; i < 4; i++) {
+			JSShape s = JSShape.ROOT;
+			for (int j = 0; j < i; j++) {
+				s = s.addProperty("dummy_" + i + "_" + j, JSShape.TYPE_DOUBLE);
+			}
+			s = s.addProperty(propId, JSShape.TYPE_DOUBLE);
+			objs[i] = new JSObject();
+			objs[i].shape = s;
+			objs[i].setDoubleSlot(i, 100.0 + i);
+		}
+
+		// 逐步调用，触发 1 -> 2 -> 3 -> 4 态演进
+		for (int i = 0; i < 4; i++) {
+			double val = (double) site.dynamicInvoker().invokeExact((Object) objs[i]);
+			Assertions.assertEquals(100.0 + i, val, 0.0001);
+		}
+
+		// 校验 CallSite 观测到的 Shape 数量确为 4，说明没有在 2 态时中断演化
+		ChainedCallSite ccs = (ChainedCallSite) site;
+		Assertions.assertEquals(4, ccs.snapshotPoly().shapes().length,
+		 "CallSite 在第 3、第 4 个异槽 Shape 灌入时应完成动态 Relink 并扩张快照！");
+
+		// 稳态执行验证：所有 4 个对象再次访问均能走 fast-path 正确读取
+		for (int rep = 0; rep < 10; rep++) {
+			for (int i = 0; i < 4; i++) {
+				double val = (double) site.dynamicInvoker().invokeExact((Object) objs[i]);
+				Assertions.assertEquals(100.0 + i, val, 0.0001);
+			}
+		}
+	}
+
+	@Test
 	public void testSymbolTableLeak() {
 		String nonExistentKey = "ghost_property_" + System.nanoTime();
 

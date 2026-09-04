@@ -12,10 +12,10 @@ public class ChainedCallSite extends MutableCallSite {
 	private             MethodHandle megamorphicTarget;
 
 	// Offset-Equivalent IC (同偏移多态状态)
-	private int     commonOffset     = -1;
-	private byte    commonType       = -1;
-	private boolean offsetEquivalent = true;
-	private int     propId           = -1;
+	private volatile int     commonOffset     = -1;
+	private volatile byte    commonType       = -1;
+	private volatile boolean offsetEquivalent = true;
+	private volatile int     propId           = -1;
 
 	public void setPropId(int propId) {
 		this.propId = propId;
@@ -97,7 +97,7 @@ public class ChainedCallSite extends MutableCallSite {
 	}
 
 	/** 返回已观测到的 Shape 列表（保持插入顺序）。 */
-	public List<JSShape> getObservedShapes() {
+	public synchronized List<JSShape> getObservedShapes() {
 		return new ArrayList<>(shapeOffsetMap.keySet());
 	}
 

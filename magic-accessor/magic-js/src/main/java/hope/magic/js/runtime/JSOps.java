@@ -380,7 +380,8 @@ public class JSOps {
 
 	public static double toDoubleSlow(Object val) {
 		if (val instanceof Number n) return n.doubleValue();
-		if (val == null || val == JSUndefined.INSTANCE) return Double.NaN;
+		if (val == null) return 0.0;
+		if (val == JSUndefined.INSTANCE) return Double.NaN;
 		if (val instanceof Boolean b) return b ? 1.0 : 0.0;
 		if (val instanceof String s) {
 			String trimmed = s.trim();

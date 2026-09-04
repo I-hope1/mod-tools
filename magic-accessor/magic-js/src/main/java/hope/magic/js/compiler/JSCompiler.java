@@ -648,6 +648,12 @@ public class JSCompiler {
 			return findAssignedType(name, exprStmt.expr, ctx);
 		} else if (node instanceof Node.AssignExpr assign) {
 			if (assign.target instanceof Node.IdentifierExpr ident && ident.name.equals(name)) {
+				// 如果赋值右侧是以 BIT_OR、BIT_AND、BIT_XOR、SHL、SHR 结尾的表达式，JS 规范保证其结果必然落入 32 位有符号整型
+				TokenType topOp = (assign.value instanceof Node.BinaryExpr bin) ? bin.op : null;
+				if (topOp == TokenType.BIT_OR || topOp == TokenType.BIT_AND || topOp == TokenType.BIT_XOR
+				    || topOp == TokenType.SHL || topOp == TokenType.SHR) {
+					return VarType.INT; // 强类型锁定为 INT，不再向上污染为 DOUBLE
+				}
 				if (assign.op == TokenType.SLASH_ASSIGN || assign.op == TokenType.USHR_ASSIGN) return VarType.DOUBLE;
 				if (assign.op == TokenType.BIT_AND_ASSIGN || assign.op == TokenType.BIT_OR_ASSIGN
 				    || assign.op == TokenType.BIT_XOR_ASSIGN || assign.op == TokenType.SHL_ASSIGN
@@ -1238,7 +1244,9 @@ public class JSCompiler {
 					mv.visitInsn(Opcodes.L2I);
 				} else if (var.isDouble()) {
 					mv.visitVarInsn(Opcodes.DLOAD, var.slot);
-					mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toInt", "(D)I", false);
+					// 这里不使用JSOps.toInt(D)而使用原生字节码来提高性能
+					mv.visitInsn(Opcodes.D2L);
+					mv.visitInsn(Opcodes.L2I);
 				} else {
 					mv.visitVarInsn(Opcodes.ALOAD, var.slot);
 					mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
@@ -1885,7 +1893,8 @@ public class JSCompiler {
 		}
 	}
 
-	private static void compileMemberIncDec(Node.UnaryExpr un, Node.MemberAccessExpr member, CompileContext ctx, boolean needResult) {
+	private static void compileMemberIncDec(Node.UnaryExpr un, Node.MemberAccessExpr member, CompileContext ctx,
+	                                        boolean needResult) {
 		MethodVisitor mv   = ctx.mv;
 		int           mark = ctx.markTempSlots();
 		try {
@@ -1929,7 +1938,8 @@ public class JSCompiler {
 		}
 	}
 
-	private static void compileIndexIncDec(Node.UnaryExpr un, Node.IndexAccessExpr idxAccess, CompileContext ctx, boolean needResult) {
+	private static void compileIndexIncDec(Node.UnaryExpr un, Node.IndexAccessExpr idxAccess, CompileContext ctx,
+	                                       boolean needResult) {
 		MethodVisitor mv   = ctx.mv;
 		int           mark = ctx.markTempSlots();
 		try {
@@ -2142,9 +2152,9 @@ public class JSCompiler {
 		JSShape   finalShape    = JSShape.ROOT;
 		boolean[] isDoubleField = new boolean[objLit.entries.size()];
 		for (int i = 0; i < objLit.entries.size(); i++) {
-			var entry   = objLit.entries.get(i);
-			int                          propId  = SymbolTable.id(entry.key());
-			VarType                      valType = inferVarType(entry.value(), ctx);
+			var     entry   = objLit.entries.get(i);
+			int     propId  = SymbolTable.id(entry.key());
+			VarType valType = inferVarType(entry.value(), ctx);
 			boolean isNum = (valType == VarType.DOUBLE || valType == VarType.INT || valType == VarType.LONG
 			                 || (entry.value() instanceof Node.LiteralExpr lit && lit.value instanceof Number));
 			isDoubleField[i] = isNum;

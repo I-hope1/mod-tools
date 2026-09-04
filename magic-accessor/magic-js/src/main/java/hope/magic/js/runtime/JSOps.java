@@ -410,13 +410,15 @@ public class JSOps {
 	}
 
 	public static int toInt(double d) {
-		if (Double.isNaN(d) || Double.isInfinite(d) || d == 0.0) {
-			return 0; // 核心：ECMAScript 规范要求非有限数必须返回 0
+		if (Math.abs(d) < 9.2233720368547758E18) {
+			return (int) (long) d;
 		}
-		// 快速路径：绝大多数数值在 long 范围内，直接硬件强转
-    if (d >= -9.2233720368547758E18 && d <= 9.2233720368547758E18) {
-        return (int) (long) d;
-    }
+		return toIntSlow(d);
+	}
+	private static int toIntSlow(double d) {
+		if (Double.isNaN(d) || Double.isInfinite(d)) {
+			return 0;
+		}
 		return (int) (long) (d % 4294967296.0);
 	}
 

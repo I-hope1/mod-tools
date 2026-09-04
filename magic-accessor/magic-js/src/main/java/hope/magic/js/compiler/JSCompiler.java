@@ -345,6 +345,10 @@ public class JSCompiler {
 			if (op == TokenType.MINUS) {
 				return inferVarType(un.expr, ctx);
 			}
+			if (op == TokenType.PLUS) {
+				VarType inner = inferVarType(un.expr, ctx);
+				return inner.isPrimitive() ? inner : VarType.DOUBLE;
+			}
 			if (op == TokenType.NOT || op == TokenType.BIT_NOT) {
 				return VarType.INT;
 			}
@@ -379,7 +383,7 @@ public class JSCompiler {
 	}
 
 	private static boolean isNumericUnaryOp(TokenType op) {
-		return op == TokenType.MINUS || op == TokenType.PLUS_PLUS || op == TokenType.MINUS_MINUS || op == TokenType.BIT_NOT;
+		return op == TokenType.PLUS || op == TokenType.MINUS || op == TokenType.PLUS_PLUS || op == TokenType.MINUS_MINUS || op == TokenType.BIT_NOT;
 	}
 
 	private static boolean isNumericExpr(Node node) {
@@ -1724,6 +1728,13 @@ public class JSCompiler {
 			}
 			compileNode(un.expr, ctx, true);
 			mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "not", "(Ljava/lang/Object;)Ljava/lang/Object;", false);
+		} else if (un.op == TokenType.PLUS) {
+			if (!needResult) {
+				compileNode(un.expr, ctx, false);
+				return;
+			}
+			compileNodeAsDouble(un.expr, ctx);
+			boxDouble(mv);
 		} else if (un.op == TokenType.MINUS) {
 			if (!needResult) {
 				compileNode(un.expr, ctx, false);
@@ -2235,6 +2246,10 @@ public class JSCompiler {
 				mv.visitInsn(b ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
 				return;
 			}
+			if (lit.value == null) {
+				mv.visitInsn(Opcodes.ICONST_0);
+				return;
+			}
 		}
 
 		if (node instanceof Node.IdentifierExpr ident) {
@@ -2266,6 +2281,10 @@ public class JSCompiler {
 		}
 
 		if (node instanceof Node.UnaryExpr un) {
+			if (un.op == TokenType.PLUS) {
+				compileNodeAsInt(un.expr, ctx);
+				return;
+			}
 			if (un.op == TokenType.BIT_NOT) {
 				compileNodeAsInt(un.expr, ctx);
 				mv.visitInsn(Opcodes.ICONST_M1);
@@ -2313,6 +2332,14 @@ public class JSCompiler {
 				pushLong(mv, num.longValue());
 				return;
 			}
+			if (lit.value instanceof Boolean b) {
+				mv.visitInsn(b ? Opcodes.LCONST_1 : Opcodes.LCONST_0);
+				return;
+			}
+			if (lit.value == null) {
+				mv.visitInsn(Opcodes.LCONST_0);
+				return;
+			}
 		}
 
 		if (node instanceof Node.IdentifierExpr ident) {
@@ -2348,6 +2375,10 @@ public class JSCompiler {
 		}
 
 		if (node instanceof Node.UnaryExpr un) {
+			if (un.op == TokenType.PLUS) {
+				compileNodeAsLong(un.expr, ctx);
+				return;
+			}
 			if (un.op == TokenType.MINUS) {
 				compileNodeAsLong(un.expr, ctx);
 				mv.visitInsn(Opcodes.LNEG);
@@ -2366,6 +2397,18 @@ public class JSCompiler {
 		if (node instanceof Node.LiteralExpr lit) {
 			if (lit.value instanceof Number num) {
 				mv.visitLdcInsn(num.doubleValue());
+				return;
+			}
+			if (lit.value == null || lit.value == Boolean.FALSE) {
+				mv.visitInsn(Opcodes.DCONST_0);
+				return;
+			}
+			if (lit.value == Boolean.TRUE) {
+				mv.visitInsn(Opcodes.DCONST_1);
+				return;
+			}
+			if (lit.value == JSUndefined.INSTANCE) {
+				mv.visitLdcInsn(Double.NaN);
 				return;
 			}
 		}
@@ -2412,6 +2455,10 @@ public class JSCompiler {
 		}
 
 		if (node instanceof Node.UnaryExpr un) {
+			if (un.op == TokenType.PLUS) {
+				compileNodeAsDouble(un.expr, ctx);
+				return;
+			}
 			if (un.op == TokenType.BIT_NOT) {
 				compileNodeAsInt(un, ctx);
 				mv.visitInsn(Opcodes.I2D);

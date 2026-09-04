@@ -176,6 +176,8 @@ public class ConstantFolder {
 						// 统一转成 double 取负后通过 createNumberLiteral 打包，完美兼顾 -0.0 与溢出提升
 						return createNumberLiteral(-num.doubleValue(), un.line, un.column);
 					}
+				} else if (un.op == TokenType.PLUS) {
+					return createNumberLiteral(JSOps.toDouble(val), un.line, un.column);
 				} else if (un.op == TokenType.NOT) {
 					boolean b = !JSOps.isTruthy(val);
 					return new Node.LiteralExpr(b, un.line, un.column);
@@ -475,7 +477,7 @@ public class ConstantFolder {
 				return isGuaranteedNumeric(bin.left) && isGuaranteedNumeric(bin.right);
 			}
 		}
-		if (node instanceof Node.UnaryExpr un && (un.op == TokenType.MINUS || un.op == TokenType.PLUS_PLUS || un.op == TokenType.MINUS_MINUS)) {
+		if (node instanceof Node.UnaryExpr un && (un.op == TokenType.PLUS || un.op == TokenType.MINUS || un.op == TokenType.PLUS_PLUS || un.op == TokenType.MINUS_MINUS)) {
 			return true;
 		}
 		return false;

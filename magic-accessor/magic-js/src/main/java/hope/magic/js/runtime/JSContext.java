@@ -285,7 +285,7 @@ public class JSContext {
 				return resolved;
 			}
 		}
-		if (Character.isUpperCase(name.charAt(0))) {
+		if (!name.isEmpty() && Character.isUpperCase(name.charAt(0))) {
 			try {
 				Class<?> c = Class.forName(name);
 				globals.put(name, c);

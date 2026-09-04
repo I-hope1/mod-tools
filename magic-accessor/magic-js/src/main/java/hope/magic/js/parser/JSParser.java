@@ -616,6 +616,7 @@ public class JSParser {
 			List<Node.ObjectLiteralExpr.Entry> entries = new ArrayList<>();
 			if (!check(TokenType.RBRACE)) {
 				do {
+					if (check(TokenType.RBRACE)) break;
 					Token keyToken = advance();
 					String key = keyToken.text;
 					Node val;
@@ -637,6 +638,7 @@ public class JSParser {
 			List<Node> elements = new ArrayList<>();
 			if (!check(TokenType.RBRACKET)) {
 				do {
+					if (check(TokenType.RBRACKET)) break;
 					elements.add(parseExpression());
 				} while (match(TokenType.COMMA));
 			}

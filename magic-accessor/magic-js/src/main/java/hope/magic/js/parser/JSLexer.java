@@ -78,6 +78,10 @@ public class JSLexer {
 						advance();
 						advance();
 						tokens.add(new Token(TokenType.ELLIPSIS, "...", null, startLine, startCol));
+					} else if (cursor < length && isDigit(source.charAt(cursor))) {
+						cursor--;
+						column--;
+						tokens.add(scanNumber(startLine, startCol));
 					} else {
 						tokens.add(new Token(TokenType.DOT, ".", null, startLine, startCol));
 					}
@@ -440,10 +444,33 @@ public class JSLexer {
 	private boolean isRegExpContext(List<Token> tokens) {
 		if (tokens.isEmpty()) return true;
 		Token last = tokens.get(tokens.size() - 1);
+		if (last.type == TokenType.RPAREN) {
+			int depth = 0;
+			for (int i = tokens.size() - 1; i >= 0; i--) {
+				TokenType t = tokens.get(i).type;
+				if (t == TokenType.RPAREN) depth++;
+				else if (t == TokenType.LPAREN) {
+					depth--;
+					if (depth == 0) {
+						if (i > 0) {
+							TokenType before = tokens.get(i - 1).type;
+							if (before == TokenType.IF || before == TokenType.WHILE || before == TokenType.FOR) {
+								return true;
+							}
+						}
+						break;
+					}
+				}
+			}
+			return false;
+		}
+		if (last.type == TokenType.RBRACE) {
+			return true;
+		}
 		return switch (last.type) {
 			case IDENTIFIER, NUMBER, STRING, REGEXP,
 			     TRUE, FALSE, NULL, UNDEFINED, THIS,
-			     RPAREN, RBRACKET, RBRACE,
+			     RBRACKET,
 			     PLUS_PLUS, MINUS_MINUS -> false;
 			default -> true;
 		};

@@ -60,11 +60,14 @@ public final class JSShape {
 	public static final byte TYPE_INT     = 2;
 	public static final byte TYPE_OBJECT  = 3;
 
-	public static final  JSShape[]     PRECOMPUTED_SHAPES = new JSShape[PRECOMPUTED_SHAPES_CAPACITY];
+	public static volatile JSShape[]   PRECOMPUTED_SHAPES = new JSShape[PRECOMPUTED_SHAPES_CAPACITY];
 	private static final AtomicInteger PRECOMPUTED_ID     = new AtomicInteger(0);
 
-	public static int registerPrecomputedShape(JSShape shape) {
+	public static synchronized int registerPrecomputedShape(JSShape shape) {
 		int id = PRECOMPUTED_ID.getAndIncrement();
+		if (id >= PRECOMPUTED_SHAPES.length) {
+			PRECOMPUTED_SHAPES = Arrays.copyOf(PRECOMPUTED_SHAPES, Math.max(PRECOMPUTED_SHAPES.length * 2, id + 1));
+		}
 		PRECOMPUTED_SHAPES[id] = shape;
 		return id;
 	}

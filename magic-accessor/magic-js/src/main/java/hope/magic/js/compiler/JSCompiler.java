@@ -472,7 +472,7 @@ public class JSCompiler {
 			    && isVarUsedAsNumeric(decl.name, root)) {
 				init = VarType.DOUBLE;
 			}
-			ctx.preInferredTypes.put(decl.name, init != null ? init : VarType.INT);
+			ctx.preInferredTypes.put(decl.name, init != null ? init : VarType.OBJECT);
 		}
 
 		for (int round = 0; round < 3; round++) {
@@ -588,7 +588,7 @@ public class JSCompiler {
 			if (merged != null) return merged;
 		}
 		if (initType != null) return initType;
-		return VarType.INT;
+		return VarType.OBJECT;
 	}
 
 	private static VarType findAssignedType(String name, Node node, CompileContext ctx) {

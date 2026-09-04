@@ -190,8 +190,8 @@ public class JSOps {
 		return a % b;
 	}
 
-	public static double mod(int a, int b) {
-		return b == 0 ? Double.NaN : (double) (a % b);
+	public static int mod(int a, int b) {
+		return b == 0 ? 0 : a % b;
 	}
 
 	public static double mod(int a, double b) {
@@ -212,8 +212,7 @@ public class JSOps {
 
 	public static boolean isEq(Object a, Object b) {
 		// js 中 NaN 的任何比较都应返回 false
-		if ((a instanceof Double d1 && d1.isNaN()) || (b instanceof Double d2 && d2.isNaN())) return false;
-		if (a == b) return true;
+		if (a == b && !(a instanceof Number n && Double.isNaN(n.doubleValue()))) return true;
 		if (a == null || a == JSUndefined.INSTANCE) {
 			return b == null || b == JSUndefined.INSTANCE;
 		}
@@ -238,8 +237,7 @@ public class JSOps {
 
 	public static boolean isStrictEq(Object a, Object b) {
 		// js 中 NaN 的任何比较都应返回 false
-		if ((a instanceof Double d1 && d1.isNaN()) || (b instanceof Double d2 && d2.isNaN())) return false;
-		if (a == b) return true;
+		if (a == b && !(a instanceof Number n && Double.isNaN(n.doubleValue()))) return true;
 		if (a == null || b == null || a == JSUndefined.INSTANCE || b == JSUndefined.INSTANCE) return false;
 		if (a instanceof Number && b instanceof Number) {
 			return ((Number) a).doubleValue() == ((Number) b).doubleValue();
@@ -247,7 +245,10 @@ public class JSOps {
 		if (a.getClass() != b.getClass()) {
 			return false;
 		}
-		return Objects.equals(a, b);
+		if (a instanceof String || a instanceof Boolean) {
+			return Objects.equals(a, b);
+		}
+		return false;
 	}
 
 	public static boolean isEqNull(Object a) {

@@ -1262,7 +1262,9 @@ public class JSLinker {
 			int offset = s.getOffset(propName);
 			if (offset >= 0) {
 				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
-				return jsObj.getDoubleSlot(offset);
+				if (jsObj.isDoubleSlot(offset)) {
+					return jsObj.getDoubleSlot(offset);
+				}
 			}
 			return jsObj.getAsDouble(propName);
 		}
@@ -1289,7 +1291,9 @@ public class JSLinker {
 			int offset = s.getOffset(propName);
 			if (offset >= 0) {
 				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
-				return (int) jsObj.getDoubleSlot(offset);
+				if (jsObj.isDoubleSlot(offset)) {
+					return (int) jsObj.getDoubleSlot(offset);
+				}
 			}
 			return JSOps.toInt(jsObj.get(propName));
 		}
@@ -1316,7 +1320,9 @@ public class JSLinker {
 			int offset = s.getOffset(propName);
 			if (offset >= 0) {
 				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
-				return (long) jsObj.getDoubleSlot(offset);
+				if (jsObj.isDoubleSlot(offset)) {
+					return (long) jsObj.getDoubleSlot(offset);
+				}
 			}
 			return JSOps.toLong(jsObj.get(propName));
 		}

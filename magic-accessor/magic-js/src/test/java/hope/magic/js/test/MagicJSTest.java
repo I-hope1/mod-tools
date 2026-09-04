@@ -2104,4 +2104,12 @@ public class MagicJSTest {
 		Assertions.assertEquals("boolean", cx.eval("var b = !1; typeof b;"));
 		Assertions.assertEquals("boolean", cx.eval("var b = !0; typeof b;"));
 	}
+
+	@Test
+	public void testCallingFunctionInDoubleMath() {
+		JSContext cx = new JSContext();
+		// 函数返回值参与浮点运算
+		cx.eval("function getVal() { return 10; }");
+		Assertions.assertEquals(12.5, ((Number) cx.eval("var d = 2.5 + getVal(); d;")).doubleValue());
+	}
 }

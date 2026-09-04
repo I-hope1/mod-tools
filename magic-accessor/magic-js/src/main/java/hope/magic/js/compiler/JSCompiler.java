@@ -2805,9 +2805,8 @@ public class JSCompiler {
 
 			int arity = call.arguments.size();
 			if (arity <= 3) {
-				// 自递归单态调用
-				if (call.callee instanceof Node.IdentifierExpr ident && ctx.isFunction && ctx.functionName != null && ctx.functionName.equals(ident.name)) {
-					// 自递归单态直连调用 (Direct self-recursive monomorphic invocation on 'this')
+				// 自递归单态调用 (仅在当前函数已被编译为 double 特化函数时有效)
+				if (call.callee instanceof Node.IdentifierExpr ident && ctx.isFunction && ctx.isDoubleSpecialized && ctx.functionName != null && ctx.functionName.equals(ident.name)) {
 					mv.visitVarInsn(Opcodes.ALOAD, 0); // this
 					mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
 					for (int i = 0; i < arity; i++) {
@@ -2816,16 +2815,6 @@ public class JSCompiler {
 					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, ctx.className, "call" + arity + "Double", getPrimDesc(arity), false);
 					return;
 				}
-
-				// 纯函数变量调用 (如 foo(1, 2))
-				compileNode(call.callee, ctx, true);
-				mv.visitTypeInsn(Opcodes.CHECKCAST, Type.getInternalName(JSFunction.class));
-				mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
-				for (int i = 0; i < arity; i++) {
-					compileNodeAsDouble(call.arguments.get(i), ctx);
-				}
-				mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, Type.getInternalName(JSFunction.class), "call" + arity + "Double", getPrimDesc(arity), true);
-				return;
 			}
 		}
 

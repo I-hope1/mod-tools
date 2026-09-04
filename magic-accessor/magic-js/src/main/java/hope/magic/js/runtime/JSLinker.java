@@ -1380,7 +1380,7 @@ public class JSLinker {
 	public static Object getPropMegamorphic(ChainedCallSite site, Object target, String propName) {
 		if (target instanceof JSObject jsObj) {
 			JSShape s   = jsObj.shape;
-			int     idx = (s.id ^ (s.id >>> 4)) & ChainedCallSite.CACHE_MASK;
+			int     idx = ChainedCallSite.cacheIndex(s.id);
 
 			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
 			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
@@ -1412,7 +1412,7 @@ public class JSLinker {
 	public static double getPropDoubleMegamorphic(ChainedCallSite site, Object target, String propName) {
 		if (target instanceof JSObject jsObj) {
 			JSShape s   = jsObj.shape;
-			int     idx = (s.id ^ (s.id >>> 4)) & ChainedCallSite.CACHE_MASK;
+			int     idx = ChainedCallSite.cacheIndex(s.id);
 
 			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
 			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
@@ -1441,7 +1441,7 @@ public class JSLinker {
 	public static int getPropIntMegamorphic(ChainedCallSite site, Object target, String propName) {
 		if (target instanceof JSObject jsObj) {
 			JSShape s   = jsObj.shape;
-			int     idx = (s.id ^ (s.id >>> 4)) & ChainedCallSite.CACHE_MASK;
+			int     idx = ChainedCallSite.cacheIndex(s.id);
 
 			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
 			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
@@ -1470,7 +1470,7 @@ public class JSLinker {
 	public static long getPropLongMegamorphic(ChainedCallSite site, Object target, String propName) {
 		if (target instanceof JSObject jsObj) {
 			JSShape s   = jsObj.shape;
-			int     idx = (s.id ^ (s.id >>> 4)) & ChainedCallSite.CACHE_MASK;
+			int     idx = ChainedCallSite.cacheIndex(s.id);
 
 			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
 			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
@@ -1499,7 +1499,7 @@ public class JSLinker {
 	public static void setPropMegamorphic(ChainedCallSite site, Object target, Object value, String propName) {
 		if (target instanceof JSObject jsObj) {
 			JSShape s   = jsObj.shape;
-			int     idx = (s.id ^ (s.id >>> 4)) & ChainedCallSite.CACHE_MASK;
+			int     idx = ChainedCallSite.cacheIndex(s.id);
 
 			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
 			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
@@ -1523,7 +1523,7 @@ public class JSLinker {
 	public static void setPropDoubleMegamorphic(ChainedCallSite site, Object target, double value, String propName) {
 		if (target instanceof JSObject jsObj) {
 			JSShape s   = jsObj.shape;
-			int     idx = (s.id ^ (s.id >>> 4)) & ChainedCallSite.CACHE_MASK;
+			int     idx = ChainedCallSite.cacheIndex(s.id);
 
 			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
 			if (entry != 0L && (int) (entry >>> 32) == s.id) {

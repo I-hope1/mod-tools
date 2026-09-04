@@ -29,8 +29,15 @@ public class ChainedCallSite extends MutableCallSite {
 	private final LinkedHashMap<JSShape, Integer> shapeOffsetMap = new LinkedHashMap<>(4);
 
 	// Megamorphic 多槽直接映射表 (Direct Mapped Fast Shape->Offset Cache)
-	public static final int       CACHE_SIZE   = 8;
-	public static final int       CACHE_MASK  = CACHE_SIZE - 1;
+	public static final int CACHE_SIZE = 64;
+	public static final int PHI_32     = 0x9E3779B9; // 黄金比例常数
+
+	/** 极速 32 位黄金比例散列：单条 imul + 单条 shr 汇编指令 */
+	public static int cacheIndex(int shapeId) {
+		return (shapeId * PHI_32) >>> 26; // 32 - 6 = 26，输出 [0, 63]
+	}
+
+	// directCache
 	public static final VarHandle CACHE_VH    = MethodHandles.arrayElementVarHandle(long[].class);
 	public final        long[]    directCache = new long[CACHE_SIZE];
 

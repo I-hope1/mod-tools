@@ -2716,6 +2716,16 @@ public class JSCompiler {
 		mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toDouble", "(Ljava/lang/Object;)D", false);
 	}
 
+	private static TokenType invertCompareOp(TokenType op) {
+		return switch (op) {
+			case LT -> TokenType.GT;
+			case LTE -> TokenType.GTE;
+			case GT -> TokenType.LT;
+			case GTE -> TokenType.LTE;
+			default -> op;
+		};
+	}
+
 	private static int getZeroCompareOpcode(TokenType op, boolean jumpOnTrue) {
 		return switch (op) {
 			case EQ, EQ_EQ -> jumpOnTrue ? Opcodes.IFEQ : Opcodes.IFNE;
@@ -2768,7 +2778,7 @@ public class JSCompiler {
 					}
 					if (isZeroLiteral(bin.left)) {
 						compileNodeAsInt(bin.right, ctx);
-						mv.visitJumpInsn(getZeroCompareOpcode(op, jumpOnTrue), targetLabel);
+						mv.visitJumpInsn(getZeroCompareOpcode(invertCompareOp(op), jumpOnTrue), targetLabel);
 						return;
 					}
 

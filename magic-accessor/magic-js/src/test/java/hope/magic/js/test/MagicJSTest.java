@@ -2045,4 +2045,18 @@ public class MagicJSTest {
 		Assertions.assertEquals(101.0, ((Number) cx.eval("var locArr = [100, 200]; ++locArr[0];")).doubleValue());
 		Assertions.assertEquals(100.0, ((Number) cx.eval("var locArr = [100, 200]; locArr[0]++;")).doubleValue());
 	}
+
+	@Test
+	public void testZeroOnLeftComparison() {
+		JSContext cx = new JSContext();
+
+		Assertions.assertEquals(true, cx.eval("var x = 5; 0 < x;"));
+		Assertions.assertEquals(false, cx.eval("var x = -5; 0 < x;"));
+		Assertions.assertEquals(true, cx.eval("var x = 5; 0 <= x;"));
+		Assertions.assertEquals(false, cx.eval("var x = 5; 0 > x;"));
+		Assertions.assertEquals(true, cx.eval("var x = -5; 0 > x;"));
+		Assertions.assertEquals(false, cx.eval("var x = 5; 0 >= x;"));
+		Assertions.assertEquals(true, cx.eval("var x = 0; 0 <= x;"));
+		Assertions.assertEquals(true, cx.eval("var x = 0; 0 >= x;"));
+	}
 }

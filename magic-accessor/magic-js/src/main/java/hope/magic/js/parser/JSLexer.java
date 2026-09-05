@@ -36,6 +36,9 @@ public class JSLexer {
 		KEYWORDS.put("switch", TokenType.SWITCH);
 		KEYWORDS.put("case", TokenType.CASE);
 		KEYWORDS.put("default", TokenType.DEFAULT);
+		KEYWORDS.put("class", TokenType.CLASS);
+		KEYWORDS.put("extends", TokenType.EXTENDS);
+		KEYWORDS.put("super", TokenType.SUPER);
 		KEYWORDS.put("new", TokenType.NEW);
 		KEYWORDS.put("this", TokenType.THIS);
 		KEYWORDS.put("true", TokenType.TRUE);

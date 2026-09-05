@@ -904,6 +904,16 @@ public class JSCompiler {
 			//noinspection UnnecessaryReturnStatement
 			return;
 		}
+		if (node instanceof Node.ClassDecl classDecl) {
+			compileClassDecl(classDecl, ctx, needResult);
+			return;
+		}
+		if (node instanceof Node.SuperExpr superExpr) {
+			if (needResult) {
+				compileIdentifier(new Node.IdentifierExpr("this", superExpr.line, superExpr.column), ctx);
+			}
+			return;
+		}
 	}
 
 	private static void compileVarDecl(Node.VarDecl varDecl, CompileContext ctx, boolean needResult) {
@@ -2087,6 +2097,30 @@ public class JSCompiler {
 
 	private static void compileCall(Node.CallExpr call, CompileContext ctx, boolean needResult) {
 		MethodVisitor mv = ctx.mv;
+		if (call.callee instanceof Node.SuperExpr) {
+			mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+			compileIdentifier(new Node.IdentifierExpr("this", call.line, call.column), ctx);
+			pushInt(mv, call.arguments.size());
+			mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+			for (int i = 0; i < call.arguments.size(); i++) {
+				mv.visitInsn(Opcodes.DUP);
+				pushInt(mv, i);
+				compileNode(call.arguments.get(i), ctx, true);
+				mv.visitInsn(Opcodes.AASTORE);
+			}
+			mv.visitMethodInsn(
+					Opcodes.INVOKESTATIC,
+					IN_JSLinker,
+					"callSuperConstructor",
+					"(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
+					false
+			);
+			if (!needResult) {
+				mv.visitInsn(Opcodes.POP);
+			}
+			return;
+		}
+
 		if (call.callee instanceof Node.IdentifierExpr ident && ctx.isFunction && ctx.functionName != null && ctx.functionName.equals(ident.name)) {
 			// 自递归单态直连调用 (Direct self-recursive monomorphic invocation on 'this')
 			int arity = call.arguments.size();
@@ -2131,6 +2165,14 @@ public class JSCompiler {
 		boolean isMember = (call.callee instanceof Node.MemberAccessExpr);
 		Node    target   = isMember ? ((Node.MemberAccessExpr) call.callee).target : call.callee;
 		String  name     = isMember ? ((Node.MemberAccessExpr) call.callee).property : "$invoke$";
+
+		if (target instanceof Node.SuperExpr) {
+			compileIdentifier(new Node.IdentifierExpr("this", call.line, call.column), ctx);
+			String desc = compileArgsAndGetDesc(call.arguments, ctx);
+			mv.visitInvokeDynamicInsn("invoke", desc, BSM_INVOKE, "__magic_super_" + name);
+			if (!needResult) mv.visitInsn(Opcodes.POP);
+			return;
+		}
 
 		compileNode(target, ctx, true);
 		String desc = compileArgsAndGetDesc(call.arguments, ctx);
@@ -2239,6 +2281,108 @@ public class JSCompiler {
 		}
 		if (needResult) {
 			visitUndefined(mv);
+		}
+	}
+
+	private static void compileClassDecl(Node.ClassDecl classDecl, CompileContext ctx, boolean needResult) {
+		MethodVisitor mv = ctx.mv;
+
+		// 1. push cx
+		mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+
+		// 2. evaluate superClass (or null)
+		if (classDecl.superClass != null) {
+			compileNode(classDecl.superClass, ctx, true);
+		} else {
+			mv.visitInsn(Opcodes.ACONST_NULL);
+		}
+
+		// 3. className (String or null)
+		if (classDecl.name != null) {
+			mv.visitLdcInsn(classDecl.name);
+		} else {
+			mv.visitInsn(Opcodes.ACONST_NULL);
+		}
+
+		// 4. methods array: [name0, fn0, name1, fn1, ...]
+		int methodCount = classDecl.methods.size();
+		pushInt(mv, methodCount * 2);
+		mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+		for (int i = 0; i < methodCount; i++) {
+			Node.FunctionDecl m = classDecl.methods.get(i);
+			mv.visitInsn(Opcodes.DUP);
+			pushInt(mv, i * 2);
+			mv.visitLdcInsn(m.name);
+			mv.visitInsn(Opcodes.AASTORE);
+
+			mv.visitInsn(Opcodes.DUP);
+			pushInt(mv, i * 2 + 1);
+			String mClass = generateFunctionClass(m.name, m.params, m.body);
+			instantiateFunction(mv, mClass);
+			mv.visitInsn(Opcodes.AASTORE);
+		}
+
+		// 5. staticMethods array: [name0, fn0, ...]
+		int staticCount = classDecl.staticMethods.size();
+		pushInt(mv, staticCount * 2);
+		mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+		for (int i = 0; i < staticCount; i++) {
+			Node.FunctionDecl sm = classDecl.staticMethods.get(i);
+			mv.visitInsn(Opcodes.DUP);
+			pushInt(mv, i * 2);
+			mv.visitLdcInsn(sm.name);
+			mv.visitInsn(Opcodes.AASTORE);
+
+			mv.visitInsn(Opcodes.DUP);
+			pushInt(mv, i * 2 + 1);
+			String smClass = generateFunctionClass(sm.name, sm.params, sm.body);
+			instantiateFunction(mv, smClass);
+			mv.visitInsn(Opcodes.AASTORE);
+		}
+
+		// 6. constructor JSFunction (or null)
+		if (classDecl.constructor != null) {
+			String ctorClass = generateFunctionClass("constructor", classDecl.constructor.params, classDecl.constructor.body);
+			instantiateFunction(mv, ctorClass);
+		} else {
+			mv.visitInsn(Opcodes.ACONST_NULL);
+		}
+
+		// 7. Call JavaClassExtender.defineClass
+		mv.visitMethodInsn(
+				Opcodes.INVOKESTATIC,
+				"hope/magic/js/runtime/JavaClassExtender",
+				"defineClass",
+				"(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;[Ljava/lang/Object;Lhope/magic/js/runtime/JSFunction;)Lhope/magic/js/runtime/JSFunction;",
+				false
+		);
+
+		// 8. Bind class name into scope
+		if (classDecl.name != null) {
+			if (!ctx.isFunction) {
+				LocalVar temp = ctx.declareLocal("__temp_class_" + classDecl.name, VarType.OBJECT);
+				mv.visitVarInsn(Opcodes.ASTORE, temp.slot);
+
+				int slot = JSContext.getGlobalSlot(classDecl.name);
+				mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+				pushInt(mv, slot);
+				mv.visitVarInsn(Opcodes.ALOAD, temp.slot);
+				mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "setSlot", "(ILjava/lang/Object;)V", false);
+
+				if (needResult) {
+					mv.visitVarInsn(Opcodes.ALOAD, temp.slot);
+				}
+			} else {
+				LocalVar var = ctx.declareLocal(classDecl.name, VarType.OBJECT);
+				if (needResult) {
+					mv.visitInsn(Opcodes.DUP);
+				}
+				mv.visitVarInsn(Opcodes.ASTORE, var.slot);
+			}
+		} else {
+			if (!needResult) {
+				mv.visitInsn(Opcodes.POP);
+			}
 		}
 	}
 
@@ -3137,7 +3281,12 @@ public class JSCompiler {
 		MethodVisitor mv       = ctx.mv;
 		String        propName = SymbolTable.symbol(member.property);
 
-		compileNode(member.target, ctx, true);
+		if (member.target instanceof Node.SuperExpr) {
+			compileIdentifier(new Node.IdentifierExpr("this", member.line, member.column), ctx);
+			propName = "__magic_super_" + propName;
+		} else {
+			compileNode(member.target, ctx, true);
+		}
 		mv.visitInvokeDynamicInsn("getProp", "(Ljava/lang/Object;)Ljava/lang/Object;", BSM_GET_PROP, propName);
 		if (!needResult) {
 			mv.visitInsn(Opcodes.POP);

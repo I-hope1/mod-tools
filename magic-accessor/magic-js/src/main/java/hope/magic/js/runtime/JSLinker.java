@@ -1599,8 +1599,40 @@ public class JSLinker {
 			return JSUndefined.INSTANCE;
 		}
 
+		if (propName.startsWith("__magic_super_") && target instanceof JSObject jsObj && !(target instanceof JSBridgedObject)) {
+			String realName = propName.substring("__magic_super_".length());
+			JSObject currentSuper = CURRENT_SUPER_PROTO.get();
+			JSObject superProto;
+			if (currentSuper != null) {
+				superProto = currentSuper.getPrototype();
+			} else {
+				JSObject proto = jsObj.getPrototype();
+				if (proto != null && proto.hasOwnProperty("constructor") && proto.getPrototype() != null) {
+					superProto = proto.getPrototype();
+				} else {
+					superProto = proto;
+				}
+			}
+			if (superProto != null) {
+				Object member = superProto.get(realName);
+				if (member != JSUndefined.INSTANCE) {
+					return member;
+				}
+			}
+		}
+
 		if (target instanceof JSObject jsObj) {
 			return jsObj.get(propName);
+		}
+
+		if (target instanceof JSBridgedObject bridged) {
+			JSObject jsObj = bridged.getJSObject();
+			if (jsObj != null) {
+				Object v = jsObj.get(propName);
+				if (v != JSUndefined.INSTANCE) {
+					return v;
+				}
+			}
 		}
 
 		if (target instanceof Map) {
@@ -1691,6 +1723,13 @@ public class JSLinker {
 				}
 			}
 		}
+
+		if (target instanceof JSBridgedObject bridged) {
+			JSObject jsObj = bridged.getJSObject();
+			if (jsObj != null) {
+				jsObj.put(propName, value);
+			}
+		}
 	}
 
 	private static void setFieldDirect(Object target, Field field, Object value) throws IllegalAccessException {
@@ -1768,6 +1807,16 @@ public class JSLinker {
 				return jsObj.getSlot(offset);
 			}
 			return jsObj.get(propName);
+		}
+
+		if (target instanceof JSBridgedObject bridged) {
+			JSObject jsObj = bridged.getJSObject();
+			if (jsObj != null) {
+				Object v = jsObj.get(propName);
+				if (v != JSUndefined.INSTANCE) {
+					return v;
+				}
+			}
 		}
 
 		if (target instanceof Map) {
@@ -1912,6 +1961,14 @@ public class JSLinker {
 				setterMethod.invoke(target, casted);
 				return;
 			} catch (Throwable ignored) {
+			}
+		}
+
+		if (target instanceof JSBridgedObject bridged) {
+			JSObject jsObj = bridged.getJSObject();
+			if (jsObj != null) {
+				jsObj.put(propName, value);
+				return;
 			}
 		}
 	}
@@ -2281,10 +2338,48 @@ public class JSLinker {
 			return func.call(null, thisArg, rest);
 		}
 
+		if (methodName.startsWith("__magic_super_") && target instanceof JSObject jsObj && !(target instanceof JSBridgedObject)) {
+			String realName = methodName.substring("__magic_super_".length());
+			JSObject currentSuper = CURRENT_SUPER_PROTO.get();
+			JSObject superProto;
+			if (currentSuper != null) {
+				superProto = currentSuper.getPrototype();
+			} else {
+				JSObject proto = jsObj.getPrototype();
+				if (proto != null && proto.hasOwnProperty("constructor") && proto.getPrototype() != null) {
+					superProto = proto.getPrototype();
+				} else {
+					superProto = proto;
+				}
+			}
+			if (superProto != null) {
+				Object member = superProto.get(realName);
+				if (member instanceof JSFunction func) {
+					JSObject prev = currentSuper;
+					CURRENT_SUPER_PROTO.set(superProto);
+					try {
+						return func.call(null, target, args);
+					} finally {
+						CURRENT_SUPER_PROTO.set(prev);
+					}
+				}
+			}
+		}
+
 		if (target instanceof JSObject jsObj) {
 			Object member = jsObj.get(methodName);
 			if (member instanceof JSFunction func) {
 				return func.call(null, jsObj, args);
+			}
+		}
+
+		if (target instanceof JSBridgedObject bridged && !methodName.startsWith("__magic_super_")) {
+			JSObject jsObj = bridged.getJSObject();
+			if (jsObj != null) {
+				Object member = jsObj.get(methodName);
+				if (member instanceof JSFunction func) {
+					return func.call(null, target, args);
+				}
 			}
 		}
 
@@ -2615,9 +2710,12 @@ public class JSLinker {
 		}
 
 		if (ctor instanceof JSFunction) {
-			JSObject newObj = new JSObject();
-			Object   res    = ((JSFunction) ctor).call(null, newObj, args);
-			if (res instanceof JSObject) return res;
+			Object proto = (ctor instanceof JSObject jsObj) ? jsObj.get("prototype") : JSUndefined.INSTANCE;
+			JSObject newObj = (proto instanceof JSObject sp) ? new JSObject(sp) : new JSObject();
+			Object res = ((JSFunction) ctor).call(null, newObj, args);
+			if (res instanceof JSBridgedObject || res instanceof JSObject || (res != null && res != JSUndefined.INSTANCE && !(res instanceof Number || res instanceof Boolean || res instanceof String || res instanceof Character))) {
+				return res;
+			}
 			return newObj;
 		}
 
@@ -3501,6 +3599,39 @@ public class JSLinker {
 		}
 
 		throw new NoSuchMethodException("Method '" + methodName + "' with " + args.length + " args not found on " + clazz.getName());
+	}
+
+	private static final ThreadLocal<JSObject> CURRENT_SUPER_PROTO = new ThreadLocal<>();
+	private static final ThreadLocal<JSObject> CURRENT_SUPER_CTOR_PROTO = new ThreadLocal<>();
+
+	public static Object callSuperConstructor(JSContext cx, Object thisObj, Object[] args) throws Throwable {
+		if (thisObj instanceof JSBridgedObject) {
+			return thisObj;
+		}
+		if (thisObj instanceof JSObject jsObj) {
+			JSObject currentProto = CURRENT_SUPER_CTOR_PROTO.get();
+			JSObject nextProto;
+			if (currentProto != null) {
+				nextProto = currentProto.getPrototype();
+			} else {
+				JSObject proto = jsObj.getPrototype();
+				nextProto = proto != null ? proto.getPrototype() : null;
+			}
+			if (nextProto != null) {
+				Object superCtor = nextProto.get("constructor");
+				if (superCtor instanceof JSFunction func) {
+					JSObject prev = currentProto;
+					CURRENT_SUPER_CTOR_PROTO.set(nextProto);
+					try {
+						func.call(cx, thisObj, args);
+					} finally {
+						CURRENT_SUPER_CTOR_PROTO.set(prev);
+					}
+					return thisObj;
+				}
+			}
+		}
+		return thisObj;
 	}
 
 	public static Object castValue(Object val, Class<?> targetType) {

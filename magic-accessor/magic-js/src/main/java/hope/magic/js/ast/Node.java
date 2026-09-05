@@ -48,6 +48,8 @@ public abstract class Node {
 		R visitRegExpLiteral(RegExpLiteral node, C context);
 		R visitFunctionExpr(FunctionExpr node, C context);
 		R visitTernaryExpr(TernaryExpr node, C context);
+		R visitClassDecl(ClassDecl node, C context);
+		R visitSuperExpr(SuperExpr node, C context);
 	}
 
 	//region 语句 Statements
@@ -594,6 +596,41 @@ public abstract class Node {
 		@Override
 		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
 			return visitor.visitTernaryExpr(this, context);
+		}
+	}
+
+	public static class ClassDecl extends Node {
+		public final String name; // 类名（可为 null，如作为匿名表达式）
+		public final Node superClass; // extends 的父类表达式（可为 null）
+		public final FunctionDecl constructor; // 构造函数（可为 null，默认无参）
+		public final List<FunctionDecl> methods; // 实例方法列表
+		public final List<FunctionDecl> staticMethods; // 静态方法列表
+
+		public ClassDecl(String name, Node superClass, FunctionDecl constructor,
+						 List<FunctionDecl> methods, List<FunctionDecl> staticMethods,
+						 int line, int column) {
+			super(line, column);
+			this.name = name;
+			this.superClass = superClass;
+			this.constructor = constructor;
+			this.methods = methods != null ? methods : List.of();
+			this.staticMethods = staticMethods != null ? staticMethods : List.of();
+		}
+
+		@Override
+		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+			return visitor.visitClassDecl(this, context);
+		}
+	}
+
+	public static class SuperExpr extends Node {
+		public SuperExpr(int line, int column) {
+			super(line, column);
+		}
+
+		@Override
+		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+			return visitor.visitSuperExpr(this, context);
 		}
 	}
 	//endregion

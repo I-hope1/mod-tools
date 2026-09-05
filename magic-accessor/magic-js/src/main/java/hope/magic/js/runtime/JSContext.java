@@ -259,6 +259,9 @@ public class JSContext {
 	public static final int SLOT_REGEXP       = getGlobalSlot("RegExp");
 	public static final int SLOT_OBJECT       = getGlobalSlot("Object");
 	public static final int SLOT_ARRAY        = getGlobalSlot("Array");
+	public static final int SLOT_JAVA         = getGlobalSlot("Java");
+	public static final int SLOT_JAVA_PKG     = getGlobalSlot("java");
+	public static final int SLOT_JAVAX_PKG    = getGlobalSlot("javax");
 
 	public static class JSBuiltinMethod extends JSObject implements JSFunction {
 		private static final List<String> BUILTIN_METHOD_PROPS = List.of("name", "length");
@@ -363,16 +366,68 @@ public class JSContext {
 			return JSUndefined.INSTANCE;
 		};
 
-		static final JSObject PACKAGES = new JSObject() {
+		public static class PackageObject extends JSObject {
+			private final String prefix;
+
+			public PackageObject(String prefix) {
+				this.prefix = prefix;
+			}
+
 			@Override
-			public Object get(String key) {
+			public Object get(String name) {
+				String fullName = (prefix == null || prefix.isEmpty()) ? name : prefix + "." + name;
 				try {
-					return Class.forName(key);
+					return Class.forName(fullName);
 				} catch (ClassNotFoundException e) {
-					return super.get(key);
+					Object existing = super.get(name);
+					if (existing != JSUndefined.INSTANCE) return existing;
+					return new PackageObject(fullName);
 				}
 			}
-		};
+
+			@Override
+			public String toString() {
+				return "[JavaPackage " + (prefix == null || prefix.isEmpty() ? "<root>" : prefix) + "]";
+			}
+		}
+
+		static final JSObject PACKAGES = new PackageObject("");
+		static final JSObject JAVA_PKG = new PackageObject("java");
+		static final JSObject JAVAX_PKG = new PackageObject("javax");
+		static final JSObject JAVA = createJavaObject();
+
+		private static JSObject createJavaObject() {
+			JSObject javaObj = new JSObject();
+			javaObj.put("type", (JSFunction) (cx, thisObj, args) -> {
+				if (args.length == 0 || args[0] == null) {
+					throw new IllegalArgumentException("Java.type() requires a class name");
+				}
+				String className = JSOps.toStr(args[0]);
+				try {
+					return Class.forName(className);
+				} catch (ClassNotFoundException e) {
+					throw new RuntimeException("ClassNotFoundException: " + className, e);
+				}
+			});
+
+			javaObj.put("extend", (JSFunction) (cx, thisObj, args) -> {
+				if (args.length == 0 || !(args[0] instanceof Class<?> targetClass)) {
+					throw new IllegalArgumentException("Java.extend() requires a Java Class as the first argument");
+				}
+				Map<String, JSFunction> methods = new LinkedHashMap<>();
+				if (args.length > 1 && args[1] instanceof JSObject overrides) {
+					for (String key : overrides.keys()) {
+						Object val = overrides.get(key);
+						if (val instanceof JSFunction fn) {
+							methods.put(key, fn);
+						}
+					}
+				}
+				return JavaClassExtender.createClassConstructor(targetClass, methods, null);
+			});
+
+			return javaObj;
+		}
 
 		static final JSFunction REGEXP = (cx, thisObj, args) -> {
 			if (args.length == 0) return new JSRegExp("", "");
@@ -1422,6 +1477,9 @@ public class JSContext {
 		public static final JSFunction          IMPORT_CLASS     = LazyMisc.IMPORT_CLASS;
 		public static final JSObject            PACKAGES         = LazyMisc.PACKAGES;
 		public static final JSFunction          REGEXP           = LazyMisc.REGEXP;
+		public static final JSObject            JAVA             = LazyMisc.JAVA;
+		public static final JSObject            JAVA_PKG         = LazyMisc.JAVA_PKG;
+		public static final JSObject            JAVAX_PKG        = LazyMisc.JAVAX_PKG;
 	}
 
 	private Object resolveLazyGlobal(int slot) {
@@ -1448,6 +1506,12 @@ public class JSContext {
 			val = LazyObject.OBJECT;
 		} else if (slot == SLOT_ARRAY) {
 			val = LazyArray.ARRAY;
+		} else if (slot == SLOT_JAVA) {
+			val = LazyMisc.JAVA;
+		} else if (slot == SLOT_JAVA_PKG) {
+			val = LazyMisc.JAVA_PKG;
+		} else if (slot == SLOT_JAVAX_PKG) {
+			val = LazyMisc.JAVAX_PKG;
 		}
 
 		if (val != null) {

@@ -41,6 +41,10 @@ public class JSParser {
 		if (t.type == TokenType.FUNCTION) {
 			return parseFunctionDecl();
 		}
+		if (t.type == TokenType.CLASS) {
+			advance();
+			return parseClassDecl(t);
+		}
 		if (t.type == TokenType.IF) {
 			return parseIfStatement();
 		}
@@ -167,6 +171,55 @@ public class JSParser {
 		List<Node> allStmts = new ArrayList<>(paramRes.unpackStmts);
 		allStmts.addAll(rawBody.statements);
 		return new Node.FunctionDecl(id.text, paramRes.params, new Node.BlockStmt(allStmts, rawBody.line, rawBody.column), kw.line, kw.column);
+	}
+
+	private Node.ClassDecl parseClassDecl(Token classToken) {
+		String className = null;
+		if (match(TokenType.IDENTIFIER)) {
+			className = previous().text;
+		}
+		Node superClass = null;
+		if (match(TokenType.EXTENDS)) {
+			superClass = parsePostfix();
+		}
+		consume(TokenType.LBRACE, "Expected '{' before class body");
+		Node.FunctionDecl constructor = null;
+		List<Node.FunctionDecl> methods = new ArrayList<>();
+		List<Node.FunctionDecl> staticMethods = new ArrayList<>();
+
+		while (!check(TokenType.RBRACE) && !isAtEnd()) {
+			if (match(TokenType.SEMICOLON)) continue;
+			boolean isStatic = false;
+			if (check(TokenType.IDENTIFIER) && "static".equals(peek().text)) {
+				advance();
+				isStatic = true;
+			}
+			Token nameToken;
+			if (match(TokenType.IDENTIFIER, TokenType.STRING)) {
+				nameToken = previous();
+			} else {
+				nameToken = consumePropertyName("Expected method name in class body");
+			}
+			String methodName = nameToken.text;
+			consume(TokenType.LPAREN, "Expected '(' after method name");
+			ParamParseResult paramRes = parseFunctionParams(nameToken);
+			consume(TokenType.RPAREN, "Expected ')' after parameters");
+			Node.BlockStmt rawBody = parseBlockStatement();
+			List<Node> allStmts = new ArrayList<>(paramRes.unpackStmts);
+			allStmts.addAll(rawBody.statements);
+			Node.BlockStmt body = new Node.BlockStmt(allStmts, rawBody.line, rawBody.column);
+
+			Node.FunctionDecl fn = new Node.FunctionDecl(methodName, paramRes.params, body, nameToken.line, nameToken.column);
+			if ("constructor".equals(methodName) && !isStatic) {
+				constructor = fn;
+			} else if (isStatic) {
+				staticMethods.add(fn);
+			} else {
+				methods.add(fn);
+			}
+		}
+		consume(TokenType.RBRACE, "Expected '}' after class body");
+		return new Node.ClassDecl(className, superClass, constructor, methods, staticMethods, classToken.line, classToken.column);
 	}
 
 	private Node parseIfStatement() {
@@ -562,6 +615,12 @@ public class JSParser {
 		if (match(TokenType.THIS)) {
 			return new Node.IdentifierExpr("this", previous().line, previous().column);
 		}
+		if (match(TokenType.SUPER)) {
+			return new Node.SuperExpr(previous().line, previous().column);
+		}
+		if (match(TokenType.CLASS)) {
+			return parseClassDecl(previous());
+		}
 		// 单参数箭头函数: x => x * 2 或 x => { ... }
 		if (check(TokenType.IDENTIFIER) && peekNext().type == TokenType.ARROW) {
 			Token param = advance();
@@ -622,6 +681,15 @@ public class JSParser {
 					Node val;
 					if (match(TokenType.COLON)) {
 						val = parseExpression();
+					} else if (check(TokenType.LPAREN)) {
+						consume(TokenType.LPAREN, "Expected '('");
+						ParamParseResult paramRes = parseFunctionParams(previous());
+						consume(TokenType.RPAREN, "Expected ')' after parameters");
+						Node.BlockStmt rawBody = parseBlockStatement();
+						List<Node> allStmts = new ArrayList<>(paramRes.unpackStmts);
+						allStmts.addAll(rawBody.statements);
+						Node.BlockStmt body = new Node.BlockStmt(allStmts, rawBody.line, rawBody.column);
+						val = new Node.FunctionExpr(key, paramRes.params, body, keyToken.line, keyToken.column);
 					} else {
 						val = new Node.IdentifierExpr(key, keyToken.line, keyToken.column);
 					}

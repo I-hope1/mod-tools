@@ -50,6 +50,7 @@ public class JSLinker {
 	public static final MethodHandle   MH_IS_EXACT_SHAPE_SETTER_OBJECT;
 	public static final MethodHandle   MH_IS_MATCH_MASK;
 	public static final MethodHandle   MH_IS_MATCH_MASK_AND_PROP;
+	public static final MethodHandle   MH_IS_MATCH_PROP;
 
 	static {
 		try {
@@ -82,6 +83,7 @@ public class JSLinker {
 			MH_IS_EXACT_SHAPE_SETTER_OBJECT = LOOKUP.findStatic(JSLinker.class, "isExactShapeSetterObject", MethodType.methodType(boolean.class, JSShape.class, Object.class, Object.class));
 			MH_IS_MATCH_MASK = LOOKUP.findStatic(JSLinker.class, "isMatchMask", MethodType.methodType(boolean.class, long.class, Object.class));
 			MH_IS_MATCH_MASK_AND_PROP = LOOKUP.findStatic(JSLinker.class, "isMatchMaskAndPropAt", MethodType.methodType(boolean.class, long.class, int.class, int.class, Object.class));
+			MH_IS_MATCH_PROP = LOOKUP.findStatic(JSLinker.class, "isMatchPropAt", MethodType.methodType(boolean.class, int.class, int.class, Object.class));
 		} catch (Throwable e) {
 			throw new ExceptionInInitializerError(e);
 		}
@@ -634,9 +636,13 @@ public class JSLinker {
 		if (propId < 0) return null; // 缺少 propId 时无法进行严格属性归属验证，安全回落
 		Map<Integer, Long> offsetMaskMap = new LinkedHashMap<>();
 		for (int i = 0; i < n; i++) {
+			int off = offsets[i];
 			JSShape s = shapes[i];
-			if (s.mask == 0L) return null; // 存在 id >= 64 的 Shape，掩码溢出，安全回落
-			offsetMaskMap.merge(offsets[i], s.mask, (m1, m2) -> m1 | m2);
+			offsetMaskMap.compute(off, (k, prevMask) -> {
+				if (prevMask == null) return s.mask;
+				if (prevMask == 0L || s.mask == 0L) return 0L;
+				return prevMask | s.mask;
+			});
 		}
 
 		if (offsetMaskMap.size() > 8) return null; // offset 种类过多时回落
@@ -649,7 +655,9 @@ public class JSLinker {
 			MethodHandle fastGetter = off < 8
 			 ? MH_GET_SLOT_DOUBLE[off]
 			 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE, 0, off);
-			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, mask, propId, off);
+			MethodHandle test = (mask != 0L)
+			 ? MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, mask, propId, off)
+			 : MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, off);
 			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
 		}
 		return chain;
@@ -659,9 +667,13 @@ public class JSLinker {
 		if (propId < 0) return null;
 		Map<Integer, Long> offsetMaskMap = new LinkedHashMap<>();
 		for (int i = 0; i < n; i++) {
+			int off = offsets[i];
 			JSShape s = shapes[i];
-			if (s.mask == 0L) return null;
-			offsetMaskMap.merge(offsets[i], s.mask, (m1, m2) -> m1 | m2);
+			offsetMaskMap.compute(off, (k, prevMask) -> {
+				if (prevMask == null) return s.mask;
+				if (prevMask == 0L || s.mask == 0L) return 0L;
+				return prevMask | s.mask;
+			});
 		}
 
 		if (offsetMaskMap.size() > 8) return null;
@@ -674,7 +686,9 @@ public class JSLinker {
 			MethodHandle fastGetter = off < 8
 			 ? MH_GET_SLOT_OBJECT[off]
 			 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, off);
-			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, mask, propId, off);
+			MethodHandle test = (mask != 0L)
+			 ? MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, mask, propId, off)
+			 : MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, off);
 			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
 		}
 		return chain;
@@ -684,9 +698,13 @@ public class JSLinker {
 		if (propId < 0) return null;
 		Map<Integer, Long> offsetMaskMap = new LinkedHashMap<>();
 		for (int i = 0; i < n; i++) {
+			int off = offsets[i];
 			JSShape s = shapes[i];
-			if (s.mask == 0L) return null;
-			offsetMaskMap.merge(offsets[i], s.mask, (m1, m2) -> m1 | m2);
+			offsetMaskMap.compute(off, (k, prevMask) -> {
+				if (prevMask == null) return s.mask;
+				if (prevMask == 0L || s.mask == 0L) return 0L;
+				return prevMask | s.mask;
+			});
 		}
 
 		if (offsetMaskMap.size() > 8) return null;
@@ -697,7 +715,9 @@ public class JSLinker {
 			int off = entries.get(i).getKey();
 			long mask = entries.get(i).getValue();
 			MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_INT, 0, off);
-			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, mask, propId, off);
+			MethodHandle test = (mask != 0L)
+			 ? MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, mask, propId, off)
+			 : MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, off);
 			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
 		}
 		return chain;
@@ -707,9 +727,13 @@ public class JSLinker {
 		if (propId < 0) return null;
 		Map<Integer, Long> offsetMaskMap = new LinkedHashMap<>();
 		for (int i = 0; i < n; i++) {
+			int off = offsets[i];
 			JSShape s = shapes[i];
-			if (s.mask == 0L) return null;
-			offsetMaskMap.merge(offsets[i], s.mask, (m1, m2) -> m1 | m2);
+			offsetMaskMap.compute(off, (k, prevMask) -> {
+				if (prevMask == null) return s.mask;
+				if (prevMask == 0L || s.mask == 0L) return 0L;
+				return prevMask | s.mask;
+			});
 		}
 
 		if (offsetMaskMap.size() > 8) return null;
@@ -720,7 +744,9 @@ public class JSLinker {
 			int off = entries.get(i).getKey();
 			long mask = entries.get(i).getValue();
 			MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_LONG, 0, off);
-			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, mask, propId, off);
+			MethodHandle test = (mask != 0L)
+			 ? MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, mask, propId, off)
+			 : MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, off);
 			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
 		}
 		return chain;
@@ -998,6 +1024,15 @@ public class JSLinker {
 		 && jsObj.shape.hasPropertyAt(propId, offset);
 	}
 
+	/**
+	 * O(1) 槽位属性归属验证：
+	 * 验证当前对象在指定 offset 槽位上的属性确为 propId。
+	 * 彻底摆脱 64 掩码上限约束，即使在万级 Shape 场景下依然提供硬件单内存读取 + 比较的极速验证。
+	 */
+	public static boolean isMatchPropAt(int propId, int offset, Object target) {
+		return target instanceof JSObject jsObj && jsObj.shape.hasPropertyAt(propId, offset);
+	}
+
 	public static boolean isShapeN(JSShape[] shapes, Object target) {
 		if (target instanceof JSObject jsObj) {
 			JSShape s = jsObj.shape;
@@ -1025,6 +1060,10 @@ public class JSLinker {
 
 		if (allHaveMask && combinedMask != 0L && propId >= 0 && commonOff >= 0) {
 			return MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, combinedMask, propId, commonOff);
+		}
+
+		if (propId >= 0 && commonOff >= 0) {
+			return MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, commonOff);
 		}
 
 		return findMH(JSLinker.class, "isShapeN", MethodType.methodType(boolean.class, JSShape[].class, Object.class)).bindTo(shapes.toArray(new JSShape[0]));

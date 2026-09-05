@@ -2539,5 +2539,51 @@ public class MagicJSTest {
 		Assertions.assertTrue(userObj.shape.id > 0, "用户对象的 Shape ID 必须为正数");
 		Assertions.assertTrue(userObj.shape.mask != 0L, "用户对象的 Shape 必须享有有效的位掩码");
 	}
+
+	@Test
+	public void testOffsetMaskDispatchResilientWhenMaskOverflow() throws Throwable {
+		// 验证当 Shape 的 ID >= 64 导致 mask == 0L 时，
+		// buildFlatPolySwitchDouble 依然通过 isMatchPropAt 正常进行聚合槽位分发，绝不返回 null
+		String propName = "targetVal_" + System.nanoTime();
+		int targetPropId = SymbolTable.id(propName);
+
+		// 构造多个不同 offset 的 Shape 集合
+		JSShape[] shapes = new JSShape[8];
+		int[] offsets = new int[8];
+		for (int i = 0; i < 8; i++) {
+			JSShape s = JSShape.ROOT;
+			for (int p = 0; p < (i % 4); p++) {
+				s = s.addProperty("dummy_" + i + "_" + p, JSShape.TYPE_DOUBLE);
+			}
+			s = s.addProperty(targetPropId, JSShape.TYPE_DOUBLE);
+			shapes[i] = s;
+			offsets[i] = i % 4;
+		}
+
+		JSLinker.PolySnapshot snap = new JSLinker.PolySnapshot(shapes, offsets, targetPropId);
+		MethodHandle fallback = MethodHandles.dropArguments(
+		 MethodHandles.constant(double.class, -1.0), 0, Object.class
+		);
+
+		MethodHandle switchMH = JSLinker.buildFlatPolySwitchDouble(snap, fallback);
+		Assertions.assertNotNull(switchMH);
+
+		// 验证每个 shape 的对象通过 switchMH 读取槽位均正确
+		for (int i = 0; i < 8; i++) {
+			JSObject obj = new JSObject();
+			obj.shape = shapes[i];
+			int off = offsets[i];
+			obj.setDoubleSlot(off, 100.0 + i);
+			double res = (double) switchMH.invokeExact((Object) obj);
+			Assertions.assertEquals(100.0 + i, res, 0.0001);
+		}
+
+		// 验证不含该属性的异构对象安全退回到 fallback (-1.0)
+		JSObject alien = new JSObject();
+		alien.shape = JSShape.ROOT.addProperty("other", JSShape.TYPE_DOUBLE);
+		alien.setDoubleSlot(0, 999.0);
+		double alienRes = (double) switchMH.invokeExact((Object) alien);
+		Assertions.assertEquals(-1.0, alienRes, 0.0001);
+	}
 }
 

@@ -2522,5 +2522,22 @@ public class MagicJSTest {
 			"    .reduce((acc, x) => acc + x, 0);"
 		)).doubleValue());
 	}
+
+	@Test
+	public void testStaticPrototypeShapeBatchConstruction() {
+		// 验证内置原型与构造函数采用静态批量终态烘焙，不污染用户 Shape ID
+		JSContext cx = new JSContext();
+		JSObject proto = (JSObject) cx.eval("Array.prototype;");
+		Assertions.assertNotNull(proto);
+		Assertions.assertTrue(proto.shape.isBuiltin, "Array.prototype 必须标记为内置 Shape");
+		Assertions.assertTrue(proto.shape.id < 0, "Array.prototype 的 Shape ID 必须使用负数隔离命名空间");
+		Assertions.assertEquals(0L, proto.shape.mask, "内置 Shape 的位掩码必须恒为 0L，不挤占 0..63 位掩码空间");
+
+		// 验证冷启动后，用户 Shape 依然可以从 1 开始分配，完整享有 1..63 掩码空间
+		JSObject userObj = (JSObject) cx.eval("({ a: 1, b: 2 });");
+		Assertions.assertFalse(userObj.shape.isBuiltin, "用户对象不得标记为内置");
+		Assertions.assertTrue(userObj.shape.id > 0, "用户对象的 Shape ID 必须为正数");
+		Assertions.assertTrue(userObj.shape.mask != 0L, "用户对象的 Shape 必须享有有效的位掩码");
+	}
 }
 

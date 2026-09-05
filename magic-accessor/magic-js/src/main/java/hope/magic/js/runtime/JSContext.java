@@ -147,6 +147,10 @@ public class JSContext {
 			super(prototype);
 		}
 
+		public JSObjectConstructor(JSShape shape, JSObject prototype) {
+			super(shape, prototype);
+		}
+
 		@Override
 		public Object call(JSContext cx, Object thisObj, Object[] args) {
 			if (args.length > 0 && args[0] != null && args[0] != JSUndefined.INSTANCE) {
@@ -180,6 +184,10 @@ public class JSContext {
 	public static class JSArrayConstructor extends JSObject implements JSFunction {
 		public JSArrayConstructor(JSObject prototype) {
 			super(prototype);
+		}
+
+		public JSArrayConstructor(JSShape shape, JSObject prototype) {
+			super(shape, prototype);
 		}
 
 		@Override
@@ -334,14 +342,32 @@ public class JSContext {
 			return new JSRegExp(pat, flags);
 		};
 
+		private static final List<String> OBJECT_PROTO_PROPS = List.of(
+			"hasOwnProperty", "toString", "valueOf", "constructor"
+		);
+		private static final List<String> OBJECT_CTOR_PROPS = List.of(
+			"name", "length", "prototype", "is", "getPrototypeOf", "getOwnPropertyNames"
+		);
+		private static final List<String> ARRAY_PROTO_PROPS = List.of(
+			"constructor", "length", "reduce", "reduceRight", "filter", "sort",
+			"map", "forEach", "find", "findIndex", "some", "every",
+			"includes", "indexOf", "lastIndexOf", "slice", "splice",
+			"concat", "push", "pop", "shift", "unshift", "reverse",
+			"fill", "flat", "toString", "join"
+		);
+		private static final List<String> ARRAY_CTOR_PROPS = List.of(
+			"name", "length", "prototype", "isArray", "of", "from"
+		);
+
 		static final JSObject            OBJECT_PROTOTYPE = createObjectPrototype();
 		static final JSObjectConstructor OBJECT           = createObjectConstructor(OBJECT_PROTOTYPE);
-		static final JSObject            ARRAY_PROTOTYPE  = new JSObject(OBJECT_PROTOTYPE);
+		static final JSObject            ARRAY_PROTOTYPE  = createArrayPrototype(OBJECT_PROTOTYPE);
 		static final JSArrayConstructor  ARRAY            = createArrayConstructor(ARRAY_PROTOTYPE);
 
 		private static JSObject createObjectPrototype() {
-			// 原型链顶端：Object.prototype 原型严格为 null
-			JSObject proto = new JSObject((JSObject) null);
+			// 原型链顶端：Object.prototype 原型严格为 null，采用批量烘焙终态 Shape
+			JSShape shape = JSShape.createStaticPrototypeShape(OBJECT_PROTO_PROPS);
+			JSObject proto = new JSObject(shape, null);
 			proto.put("hasOwnProperty", (JSFunction) (cx, thisObj, args) -> {
 				if (args.length == 0) return Boolean.FALSE;
 				String key = JSOps.toStr(args[0]);
@@ -356,7 +382,8 @@ public class JSContext {
 		}
 
 		private static JSObjectConstructor createObjectConstructor(JSObject proto) {
-			JSObjectConstructor ctor = new JSObjectConstructor(proto);
+			JSShape shape = JSShape.createStaticPrototypeShape(proto.shape, OBJECT_CTOR_PROPS);
+			JSObjectConstructor ctor = new JSObjectConstructor(shape, proto);
 			proto.put("constructor", ctor);
 
 			// 固有属性 (Own Properties)
@@ -393,8 +420,14 @@ public class JSContext {
 			return ctor;
 		}
 
+		private static JSObject createArrayPrototype(JSObject objectProto) {
+			JSShape shape = JSShape.createStaticPrototypeShape(objectProto.shape, ARRAY_PROTO_PROPS);
+			return new JSObject(shape, objectProto);
+		}
+
 		private static JSArrayConstructor createArrayConstructor(JSObject proto) {
-			JSArrayConstructor ctor = new JSArrayConstructor(OBJECT_PROTOTYPE);
+			JSShape shape = JSShape.createStaticPrototypeShape(OBJECT_PROTOTYPE.shape, ARRAY_CTOR_PROPS);
+			JSArrayConstructor ctor = new JSArrayConstructor(shape, OBJECT_PROTOTYPE);
 			proto.put("constructor", ctor);
 			proto.put("length", 0.0);
 

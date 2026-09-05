@@ -48,6 +48,10 @@ public final class SymbolTable {
 		return register(name);
 	}
 
+	public static int symbolId(String name) {
+		return id(name);
+	}
+
 	private static synchronized int register(String name) {
 		Integer existingId = NAME_TO_ID.get(name);
 		if (existingId != null) return existingId;

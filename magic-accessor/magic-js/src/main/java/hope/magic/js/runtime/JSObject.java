@@ -101,6 +101,11 @@ public class JSObject {
 		this.prototype = prototype;
 	}
 
+	public JSObject(JSShape shape, JSObject prototype) {
+		this.shape = shape;
+		this.prototype = prototype;
+	}
+
 	//endregion
 	//region 槽位访问
 

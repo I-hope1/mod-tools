@@ -19,7 +19,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class JSShape {
 	private static final MethodHandles.Lookup LOOKUP = Magic.lookup;
 
-	private static final AtomicInteger                        SHAPE_ID_GEN = new AtomicInteger(1);
+	private static final AtomicInteger BUILTIN_ID_GEN = new AtomicInteger(-1);
+	private static final AtomicInteger USER_ID_GEN    = new AtomicInteger(1);
 	private static final ConcurrentHashMap<String, VarHandle> VAR_HANDLES  = new ConcurrentHashMap<>();
 
 	// 语义化控制常量
@@ -72,13 +73,14 @@ public final class JSShape {
 		return id;
 	}
 
-	public static final JSShape ROOT = new JSShape(null, SymbolTable.NO_SYMBOL, TYPE_UNKNOWN);
+	public static final JSShape ROOT = new JSShape(null, SymbolTable.NO_SYMBOL, TYPE_UNKNOWN, false);
 
-	public final int  id;
-	public final long mask;            // 单指令位掩码 (1L << id，当 id < 64 时有效)
-	public final int  propertyCount;
-	public final int  propertyId;      // 本次迁移引入的属性 ID
-	public final byte propertyType;   // 本次迁移引入的类型
+	public final int     id;
+	public final long    mask;            // 单指令位掩码 (1L << id，当 id < 64 时有效)
+	public final boolean isBuiltin;
+	public final int     propertyCount;
+	public final int     propertyId;      // 本次迁移引入的属性 ID
+	public final byte    propertyType;   // 本次迁移引入的类型
 
 	// In-Shape 内联 0~3 键 (涵盖 90%+ 的小对象，0 额外数组堆分配)
 	public final int k0, k1, k2, k3;
@@ -94,8 +96,13 @@ public final class JSShape {
 	private volatile IntObjectMap<JSShape> multiTransitions = null;
 
 	private JSShape(JSShape parent, int propId, byte propType) {
-		this.id = SHAPE_ID_GEN.getAndIncrement();
-		this.mask = (this.id < BITMASK_MAX_SHAPES) ? (1L << this.id) : 0L;
+		this(parent, propId, propType, parent != null && parent.isBuiltin);
+	}
+
+	private JSShape(JSShape parent, int propId, byte propType, boolean isBuiltin) {
+		this.isBuiltin = isBuiltin;
+		this.id = isBuiltin ? BUILTIN_ID_GEN.getAndDecrement() : USER_ID_GEN.getAndIncrement();
+		this.mask = (!isBuiltin && this.id < BITMASK_MAX_SHAPES) ? (1L << this.id) : 0L;
 		this.propertyId = propId;
 		this.propertyType = propType;
 		int count = (parent == null ? 0 : parent.propertyCount) + (propId >= 0 ? 1 : 0);
@@ -138,6 +145,62 @@ public final class JSShape {
 				this.overflowKeys = ofKeys;
 				this.overflowTypes = ofTypes;
 			}
+		}
+	}
+
+	public static int getNextUserId() { return USER_ID_GEN.get(); }
+	public static int getNextBuiltinId() { return BUILTIN_ID_GEN.get(); }
+
+	/**
+	 * 一次性烘焙终态 Shape：跳过所有中间过渡 Shape，直接生成最终形态。
+	 * 只分配 1 个负数内置 Shape ID，掩码恒为 0L（不占用宝贵的 0..63 位掩码空间）。
+	 */
+	public static JSShape createStaticPrototypeShape(List<String> propNames) {
+		return createStaticPrototypeShape(null, propNames);
+	}
+
+	public static JSShape createStaticPrototypeShape(JSShape parentProtoShape, List<String> propNames) {
+		int n = propNames.size();
+		int[] propIds = new int[n];
+		byte[] types  = new byte[n];
+
+		for (int i = 0; i < n; i++) {
+			propIds[i] = SymbolTable.symbolId(propNames.get(i));
+			types[i]   = TYPE_OBJECT;
+		}
+
+		return new JSShape(propIds, types, true);
+	}
+
+	private JSShape(int[] propIds, byte[] types, boolean isBuiltin) {
+		this.isBuiltin = isBuiltin;
+		this.id = isBuiltin ? BUILTIN_ID_GEN.getAndDecrement() : USER_ID_GEN.getAndIncrement();
+		this.mask = (!isBuiltin && this.id < BITMASK_MAX_SHAPES) ? (1L << this.id) : 0L;
+		int count = propIds.length;
+		this.propertyCount = count;
+		this.propertyId = count > 0 ? propIds[count - 1] : SymbolTable.NO_SYMBOL;
+		this.propertyType = count > 0 ? types[count - 1] : TYPE_UNKNOWN;
+
+		this.k0 = count > 0 ? propIds[0] : -1;
+		this.t0 = count > 0 ? types[0] : 0;
+		this.k1 = count > 1 ? propIds[1] : -1;
+		this.t1 = count > 1 ? types[1] : 0;
+		this.k2 = count > 2 ? propIds[2] : -1;
+		this.t2 = count > 2 ? types[2] : 0;
+		this.k3 = count > 3 ? propIds[3] : -1;
+		this.t3 = count > 3 ? types[3] : 0;
+
+		if (count <= INLINE_PROPERTY_CAPACITY) {
+			this.overflowKeys = null;
+			this.overflowTypes = null;
+		} else {
+			int overflowLen = count - INLINE_PROPERTY_CAPACITY;
+			int[] ofKeys = new int[overflowLen];
+			byte[] ofTypes = new byte[overflowLen];
+			System.arraycopy(propIds, INLINE_PROPERTY_CAPACITY, ofKeys, 0, overflowLen);
+			System.arraycopy(types, INLINE_PROPERTY_CAPACITY, ofTypes, 0, overflowLen);
+			this.overflowKeys = ofKeys;
+			this.overflowTypes = ofTypes;
 		}
 	}
 

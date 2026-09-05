@@ -97,6 +97,12 @@ public class JSObject {
 		this.prototype = JSContext.LazyObject.OBJECT_PROTOTYPE;
 	}
 
+	public JSObject(JSShape shape, long doubleMask) {
+		this.shape = shape;
+		this.doubleFieldMask = doubleMask;
+		this.prototype = JSContext.LazyObject.OBJECT_PROTOTYPE;
+	}
+
 	public JSObject(JSObject prototype) {
 		this.prototype = prototype;
 	}

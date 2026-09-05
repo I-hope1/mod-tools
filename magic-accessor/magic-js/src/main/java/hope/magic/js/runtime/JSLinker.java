@@ -38,6 +38,10 @@ public class JSLinker {
 	public static final MethodHandle   MH_TO_INTERFACE;
 	public static final MethodHandle   MH_IS_EXACT_CLASS;
 	public static final MethodHandle   MH_IS_EXACT_SHAPE;
+	public static final MethodHandle   MH_IS_SAME_OBJECT;
+	public static final MethodHandle   MH_TRANSITION_SET_DOUBLE;
+	public static final MethodHandle   MH_TRANSITION_SET_OBJECT;
+	public static final MethodHandle   MH_TRANSITION_SET_OBJECT_DOUBLE;
 	public static final class SlotMH {
 		public static final MethodHandle[] MH_GET_SLOT_DOUBLE = new MethodHandle[8];
 		public static final MethodHandle[] MH_SET_SLOT_DOUBLE = new MethodHandle[8];
@@ -95,6 +99,10 @@ public class JSLinker {
 			MH_TO_INTERFACE = LOOKUP.findStatic(JSLinker.class, "toInterface", MethodType.methodType(Object.class, Class.class, Object.class));
 			MH_IS_EXACT_CLASS = LOOKUP.findStatic(JSLinker.class, "isExactClass", MethodType.methodType(boolean.class, Class.class, Object.class));
 			MH_IS_EXACT_SHAPE = LOOKUP.findStatic(JSLinker.class, "isExactShape", MethodType.methodType(boolean.class, JSShape.class, Object.class));
+			MH_IS_SAME_OBJECT = LOOKUP.findStatic(JSLinker.class, "isSameObject", MethodType.methodType(boolean.class, Object.class, Object.class));
+			MH_TRANSITION_SET_DOUBLE = LOOKUP.findStatic(JSLinker.class, "transitionSetDouble", MethodType.methodType(void.class, JSShape.class, int.class, Object.class, double.class));
+			MH_TRANSITION_SET_OBJECT = LOOKUP.findStatic(JSLinker.class, "transitionSetObject", MethodType.methodType(void.class, JSShape.class, int.class, Object.class, Object.class));
+			MH_TRANSITION_SET_OBJECT_DOUBLE = LOOKUP.findStatic(JSLinker.class, "transitionSetObjectDouble", MethodType.methodType(void.class, JSShape.class, int.class, Object.class, Object.class));
 		} catch (Throwable e) {
 			throw new ExceptionInInitializerError(e);
 		}
@@ -148,6 +156,15 @@ public class JSLinker {
 		 INVOKE_FALLBACK = findMH(JSLinker.class, "invokeFallback", MethodType.methodType(Object.class, ChainedCallSite.class, Object.class, Object[].class, String.class)),
 		 NEW_GENERIC     = findMH(JSLinker.class, "newGeneric", MethodType.methodType(Object.class, Object.class, Object[].class)),
 		 NEW_FALLBACK    = findMH(JSLinker.class, "newFallback", MethodType.methodType(Object.class, ChainedCallSite.class, Object.class, Object[].class));
+	}
+
+	public static final class NewMH {
+		public static final MethodHandle
+		 NEW_JS_FUNC0 = findMH(JSLinker.class, "newJSFunction0", MethodType.methodType(Object.class, JSFunction.class, JSObject.class)),
+		 NEW_JS_FUNC1 = findMH(JSLinker.class, "newJSFunction1", MethodType.methodType(Object.class, JSFunction.class, Object.class, JSObject.class)),
+		 NEW_JS_FUNC2 = findMH(JSLinker.class, "newJSFunction2", MethodType.methodType(Object.class, JSFunction.class, Object.class, Object.class, JSObject.class)),
+		 NEW_JS_FUNC3 = findMH(JSLinker.class, "newJSFunction3", MethodType.methodType(Object.class, JSFunction.class, Object.class, Object.class, Object.class, JSObject.class)),
+		 NEW_JS_FUNC4 = findMH(JSLinker.class, "newJSFunction4", MethodType.methodType(Object.class, JSFunction.class, Object.class, Object.class, Object.class, Object.class, JSObject.class));
 	}
 
 	public static final class JSFuncMH {
@@ -1894,6 +1911,10 @@ public class JSLinker {
 		if (target == null || target == JSUndefined.INSTANCE) return;
 
 		if (target instanceof JSObject jsObj) {
+			if (target instanceof JSArray jsArr) {
+				jsArr.put(propName, value);
+				return;
+			}
 			int offset = jsObj.shape.getOffset(propName);
 			if (offset >= 0) {
 				byte type = jsObj.shape.getSlotType(offset);
@@ -1926,7 +1947,28 @@ public class JSLinker {
 				jsObj.setSlot(offset, value);
 				return;
 			}
-			jsObj.put(propName, value);
+			int propId = site.getPropId();
+			if (propId < 0) {
+				propId = SymbolTable.id(propName);
+				site.setPropId(propId);
+			}
+			JSShape oldShape = jsObj.shape;
+			byte valType = (value instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
+			JSShape newShape = oldShape.addProperty(propId, valType);
+			int newOffset = newShape.propertyCount - 1;
+
+			MethodHandle test = MH_IS_EXACT_SHAPE_SETTER_OBJECT.bindTo(oldShape);
+			MethodHandle directSetter = (valType == JSShape.TYPE_DOUBLE)
+			 ? MethodHandles.insertArguments(MH_TRANSITION_SET_OBJECT_DOUBLE, 0, newShape, newOffset)
+			 : MethodHandles.insertArguments(MH_TRANSITION_SET_OBJECT, 0, newShape, newOffset);
+			site.installGuardOrSwitchMegamorphic(test, directSetter);
+
+			jsObj.shape = newShape;
+			if (valType == JSShape.TYPE_DOUBLE) {
+				jsObj.setDoubleSlot(newOffset, JSOps.toDouble(value));
+			} else {
+				jsObj.setSlot(newOffset, value);
+			}
 			return;
 		}
 
@@ -1992,6 +2034,10 @@ public class JSLinker {
 		if (target == null || target == JSUndefined.INSTANCE) return;
 
 		if (target instanceof JSObject jsObj) {
+			if (target instanceof JSArray jsArr) {
+				jsArr.put(propName, value);
+				return;
+			}
 			int offset = jsObj.shape.getOffset(propName);
 			if (offset >= 0) {
 				site.recordShape(jsObj.shape, offset, JSShape.TYPE_DOUBLE);
@@ -2023,7 +2069,21 @@ public class JSLinker {
 				jsObj.setDoubleSlot(offset, value);
 				return;
 			}
-			jsObj.put(propName, value);
+			int propId = site.getPropId();
+			if (propId < 0) {
+				propId = SymbolTable.id(propName);
+				site.setPropId(propId);
+			}
+			JSShape oldShape = jsObj.shape;
+			JSShape newShape = oldShape.addProperty(propId, JSShape.TYPE_DOUBLE);
+			int newOffset = newShape.propertyCount - 1;
+
+			MethodHandle test = MH_IS_EXACT_SHAPE_SETTER_DOUBLE.bindTo(oldShape);
+			MethodHandle directSetter = MethodHandles.insertArguments(MH_TRANSITION_SET_DOUBLE, 0, newShape, newOffset);
+			site.installGuardOrSwitchMegamorphic(test, directSetter);
+
+			jsObj.shape = newShape;
+			jsObj.setDoubleSlot(newOffset, value);
 			return;
 		}
 
@@ -2761,11 +2821,79 @@ public class JSLinker {
 		throw new IllegalArgumentException("Cannot instantiate non-constructor: " + ctor);
 	}
 
+	public static boolean isSameObject(Object expected, Object actual) {
+		return expected == actual;
+	}
+
+	public static void transitionSetDouble(JSShape newShape, int slot, Object target, double val) {
+		JSObject obj = (JSObject) target;
+		obj.shape = newShape;
+		obj.setDoubleSlot(slot, val);
+	}
+
+	public static void transitionSetObject(JSShape newShape, int slot, Object target, Object val) {
+		JSObject obj = (JSObject) target;
+		obj.shape = newShape;
+		obj.setSlot(slot, val);
+	}
+
+	public static void transitionSetObjectDouble(JSShape newShape, int slot, Object target, Object val) {
+		JSObject obj = (JSObject) target;
+		obj.shape = newShape;
+		obj.setDoubleSlot(slot, JSOps.toDouble(val));
+	}
+
+	public static Object newJSFunction0(JSFunction ctor, JSObject cachedProto) throws Throwable {
+		JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto) : new JSObject();
+		Object res = ctor.call0(null, newObj);
+		if (res instanceof JSBridgedObject || res instanceof JSObject || (res != null && res != JSUndefined.INSTANCE && !(res instanceof Number || res instanceof Boolean || res instanceof String || res instanceof Character))) {
+			return res;
+		}
+		return newObj;
+	}
+
+	public static Object newJSFunction1(JSFunction ctor, Object a0, JSObject cachedProto) throws Throwable {
+		JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto) : new JSObject();
+		Object res = ctor.call1(null, newObj, a0);
+		if (res instanceof JSBridgedObject || res instanceof JSObject || (res != null && res != JSUndefined.INSTANCE && !(res instanceof Number || res instanceof Boolean || res instanceof String || res instanceof Character))) {
+			return res;
+		}
+		return newObj;
+	}
+
+	public static Object newJSFunction2(JSFunction ctor, Object a0, Object a1, JSObject cachedProto) throws Throwable {
+		JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto) : new JSObject();
+		Object res = ctor.call2(null, newObj, a0, a1);
+		if (res instanceof JSBridgedObject || res instanceof JSObject || (res != null && res != JSUndefined.INSTANCE && !(res instanceof Number || res instanceof Boolean || res instanceof String || res instanceof Character))) {
+			return res;
+		}
+		return newObj;
+	}
+
+	public static Object newJSFunction3(JSFunction ctor, Object a0, Object a1, Object a2, JSObject cachedProto) throws Throwable {
+		JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto) : new JSObject();
+		Object res = ctor.call3(null, newObj, a0, a1, a2);
+		if (res instanceof JSBridgedObject || res instanceof JSObject || (res != null && res != JSUndefined.INSTANCE && !(res instanceof Number || res instanceof Boolean || res instanceof String || res instanceof Character))) {
+			return res;
+		}
+		return newObj;
+	}
+
+	public static Object newJSFunction4(JSFunction ctor, Object a0, Object a1, Object a2, Object a3, JSObject cachedProto) throws Throwable {
+		JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto) : new JSObject();
+		Object res = ctor.call4(null, newObj, a0, a1, a2, a3);
+		if (res instanceof JSBridgedObject || res instanceof JSObject || (res != null && res != JSUndefined.INSTANCE && !(res instanceof Number || res instanceof Boolean || res instanceof String || res instanceof Character))) {
+			return res;
+		}
+		return newObj;
+	}
+
 	public static Object newFallback(ChainedCallSite site, Object ctor, Object[] args) throws Throwable {
+		int arity = args.length;
 		if (ctor instanceof Class<?> clazz) {
 			if (STRATEGY == InvocationStrategy.MAGIC_ACCESSOR) {
 				try {
-					MagicJIT.MagicConstructorInvoker ctorInvoker = MagicJIT.getConstructorInvoker(clazz, args.length);
+					MagicJIT.MagicConstructorInvoker ctorInvoker = MagicJIT.getConstructorInvoker(clazz, arity);
 					if (ctorInvoker != null) {
 						return ctorInvoker.newInstance(args);
 					}
@@ -2773,11 +2901,68 @@ public class JSLinker {
 				}
 			}
 
-			MethodHandle ctorSpreader = getConstructorSpreader(clazz, args.length);
+			MethodHandle ctorSpreader = getConstructorSpreader(clazz, arity);
 			if (ctorSpreader != null) {
+				try {
+					Constructor<?> c = MethodResolver.findConstructor(clazz, arity);
+					if (c != null) {
+						MethodHandle mh = Magic.lookup.unreflectConstructor(c);
+						Class<?>[] pTypes = c.getParameterTypes();
+						for (int i = 0; i < pTypes.length; i++) {
+							MethodHandle filter = getArgumentFilter(pTypes[i]);
+							if (filter != null) mh = MethodHandles.filterArguments(mh, i, filter);
+						}
+						MethodHandle directCtor = MethodHandles.dropArguments(mh, 0, Object.class);
+						MethodHandle test = MH_IS_SAME_OBJECT.bindTo(clazz);
+						if (site.type().parameterCount() > 1) {
+							test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+						}
+						site.installGuardOrSwitchMegamorphic(test, directCtor.asType(site.type()));
+					}
+				} catch (Throwable ignored) {}
 				return ctorSpreader.invokeExact(args);
 			}
-			throw new NoSuchMethodException("No matching constructor for " + clazz.getName() + " with " + args.length + " args");
+			throw new NoSuchMethodException("No matching constructor for " + clazz.getName() + " with " + arity + " args");
+		}
+
+		if (ctor instanceof JSFunction func) {
+			Object proto = (ctor instanceof JSObject jsObj) ? jsObj.get("prototype") : JSUndefined.INSTANCE;
+			JSObject cachedProto = (proto instanceof JSObject sp) ? sp : null;
+
+			MethodHandle fastTarget = null;
+			if (arity == 0) {
+				fastTarget = MethodHandles.insertArguments(NewMH.NEW_JS_FUNC0, 1, cachedProto);
+			} else if (arity == 1) {
+				fastTarget = MethodHandles.insertArguments(NewMH.NEW_JS_FUNC1, 2, cachedProto);
+			} else if (arity == 2) {
+				fastTarget = MethodHandles.insertArguments(NewMH.NEW_JS_FUNC2, 3, cachedProto);
+			} else if (arity == 3) {
+				fastTarget = MethodHandles.insertArguments(NewMH.NEW_JS_FUNC3, 4, cachedProto);
+			} else if (arity == 4) {
+				fastTarget = MethodHandles.insertArguments(NewMH.NEW_JS_FUNC4, 5, cachedProto);
+			}
+
+			if (fastTarget != null) {
+				MethodHandle test = MH_IS_SAME_OBJECT.bindTo(ctor);
+				if (site.type().parameterCount() > 1) {
+					test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+				}
+				site.installGuardOrSwitchMegamorphic(test, fastTarget.asType(site.type()));
+			}
+
+			JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto) : new JSObject();
+			Object res;
+			if (arity == 0) res = func.call0(null, newObj);
+			else if (arity == 1) res = func.call1(null, newObj, args[0]);
+			else if (arity == 2) res = func.call2(null, newObj, args[0], args[1]);
+			else if (arity == 3) res = func.call3(null, newObj, args[0], args[1], args[2]);
+			else if (arity == 4) res = func.call4(null, newObj, args[0], args[1], args[2], args[3]);
+			else res = func.call(null, newObj, args);
+
+			if (res instanceof JSBridgedObject || res instanceof JSObject || (res != null && res != JSUndefined.INSTANCE && !(res instanceof Number || res instanceof Boolean || res instanceof String || res instanceof Character))) {
+				return res;
+			}
+			return newObj;
 		}
 
 		return newGeneric(ctor, args);

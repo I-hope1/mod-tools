@@ -96,6 +96,16 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		}
 	}
 
+	public static JSArray fromElements(Object[] elements) {
+		JSArray arr = new JSArray();
+		if (elements != null && elements.length > 0) {
+			arr.elements = elements;
+			arr.denseSize = elements.length;
+			arr.length = elements.length;
+		}
+		return arr;
+	}
+
 	//endregion
 	//region 长度属性操作
 

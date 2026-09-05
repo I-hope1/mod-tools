@@ -284,23 +284,25 @@ public class JavaInheritanceTest {
 	public void testES6MultiTierJavaSubclassing() {
 		JSContext cx = new JSContext();
 		Object res = cx.eval(
-				"class BaseList extends java.util.ArrayList {\n" +
-				"    constructor() { super(); }\n" +
-				"    tag() { return 'base'; }\n" +
-				"}\n" +
-				"\n" +
-				"class AdvancedList extends BaseList {\n" +
-				"    tag() { return super.tag() + ' -> adv'; }\n" +
-				"}\n" +
-				"\n" +
-				"let list = new AdvancedList();\n" +
-				"list.add('test');\n" +
-				"let t = list.tag();\n" +
-				"[list, t];\n"
+		 """
+			class BaseList extends java.util.ArrayList {
+			    constructor() { super(); }
+			    tag() { return 'base'; }
+			}
+			
+			class AdvancedList extends BaseList {
+			    tag() { return super.tag() + ' -> adv'; }
+			}
+			
+			let list = new AdvancedList();
+			list.add('test');
+			let t = list.tag();
+			[list, t];
+			"""
 		);
 
 		Assertions.assertInstanceOf(hope.magic.js.runtime.JSArray.class, res);
-		hope.magic.js.runtime.JSArray arr = (hope.magic.js.runtime.JSArray) res;
+		var arr = (hope.magic.js.runtime.JSArray) res;
 		Object listObj = arr.getElement(0);
 		Object tagObj = arr.getElement(1);
 

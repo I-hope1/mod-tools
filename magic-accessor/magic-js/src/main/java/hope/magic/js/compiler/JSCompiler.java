@@ -2193,6 +2193,7 @@ public class JSCompiler {
 		// 1. 预先在编译期推断完整 Shape，避免对象字面量构造过程中反复触发 3~5 次动态迁移与 putDoubleSlow
 		JSShape   finalShape    = JSShape.ROOT;
 		boolean[] isDoubleField = new boolean[objLit.entries.size()];
+		long      doubleMask    = 0L;
 		for (int i = 0; i < objLit.entries.size(); i++) {
 			var     entry   = objLit.entries.get(i);
 			int     propId  = SymbolTable.id(entry.key());
@@ -2200,31 +2201,48 @@ public class JSCompiler {
 			boolean isNum = (valType == VarType.DOUBLE || valType == VarType.INT || valType == VarType.LONG
 			                 || (entry.value() instanceof Node.LiteralExpr lit && lit.value instanceof Number));
 			isDoubleField[i] = isNum;
+			if (isNum && i < 64) {
+				doubleMask |= (1L << i);
+			}
 			byte fieldType = isNum ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
 			finalShape = finalShape.addProperty(propId, fieldType);
 		}
 
 		int shapeId = JSShape.registerPrecomputedShape(finalShape);
 
-		// 2. 实例化 JSObject 并直传预构建 Shape (0 动态迁移)
+		// 2. 实例化 JSObject 并直传预构建 Shape 与 precomputed doubleMask (0 动态迁移)
 		mv.visitTypeInsn(Opcodes.NEW, IN_JSObject);
 		mv.visitInsn(Opcodes.DUP);
 		mv.visitFieldInsn(Opcodes.GETSTATIC, IN_JSShape, "PRECOMPUTED_SHAPES", "[L" + IN_JSShape + ";");
 		pushInt(mv, shapeId);
 		mv.visitInsn(Opcodes.AALOAD);
-		mv.visitMethodInsn(Opcodes.INVOKESPECIAL, IN_JSObject, "<init>", "(L" + IN_JSShape + ";)V", false);
+		mv.visitLdcInsn(doubleMask);
+		mv.visitMethodInsn(Opcodes.INVOKESPECIAL, IN_JSObject, "<init>", "(L" + IN_JSShape + ";J)V", false);
 
-		// 3. 槽位直接注入 (offset 已在编译期固定为 0, 1, 2...，直接发射 setDoubleSlot / setSlot，0 动态查表)
+		// 3. 槽位直接注入 (offset 已在编译期固定为 0, 1, 2...)
 		for (int i = 0; i < objLit.entries.size(); i++) {
 			var entry = objLit.entries.get(i);
 			mv.visitInsn(Opcodes.DUP);
-			pushInt(mv, i);
-			if (isDoubleField[i]) {
-				compileNodeAsDouble(entry.value(), ctx);
-				mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "setDoubleSlot", "(ID)V", false);
+			if (i < 8) {
+				// 核心优化：针对 In-Object Top 8 槽位直接发射 PUTFIELD，0 方法调用开销，C2 JIT 100% 硬件级单条指令直写
+				if (isDoubleField[i]) {
+					compileNodeAsDouble(entry.value(), ctx);
+					mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Double", "doubleToRawLongBits", "(D)J", false);
+					mv.visitFieldInsn(Opcodes.PUTFIELD, IN_JSObject, "prim" + i, "J");
+				} else {
+					compileNode(entry.value(), ctx, true);
+					mv.visitFieldInsn(Opcodes.PUTFIELD, IN_JSObject, "obj" + i, "Ljava/lang/Object;");
+				}
 			} else {
-				compileNode(entry.value(), ctx, true);
-				mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "setSlot", "(ILjava/lang/Object;)V", false);
+				// 溢出槽位回退
+				pushInt(mv, i);
+				if (isDoubleField[i]) {
+					compileNodeAsDouble(entry.value(), ctx);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "setDoubleSlot", "(ID)V", false);
+				} else {
+					compileNode(entry.value(), ctx, true);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "setSlot", "(ILjava/lang/Object;)V", false);
+				}
 			}
 		}
 		if (!needResult) mv.visitInsn(Opcodes.POP);
@@ -2232,15 +2250,24 @@ public class JSCompiler {
 
 	private static void compileArrayLiteral(Node.ArrayLiteralExpr arrLit, CompileContext ctx, boolean needResult) {
 		MethodVisitor mv = ctx.mv;
-		mv.visitTypeInsn(Opcodes.NEW, IN_JSArray);
-		mv.visitInsn(Opcodes.DUP);
-		mv.visitMethodInsn(Opcodes.INVOKESPECIAL, IN_JSArray, "<init>", "()V", false);
-
-		for (Node elem : arrLit.elements) {
+		int size = arrLit.elements.size();
+		if (size == 0) {
+			mv.visitTypeInsn(Opcodes.NEW, IN_JSArray);
 			mv.visitInsn(Opcodes.DUP);
-			compileNode(elem, ctx, true);
-			mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSArray, "push", "(Ljava/lang/Object;)V", false);
+			mv.visitMethodInsn(Opcodes.INVOKESPECIAL, IN_JSArray, "<init>", "()V", false);
+			if (!needResult) mv.visitInsn(Opcodes.POP);
+			return;
 		}
+
+		pushInt(mv, size);
+		mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+		for (int i = 0; i < size; i++) {
+			mv.visitInsn(Opcodes.DUP);
+			pushInt(mv, i);
+			compileNode(arrLit.elements.get(i), ctx, true);
+			mv.visitInsn(Opcodes.AASTORE);
+		}
+		mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSArray, "fromElements", "([Ljava/lang/Object;)L" + IN_JSArray + ";", false);
 		if (!needResult) mv.visitInsn(Opcodes.POP);
 	}
 

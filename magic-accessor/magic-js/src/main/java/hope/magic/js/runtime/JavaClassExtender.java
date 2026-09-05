@@ -29,6 +29,8 @@ public final class JavaClassExtender {
 		public final Map<String, Long> methodMasks; // 方法名 -> 掩码位
 		public final List<Constructor<?>> constructors; // 原父类可见构造器列表
 		public final List<Constructor<?>> subConstructors; // 子类构造器列表
+		public final Constructor<?> noArgSubConstructor; // 快速无参构造器 (JSObject, long)
+		public final java.lang.invoke.MethodHandle noArgSubMh; // 快速无参构造器 MethodHandle
 
 		public ClassInfo(Class<?> targetClass, Class<?> subClass,
 						 Map<String, Long> methodMasks, List<Constructor<?>> constructors,
@@ -38,6 +40,20 @@ public final class JavaClassExtender {
 			this.methodMasks = methodMasks;
 			this.constructors = constructors;
 			this.subConstructors = subConstructors;
+			Constructor<?> noArg = null;
+			java.lang.invoke.MethodHandle mh = null;
+			for (Constructor<?> c : subConstructors) {
+				Class<?>[] pTypes = c.getParameterTypes();
+				if (pTypes.length == 2 && pTypes[0] == JSObject.class && pTypes[1] == long.class) {
+					noArg = c;
+					try {
+						mh = Magic.lookup.unreflectConstructor(c);
+					} catch (Throwable ignored) {}
+					break;
+				}
+			}
+			this.noArgSubConstructor = noArg;
+			this.noArgSubMh = mh;
 		}
 	}
 
@@ -273,6 +289,14 @@ public final class JavaClassExtender {
 	}
 
 	private static Object instantiateSubclass(ClassInfo info, JSObject jsObj, long mask, Object[] args) {
+		if (args.length == 0 && info.noArgSubConstructor != null) {
+			try {
+				return info.noArgSubConstructor.newInstance(jsObj, mask);
+			} catch (Throwable t) {
+				throw new RuntimeException("Failed to instantiate dynamic subclass for " + info.targetClass.getName(), t);
+			}
+		}
+
 		Constructor<?> bestCtor = null;
 		Object[] castedArgs = null;
 

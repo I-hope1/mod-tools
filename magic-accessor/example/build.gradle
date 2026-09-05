@@ -199,3 +199,12 @@ tasks.register('benchBun', JavaExec) {
 		executable = jsBenchmarkJdk.absolutePath
 	}
 }
+
+tasks.register('densityJS', JavaExec) {
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'hope.magic.example.ContextDensityBenchmark'
+	if (jsBenchmarkJdk.exists()) {
+		executable = jsBenchmarkJdk.absolutePath
+	}
+}
+

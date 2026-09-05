@@ -72,12 +72,29 @@ public class JSObject {
 
 	private JSObject prototype/*  = null */;
 
+	public JSObject getPrototype() {
+		if (this == JSContext.LazyBuiltins.OBJECT_PROTOTYPE) {
+			return null;
+		}
+		return prototype;
+	}
+
+	public void setPrototype(JSObject prototype) {
+		if (this == JSContext.LazyBuiltins.OBJECT_PROTOTYPE) {
+			throw new RuntimeException("TypeError: Immutable prototype object '#<Object>' cannot have their prototype set");
+		}
+		this.prototype = prototype;
+	}
+
 	//endregion
 	//region 构造器
-	public JSObject() { }
+	public JSObject() {
+		this.prototype = JSContext.LazyBuiltins.OBJECT_PROTOTYPE;
+	}
 
 	public JSObject(JSShape shape) {
 		this.shape = shape;
+		this.prototype = JSContext.LazyBuiltins.OBJECT_PROTOTYPE;
 	}
 
 	public JSObject(JSObject prototype) {
@@ -408,6 +425,20 @@ public class JSObject {
 			return prototype != null && prototype.has(key);
 		}
 		return has(symId);
+	}
+
+	public boolean hasOwnProperty(String key) {
+		int symId = SymbolTable.lookupId(key);
+		if (symId == SymbolTable.NO_SYMBOL) return false;
+		return hasOwnProperty(symId);
+	}
+
+	public boolean hasOwnProperty(int propId) {
+		if (propId < 0) return false;
+		int offset = shape.getOffset(propId);
+		if (offset < 0) return false;
+		if (isDoubleSlot(offset)) return true;
+		return getRawObjectSlot(offset) != DELETED;
 	}
 
 	public void delete(int propId) {

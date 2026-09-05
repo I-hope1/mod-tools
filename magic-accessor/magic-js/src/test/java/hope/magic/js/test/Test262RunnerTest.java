@@ -115,37 +115,7 @@ public class Test262RunnerTest {
 	 * TC39 SameValue algorithm (ECMA-262 §7.2.14).
 	 */
 	public static boolean isSameValue(Object x, Object y) {
-		if (x == y) {
-			if (x instanceof Double dx && y instanceof Double dy) {
-				// Handle +0.0 vs -0.0
-				return Double.doubleToRawLongBits(dx) == Double.doubleToRawLongBits(dy);
-			}
-			return true;
-		}
-		if (x == null || y == null) {
-			return x == y;
-		}
-		if (x == JSUndefined.INSTANCE || y == JSUndefined.INSTANCE) {
-			return x == y;
-		}
-		if (x instanceof Number nx && y instanceof Number ny) {
-			double dx = nx.doubleValue();
-			double dy = ny.doubleValue();
-			if (Double.isNaN(dx) && Double.isNaN(dy)) {
-				return true;
-			}
-			if (dx == dy) {
-				return Double.doubleToRawLongBits(dx) == Double.doubleToRawLongBits(dy);
-			}
-			return false;
-		}
-		if (x instanceof String || y instanceof String) {
-			return Objects.equals(x.toString(), y.toString());
-		}
-		if (x instanceof Boolean && y instanceof Boolean) {
-			return x.equals(y);
-		}
-		return Objects.equals(x, y);
+		return JSOps.sameValue(x, y);
 	}
 
 	/**
@@ -563,6 +533,100 @@ public class Test262RunnerTest {
 				var popped = arr.pop();
 				assert.sameValue(popped, 4, "popped element");
 				assert.sameValue(arr.length, 3, "length after pop");
+			""");
+		}
+	}
+
+	@Nested
+	@DisplayName("TC39 Test262: built-ins/Object/is")
+	class BuiltinObjectIs {
+
+		@Test
+		@DisplayName("test262: S19.1.2.10 - Object.is SameValue semantics")
+		public void testObjectIsSameValue() {
+			runTest262("""
+				/*---
+				info: Object.is ( value1, value2 )
+				es6id: 19.1.2.10
+				---*/
+				// 1. SameValue on Numbers & IEEE 754 NaNs
+				assert.sameValue(Object.is(NaN, NaN), true, "NaN is NaN");
+				assert.sameValue(Object.is(0 / 0, NaN), true, "computed NaN is NaN");
+				assert.sameValue(Object.is(+0, -0), false, "+0 is not -0");
+				assert.sameValue(Object.is(-0, +0), false, "-0 is not +0");
+				assert.sameValue(Object.is(+0, 0), true, "+0 is 0");
+				assert.sameValue(Object.is(-0, -0), true, "-0 is -0");
+				assert.sameValue(Object.is(0, 0), true, "0 is 0");
+				assert.sameValue(Object.is(1, 1), true, "1 is 1");
+				assert.sameValue(Object.is(1, 2), false, "1 is not 2");
+				assert.sameValue(Object.is(10, 10.0), true, "10 is 10.0 (cross number type alignment)");
+				assert.sameValue(Object.is(0, -0.0), false, "int 0 is not -0.0");
+
+				// 2. Different types
+				assert.sameValue(Object.is(1, "1"), false, "number is not string");
+				assert.sameValue(Object.is(0, false), false, "0 is not false");
+				assert.sameValue(Object.is(1, true), false, "1 is not true");
+				assert.sameValue(Object.is("", false), false, "empty string is not false");
+				assert.sameValue(Object.is(null, undefined), false, "null is not undefined");
+
+				// 3. Strings & Booleans
+				assert.sameValue(Object.is("foo", "foo"), true, "'foo' is 'foo'");
+				assert.sameValue(Object.is("foo", "bar"), false, "'foo' is not 'bar'");
+				assert.sameValue(Object.is(true, true), true, "true is true");
+				assert.sameValue(Object.is(false, false), true, "false is false");
+				assert.sameValue(Object.is(true, false), false, "true is not false");
+
+				// 4. Objects (reference equality)
+				assert.sameValue(Object.is([], []), false, "different array instances");
+				var o1 = {};
+				var o2 = {};
+				assert.sameValue(Object.is(o1, o1), true, "same object instance");
+				assert.sameValue(Object.is(o1, o2), false, "different object instances");
+
+				// 5. Arity variations
+				assert.sameValue(Object.is(), true, "no args -> is(undefined, undefined)");
+				assert.sameValue(Object.is(undefined), true, "1 arg -> is(undefined, undefined)");
+				assert.sameValue(Object.is(null), false, "1 arg -> is(null, undefined)");
+				assert.sameValue(Object.is(1), false, "1 arg -> is(1, undefined)");
+				assert.sameValue(Object.is(1, 1, 999), true, "extra args ignored");
+			""");
+		}
+
+		@Test
+		@DisplayName("test262: S19.1.2.10 - Object.is Own Property & Intrinsic Structures")
+		public void testObjectIsIntrinsicStructures() {
+			runTest262("""
+				/*---
+				info: Object and Object.is intrinsic properties and prototype structure
+				es6id: 19.1.2.10
+				---*/
+				// 1. Function metadata
+				assert.sameValue(typeof Object, "function", "typeof Object === 'function'");
+				assert.sameValue(typeof Object.is, "function", "typeof Object.is === 'function'");
+				assert.sameValue(Object.name, "Object", "Object.name === 'Object'");
+				assert.sameValue(Object.length, 1, "Object.length === 1");
+				assert.sameValue(Object.is.name, "is", "Object.is.name === 'is'");
+				assert.sameValue(Object.is.length, 2, "Object.is.length === 2");
+
+				// 2. Prototype chain top and back-reference
+				assert.sameValue(Object.prototype.constructor, Object, "Object.prototype.constructor === Object");
+				assert.sameValue(Object.getPrototypeOf(Object.prototype), null, "Object.getPrototypeOf(Object.prototype) === null");
+
+				// 3. Own Property reflection
+				assert.sameValue(Object.hasOwnProperty("is"), true, "Object.hasOwnProperty('is')");
+				assert.sameValue(Object.hasOwnProperty("prototype"), true, "Object.hasOwnProperty('prototype')");
+				assert.sameValue(Object.hasOwnProperty("name"), true, "Object.hasOwnProperty('name')");
+				assert.sameValue(Object.hasOwnProperty("length"), true, "Object.hasOwnProperty('length')");
+
+				// 4. Object instance prototype
+				var obj = {};
+				assert.sameValue(Object.getPrototypeOf(obj), Object.prototype, "Object.getPrototypeOf({}) === Object.prototype");
+				assert.sameValue(obj.hasOwnProperty("is"), false, "instance does not have 'is' as own property");
+
+				// 5. Standalone extraction
+				var isFn = Object.is;
+				assert.sameValue(isFn(NaN, NaN), true, "extracted isFn(NaN, NaN)");
+				assert.sameValue(isFn(+0, -0), false, "extracted isFn(+0, -0)");
 			""");
 		}
 	}

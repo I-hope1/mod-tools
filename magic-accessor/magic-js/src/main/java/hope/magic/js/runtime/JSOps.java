@@ -251,6 +251,73 @@ public class JSOps {
 		return false;
 	}
 
+	/**
+	 * TC39 SameValue algorithm (ECMA-262 §7.2.14).
+	 * 用于 Object.is，严格区分 +0 与 -0，判定所有 NaN 互相相等，并抹平底层 Number 存储差异。
+	 */
+	public static boolean sameValue(Object a, Object b) {
+		if (a == b) {
+			if (a instanceof Number n) {
+				double d = n.doubleValue();
+				if (d == 0.0) {
+					return Double.doubleToRawLongBits(d) == Double.doubleToRawLongBits(((Number) b).doubleValue());
+				}
+			}
+			return true;
+		}
+		if (a == null || b == null || a == JSUndefined.INSTANCE || b == JSUndefined.INSTANCE) {
+			return a == b;
+		}
+		if (a instanceof Number na && b instanceof Number nb) {
+			double da = na.doubleValue();
+			double db = nb.doubleValue();
+			// IEEE 754: 只要双方都是 NaN (无论 payload / quiet / signaling 差异)，在 JS 中均视为相同
+			if (Double.isNaN(da) && Double.isNaN(db)) {
+				return true;
+			}
+			if (Double.isNaN(da) || Double.isNaN(db)) {
+				return false;
+			}
+			// 严格区分 +0.0 与 -0.0
+			if (da == 0.0 && db == 0.0) {
+				return Double.doubleToRawLongBits(da) == Double.doubleToRawLongBits(db);
+			}
+			// 跨数值类型对齐：例如 10 与 10.0 相等
+			return da == db;
+		}
+		if (a instanceof CharSequence && b instanceof CharSequence) {
+			return a.toString().equals(b.toString());
+		}
+		if (a instanceof Boolean && b instanceof Boolean) {
+			return a.equals(b);
+		}
+		if (a instanceof Character && b instanceof Character) {
+			return a.equals(b);
+		}
+		return false;
+	}
+
+	public static boolean sameValue(double a, double b) {
+		if (Double.isNaN(a) && Double.isNaN(b)) return true;
+		return Double.doubleToRawLongBits(a) == Double.doubleToRawLongBits(b);
+	}
+
+	public static boolean sameValue(int a, int b) {
+		return a == b;
+	}
+
+	public static boolean sameValue(long a, long b) {
+		return a == b;
+	}
+
+	public static boolean sameValue(boolean a, boolean b) {
+		return a == b;
+	}
+
+	public static Object sameValueBoxed(Object a, Object b) {
+		return sameValue(a, b) ? Boolean.TRUE : Boolean.FALSE;
+	}
+
 	public static boolean isEqNull(Object a) {
 		return a == null || a == JSUndefined.INSTANCE;
 	}

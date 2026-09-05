@@ -106,6 +106,77 @@ public class JSContext {
 		}
 	}
 
+	public static class JSObjectIsFunction extends JSObject implements JSFunction {
+		public static final JSObjectIsFunction INSTANCE = new JSObjectIsFunction();
+
+		public JSObjectIsFunction() {
+			put("name", "is");
+			put("length", 2);
+		}
+
+		@Override
+		public Object call(JSContext cx, Object thisObj, Object[] args) {
+			Object a0 = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
+			Object a1 = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
+			return JSOps.sameValue(a0, a1);
+		}
+
+		@Override
+		public Object call0(JSContext cx, Object thisObj) {
+			return Boolean.TRUE;
+		}
+
+		@Override
+		public Object call1(JSContext cx, Object thisObj, Object a0) {
+			return JSOps.sameValue(a0, JSUndefined.INSTANCE);
+		}
+
+		@Override
+		public Object call2(JSContext cx, Object thisObj, Object a0, Object a1) {
+			return JSOps.sameValue(a0, a1);
+		}
+
+		@Override
+		public String toString() {
+			return "function is() { [native code] }";
+		}
+	}
+
+	public static class JSObjectConstructor extends JSObject implements JSFunction {
+		public JSObjectConstructor(JSObject prototype) {
+			super(prototype);
+		}
+
+		@Override
+		public Object call(JSContext cx, Object thisObj, Object[] args) {
+			if (args.length > 0 && args[0] != null && args[0] != JSUndefined.INSTANCE) {
+				if (args[0] instanceof JSObject) {
+					return args[0];
+				}
+				return args[0];
+			}
+			return new JSObject(LazyBuiltins.OBJECT_PROTOTYPE);
+		}
+
+		@Override
+		public Object call0(JSContext cx, Object thisObj) {
+			return new JSObject(LazyBuiltins.OBJECT_PROTOTYPE);
+		}
+
+		@Override
+		public Object call1(JSContext cx, Object thisObj, Object a0) {
+			if (a0 != null && a0 != JSUndefined.INSTANCE) {
+				return a0;
+			}
+			return new JSObject(LazyBuiltins.OBJECT_PROTOTYPE);
+		}
+
+		@Override
+		public String toString() {
+			return "function Object() { [native code] }";
+		}
+	}
+
 	public static final int SLOT_NAN          = getGlobalSlot("NaN");
 	public static final int SLOT_INFINITY     = getGlobalSlot("Infinity");
 	public static final int SLOT_UNDEFINED    = getGlobalSlot("undefined");
@@ -116,8 +187,9 @@ public class JSContext {
 	public static final int SLOT_IMPORT_CLASS = getGlobalSlot("importClass");
 	public static final int SLOT_PACKAGES     = getGlobalSlot("Packages");
 	public static final int SLOT_REGEXP       = getGlobalSlot("RegExp");
+	public static final int SLOT_OBJECT       = getGlobalSlot("Object");
 
-	private static class LazyBuiltins {
+	static class LazyBuiltins {
 		static final JSFunction PRINT = (cx, thisObj, args) -> {
 			StringBuilder sb = new StringBuilder();
 			for (int i = 0; i < args.length; i++) {
@@ -205,6 +277,63 @@ public class JSContext {
 			String flags = args.length > 1 && args[1] != null && args[1] != JSUndefined.INSTANCE ? JSOps.toStr(args[1]) : "";
 			return new JSRegExp(pat, flags);
 		};
+
+		static final JSObject            OBJECT_PROTOTYPE = createObjectPrototype();
+		static final JSObjectConstructor OBJECT           = createObjectConstructor(OBJECT_PROTOTYPE);
+
+		private static JSObject createObjectPrototype() {
+			// 原型链顶端：Object.prototype 原型严格为 null
+			JSObject proto = new JSObject((JSObject) null);
+			proto.put("hasOwnProperty", (JSFunction) (cx, thisObj, args) -> {
+				if (args.length == 0) return Boolean.FALSE;
+				String key = JSOps.toStr(args[0]);
+				if (thisObj instanceof JSObject jsObj) {
+					return jsObj.hasOwnProperty(key);
+				}
+				return Boolean.FALSE;
+			});
+			proto.put("toString", (JSFunction) (cx, thisObj, args) -> "[object Object]");
+			proto.put("valueOf", (JSFunction) (cx, thisObj, args) -> thisObj);
+			return proto;
+		}
+
+		private static JSObjectConstructor createObjectConstructor(JSObject proto) {
+			JSObjectConstructor ctor = new JSObjectConstructor(proto);
+			proto.put("constructor", ctor);
+
+			// 固有属性 (Own Properties)
+			ctor.put("name", "Object");
+			ctor.put("length", 1);
+			ctor.put("prototype", proto);
+			ctor.put("is", JSObjectIsFunction.INSTANCE);
+
+			// 元编程静态方法
+			ctor.put("getPrototypeOf", (JSFunction) (cx, thisObj, args) -> {
+				if (args.length == 0 || args[0] == null || args[0] == JSUndefined.INSTANCE) {
+					throw new RuntimeException("TypeError: Cannot convert undefined or null to object");
+				}
+				if (args[0] instanceof JSObject jsObj) {
+					return jsObj.getPrototype();
+				}
+				return null;
+			});
+
+			ctor.put("getOwnPropertyNames", (JSFunction) (cx, thisObj, args) -> {
+				if (args.length == 0 || args[0] == null || args[0] == JSUndefined.INSTANCE) {
+					throw new RuntimeException("TypeError: Cannot convert undefined or null to object");
+				}
+				if (args[0] instanceof JSObject jsObj) {
+					JSArray arr = new JSArray();
+					for (String k : jsObj.keys()) {
+						arr.push(k);
+					}
+					return arr;
+				}
+				return new JSArray();
+			});
+
+			return ctor;
+		}
 	}
 
 	public long rawReturnBits;
@@ -238,8 +367,11 @@ public class JSContext {
 			val = LazyBuiltins.IMPORT_CLASS;
 		} else if (slot == SLOT_PACKAGES) {
 			val = LazyBuiltins.PACKAGES;
-		} else if (slot == SLOT_REGEXP)
+		} else if (slot == SLOT_REGEXP) {
 			val = LazyBuiltins.REGEXP;
+		} else if (slot == SLOT_OBJECT) {
+			val = LazyBuiltins.OBJECT;
+		}
 
 		if (val != null) {
 			ensureGlobalSlotCapacity(slot);

@@ -11,8 +11,9 @@ import java.util.function.*;
 public final class LongObjectMap<V> {
 
 	// 哨兵对象
-	private static final Object TOMBSTONE   = new Object();
-	private static final float  LOAD_FACTOR = 0.75f;
+	private static final Object TOMBSTONE        = new Object();
+	private static final float  LOAD_FACTOR      = 0.75f;
+	private static final int    MAXIMUM_CAPACITY = 1 << 30;
 
 	private long[]   keys;
 	private Object[] values;
@@ -165,8 +166,20 @@ public final class LongObjectMap<V> {
 	}
 
 	private void rehash() {
-		// 如果墓碑太多，我们可以不扩容只清理（这里暂定简单翻倍扩容）
-		resizeTo(capacity * 2);
+		if (capacity >= MAXIMUM_CAPACITY) {
+			if (size >= MAXIMUM_CAPACITY * LOAD_FACTOR) {
+				throw new IllegalStateException("LongObjectMap capacity exceeded: " + MAXIMUM_CAPACITY);
+			}
+			resizeTo(capacity); // 仅做墓碑清理
+			return;
+		}
+
+		// 如果有效负载并不高，说明是墓碑占位过多导致的，原地清理不扩容！
+		if (size < (capacity * LOAD_FACTOR * 0.5f)) {
+			resizeTo(capacity);
+		} else {
+			resizeTo(capacity << 1);
+		}
 	}
 
 	private void resizeTo(int newCapacity) {
@@ -251,6 +264,10 @@ public final class LongObjectMap<V> {
 		if (totalPotentialSize > this.capacity * LOAD_FACTOR) {
 			int targetCapacity = this.capacity;
 			while (totalPotentialSize > targetCapacity * LOAD_FACTOR) {
+				if (targetCapacity >= MAXIMUM_CAPACITY) {
+					targetCapacity = MAXIMUM_CAPACITY;
+					break;
+				}
 				targetCapacity <<= 1; // 保持 2 的幂
 			}
 			resizeTo(targetCapacity); // 抽取出一个显式容量的 resize 方法

@@ -2220,8 +2220,8 @@ public class JSLinker {
 			throw new NullPointerException("Cannot invoke method '" + methodName + "' on null/undefined");
 		}
 
-		if (target instanceof JSFunction) {
-			return ((JSFunction) target).call(null, JSUndefined.INSTANCE, args);
+		if (target instanceof JSFunction func && "call".equals(methodName)) {
+			return func.call(null, JSUndefined.INSTANCE, args);
 		}
 
 		if (target instanceof JSObject jsObj) {
@@ -2263,7 +2263,7 @@ public class JSLinker {
 			throw new NullPointerException("Cannot invoke method '" + methodName + "' on null/undefined");
 		}
 
-		if (target instanceof JSFunction func) {
+		if (target instanceof JSFunction func && "call".equals(methodName)) {
 			int          arity = args.length;
 			MethodHandle directMh;
 			if (arity == 0) {
@@ -2301,17 +2301,28 @@ public class JSLinker {
 			Object member = jsObj.get(methodName);
 			if (member instanceof JSFunction func) {
 				int ownOffset = jsObj.shape.getOffset(methodName);
-				// 只有当方法不在自身槽位上（offset < 0，即来自原型链）时，函数实例才恒定，方可绑定常量
-				if (ownOffset < 0) {
+				// 当方法不在自身槽位上（offset < 0，即来自原型链），或为内置单例对象（如 JSObjectConstructor）时，函数实例恒定，方可绑定常量
+				if (ownOffset < 0 || jsObj instanceof JSContext.JSObjectConstructor) {
 					MethodHandle test = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
 					if (site.type().parameterCount() > 1) {
 						test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
 					}
-					MethodHandle exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL, 1, (Object) null)
-					 .bindTo(func)
-					 .asCollector(1, Object[].class, args.length)
-					 .asType(site.type());
-					site.installGuardOrSwitchMegamorphic(test, exactFuncCall);
+					int arity = args.length;
+					MethodHandle exactFuncCall;
+					if (arity == 0) {
+						exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL0, 1, (Object) null).bindTo(func);
+					} else if (arity == 1) {
+						exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL1, 1, (Object) null).bindTo(func);
+					} else if (arity == 2) {
+						exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL2, 1, (Object) null).bindTo(func);
+					} else if (arity == 3) {
+						exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL3, 1, (Object) null).bindTo(func);
+					} else {
+						exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL, 1, (Object) null)
+						 .bindTo(func)
+						 .asCollector(1, Object[].class, arity);
+					}
+					site.installGuardOrSwitchMegamorphic(test, exactFuncCall.asType(site.type()));
 				}
 				// 若为自有闭包属性，则不绑定死常量，保持动态调用
 				return func.call(null, jsObj, args);

@@ -2271,5 +2271,80 @@ public class MagicJSTest {
 		Object res = cx.eval("function add(a, b) { return a + b; } add(3, 4);");
 		Assertions.assertEquals(7.0, ((Number) res).doubleValue());
 	}
+
+	@Test
+	public void testObjectIsSemantics() {
+		JSContext cx = new JSContext();
+
+		// 1. NaN 与符号零 (+0 vs -0)
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Object.is(NaN, NaN);"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("Object.is(+0, -0);"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("Object.is(-0, +0);"));
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Object.is(+0, 0);"));
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Object.is(-0, -0);"));
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Object.is(0, 0);"));
+
+		// 2. 跨数值类型对齐与区分
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Object.is(10, 10.0);"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("Object.is(0, -0.0);"));
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Object.is(1, 1);"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("Object.is(1, 2);"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("Object.is(1, '1');"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("Object.is(0, false);"));
+
+		// 3. 基础与引用类型
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Object.is('hello', 'hello');"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("Object.is('hello', 'world');"));
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Object.is(true, true);"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("Object.is(true, false);"));
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Object.is(null, null);"));
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Object.is(undefined, undefined);"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("Object.is(null, undefined);"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("Object.is({}, {});"));
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("var o = {}; Object.is(o, o);"));
+
+		// 4. 函数提取
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("var is = Object.is; is(NaN, NaN);"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("var is = Object.is; is(+0, -0);"));
+
+		// 5. 参数数量变体
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Object.is();"));
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Object.is(undefined);"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("Object.is(null);"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("Object.is(1);"));
+	}
+
+	@Test
+	public void testObjectConstructorAndPrototypes() {
+		JSContext cx = new JSContext();
+
+		// 1. 函数元数据与类型
+		Assertions.assertEquals("function", cx.eval("typeof Object;"));
+		Assertions.assertEquals("function", cx.eval("typeof Object.is;"));
+		Assertions.assertEquals("Object", cx.eval("Object.name;"));
+		Assertions.assertEquals(1.0, ((Number) cx.eval("Object.length;")).doubleValue());
+		Assertions.assertEquals("is", cx.eval("Object.is.name;"));
+		Assertions.assertEquals(2.0, ((Number) cx.eval("Object.is.length;")).doubleValue());
+
+		// 2. 构造器反向引用与原型链顶端
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Object.prototype.constructor === Object;"));
+		Assertions.assertNull(cx.eval("Object.getPrototypeOf(Object.prototype);"));
+
+		// 3. 自有属性 Own Property
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Object.hasOwnProperty('is');"));
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Object.hasOwnProperty('prototype');"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("Object.hasOwnProperty('toString');"));
+
+		// 4. 普通对象继承与原型
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("var obj = { a: 10 }; Object.getPrototypeOf(obj) === Object.prototype;"));
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("var obj = { a: 10 }; obj.hasOwnProperty('a');"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("var obj = { a: 10 }; obj.hasOwnProperty('b');"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("var obj = { a: 10 }; obj.hasOwnProperty('is');"));
+
+		// 5. Object() 与 new Object()
+		Assertions.assertEquals("object", cx.eval("typeof Object();"));
+		Assertions.assertEquals("object", cx.eval("typeof new Object();"));
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("var o = { x: 1 }; Object(o) === o;"));
+	}
 }
 

@@ -14,6 +14,7 @@ public final class IntObjectMap<V> {
 	private static final Object TOMBSTONE   = new Object();
 	private static final float  LOAD_FACTOR = 0.75f;
 
+	private static final int    MIN_CAPACITY     = 4;
 	/** @see HashMap#MAXIMUM_CAPACITY */
 	static final int MAXIMUM_CAPACITY = 1 << 30;
 
@@ -46,16 +47,16 @@ public final class IntObjectMap<V> {
 
 	/** @see HashMap#tableSizeFor(int)   */
 	private static int tableSizeFor(int cap) {
+		if (cap <= MIN_CAPACITY) return MIN_CAPACITY;
 		int n = -1 >>> Integer.numberOfLeadingZeros(cap - 1);
-		return (n < 0) ? 1 : (n >= MAXIMUM_CAPACITY) ? MAXIMUM_CAPACITY : n + 1;
+		return (n >= MAXIMUM_CAPACITY) ? MAXIMUM_CAPACITY : n + 1;
 	}
 
 	public int size() { return size; }
 	public boolean isEmpty() { return size == 0; }
+	public int capacity() { return capacity; }
 
-	/**
-	 * 哈希混合函数 (MurmurHash3 变体)
-	 */
+	/** 哈希混合函数 (MurmurHash3 32-bit finalizer) */
 	private int hash(int key) {
 		key ^= (key >>> 16);
 		key *= 0x85ebca6b;
@@ -136,12 +137,12 @@ public final class IntObjectMap<V> {
 		return null;
 	}
 
-	/**
-	 * 高性能 computeIfAbsent，避免两次查找
-	 */
+	/**  高性能 computeIfAbsent，避免两次查找*/
 	@SuppressWarnings("unchecked")
 	public V computeIfAbsent(int key, IntFunction<? extends V> mappingFunction) {
-		if ((size + tombstoneCount + 1) > capacity * LOAD_FACTOR) rehash();
+		if ((size + tombstoneCount + 1) > capacity * LOAD_FACTOR) {
+			rehash();
+		}
 
 		int h            = hash(key);
 		int idx          = h & mask;
@@ -167,9 +168,27 @@ public final class IntObjectMap<V> {
 		return newValue;
 	}
 
+	/**
+	 * 智能重哈希：
+	 * 1. 达到最大容量时拒绝扩容；
+	 * 2. 若大部分是墓碑（有效数据不足容量的一半），保持原容量仅清理墓碑，彻底阻断 OOM；
+	 * 3. 真正需要空间时才翻倍扩容。
+	 */
 	private void rehash() {
-		// 如果墓碑太多，我们可以不扩容只清理（这里暂定简单翻倍扩容）
-		resizeTo(capacity * 2);
+		if (capacity >= MAXIMUM_CAPACITY) {
+			if (size >= MAXIMUM_CAPACITY * LOAD_FACTOR) {
+				throw new IllegalStateException("IntObjectMap capacity exceeded: " + MAXIMUM_CAPACITY);
+			}
+			resizeTo(capacity); // 仅做墓碑清理
+			return;
+		}
+
+		// 如果有效负载并不高，说明是墓碑占位过多导致的，原地清理不扩容！
+		if (size < (capacity * LOAD_FACTOR * 0.5f)) {
+			resizeTo(capacity);
+		} else {
+			resizeTo(capacity << 1);
+		}
 	}
 
 	private void resizeTo(int newCapacity) {
@@ -177,7 +196,7 @@ public final class IntObjectMap<V> {
 		Object[] oldValues = values;
 		int      oldCap    = capacity;
 
-		init(newCapacity); // 重新分配数组
+		init(newCapacity); // 重新分配数组与重置计数器
 
 		for (int i = 0; i < oldCap; i++) {
 			Object v = oldValues[i];
@@ -201,14 +220,15 @@ public final class IntObjectMap<V> {
 
 	public void forEachValue(Consumer<? super V> action) {
 		for (int i = 0; i < capacity; i++) {
-			if (values[i] != null && values[i] != TOMBSTONE) {
-				action.accept((V) values[i]);
+			Object v = values[i];
+			if (v != null && v != TOMBSTONE) {
+				action.accept((V) v);
 			}
 		}
 	}
 
 	public void clear() {
-		Arrays.fill(values, null); // keys 不需要 fill，因为根据 values 判断
+		Arrays.fill(values, null);  // keys 为基础类型无需清理，无 GC 泄漏风险
 		size = 0;
 		tombstoneCount = 0;
 	}
@@ -234,34 +254,34 @@ public final class IntObjectMap<V> {
 
 		ensureMoreCapacity(other.size());
 
-		// 2. 物理搬移：直接遍历数组，跳过 null 和墓碑
-		int[]    keys1   = other.keys;
-		Object[] values1 = other.values;
+		// 直接遍历数组，跳过 null 和墓碑
+		int[]    otherKeys   = other.keys;
+		Object[] otherValues = other.values;
 		for (int i = 0, cap = other.capacity; i < cap; i++) {
-			// 直接访问数组比 get 效率更高（减少哈希计算）
-			int key   = keys1[i];
-			V   value = (V) values1[i];
+			Object value = otherValues[i];
 			// valueAt 已经处理了墓碑返回 null
 			if (value != null && value != TOMBSTONE) {
-				this.put(key, value);
+				this.put(otherKeys[i], (V) value);
 			}
 		}
 	}
-	private void ensureMoreCapacity(int other) {
-		// 1. 预估容量：主要矛盾是减少 resize 过程中产生的临时数组分配
+	private void ensureMoreCapacity(int countToAdd) {
+		//预估容量：主要是减少 resize 过程中产生的临时数组分配
 		// 合并后的总规模 = 当前占用(含墓碑) + 外部新入成员
-		int totalPotentialSize = this.size + this.tombstoneCount + other;
+		long totalPotentialSize = this.size + this.tombstoneCount + countToAdd;
 		if (totalPotentialSize > this.capacity * LOAD_FACTOR) {
 			int targetCapacity = this.capacity;
 			while (totalPotentialSize > targetCapacity * LOAD_FACTOR) {
+				if (targetCapacity >= MAXIMUM_CAPACITY) {
+					targetCapacity = MAXIMUM_CAPACITY;
+					break;
+				}
 				targetCapacity <<= 1; // 保持 2 的幂
 			}
-			resizeTo(targetCapacity); // 抽取出一个显式容量的 resize 方法
+			resizeTo(targetCapacity);
 		}
 	}
-	/**
-	 * 专门用于从列表或其他集合批量导入数据，并提取复合哈希 Key
-	 */
+	/** 专门用于从列表或其他集合批量导入数据，并提取复合哈希 Key */
 	public <T> void putAll(Collection<T> items, java.util.function.ToIntFunction<T> keyExtractor,
 	                       java.util.function.Function<T, V> valueMapper) {
 		if (items == null || items.isEmpty()) return;
@@ -277,27 +297,20 @@ public final class IntObjectMap<V> {
 	@Override
 	public boolean equals(Object o) {
 		if (this == o) return true;
-		// 1. 类型校验
 		if (!(o instanceof IntObjectMap<?> that)) return false;
 
-		// 2. 规模校验（主要矛盾）：Size 不等直接判否
 		if (this.size != that.size) return false;
 
-		// 3. 逻辑内容校验（逐项核查）
-		// 遍历当前 Map 的物理数组
 		for (int i = 0; i < this.capacity; i++) {
 			Object v = this.values[i];
 
 			// 忽略空位和墓碑，只处理有效数据
 			if (v != null && v != TOMBSTONE) {
 				int key = this.keys[i];
-
-				// 去对方 Map 里查找同一个 Key
 				Object thatValue = that.get(key);
-
-				// 判断值是否相等
-				if (thatValue == null) return false; // 对方没有这个 Key
-				if (!Objects.equals(v, thatValue)) return false; // 值对不上
+				if (thatValue == null || !Objects.equals(v, thatValue)) {
+					return false;
+				}
 			}
 		}
 
@@ -312,7 +325,7 @@ public final class IntObjectMap<V> {
 			Object v = values[i];
 			if (v != null && v != TOMBSTONE) {
 				// 将 Key 和 Value 的哈希值结合，确保逻辑唯一性
-				h += Long.hashCode(keys[i]) ^ Objects.hashCode(v);
+				h +=  keys[i] ^ Objects.hashCode(v);
 			}
 		}
 		return h;
@@ -325,9 +338,6 @@ public final class IntObjectMap<V> {
 	/** 快速判断该位置是否有有效值 (逻辑内联) */
 	public static boolean isValid(Object value) {
 		return value != null && value != TOMBSTONE;
-	}
-	public int capacity() {
-		return capacity;
 	}
 	/* public long keyAt(int i) {
 		return keys[i];

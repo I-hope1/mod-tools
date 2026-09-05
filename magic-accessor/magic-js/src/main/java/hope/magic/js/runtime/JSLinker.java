@@ -1599,24 +1599,38 @@ public class JSLinker {
 			return JSUndefined.INSTANCE;
 		}
 
-		if (propName.startsWith("__magic_super_") && target instanceof JSObject jsObj && !(target instanceof JSBridgedObject)) {
+		if (propName.startsWith("__magic_super_")) {
 			String realName = propName.substring("__magic_super_".length());
-			JSObject currentSuper = CURRENT_SUPER_PROTO.get();
-			JSObject superProto;
-			if (currentSuper != null) {
-				superProto = currentSuper.getPrototype();
-			} else {
-				JSObject proto = jsObj.getPrototype();
-				if (proto != null && proto.hasOwnProperty("constructor") && proto.getPrototype() != null) {
-					superProto = proto.getPrototype();
-				} else {
-					superProto = proto;
+
+			if (target instanceof JSBridgedObject) {
+				List<Method> candidates = MethodResolver.findCandidateMethods(target.getClass(), propName);
+				if (!candidates.isEmpty()) {
+					return (JSFunction) (cx, thisObj, args) -> invokeJavaMethod(target, propName, args);
 				}
 			}
-			if (superProto != null) {
-				Object member = superProto.get(realName);
-				if (member != JSUndefined.INSTANCE) {
-					return member;
+
+			JSObject jsObj = (target instanceof JSBridgedObject bridged)
+					? bridged.getJSObject()
+					: (target instanceof JSObject obj ? obj : null);
+
+			if (jsObj != null) {
+				JSObject currentSuper = CURRENT_SUPER_PROTO.get();
+				JSObject superProto;
+				if (currentSuper != null) {
+					superProto = currentSuper.getPrototype();
+				} else {
+					JSObject proto = jsObj.getPrototype();
+					if (proto != null && proto.hasOwnProperty("constructor") && proto.getPrototype() != null) {
+						superProto = proto.getPrototype();
+					} else {
+						superProto = proto;
+					}
+				}
+				if (superProto != null) {
+					Object member = superProto.get(realName);
+					if (member != JSUndefined.INSTANCE) {
+						return member;
+					}
 				}
 			}
 		}
@@ -2338,29 +2352,54 @@ public class JSLinker {
 			return func.call(null, thisArg, rest);
 		}
 
-		if (methodName.startsWith("__magic_super_") && target instanceof JSObject jsObj && !(target instanceof JSBridgedObject)) {
+		if (methodName.startsWith("__magic_super_")) {
 			String realName = methodName.substring("__magic_super_".length());
-			JSObject currentSuper = CURRENT_SUPER_PROTO.get();
-			JSObject superProto;
-			if (currentSuper != null) {
-				superProto = currentSuper.getPrototype();
-			} else {
-				JSObject proto = jsObj.getPrototype();
-				if (proto != null && proto.hasOwnProperty("constructor") && proto.getPrototype() != null) {
-					superProto = proto.getPrototype();
-				} else {
-					superProto = proto;
+
+			if (target instanceof JSBridgedObject) {
+				Class<?> clazz = target.getClass();
+				Method targetMethod = findBestMatchingMethod(clazz, methodName, args);
+				if (targetMethod != null) {
+					targetMethod.setAccessible(true);
+					Class<?>[] paramTypes = targetMethod.getParameterTypes();
+					Object[]   castedArgs = new Object[args.length];
+					for (int i = 0; i < args.length; i++) {
+						castedArgs[i] = castValue(args[i], paramTypes[i]);
+					}
+					MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(clazz, methodName, args.length, Modifier.isStatic(targetMethod.getModifiers()));
+					if (invoker != null) {
+						return invoker.invoke(target, castedArgs);
+					}
+					return targetMethod.invoke(target, castedArgs);
 				}
 			}
-			if (superProto != null) {
-				Object member = superProto.get(realName);
-				if (member instanceof JSFunction func) {
-					JSObject prev = currentSuper;
-					CURRENT_SUPER_PROTO.set(superProto);
-					try {
-						return func.call(null, target, args);
-					} finally {
-						CURRENT_SUPER_PROTO.set(prev);
+
+			JSObject jsObj = (target instanceof JSBridgedObject bridged)
+					? bridged.getJSObject()
+					: (target instanceof JSObject obj ? obj : null);
+
+			if (jsObj != null) {
+				JSObject currentSuper = CURRENT_SUPER_PROTO.get();
+				JSObject superProto;
+				if (currentSuper != null) {
+					superProto = currentSuper.getPrototype();
+				} else {
+					JSObject proto = jsObj.getPrototype();
+					if (proto != null && proto.hasOwnProperty("constructor") && proto.getPrototype() != null) {
+						superProto = proto.getPrototype();
+					} else {
+						superProto = proto;
+					}
+				}
+				if (superProto != null) {
+					Object member = superProto.get(realName);
+					if (member instanceof JSFunction func) {
+						JSObject prev = currentSuper;
+						CURRENT_SUPER_PROTO.set(superProto);
+						try {
+							return func.call(null, target, args);
+						} finally {
+							CURRENT_SUPER_PROTO.set(prev);
+						}
 					}
 				}
 			}
@@ -3605,30 +3644,33 @@ public class JSLinker {
 	private static final ThreadLocal<JSObject> CURRENT_SUPER_CTOR_PROTO = new ThreadLocal<>();
 
 	public static Object callSuperConstructor(JSContext cx, Object thisObj, Object[] args) throws Throwable {
-		if (thisObj instanceof JSBridgedObject) {
-			return thisObj;
+		JSObject jsObj = null;
+		if (thisObj instanceof JSBridgedObject bridged) {
+			jsObj = bridged.getJSObject();
+		} else if (thisObj instanceof JSObject obj) {
+			jsObj = obj;
 		}
-		if (thisObj instanceof JSObject jsObj) {
-			JSObject currentProto = CURRENT_SUPER_CTOR_PROTO.get();
-			JSObject nextProto;
-			if (currentProto != null) {
-				nextProto = currentProto.getPrototype();
-			} else {
-				JSObject proto = jsObj.getPrototype();
-				nextProto = proto != null ? proto.getPrototype() : null;
-			}
-			if (nextProto != null) {
-				Object superCtor = nextProto.get("constructor");
-				if (superCtor instanceof JSFunction func) {
-					JSObject prev = currentProto;
-					CURRENT_SUPER_CTOR_PROTO.set(nextProto);
-					try {
-						func.call(cx, thisObj, args);
-					} finally {
-						CURRENT_SUPER_CTOR_PROTO.set(prev);
-					}
-					return thisObj;
+		if (jsObj == null) return thisObj;
+
+		JSObject currentProto = CURRENT_SUPER_CTOR_PROTO.get();
+		JSObject nextProto;
+		if (currentProto != null) {
+			nextProto = currentProto.getPrototype();
+		} else {
+			JSObject proto = jsObj.getPrototype();
+			nextProto = proto != null ? proto.getPrototype() : null;
+		}
+		if (nextProto != null && nextProto != JSContext.LazyObject.OBJECT_PROTOTYPE) {
+			Object superCtor = nextProto.get("constructor");
+			if (superCtor instanceof JSFunction func && !(func instanceof JSContext.JSObjectConstructor)) {
+				JSObject prev = currentProto;
+				CURRENT_SUPER_CTOR_PROTO.set(nextProto);
+				try {
+					func.call(cx, thisObj, args);
+				} finally {
+					CURRENT_SUPER_CTOR_PROTO.set(prev);
 				}
+				return thisObj;
 			}
 		}
 		return thisObj;

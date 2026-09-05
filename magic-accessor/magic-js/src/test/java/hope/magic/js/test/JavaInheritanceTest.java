@@ -29,7 +29,7 @@ public class JavaInheritanceTest {
 			return a * 2;
 		}
 
-		public String compute(String s) {
+		public String compute(Object s) {
 			return "str:" + s;
 		}
 	}
@@ -38,21 +38,23 @@ public class JavaInheritanceTest {
 	public void testES6ClassExtendArrayList() {
 		JSContext cx = new JSContext();
 		Object res = cx.eval(
-				"class MyList extends java.util.ArrayList {\n" +
-				"    constructor(prefix) {\n" +
-				"        super();\n" +
-				"        this.prefix = prefix;\n" +
-				"    }\n" +
-				"\n" +
-				"    add(val) {\n" +
-				"        return super.add(this.prefix + ':' + val);\n" +
-				"    }\n" +
-				"}\n" +
-				"\n" +
-				"let list = new MyList('item');\n" +
-				"list.add('apple');\n" +
-				"list.add('banana');\n" +
-				"list;\n"
+		 """
+			class MyList extends java.util.ArrayList {
+			    constructor(prefix) {
+			        super();
+			        this.prefix = prefix;
+			    }
+			
+			    add(val) {
+			        return super.add(this.prefix + ':' + val);
+			    }
+			}
+			
+			let list = new MyList('item');
+			list.add('apple');
+			list.add('banana');
+			list;
+			"""
 		);
 
 		Assertions.assertInstanceOf(ArrayList.class, res);
@@ -77,15 +79,17 @@ public class JavaInheritanceTest {
 	public void testJavaExtendAPI() {
 		JSContext cx = new JSContext();
 		Object res = cx.eval(
-				"let SubList = Java.extend(java.util.ArrayList, {\n" +
-				"    add(val) {\n" +
-				"        return this.__magic_super_add('ext:' + val);\n" +
-				"    }\n" +
-				"});\n" +
-				"let list = new SubList();\n" +
-				"list.add('hello');\n" +
-				"list.add('world');\n" +
-				"list;\n"
+		 """
+			let SubList = Java.extend(java.util.ArrayList, {
+			    add(val) {
+			        return this.__magic_super_add('ext:' + val);
+			    }
+			});
+			let list = new SubList();
+			list.add('hello');
+			list.add('world');
+			list;
+			"""
 		);
 
 		Assertions.assertInstanceOf(ArrayList.class, res);
@@ -101,15 +105,17 @@ public class JavaInheritanceTest {
 	public void testInterfaceImplementationRunnable() throws InterruptedException {
 		JSContext cx = new JSContext();
 		cx.eval(
-				"executed = false;\n" +
-				"threadName = '';\n" +
-				"class MyTask extends java.lang.Runnable {\n" +
-				"    run() {\n" +
-				"        executed = true;\n" +
-				"        threadName = java.lang.Thread.currentThread().getName();\n" +
-				"    }\n" +
-				"}\n" +
-				"task = new MyTask();\n"
+		 """
+			executed = false;
+			threadName = '';
+			class MyTask extends java.lang.Runnable {
+			    run() {
+			        executed = true;
+			        threadName = java.lang.Thread.currentThread().getName();
+			    }
+			}
+			task = new MyTask();
+			"""
 		);
 
 		Object task = cx.get("task");
@@ -129,17 +135,19 @@ public class JavaInheritanceTest {
 		cx.set("AbstractWorker", AbstractWorker.class);
 
 		Object res = cx.eval(
-				"class ConcreteWorker extends AbstractWorker {\n" +
-				"    constructor(name, suffix) {\n" +
-				"        super(name);\n" +
-				"        this.suffix = suffix;\n" +
-				"    }\n" +
-				"    doWork(count) {\n" +
-				"        return this.name + ' did ' + count + ' ' + this.suffix;\n" +
-				"    }\n" +
-				"}\n" +
-				"let worker = new ConcreteWorker('Alice', 'tasks');\n" +
-				"worker;\n"
+		 """
+			class ConcreteWorker extends AbstractWorker {
+			    constructor(name, suffix) {
+			        super(name);
+			        this.suffix = suffix;
+			    }
+			    doWork(count) {
+			        return this.name + ' did ' + count + ' ' + this.suffix;
+			    }
+			}
+			let worker = new ConcreteWorker('Alice', 'tasks');
+			worker;
+			"""
 		);
 
 		Assertions.assertInstanceOf(AbstractWorker.class, res);
@@ -156,15 +164,15 @@ public class JavaInheritanceTest {
 
 	@Test
 	public void testMetaspaceZeroExpansion() {
-		JSContext cx = new JSContext();
-		Class<?> firstSubClass = null;
+		JSContext cx            = new JSContext();
+		Class<?>  firstSubClass = null;
 
 		for (int i = 0; i < 10; i++) {
 			Object res = cx.eval(
-					"class DynamicList" + i + " extends java.util.ArrayList {\n" +
-					"    add(x) { return super.add(x); }\n" +
-					"}\n" +
-					"new DynamicList" + i + "();\n"
+			 "class DynamicList" + i + " extends java.util.ArrayList {\n" +
+			 "    add(x) { return super.add(x); }\n" +
+			 "}\n" +
+			 "new DynamicList" + i + "();\n"
 			);
 			Assertions.assertInstanceOf(ArrayList.class, res);
 			if (firstSubClass == null) {
@@ -185,15 +193,17 @@ public class JavaInheritanceTest {
 		cx.set("Calculator", Calculator.class);
 
 		Object res = cx.eval(
-				"class MyCalc extends Calculator {\n" +
-				"    compute(arg) {\n" +
-				"        if (typeof arg === 'number') {\n" +
-				"            return super.compute(arg) + 10;\n" +
-				"        }\n" +
-				"        return super.compute(arg) + '!';\n" +
-				"    }\n" +
-				"}\n" +
-				"new MyCalc();\n"
+		 """
+			class MyCalc extends Calculator {
+			    compute(arg) {
+			        if (typeof arg === 'number') {
+			            return super.compute(arg) + 10;
+			        }
+			        return super.compute(arg) + '!';
+			    }
+			}
+			new MyCalc();
+			"""
 		);
 
 		Assertions.assertInstanceOf(Calculator.class, res);
@@ -208,24 +218,26 @@ public class JavaInheritanceTest {
 	public void testES6PureJSClassInheritance() {
 		JSContext cx = new JSContext();
 		Object res = cx.eval(
-				"class Animal {\n" +
-				"    constructor(name) {\n" +
-				"        this.name = name;\n" +
-				"    }\n" +
-				"    speak() {\n" +
-				"        return this.name + ' makes a sound';\n" +
-				"    }\n" +
-				"}\n" +
-				"class Dog extends Animal {\n" +
-				"    constructor(name) {\n" +
-				"        super(name);\n" +
-				"    }\n" +
-				"    speak() {\n" +
-				"        return super.speak() + ', bark!';\n" +
-				"    }\n" +
-				"}\n" +
-				"let d = new Dog('Rex');\n" +
-				"d.speak();\n"
+		 """
+			class Animal {
+			    constructor(name) {
+			        this.name = name;
+			    }
+			    speak() {
+			        return this.name + ' makes a sound';
+			    }
+			}
+			class Dog extends Animal {
+			    constructor(name) {
+			        super(name);
+			    }
+			    speak() {
+			        return super.speak() + ', bark!';
+			    }
+			}
+			let d = new Dog('Rex');
+			d.speak();
+			"""
 		);
 
 		Assertions.assertEquals("Rex makes a sound, bark!", res);
@@ -235,34 +247,71 @@ public class JavaInheritanceTest {
 	public void testES6MultiLevelPureJSInheritance() {
 		JSContext cx = new JSContext();
 		Object res = cx.eval(
-				"class Animal {\n" +
-				"    constructor(name) {\n" +
-				"        this.name = name;\n" +
-				"    }\n" +
-				"    speak() {\n" +
-				"        return this.name + ':sound';\n" +
-				"    }\n" +
-				"}\n" +
-				"class Dog extends Animal {\n" +
-				"    constructor(name) {\n" +
-				"        super(name);\n" +
-				"    }\n" +
-				"    speak() {\n" +
-				"        return super.speak() + ':bark';\n" +
-				"    }\n" +
-				"}\n" +
-				"class Puppy extends Dog {\n" +
-				"    constructor(name) {\n" +
-				"        super(name);\n" +
-				"    }\n" +
-				"    speak() {\n" +
-				"        return super.speak() + ':yip';\n" +
-				"    }\n" +
-				"}\n" +
-				"let p = new Puppy('Toby');\n" +
-				"p.speak();\n"
+		 """
+			class Animal {
+			    constructor(name) {
+			        this.name = name;
+			    }
+			    speak() {
+			        return this.name + ':sound';
+			    }
+			}
+			class Dog extends Animal {
+			    constructor(name) {
+			        super(name);
+			    }
+			    speak() {
+			        return super.speak() + ':bark';
+			    }
+			}
+			class Puppy extends Dog {
+			    constructor(name) {
+			        super(name);
+			    }
+			    speak() {
+			        return super.speak() + ':yip';
+			    }
+			}
+			let p = new Puppy('Toby');
+			p.speak();
+			"""
 		);
 
 		Assertions.assertEquals("Toby:sound:bark:yip", res);
+	}
+
+	@Test
+	public void testES6MultiTierJavaSubclassing() {
+		JSContext cx = new JSContext();
+		Object res = cx.eval(
+				"class BaseList extends java.util.ArrayList {\n" +
+				"    constructor() { super(); }\n" +
+				"    tag() { return 'base'; }\n" +
+				"}\n" +
+				"\n" +
+				"class AdvancedList extends BaseList {\n" +
+				"    tag() { return super.tag() + ' -> adv'; }\n" +
+				"}\n" +
+				"\n" +
+				"let list = new AdvancedList();\n" +
+				"list.add('test');\n" +
+				"let t = list.tag();\n" +
+				"[list, t];\n"
+		);
+
+		Assertions.assertInstanceOf(hope.magic.js.runtime.JSArray.class, res);
+		hope.magic.js.runtime.JSArray arr = (hope.magic.js.runtime.JSArray) res;
+		Object listObj = arr.getElement(0);
+		Object tagObj = arr.getElement(1);
+
+		// 验证最终生成的物理实例依然是原生 ArrayList
+		Assertions.assertInstanceOf(ArrayList.class, listObj);
+		@SuppressWarnings("unchecked")
+		List<Object> list = (List<Object>) listObj;
+		Assertions.assertEquals(1, list.size());
+		Assertions.assertEquals("test", list.get(0));
+
+		// 验证多层继承中的 super.method() 调度链
+		Assertions.assertEquals("base -> adv", tagObj);
 	}
 }

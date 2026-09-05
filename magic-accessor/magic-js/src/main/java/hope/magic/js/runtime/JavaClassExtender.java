@@ -70,6 +70,15 @@ public final class JavaClassExtender {
 		return SUBCLASS_CACHE.get(superClass);
 	}
 
+	public static Class<?> getJavaSuperClass(Object obj) {
+		if (obj instanceof Class<?> c) return c;
+		if (obj instanceof JSObject jsObj) {
+			Object jc = jsObj.get("__magic_java_class__");
+			if (jc instanceof Class<?> c) return c;
+		}
+		return null;
+	}
+
 	public static JSFunction defineClass(
 			JSContext cx,
 			Object superClassObj,
@@ -93,8 +102,10 @@ public final class JavaClassExtender {
 		}
 
 		JSFunction resultCtor;
-		if (superClassObj instanceof Class<?> superClass) {
-			resultCtor = createClassConstructor(superClass, methods, ctorFn);
+		Class<?> javaSuperClass = getJavaSuperClass(superClassObj);
+		if (javaSuperClass != null) {
+			JSFunction superJSClass = (superClassObj instanceof JSFunction sf) ? sf : null;
+			resultCtor = createClassConstructor(javaSuperClass, superJSClass, methods, ctorFn);
 		} else if (superClassObj instanceof JSFunction superCtor) {
 			resultCtor = createJSClassConstructor(cx, superCtor, methods, ctorFn);
 		} else if (superClassObj == null || superClassObj == JSUndefined.INSTANCE) {
@@ -153,11 +164,24 @@ public final class JavaClassExtender {
 		return ctor;
 	}
 
-	public static JSFunction createClassConstructor(Class<?> superClass, Map<String, JSFunction> methods, JSFunction jsCtor) {
-		ClassInfo info = getClassInfo(superClass);
+	public static JSFunction createClassConstructor(
+			Class<?> javaSuperClass,
+			JSFunction superJSClass,
+			Map<String, JSFunction> methods,
+			JSFunction jsCtor
+	) {
+		ClassInfo info = getClassInfo(javaSuperClass);
 
-		// 计算掩码
+		// 计算掩码 (继承父 JS 类的掩码)
 		long mask = 0L;
+		if (superJSClass instanceof JSObject superObj) {
+			Object superMask = superObj.get("__magic_override_mask__");
+			if (superMask instanceof Long m) {
+				mask |= m;
+			} else if (superMask instanceof Number num) {
+				mask |= num.longValue();
+			}
+		}
 		if (methods != null) {
 			for (String methodName : methods.keySet()) {
 				Long shift = info.methodMasks.get(methodName);
@@ -168,7 +192,14 @@ public final class JavaClassExtender {
 		}
 		final long finalMask = mask;
 
-		JSObject proto = new JSObject();
+		JSObject proto;
+		if (superJSClass instanceof JSObject superCtorObj) {
+			Object superProto = superCtorObj.get("prototype");
+			proto = new JSObject(superProto instanceof JSObject sp ? sp : JSContext.LazyObject.OBJECT_PROTOTYPE);
+		} else {
+			proto = new JSObject();
+		}
+
 		if (methods != null) {
 			for (Map.Entry<String, JSFunction> entry : methods.entrySet()) {
 				proto.put(entry.getKey(), entry.getValue());
@@ -177,14 +208,19 @@ public final class JavaClassExtender {
 
 		JSFunctionObject ctor = new JSFunctionObject((cx, thisObj, args) -> {
 			Object[] callArgs = args != null ? args : new Object[0];
-			JSObject jsObj = new JSObject(proto);
-
-			// 匹配最佳物理构造器
-			Object instance = instantiateSubclass(info, jsObj, finalMask, callArgs);
+			Object instance;
+			if (thisObj instanceof JSBridgedObject existing) {
+				instance = existing;
+			} else {
+				JSObject jsObj = new JSObject(proto);
+				instance = instantiateSubclass(info, jsObj, finalMask, callArgs);
+			}
 
 			// 执行 JS constructor (若存在)
 			if (jsCtor != null) {
 				jsCtor.call(cx, instance, callArgs);
+			} else if (superJSClass != null) {
+				superJSClass.call(cx, instance, callArgs);
 			}
 
 			return instance;
@@ -192,7 +228,16 @@ public final class JavaClassExtender {
 
 		ctor.put("prototype", proto);
 		proto.put("constructor", ctor);
+		ctor.put("__magic_java_class__", javaSuperClass);
+		ctor.put("__magic_override_mask__", finalMask);
+		if (superJSClass instanceof JSObject superCtorObj) {
+			ctor.setPrototype(superCtorObj);
+		}
 		return ctor;
+	}
+
+	public static JSFunction createClassConstructor(Class<?> superClass, Map<String, JSFunction> methods, JSFunction jsCtor) {
+		return createClassConstructor(superClass, null, methods, jsCtor);
 	}
 
 	private static boolean isTypeCompatible(Object arg, Class<?> targetType) {

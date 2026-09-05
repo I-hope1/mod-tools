@@ -23,10 +23,114 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class MagicJIT implements Opcodes {
 
-	private record InvokerKey(Class<?> clazz, String methodName, int arity, boolean isStatic) { }
-	private record CtorKey(Class<?> clazz, int arity) { }
-	private record MemberKey(Class<?> clazz, String memberName) { }
-	private record PrimMemberKey(Class<?> clazz, String memberName, Class<?> primType) { }
+	private static final class InvokerKey {
+		final Class<?> clazz;
+		final String methodName;
+		final int arity;
+		final boolean isStatic;
+		final int hash;
+
+		InvokerKey(Class<?> clazz, String methodName, int arity, boolean isStatic) {
+			this.clazz = clazz;
+			this.methodName = methodName;
+			this.arity = arity;
+			this.isStatic = isStatic;
+			int h = clazz.hashCode();
+			h = 31 * h + methodName.hashCode();
+			h = 31 * h + arity;
+			h = 31 * h + (isStatic ? 1 : 0);
+			this.hash = h;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof InvokerKey that)) return false;
+			return arity == that.arity && isStatic == that.isStatic && clazz == that.clazz && methodName.equals(that.methodName);
+		}
+
+		@Override
+		public int hashCode() {
+			return hash;
+		}
+	}
+
+	private static final class CtorKey {
+		final Class<?> clazz;
+		final int arity;
+		final int hash;
+
+		CtorKey(Class<?> clazz, int arity) {
+			this.clazz = clazz;
+			this.arity = arity;
+			this.hash = 31 * clazz.hashCode() + arity;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof CtorKey that)) return false;
+			return arity == that.arity && clazz == that.clazz;
+		}
+
+		@Override
+		public int hashCode() {
+			return hash;
+		}
+	}
+
+	private static final class MemberKey {
+		final Class<?> clazz;
+		final String memberName;
+		final int hash;
+
+		MemberKey(Class<?> clazz, String memberName) {
+			this.clazz = clazz;
+			this.memberName = memberName;
+			this.hash = 31 * clazz.hashCode() + memberName.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof MemberKey that)) return false;
+			return clazz == that.clazz && memberName.equals(that.memberName);
+		}
+
+		@Override
+		public int hashCode() {
+			return hash;
+		}
+	}
+
+	private static final class PrimMemberKey {
+		final Class<?> clazz;
+		final String memberName;
+		final Class<?> primType;
+		final int hash;
+
+		PrimMemberKey(Class<?> clazz, String memberName, Class<?> primType) {
+			this.clazz = clazz;
+			this.memberName = memberName;
+			this.primType = primType;
+			int h = clazz.hashCode();
+			h = 31 * h + memberName.hashCode();
+			h = 31 * h + primType.hashCode();
+			this.hash = h;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof PrimMemberKey that)) return false;
+			return clazz == that.clazz && primType == that.primType && memberName.equals(that.memberName);
+		}
+
+		@Override
+		public int hashCode() {
+			return hash;
+		}
+	}
 
 	private static final AtomicLong                            COUNTER              = new AtomicLong();
 	private static final Map<InvokerKey, MagicInvoker>         INVOKER_CACHE        = new ConcurrentHashMap<>();
@@ -46,12 +150,20 @@ public class MagicJIT implements Opcodes {
 
 	public static MagicInvoker getMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic) {
 		InvokerKey key = new InvokerKey(clazz, methodName, arity, isStatic);
-		return INVOKER_CACHE.computeIfAbsent(key, k -> createMethodInvoker(clazz, methodName, arity, isStatic));
+		MagicInvoker cached = INVOKER_CACHE.get(key);
+		if (cached != null) return cached;
+		MagicInvoker invoker = createMethodInvoker(clazz, methodName, arity, isStatic);
+		if (invoker != null) INVOKER_CACHE.put(key, invoker);
+		return invoker;
 	}
 
 	public static MagicConstructorInvoker getConstructorInvoker(Class<?> clazz, int arity) {
 		CtorKey key = new CtorKey(clazz, arity);
-		return CTOR_CACHE.computeIfAbsent(key, k -> createConstructorInvoker(clazz, arity));
+		MagicConstructorInvoker cached = CTOR_CACHE.get(key);
+		if (cached != null) return cached;
+		MagicConstructorInvoker invoker = createConstructorInvoker(clazz, arity);
+		if (invoker != null) CTOR_CACHE.put(key, invoker);
+		return invoker;
 	}
 
 	public static MagicInvoker createMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic) {
@@ -195,17 +307,29 @@ public class MagicJIT implements Opcodes {
 
 	public static MethodHandle getFieldGetterStub(Class<?> clazz, String fieldName) {
 		MemberKey key = new MemberKey(clazz, fieldName);
-		return GETTER_CACHE.computeIfAbsent(key, k -> createExactFieldGetterStub(clazz, fieldName));
+		MethodHandle cached = GETTER_CACHE.get(key);
+		if (cached != null) return cached;
+		MethodHandle stub = createExactFieldGetterStub(clazz, fieldName);
+		if (stub != null) GETTER_CACHE.put(key, stub);
+		return stub;
 	}
 
 	public static MethodHandle getFieldSetterStub(Class<?> clazz, String fieldName) {
 		MemberKey key = new MemberKey(clazz, fieldName);
-		return SETTER_CACHE.computeIfAbsent(key, k -> createExactFieldSetterStub(clazz, fieldName));
+		MethodHandle cached = SETTER_CACHE.get(key);
+		if (cached != null) return cached;
+		MethodHandle stub = createExactFieldSetterStub(clazz, fieldName);
+		if (stub != null) SETTER_CACHE.put(key, stub);
+		return stub;
 	}
 
 	public static MethodHandle getPrimitiveFieldGetterStub(Class<?> clazz, String fieldName, Class<?> primitiveType) {
 		PrimMemberKey key = new PrimMemberKey(clazz, fieldName, primitiveType);
-		return PRIMITIVE_GETTER_CACHE.computeIfAbsent(key, k -> createExactPrimitiveFieldGetterStub(clazz, fieldName, primitiveType));
+		MethodHandle cached = PRIMITIVE_GETTER_CACHE.get(key);
+		if (cached != null) return cached;
+		MethodHandle stub = createExactPrimitiveFieldGetterStub(clazz, fieldName, primitiveType);
+		if (stub != null) PRIMITIVE_GETTER_CACHE.put(key, stub);
+		return stub;
 	}
 
 	public static MethodHandle createExactPrimitiveFieldGetterStub(Class<?> clazz, String fieldName,
@@ -256,7 +380,11 @@ public class MagicJIT implements Opcodes {
 
 	public static MethodHandle createExactFieldGetterStub(Class<?> clazz, String fieldName) {
 		MemberKey key = new MemberKey(clazz, fieldName);
-		return GETTER_CACHE.computeIfAbsent(key, k -> generateExactFieldGetterStub(clazz, fieldName));
+		MethodHandle cached = GETTER_CACHE.get(key);
+		if (cached != null) return cached;
+		MethodHandle stub = generateExactFieldGetterStub(clazz, fieldName);
+		if (stub != null) GETTER_CACHE.put(key, stub);
+		return stub;
 	}
 
 	private static MethodHandle generateExactFieldGetterStub(Class<?> clazz, String fieldName) {
@@ -280,7 +408,11 @@ public class MagicJIT implements Opcodes {
 
 	public static MethodHandle createExactFieldSetterStub(Class<?> clazz, String fieldName) {
 		MemberKey key = new MemberKey(clazz, fieldName);
-		return SETTER_CACHE.computeIfAbsent(key, k -> generateExactFieldSetterStub(clazz, fieldName));
+		MethodHandle cached = SETTER_CACHE.get(key);
+		if (cached != null) return cached;
+		MethodHandle stub = generateExactFieldSetterStub(clazz, fieldName);
+		if (stub != null) SETTER_CACHE.put(key, stub);
+		return stub;
 	}
 
 	private static MethodHandle generateExactFieldSetterStub(Class<?> clazz, String fieldName) {
@@ -303,7 +435,11 @@ public class MagicJIT implements Opcodes {
 	}
 
 	public static MethodHandle createExactMethodStub(Class<?> clazz, Method targetMethod) {
-		return EXACT_METHOD_CACHE.computeIfAbsent(targetMethod, m -> generateExactMethodStub(clazz, m));
+		MethodHandle cached = EXACT_METHOD_CACHE.get(targetMethod);
+		if (cached != null) return cached;
+		MethodHandle stub = generateExactMethodStub(clazz, targetMethod);
+		if (stub != null) EXACT_METHOD_CACHE.put(targetMethod, stub);
+		return stub;
 	}
 
 	private static MethodHandle generateExactMethodStub(Class<?> clazz, Method targetMethod) {

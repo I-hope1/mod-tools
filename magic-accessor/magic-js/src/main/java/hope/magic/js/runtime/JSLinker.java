@@ -9,6 +9,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 
+import static hope.magic.js.runtime.JSLinker.SlotMH.*;
+
 @SuppressWarnings({"unused", "unchecked", "rawtypes"})
 public class JSLinker {
 	static final Unsafe               UNSAFE = Magic.unsafe;
@@ -36,21 +38,48 @@ public class JSLinker {
 	public static final MethodHandle   MH_TO_INTERFACE;
 	public static final MethodHandle   MH_IS_EXACT_CLASS;
 	public static final MethodHandle   MH_IS_EXACT_SHAPE;
-	public static final MethodHandle   MH_GET_JS_OBJ_SLOT;
-	public static final MethodHandle   MH_SET_JS_OBJ_SLOT;
-	public static final MethodHandle   MH_GET_JS_OBJ_SLOT_INT;
-	public static final MethodHandle   MH_GET_JS_OBJ_SLOT_DOUBLE;
-	public static final MethodHandle   MH_GET_JS_OBJ_SLOT_LONG;
-	public static final MethodHandle   MH_SET_JS_OBJ_SLOT_DOUBLE;
-	public static final MethodHandle[] MH_GET_SLOT_DOUBLE = new MethodHandle[8];
-	public static final MethodHandle[] MH_SET_SLOT_DOUBLE = new MethodHandle[8];
-	public static final MethodHandle[] MH_GET_SLOT_OBJECT = new MethodHandle[8];
-	public static final MethodHandle[] MH_SET_SLOT_OBJECT = new MethodHandle[8];
-	public static final MethodHandle   MH_IS_EXACT_SHAPE_SETTER_DOUBLE;
-	public static final MethodHandle   MH_IS_EXACT_SHAPE_SETTER_OBJECT;
-	public static final MethodHandle   MH_IS_MATCH_MASK;
-	public static final MethodHandle   MH_IS_MATCH_MASK_AND_PROP;
-	public static final MethodHandle   MH_IS_MATCH_PROP;
+	public static final class SlotMH {
+		public static final MethodHandle[] MH_GET_SLOT_DOUBLE = new MethodHandle[8];
+		public static final MethodHandle[] MH_SET_SLOT_DOUBLE = new MethodHandle[8];
+		public static final MethodHandle[] MH_GET_SLOT_OBJECT = new MethodHandle[8];
+		public static final MethodHandle[] MH_SET_SLOT_OBJECT = new MethodHandle[8];
+		public static final MethodHandle   MH_GET_JS_OBJ_SLOT;
+		public static final MethodHandle   MH_SET_JS_OBJ_SLOT;
+		public static final MethodHandle   MH_GET_JS_OBJ_SLOT_INT;
+		public static final MethodHandle   MH_GET_JS_OBJ_SLOT_DOUBLE;
+		public static final MethodHandle   MH_GET_JS_OBJ_SLOT_LONG;
+		public static final MethodHandle   MH_SET_JS_OBJ_SLOT_DOUBLE;
+		public static final MethodHandle   MH_IS_EXACT_SHAPE_SETTER_DOUBLE;
+		public static final MethodHandle   MH_IS_EXACT_SHAPE_SETTER_OBJECT;
+		public static final MethodHandle   MH_IS_MATCH_MASK;
+		public static final MethodHandle   MH_IS_MATCH_MASK_AND_PROP;
+		public static final MethodHandle   MH_IS_MATCH_PROP;
+
+		static {
+			try {
+				MH_GET_JS_OBJ_SLOT = LOOKUP.findStatic(JSLinker.class, "getJSObjSlot", MethodType.methodType(Object.class, int.class, Object.class));
+				MH_SET_JS_OBJ_SLOT = LOOKUP.findStatic(JSLinker.class, "setJSObjSlot", MethodType.methodType(void.class, int.class, Object.class, Object.class));
+				MH_GET_JS_OBJ_SLOT_INT = LOOKUP.findStatic(JSLinker.class, "getJSObjSlotAsInt", MethodType.methodType(int.class, int.class, Object.class));
+				MH_GET_JS_OBJ_SLOT_DOUBLE = LOOKUP.findStatic(JSLinker.class, "getJSObjSlotAsDouble", MethodType.methodType(double.class, int.class, Object.class));
+				MH_GET_JS_OBJ_SLOT_LONG = LOOKUP.findStatic(JSLinker.class, "getJSObjSlotAsLong", MethodType.methodType(long.class, int.class, Object.class));
+				MH_SET_JS_OBJ_SLOT_DOUBLE = LOOKUP.findStatic(JSLinker.class, "setJSObjSlotDouble", MethodType.methodType(void.class, int.class, Object.class, double.class));
+
+				for (int i = 0; i < 8; i++) {
+					MH_GET_SLOT_DOUBLE[i] = LOOKUP.findStatic(JSLinker.class, "getSlot" + i + "Double", MethodType.methodType(double.class, JSObject.class));
+					MH_SET_SLOT_DOUBLE[i] = LOOKUP.findStatic(JSLinker.class, "setSlot" + i + "Double", MethodType.methodType(void.class, JSObject.class, double.class));
+					MH_GET_SLOT_OBJECT[i] = LOOKUP.findStatic(JSLinker.class, "getSlot" + i + "Object", MethodType.methodType(Object.class, JSObject.class));
+					MH_SET_SLOT_OBJECT[i] = LOOKUP.findStatic(JSLinker.class, "setSlot" + i + "Object", MethodType.methodType(void.class, JSObject.class, Object.class));
+				}
+				MH_IS_EXACT_SHAPE_SETTER_DOUBLE = LOOKUP.findStatic(JSLinker.class, "isExactShapeSetterDouble", MethodType.methodType(boolean.class, JSShape.class, Object.class, double.class));
+				MH_IS_EXACT_SHAPE_SETTER_OBJECT = LOOKUP.findStatic(JSLinker.class, "isExactShapeSetterObject", MethodType.methodType(boolean.class, JSShape.class, Object.class, Object.class));
+				MH_IS_MATCH_MASK = LOOKUP.findStatic(JSLinker.class, "isMatchMask", MethodType.methodType(boolean.class, long.class, Object.class));
+				MH_IS_MATCH_MASK_AND_PROP = LOOKUP.findStatic(JSLinker.class, "isMatchMaskAndPropAt", MethodType.methodType(boolean.class, long.class, int.class, int.class, Object.class));
+				MH_IS_MATCH_PROP = LOOKUP.findStatic(JSLinker.class, "isMatchPropAt", MethodType.methodType(boolean.class, int.class, int.class, Object.class));
+			} catch (Throwable e) {
+				throw new ExceptionInInitializerError(e);
+			}
+		}
+	}
 
 	static {
 		try {
@@ -66,24 +95,6 @@ public class JSLinker {
 			MH_TO_INTERFACE = LOOKUP.findStatic(JSLinker.class, "toInterface", MethodType.methodType(Object.class, Class.class, Object.class));
 			MH_IS_EXACT_CLASS = LOOKUP.findStatic(JSLinker.class, "isExactClass", MethodType.methodType(boolean.class, Class.class, Object.class));
 			MH_IS_EXACT_SHAPE = LOOKUP.findStatic(JSLinker.class, "isExactShape", MethodType.methodType(boolean.class, JSShape.class, Object.class));
-			MH_GET_JS_OBJ_SLOT = LOOKUP.findStatic(JSLinker.class, "getJSObjSlot", MethodType.methodType(Object.class, int.class, Object.class));
-			MH_SET_JS_OBJ_SLOT = LOOKUP.findStatic(JSLinker.class, "setJSObjSlot", MethodType.methodType(void.class, int.class, Object.class, Object.class));
-			MH_GET_JS_OBJ_SLOT_INT = LOOKUP.findStatic(JSLinker.class, "getJSObjSlotAsInt", MethodType.methodType(int.class, int.class, Object.class));
-			MH_GET_JS_OBJ_SLOT_DOUBLE = LOOKUP.findStatic(JSLinker.class, "getJSObjSlotAsDouble", MethodType.methodType(double.class, int.class, Object.class));
-			MH_GET_JS_OBJ_SLOT_LONG = LOOKUP.findStatic(JSLinker.class, "getJSObjSlotAsLong", MethodType.methodType(long.class, int.class, Object.class));
-			MH_SET_JS_OBJ_SLOT_DOUBLE = LOOKUP.findStatic(JSLinker.class, "setJSObjSlotDouble", MethodType.methodType(void.class, int.class, Object.class, double.class));
-
-			for (int i = 0; i < 8; i++) {
-				MH_GET_SLOT_DOUBLE[i] = LOOKUP.findStatic(JSLinker.class, "getSlot" + i + "Double", MethodType.methodType(double.class, JSObject.class));
-				MH_SET_SLOT_DOUBLE[i] = LOOKUP.findStatic(JSLinker.class, "setSlot" + i + "Double", MethodType.methodType(void.class, JSObject.class, double.class));
-				MH_GET_SLOT_OBJECT[i] = LOOKUP.findStatic(JSLinker.class, "getSlot" + i + "Object", MethodType.methodType(Object.class, JSObject.class));
-				MH_SET_SLOT_OBJECT[i] = LOOKUP.findStatic(JSLinker.class, "setSlot" + i + "Object", MethodType.methodType(void.class, JSObject.class, Object.class));
-			}
-			MH_IS_EXACT_SHAPE_SETTER_DOUBLE = LOOKUP.findStatic(JSLinker.class, "isExactShapeSetterDouble", MethodType.methodType(boolean.class, JSShape.class, Object.class, double.class));
-			MH_IS_EXACT_SHAPE_SETTER_OBJECT = LOOKUP.findStatic(JSLinker.class, "isExactShapeSetterObject", MethodType.methodType(boolean.class, JSShape.class, Object.class, Object.class));
-			MH_IS_MATCH_MASK = LOOKUP.findStatic(JSLinker.class, "isMatchMask", MethodType.methodType(boolean.class, long.class, Object.class));
-			MH_IS_MATCH_MASK_AND_PROP = LOOKUP.findStatic(JSLinker.class, "isMatchMaskAndPropAt", MethodType.methodType(boolean.class, long.class, int.class, int.class, Object.class));
-			MH_IS_MATCH_PROP = LOOKUP.findStatic(JSLinker.class, "isMatchPropAt", MethodType.methodType(boolean.class, int.class, int.class, Object.class));
 		} catch (Throwable e) {
 			throw new ExceptionInInitializerError(e);
 		}
@@ -2537,32 +2548,56 @@ public class JSLinker {
 	public static boolean toBoolean(Object val) { return JSOps.toBoolean(val); }
 	public static String toStringVal(Object val) { return JSOps.toStr(val); }
 
-	private record CtorKey(Class<?> clazz, int arity) { }
-	private record MethodKey(Class<?> clazz, String methodName, int arity, boolean isStatic) { }
+	private static final class CtorKey {
+		final Class<?> clazz;
+		final int arity;
+		final int hash;
+
+		CtorKey(Class<?> clazz, int arity) {
+			this.clazz = clazz;
+			this.arity = arity;
+			this.hash = 31 * clazz.hashCode() + arity;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof CtorKey that)) return false;
+			return arity == that.arity && clazz == that.clazz;
+		}
+
+		@Override
+		public int hashCode() {
+			return hash;
+		}
+	}
 
 	private static final Map<CtorKey, MethodHandle> CTOR_SPREADER_CACHE = new ConcurrentHashMap<>();
 
 	private static MethodHandle getConstructorSpreader(Class<?> clazz, int arity) {
 		CtorKey key = new CtorKey(clazz, arity);
-		return CTOR_SPREADER_CACHE.computeIfAbsent(key, k -> {
-			Constructor<?> c = MethodResolver.findConstructor(clazz, arity);
-			if (c == null) return null;
-			try {
-				MethodHandle mh         = Magic.lookup.unreflectConstructor(c);
-				Class<?>[]   paramTypes = c.getParameterTypes();
-				MethodHandle adapted    = mh;
-				for (int i = 0; i < paramTypes.length; i++) {
-					MethodHandle filter = getArgumentFilter(paramTypes[i]);
-					if (filter != null) {
-						adapted = MethodHandles.filterArguments(adapted, i, filter);
-					}
+		MethodHandle cached = CTOR_SPREADER_CACHE.get(key);
+		if (cached != null) return cached;
+
+		Constructor<?> c = MethodResolver.findConstructor(clazz, arity);
+		if (c == null) return null;
+		try {
+			MethodHandle mh         = Magic.lookup.unreflectConstructor(c);
+			Class<?>[]   paramTypes = c.getParameterTypes();
+			MethodHandle adapted    = mh;
+			for (int i = 0; i < paramTypes.length; i++) {
+				MethodHandle filter = getArgumentFilter(paramTypes[i]);
+				if (filter != null) {
+					adapted = MethodHandles.filterArguments(adapted, i, filter);
 				}
-				MethodHandle genericMh = adapted.asType(MethodType.genericMethodType(arity));
-				return genericMh.asSpreader(Object[].class, arity);
-			} catch (Throwable e) {
-				throw new RuntimeException(e);
 			}
-		});
+			MethodHandle genericMh = adapted.asType(MethodType.genericMethodType(arity));
+			MethodHandle spreader  = genericMh.asSpreader(Object[].class, arity);
+			CTOR_SPREADER_CACHE.put(key, spreader);
+			return spreader;
+		} catch (Throwable e) {
+			throw new RuntimeException(e);
+		}
 	}
 
 	public static Object newGeneric(Object ctor, Object[] args) throws Throwable {
@@ -3247,31 +3282,66 @@ public class JSLinker {
 	public static long getObjectAsLongPrim(long offset,
 	                                       Object target) { return JSOps.toLong(UNSAFE.getObject(target, offset)); }
 
+	private static final class MethodKey {
+		final Class<?> clazz;
+		final String methodName;
+		final int arity;
+		final boolean isStatic;
+		final int hash;
+
+		MethodKey(Class<?> clazz, String methodName, int arity, boolean isStatic) {
+			this.clazz = clazz;
+			this.methodName = methodName;
+			this.arity = arity;
+			this.isStatic = isStatic;
+			int h = clazz.hashCode();
+			h = 31 * h + methodName.hashCode();
+			h = 31 * h + arity;
+			h = 31 * h + (isStatic ? 1 : 0);
+			this.hash = h;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof MethodKey that)) return false;
+			return arity == that.arity && isStatic == that.isStatic && clazz == that.clazz && methodName.equals(that.methodName);
+		}
+
+		@Override
+		public int hashCode() {
+			return hash;
+		}
+	}
+
 	private static final Map<MethodKey, MethodHandle> METHOD_SPREADER_CACHE = new ConcurrentHashMap<>();
 
 	private static MethodHandle getMethodSpreader(Class<?> clazz, String methodName, int arity, boolean isStatic) {
 		MethodKey key = new MethodKey(clazz, methodName, arity, isStatic);
-		return METHOD_SPREADER_CACHE.computeIfAbsent(key, k -> {
-			Method targetMethod = MethodResolver.findMethod(clazz, methodName, arity, isStatic);
-			if (targetMethod == null) return null;
-			targetMethod.setAccessible(true);
-			try {
-				MethodHandle mh         = Magic.lookup.unreflect(targetMethod);
-				MethodHandle adapted    = isStatic ? MethodHandles.dropArguments(mh, 0, Object.class) : mh;
-				Class<?>[]   paramTypes = targetMethod.getParameterTypes();
-				for (int i = 0; i < paramTypes.length; i++) {
-					MethodHandle filter = getArgumentFilter(paramTypes[i]);
-					if (filter != null) {
-						adapted = MethodHandles.filterArguments(adapted, 1 + i, filter);
-					}
+		MethodHandle cached = METHOD_SPREADER_CACHE.get(key);
+		if (cached != null) return cached;
+
+		Method targetMethod = MethodResolver.findMethod(clazz, methodName, arity, isStatic);
+		if (targetMethod == null) return null;
+		targetMethod.setAccessible(true);
+		try {
+			MethodHandle mh         = Magic.lookup.unreflect(targetMethod);
+			MethodHandle adapted    = isStatic ? MethodHandles.dropArguments(mh, 0, Object.class) : mh;
+			Class<?>[]   paramTypes = targetMethod.getParameterTypes();
+			for (int i = 0; i < paramTypes.length; i++) {
+				MethodHandle filter = getArgumentFilter(paramTypes[i]);
+				if (filter != null) {
+					adapted = MethodHandles.filterArguments(adapted, 1 + i, filter);
 				}
-				MethodType   genericType = MethodType.genericMethodType(1 + arity);
-				MethodHandle genericMh   = adapted.asType(genericType);
-				return genericMh.asSpreader(Object[].class, arity);
-			} catch (Throwable e) {
-				throw new RuntimeException(e);
 			}
-		});
+			MethodType   genericType = MethodType.genericMethodType(1 + arity);
+			MethodHandle genericMh   = adapted.asType(genericType);
+			MethodHandle spreader    = genericMh.asSpreader(Object[].class, arity);
+			METHOD_SPREADER_CACHE.put(key, spreader);
+			return spreader;
+		} catch (Throwable e) {
+			throw new RuntimeException(e);
+		}
 	}
 
 	private static Object invokeStringMethod(String str, String methodName, Object[] args) throws Throwable {

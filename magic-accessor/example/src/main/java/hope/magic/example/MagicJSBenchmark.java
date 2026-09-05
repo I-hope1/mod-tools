@@ -2,6 +2,7 @@ package hope.magic.example;
 
 import com.caoccao.javet.interop.*;
 import com.caoccao.javet.interop.converters.JavetProxyConverter;
+import com.caoccao.javet.values.*;
 import com.caoccao.javet.values.reference.IV8ValueFunction;
 import hope.magic.js.compiler.JSCompiler;
 import hope.magic.js.runtime.*;
@@ -289,7 +290,7 @@ public class MagicJSBenchmark {
 
 	@Benchmark
 	public Object v8_js_method_call() throws Exception {
-		try (var result = v8FieldScript.call(null)) {
+		try (var result = v8MethodScript.call(null)) {
         return result;
     }
 	}
@@ -361,7 +362,9 @@ public class MagicJSBenchmark {
 
 	@Benchmark
 	public Object v8_js_poly() throws Exception {
-		return v8PolyScript.call(null);
+		try (var result = v8PolyScript.call(null)) {
+			return result;
+		}
 	}
 
 	@Benchmark

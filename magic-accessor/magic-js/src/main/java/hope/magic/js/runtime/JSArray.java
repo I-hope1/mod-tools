@@ -28,11 +28,11 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	//region 构造函数
 
 	public JSArray() {
-		super(JSContext.LazyBuiltins.ARRAY_PROTOTYPE);
+		super(JSContext.LazyArray.ARRAY_PROTOTYPE);
 	}
 
 	public JSArray(int initialCapacity) {
-		super(JSContext.LazyBuiltins.ARRAY_PROTOTYPE);
+		super(JSContext.LazyArray.ARRAY_PROTOTYPE);
 		if (initialCapacity > 0) {
 			int cap = Math.min(initialCapacity, MAX_DENSE_CAPACITY);
 			this.elements = new Object[Math.max(cap, INITIAL_DENSE_CAPACITY)];
@@ -41,11 +41,11 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	}
 
 	public JSArray(JSObject prototype) {
-		super(prototype != null ? prototype : JSContext.LazyBuiltins.ARRAY_PROTOTYPE);
+		super(prototype != null ? prototype : JSContext.LazyArray.ARRAY_PROTOTYPE);
 	}
 
 	public JSArray(Collection<?> initial) {
-		super(JSContext.LazyBuiltins.ARRAY_PROTOTYPE);
+		super(JSContext.LazyArray.ARRAY_PROTOTYPE);
 		if (initial != null) {
 			int sz = initial.size();
 			if (sz > 0 && sz <= MAX_DENSE_CAPACITY) {
@@ -69,7 +69,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	}
 
 	public JSArray(Iterable<?> initial) {
-		super(JSContext.LazyBuiltins.ARRAY_PROTOTYPE);
+		super(JSContext.LazyArray.ARRAY_PROTOTYPE);
 		if (initial != null) {
 			if (initial instanceof Collection<?> c) {
 				int sz = c.size();
@@ -502,7 +502,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	@Override
 	public JSObject getPrototype() {
 		JSObject p = super.getPrototype();
-		return p != null ? p : JSContext.LazyBuiltins.ARRAY_PROTOTYPE;
+		return p != null ? p : JSContext.LazyArray.ARRAY_PROTOTYPE;
 	}
 
 	@Override

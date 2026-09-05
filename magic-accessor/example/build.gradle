@@ -114,7 +114,7 @@ tasks.register('jmhJS', JavaExec) {
 
 	args = [
 			'hope.magic.example.MagicJSBenchmark',
-			'-f', '3',
+			'-f', '2',
 			'-wi', '3',
 			'-i', '5',
 			'-bm', 'avgt',
@@ -150,6 +150,7 @@ tasks.register('coldJS', JavaExec) {
 		executable = jsBenchmarkJdk.absolutePath
 	}
 }
+
 
 tasks.register('gradientJS', JavaExec) {
 	classpath = sourceSets.main.runtimeClasspath

@@ -73,14 +73,14 @@ public class JSObject {
 	private JSObject prototype/*  = null */;
 
 	public JSObject getPrototype() {
-		if (this == JSContext.LazyBuiltins.OBJECT_PROTOTYPE) {
+		if (this == JSContext.LazyObject.OBJECT_PROTOTYPE) {
 			return null;
 		}
 		return prototype;
 	}
 
 	public void setPrototype(JSObject prototype) {
-		if (this == JSContext.LazyBuiltins.OBJECT_PROTOTYPE) {
+		if (this == JSContext.LazyObject.OBJECT_PROTOTYPE) {
 			throw new RuntimeException("TypeError: Immutable prototype object '#<Object>' cannot have their prototype set");
 		}
 		this.prototype = prototype;
@@ -89,12 +89,12 @@ public class JSObject {
 	//endregion
 	//region 构造器
 	public JSObject() {
-		this.prototype = JSContext.LazyBuiltins.OBJECT_PROTOTYPE;
+		this.prototype = JSContext.LazyObject.OBJECT_PROTOTYPE;
 	}
 
 	public JSObject(JSShape shape) {
 		this.shape = shape;
-		this.prototype = JSContext.LazyBuiltins.OBJECT_PROTOTYPE;
+		this.prototype = JSContext.LazyObject.OBJECT_PROTOTYPE;
 	}
 
 	public JSObject(JSObject prototype) {

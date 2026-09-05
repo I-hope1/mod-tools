@@ -159,12 +159,12 @@ public class JSContext {
 				}
 				return args[0];
 			}
-			return new JSObject(LazyBuiltins.OBJECT_PROTOTYPE);
+			return new JSObject(LazyObject.OBJECT_PROTOTYPE);
 		}
 
 		@Override
 		public Object call0(JSContext cx, Object thisObj) {
-			return new JSObject(LazyBuiltins.OBJECT_PROTOTYPE);
+			return new JSObject(LazyObject.OBJECT_PROTOTYPE);
 		}
 
 		@Override
@@ -172,7 +172,7 @@ public class JSContext {
 			if (a0 != null && a0 != JSUndefined.INSTANCE) {
 				return a0;
 			}
-			return new JSObject(LazyBuiltins.OBJECT_PROTOTYPE);
+			return new JSObject(LazyObject.OBJECT_PROTOTYPE);
 		}
 
 		@Override
@@ -253,7 +253,82 @@ public class JSContext {
 	public static final int SLOT_OBJECT       = getGlobalSlot("Object");
 	public static final int SLOT_ARRAY        = getGlobalSlot("Array");
 
-	static class LazyBuiltins {
+	public static class JSBuiltinMethod extends JSObject implements JSFunction {
+		private static final List<String> BUILTIN_METHOD_PROPS = List.of("name", "length");
+		private static final JSShape METHOD_SHAPE = JSShape.createStaticPrototypeShape(BUILTIN_METHOD_PROPS);
+
+		private final JSFunction fn;
+
+		public JSBuiltinMethod(String name, int length, JSFunction fn) {
+			super(METHOD_SHAPE, null);
+			this.obj0 = name;
+			this.prim1 = Double.doubleToRawLongBits((double) length);
+			this.doubleFieldMask = (1L << 1);
+			this.fn = fn;
+		}
+
+		@Override
+		public Object call(JSContext cx, Object thisObj, Object[] args) throws Throwable {
+			return fn.call(cx, thisObj, args);
+		}
+
+		@Override
+		public Object call0(JSContext cx, Object thisObj) throws Throwable {
+			return fn.call0(cx, thisObj);
+		}
+
+		@Override
+		public Object call1(JSContext cx, Object thisObj, Object a0) throws Throwable {
+			return fn.call1(cx, thisObj, a0);
+		}
+
+		@Override
+		public Object call2(JSContext cx, Object thisObj, Object a0, Object a1) throws Throwable {
+			return fn.call2(cx, thisObj, a0, a1);
+		}
+
+		@Override
+		public Object call3(JSContext cx, Object thisObj, Object a0, Object a1, Object a2) throws Throwable {
+			return fn.call3(cx, thisObj, a0, a1, a2);
+		}
+
+		@Override
+		public Object call4(JSContext cx, Object thisObj, Object a0, Object a1, Object a2, Object a3) throws Throwable {
+			return fn.call4(cx, thisObj, a0, a1, a2, a3);
+		}
+
+		@Override
+		public double call0Double(JSContext cx) throws Throwable {
+			return fn.call0Double(cx);
+		}
+
+		@Override
+		public double call1Double(JSContext cx, double a0) throws Throwable {
+			return fn.call1Double(cx, a0);
+		}
+
+		@Override
+		public double call2Double(JSContext cx, double a0, double a1) throws Throwable {
+			return fn.call2Double(cx, a0, a1);
+		}
+
+		@Override
+		public double call3Double(JSContext cx, double a0, double a1, double a2) throws Throwable {
+			return fn.call3Double(cx, a0, a1, a2);
+		}
+
+		@Override
+		public double call4Double(JSContext cx, double a0, double a1, double a2, double a3) throws Throwable {
+			return fn.call4Double(cx, a0, a1, a2, a3);
+		}
+
+		@Override
+		public String toString() {
+			return "function " + obj0 + "() { [native code] }";
+		}
+	}
+
+	static class LazyMisc {
 		static final JSFunction PRINT = (cx, thisObj, args) -> {
 			StringBuilder sb = new StringBuilder();
 			for (int i = 0; i < args.length; i++) {
@@ -263,45 +338,6 @@ public class JSContext {
 			System.out.println(sb);
 			return JSUndefined.INSTANCE;
 		};
-
-		static final JSObject CONSOLE = createConsole();
-		private static JSObject createConsole() {
-			JSObject c = new JSObject();
-			c.put("log", PRINT);
-			return c;
-		}
-
-		static final JSObject MATH = createMath();
-		private static JSObject createMath() {
-			JSObject math = new JSObject();
-			math.put("PI", Math.PI);
-			math.put("E", Math.E);
-			math.put("abs", new JSMathFunction(JSMathFunction.OP_ABS));
-			math.put("sqrt", new JSMathFunction(JSMathFunction.OP_SQRT));
-			math.put("floor", new JSMathFunction(JSMathFunction.OP_FLOOR));
-			math.put("ceil", new JSMathFunction(JSMathFunction.OP_CEIL));
-			math.put("round", new JSMathFunction(JSMathFunction.OP_ROUND));
-			math.put("sin", new JSMathFunction(JSMathFunction.OP_SIN));
-			math.put("cos", new JSMathFunction(JSMathFunction.OP_COS));
-			math.put("tan", new JSMathFunction(JSMathFunction.OP_TAN));
-			math.put("asin", new JSMathFunction(JSMathFunction.OP_ASIN));
-			math.put("acos", new JSMathFunction(JSMathFunction.OP_ACOS));
-			math.put("atan", new JSMathFunction(JSMathFunction.OP_ATAN));
-			math.put("exp", new JSMathFunction(JSMathFunction.OP_EXP));
-			math.put("log", new JSMathFunction(JSMathFunction.OP_LOG));
-			math.put("log10", new JSMathFunction(JSMathFunction.OP_LOG10));
-			math.put("log2", new JSMathFunction(JSMathFunction.OP_LOG2));
-			math.put("cbrt", new JSMathFunction(JSMathFunction.OP_CBRT));
-			math.put("sign", new JSMathFunction(JSMathFunction.OP_SIGN));
-			math.put("trunc", new JSMathFunction(JSMathFunction.OP_TRUNC));
-			math.put("random", new JSMathFunction(JSMathFunction.OP_RANDOM));
-			math.put("max", new JSMathFunction(JSMathFunction.OP_MAX));
-			math.put("min", new JSMathFunction(JSMathFunction.OP_MIN));
-			math.put("pow", new JSMathFunction(JSMathFunction.OP_POW));
-			math.put("atan2", new JSMathFunction(JSMathFunction.OP_ATAN2));
-			math.put("hypot", new JSMathFunction(JSMathFunction.OP_HYPOT));
-			return math;
-		}
 
 		static final JSFunction IMPORT_CLASS = (cx, thisObj, args) -> {
 			if (args.length > 0) {
@@ -341,28 +377,70 @@ public class JSContext {
 			String flags = args.length > 1 && args[1] != null && args[1] != JSUndefined.INSTANCE ? JSOps.toStr(args[1]) : "";
 			return new JSRegExp(pat, flags);
 		};
+	}
 
+	static class LazyConsole {
+		static final JSObject CONSOLE = createConsole();
+		private static JSObject createConsole() {
+			JSShape shape = JSShape.createStaticPrototypeShape(List.of("log"));
+			JSObject c = new JSObject(shape, null);
+			c.put("log", LazyMisc.PRINT);
+			return c;
+		}
+	}
+
+	static class LazyMath {
+		private static final List<String> MATH_PROPS = List.of(
+			"PI", "E", "abs", "sqrt", "floor", "ceil", "round",
+			"sin", "cos", "tan", "asin", "acos", "atan", "exp",
+			"log", "log10", "log2", "cbrt", "sign", "trunc",
+			"random", "max", "min", "pow", "atan2", "hypot"
+		);
+		private static final JSShape MATH_SHAPE = JSShape.createStaticPrototypeShape(MATH_PROPS);
+		static final JSObject MATH = createMath();
+
+		private static JSObject createMath() {
+			JSObject math = new JSObject(MATH_SHAPE, null);
+			math.put("PI", Math.PI);
+			math.put("E", Math.E);
+			math.put("abs", new JSMathFunction(JSMathFunction.OP_ABS));
+			math.put("sqrt", new JSMathFunction(JSMathFunction.OP_SQRT));
+			math.put("floor", new JSMathFunction(JSMathFunction.OP_FLOOR));
+			math.put("ceil", new JSMathFunction(JSMathFunction.OP_CEIL));
+			math.put("round", new JSMathFunction(JSMathFunction.OP_ROUND));
+			math.put("sin", new JSMathFunction(JSMathFunction.OP_SIN));
+			math.put("cos", new JSMathFunction(JSMathFunction.OP_COS));
+			math.put("tan", new JSMathFunction(JSMathFunction.OP_TAN));
+			math.put("asin", new JSMathFunction(JSMathFunction.OP_ASIN));
+			math.put("acos", new JSMathFunction(JSMathFunction.OP_ACOS));
+			math.put("atan", new JSMathFunction(JSMathFunction.OP_ATAN));
+			math.put("exp", new JSMathFunction(JSMathFunction.OP_EXP));
+			math.put("log", new JSMathFunction(JSMathFunction.OP_LOG));
+			math.put("log10", new JSMathFunction(JSMathFunction.OP_LOG10));
+			math.put("log2", new JSMathFunction(JSMathFunction.OP_LOG2));
+			math.put("cbrt", new JSMathFunction(JSMathFunction.OP_CBRT));
+			math.put("sign", new JSMathFunction(JSMathFunction.OP_SIGN));
+			math.put("trunc", new JSMathFunction(JSMathFunction.OP_TRUNC));
+			math.put("random", new JSMathFunction(JSMathFunction.OP_RANDOM));
+			math.put("max", new JSMathFunction(JSMathFunction.OP_MAX));
+			math.put("min", new JSMathFunction(JSMathFunction.OP_MIN));
+			math.put("pow", new JSMathFunction(JSMathFunction.OP_POW));
+			math.put("atan2", new JSMathFunction(JSMathFunction.OP_ATAN2));
+			math.put("hypot", new JSMathFunction(JSMathFunction.OP_HYPOT));
+			return math;
+		}
+	}
+
+	static class LazyObject {
 		private static final List<String> OBJECT_PROTO_PROPS = List.of(
 			"hasOwnProperty", "toString", "valueOf", "constructor"
 		);
 		private static final List<String> OBJECT_CTOR_PROPS = List.of(
 			"name", "length", "prototype", "is", "getPrototypeOf", "getOwnPropertyNames"
 		);
-		private static final List<String> ARRAY_PROTO_PROPS = List.of(
-			"constructor", "length", "reduce", "reduceRight", "filter", "sort",
-			"map", "forEach", "find", "findIndex", "some", "every",
-			"includes", "indexOf", "lastIndexOf", "slice", "splice",
-			"concat", "push", "pop", "shift", "unshift", "reverse",
-			"fill", "flat", "toString", "join"
-		);
-		private static final List<String> ARRAY_CTOR_PROPS = List.of(
-			"name", "length", "prototype", "isArray", "of", "from"
-		);
 
 		static final JSObject            OBJECT_PROTOTYPE = createObjectPrototype();
 		static final JSObjectConstructor OBJECT           = createObjectConstructor(OBJECT_PROTOTYPE);
-		static final JSObject            ARRAY_PROTOTYPE  = createArrayPrototype(OBJECT_PROTOTYPE);
-		static final JSArrayConstructor  ARRAY            = createArrayConstructor(ARRAY_PROTOTYPE);
 
 		private static JSObject createObjectPrototype() {
 			// 原型链顶端：Object.prototype 原型严格为 null，采用批量烘焙终态 Shape
@@ -419,6 +497,22 @@ public class JSContext {
 
 			return ctor;
 		}
+	}
+
+	static class LazyArray {
+		private static final List<String> ARRAY_PROTO_PROPS = List.of(
+			"constructor", "length", "reduce", "reduceRight", "filter", "sort",
+			"map", "forEach", "find", "findIndex", "some", "every",
+			"includes", "indexOf", "lastIndexOf", "slice", "splice",
+			"concat", "push", "pop", "shift", "unshift", "reverse",
+			"fill", "flat", "toString", "join"
+		);
+		private static final List<String> ARRAY_CTOR_PROPS = List.of(
+			"name", "length", "prototype", "isArray", "of", "from"
+		);
+
+		static final JSObject            ARRAY_PROTOTYPE = createArrayPrototype(LazyObject.OBJECT_PROTOTYPE);
+		static final JSArrayConstructor  ARRAY           = createArrayConstructor(ARRAY_PROTOTYPE);
 
 		private static JSObject createArrayPrototype(JSObject objectProto) {
 			JSShape shape = JSShape.createStaticPrototypeShape(objectProto.shape, ARRAY_PROTO_PROPS);
@@ -426,8 +520,8 @@ public class JSContext {
 		}
 
 		private static JSArrayConstructor createArrayConstructor(JSObject proto) {
-			JSShape shape = JSShape.createStaticPrototypeShape(OBJECT_PROTOTYPE.shape, ARRAY_CTOR_PROPS);
-			JSArrayConstructor ctor = new JSArrayConstructor(shape, OBJECT_PROTOTYPE);
+			JSShape shape = JSShape.createStaticPrototypeShape(LazyObject.OBJECT_PROTOTYPE.shape, ARRAY_CTOR_PROPS);
+			JSArrayConstructor ctor = new JSArrayConstructor(shape, LazyObject.OBJECT_PROTOTYPE);
 			proto.put("constructor", ctor);
 			proto.put("length", 0.0);
 
@@ -1206,41 +1300,7 @@ public class JSContext {
 		}
 
 		private static JSObject makeMethod(String name, int length, JSFunction fn) {
-			class MethodWrapper extends JSObject implements JSFunction {
-				MethodWrapper() {
-					put("name", name);
-					put("length", length);
-				}
-				@Override
-				public Object call(JSContext cx, Object thisObj, Object[] args) throws Throwable {
-					return fn.call(cx, thisObj, args);
-				}
-				@Override
-				public Object call0(JSContext cx, Object thisObj) throws Throwable {
-					return fn.call0(cx, thisObj);
-				}
-				@Override
-				public Object call1(JSContext cx, Object thisObj, Object a0) throws Throwable {
-					return fn.call1(cx, thisObj, a0);
-				}
-				@Override
-				public Object call2(JSContext cx, Object thisObj, Object a0, Object a1) throws Throwable {
-					return fn.call2(cx, thisObj, a0, a1);
-				}
-				@Override
-				public Object call3(JSContext cx, Object thisObj, Object a0, Object a1, Object a2) throws Throwable {
-					return fn.call3(cx, thisObj, a0, a1, a2);
-				}
-				@Override
-				public Object call4(JSContext cx, Object thisObj, Object a0, Object a1, Object a2, Object a3) throws Throwable {
-					return fn.call4(cx, thisObj, a0, a1, a2, a3);
-				}
-				@Override
-				public String toString() {
-					return "function " + name + "() { [native code] }";
-				}
-			}
-			return new MethodWrapper();
+			return new JSBuiltinMethod(name, length, fn);
 		}
 
 		private static Object toObject(Object value) {
@@ -1344,6 +1404,19 @@ public class JSContext {
 		// 100% 零成本实例化：按需懒加载所有 Built-in 对象，首调 0 类加载突发
 	}
 
+	public static class LazyBuiltins {
+		public static final JSObject            OBJECT_PROTOTYPE = LazyObject.OBJECT_PROTOTYPE;
+		public static final JSObject            ARRAY_PROTOTYPE  = LazyArray.ARRAY_PROTOTYPE;
+		public static final JSObjectConstructor OBJECT           = LazyObject.OBJECT;
+		public static final JSArrayConstructor  ARRAY            = LazyArray.ARRAY;
+		public static final JSObject            CONSOLE          = LazyConsole.CONSOLE;
+		public static final JSObject            MATH             = LazyMath.MATH;
+		public static final JSFunction          PRINT            = LazyMisc.PRINT;
+		public static final JSFunction          IMPORT_CLASS     = LazyMisc.IMPORT_CLASS;
+		public static final JSObject            PACKAGES         = LazyMisc.PACKAGES;
+		public static final JSFunction          REGEXP           = LazyMisc.REGEXP;
+	}
+
 	private Object resolveLazyGlobal(int slot) {
 		Object val = null;
 		if (slot == SLOT_NAN) { val = Double.NaN; } else if (slot == SLOT_INFINITY) {
@@ -1353,21 +1426,21 @@ public class JSContext {
 		} else if (slot == SLOT_JSOPS) {
 			val = JSOps.class;
 		} else if (slot == SLOT_PRINT) {
-			val = LazyBuiltins.PRINT;
+			val = LazyMisc.PRINT;
 		} else if (slot == SLOT_CONSOLE) {
-			val = LazyBuiltins.CONSOLE;
+			val = LazyConsole.CONSOLE;
 		} else if (slot == SLOT_MATH) {
-			val = LazyBuiltins.MATH;
+			val = LazyMath.MATH;
 		} else if (slot == SLOT_IMPORT_CLASS) {
-			val = LazyBuiltins.IMPORT_CLASS;
+			val = LazyMisc.IMPORT_CLASS;
 		} else if (slot == SLOT_PACKAGES) {
-			val = LazyBuiltins.PACKAGES;
+			val = LazyMisc.PACKAGES;
 		} else if (slot == SLOT_REGEXP) {
-			val = LazyBuiltins.REGEXP;
+			val = LazyMisc.REGEXP;
 		} else if (slot == SLOT_OBJECT) {
-			val = LazyBuiltins.OBJECT;
+			val = LazyObject.OBJECT;
 		} else if (slot == SLOT_ARRAY) {
-			val = LazyBuiltins.ARRAY;
+			val = LazyArray.ARRAY;
 		}
 
 		if (val != null) {

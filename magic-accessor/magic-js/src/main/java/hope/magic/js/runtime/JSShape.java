@@ -5,7 +5,6 @@ import hope.magic.runtime.Magic;
 import java.lang.invoke.*;
 import java.lang.reflect.Field;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -21,7 +20,11 @@ public final class JSShape {
 
 	private static final AtomicInteger BUILTIN_ID_GEN = new AtomicInteger(-1);
 	private static final AtomicInteger USER_ID_GEN    = new AtomicInteger(1);
-	private static final ConcurrentHashMap<String, VarHandle> VAR_HANDLES  = new ConcurrentHashMap<>();
+	// 架构优化说明：
+	// 原 VAR_HANDLES (ConcurrentHashMap<String, VarHandle>) 与 casIC() 属于早期单内联缓存（Single-IC）
+	// 的动态原子 CAS 更新机制。当前引擎已全面进化为 ChainedCallSite 多态内联链与聚合槽位/掩码跳转表，
+	// 属性寻址全量由运行时方法句柄 (SlotMH / Unsafe) 接管，casIC 已无任何外部调用方。
+	// 此处废弃并移除无用的 VAR_HANDLES 缓存与 casIC 方法，消除死代码并减轻静态类加载开销。
 
 	// 语义化控制常量
 	public static final int  SHAPE_ID_SHIFT              = 32;
@@ -34,26 +37,6 @@ public final class JSShape {
 
 	public static long packIC(int shapeId, int offset) {
 		return ((long) shapeId << SHAPE_ID_SHIFT) | (offset & OFFSET_MASK);
-	}
-
-	public static boolean casIC(Class<?> clazz, String fieldName, long expected, long update) {
-		String    key = clazz.getName() + "." + fieldName;
-		VarHandle vh  = VAR_HANDLES.get(key);
-		if (vh == null) {
-			try {
-				vh = LOOKUP.findStaticVarHandle(clazz, fieldName, long.class);
-				VAR_HANDLES.put(key, vh);
-			} catch (Throwable t) {
-				try {
-					Field f      = clazz.getField(fieldName);
-					long  offset = Magic.unsafe.staticFieldOffset(f);
-					return Magic.unsafe.compareAndSwapLong(clazz, offset, expected, update);
-				} catch (Throwable ignored) {
-					return false;
-				}
-			}
-		}
-		return vh.compareAndSet(expected, update);
 	}
 
 	public static final byte TYPE_UNKNOWN = 0;

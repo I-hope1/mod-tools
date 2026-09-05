@@ -20,7 +20,14 @@ public class JSContext {
 
 	public static final int                               INITIAL_GLOBAL_SLOTS_CAPACITY = 64;
 	public volatile     Object[]                          globalSlots                   = new Object[INITIAL_GLOBAL_SLOTS_CAPACITY];
-	private final       ConcurrentHashMap<String, Object> globals                       = new ConcurrentHashMap<>();
+	// 架构优化说明：
+	// 原 globals 采用 ConcurrentHashMap<String, Object> 作为实例字段，
+	// 导致每个 JSContext 实例化时均需要分配包含并发分段/计数器单元的重型哈希表，增加了堆分配与 GC 压力。
+	// 实际上，JS 执行的热点全局变量均由 globalSlots[] 密集数组直接索引（1 指令寻址），
+	// 仅在首次冷加载或反射兜底时才会访问 globals。
+	// 故将其替换为轻量 HashMap<String, Object>，写操作集中在 synchronized 的 set() 中，
+	// 读操作通过 synchronized (globals) 块保证复合原子性与线程安全，大幅减少 Context 创建开销。
+	private final       Map<String, Object>               globals                       = new HashMap<>();
 
 	public static class JSMathFunction implements JSFunction {
 		public static final int OP_ABS    = 0;
@@ -1458,7 +1465,9 @@ public class JSContext {
 	}
 
 	public synchronized void set(String name, Object value) {
-		globals.put(name, value == null ? NULL_VALUE : value);
+		synchronized (globals) {
+			globals.put(name, value == null ? NULL_VALUE : value);
+		}
 		int slot = getGlobalSlot(name);
 		ensureGlobalSlotCapacity(slot);
 		globalSlots[slot] = value == null ? NULL_VALUE : value;
@@ -1472,7 +1481,10 @@ public class JSContext {
 			if (val == NULL_VALUE) return null;
 			if (val != null) return val;
 		}
-		Object val = globals.get(name);
+		Object val;
+		synchronized (globals) {
+			val = globals.get(name);
+		}
 		if (val != null) {
 			if (val == NULL_VALUE) return null;
 			if (slot >= 0) {
@@ -1490,7 +1502,9 @@ public class JSContext {
 		if (!name.isEmpty() && Character.isUpperCase(name.charAt(0))) {
 			try {
 				Class<?> c = Class.forName(name);
-				globals.put(name, c);
+				synchronized (globals) {
+					globals.put(name, c);
+				}
 				if (slot >= 0) {
 					ensureGlobalSlotCapacity(slot);
 					globalSlots[slot] = c;

@@ -12,9 +12,16 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class SymbolTable {
 
-	private static final    ConcurrentHashMap<String, String>  TABLE      = new ConcurrentHashMap<>(1024);
-	private static final    ConcurrentHashMap<String, Integer> NAME_TO_ID = new ConcurrentHashMap<>(1024);
-	private static volatile String[]                           ID_TO_NAME = new String[1024];
+	// 架构优化说明：
+	// 原 TABLE 与 NAME_TO_ID 初始容量设为 1024，在 HotSpot 中因负载因子 0.75 导致启动时立即分配 2048 长度的 Node 数组，
+	// 连同 ID_TO_NAME 瞬间吃掉 5120 个引用槽位，引发冷启动内存分配与 GC 压力。
+	// 改为初始容量 64（对应 128 桶），由于 register() 本身具备 Arrays.copyOf 翻倍扩容保护，
+	// 且 ConcurrentHashMap 亦原生支持平滑动态扩容，既保障了冷启动脚本零浪费（仅占用极小堆空间），
+	// 又能无缝支持后续大型脚本符号表的大规模动态扩容。
+	public static final     int                                INITIAL_CAPACITY = 64;
+	private static final    ConcurrentHashMap<String, String>  TABLE      = new ConcurrentHashMap<>(INITIAL_CAPACITY);
+	private static final    ConcurrentHashMap<String, Integer> NAME_TO_ID = new ConcurrentHashMap<>(INITIAL_CAPACITY);
+	private static volatile String[]                           ID_TO_NAME = new String[INITIAL_CAPACITY];
 	private static final    AtomicInteger                      ID_GEN     = new AtomicInteger(0);
 
 	// private static final VarHandle ID_ARR_VH = MethodHandles.arrayElementVarHandle(String[].class);

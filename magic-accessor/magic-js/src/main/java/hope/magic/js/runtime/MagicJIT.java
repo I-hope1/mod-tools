@@ -102,41 +102,29 @@ public class MagicJIT implements Opcodes {
 			return hash;
 		}
 	}
-
-	private static final class PrimMemberKey {
-		final Class<?> clazz;
-		final String memberName;
-		final Class<?> primType;
-		final int hash;
-
-		PrimMemberKey(Class<?> clazz, String memberName, Class<?> primType) {
-			this.clazz = clazz;
-			this.memberName = memberName;
-			this.primType = primType;
-			int h = clazz.hashCode();
-			h = 31 * h + memberName.hashCode();
-			h = 31 * h + primType.hashCode();
-			this.hash = h;
-		}
-
-		@Override
-		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof PrimMemberKey that)) return false;
-			return clazz == that.clazz && primType == that.primType && memberName.equals(that.memberName);
-		}
-
-		@Override
-		public int hashCode() {
-			return hash;
-		}
-	}
-
+	// 架构优化说明：
+	// 原 FN_ADAPTER_MH_CACHE 与 OBJ_ADAPTER_MH_CACHE 采用 ConcurrentHashMap<Class<?>, MethodHandle>。
+	// 以 Class<?> 为 Key 的全局并发 Map 存在两大缺陷：
+	// 1. 强引用动态加载的 Class，阻碍其 ClassLoader 垃圾回收，造成元空间（Metaspace）内存泄漏。
+	// 2. 并发哈希表读写存在哈希冲突与分段锁/CAS 竞争开销。
+	// 改为 JDK 原生 ClassValue<MethodHandle> 后：
+	// 1. 缓存生命周期与 Class 深度绑定，Class 卸载时缓存条目自动被 GC 回收。
+	// 2. JVM HotSpot 将 ClassValue 读取内联为直接指针偏移访问，达到近乎无锁的 O(1) 极速。
 	private static final AtomicLong                            COUNTER              = new AtomicLong();
 	private static final Map<InvokerKey, MagicInvoker>         INVOKER_CACHE        = new ConcurrentHashMap<>();
 	private static final Map<CtorKey, MagicConstructorInvoker> CTOR_CACHE           = new ConcurrentHashMap<>();
-	private static final Map<Class<?>, MethodHandle>           FN_ADAPTER_MH_CACHE  = new ConcurrentHashMap<>();
-	private static final Map<Class<?>, MethodHandle>           OBJ_ADAPTER_MH_CACHE = new ConcurrentHashMap<>();
+	private static final ClassValue<MethodHandle>              FN_ADAPTER_MH_CACHE  = new ClassValue<>() {
+		@Override
+		protected MethodHandle computeValue(Class<?> type) {
+			return createFunctionAdapterHandle(type);
+		}
+	};
+	private static final ClassValue<MethodHandle>              OBJ_ADAPTER_MH_CACHE = new ClassValue<>() {
+		@Override
+		protected MethodHandle computeValue(Class<?> type) {
+			return createObjectAdapterHandle(type);
+		}
+	};
 
 	@FunctionalInterface
 	public interface MagicInvoker {
@@ -303,7 +291,6 @@ public class MagicJIT implements Opcodes {
 
 	private static final Map<MemberKey, MethodHandle>     GETTER_CACHE           = new ConcurrentHashMap<>();
 	private static final Map<MemberKey, MethodHandle>     SETTER_CACHE           = new ConcurrentHashMap<>();
-	private static final Map<PrimMemberKey, MethodHandle> PRIMITIVE_GETTER_CACHE = new ConcurrentHashMap<>();
 
 	public static MethodHandle getFieldGetterStub(Class<?> clazz, String fieldName) {
 		MemberKey key = new MemberKey(clazz, fieldName);
@@ -323,58 +310,11 @@ public class MagicJIT implements Opcodes {
 		return stub;
 	}
 
-	public static MethodHandle getPrimitiveFieldGetterStub(Class<?> clazz, String fieldName, Class<?> primitiveType) {
-		PrimMemberKey key = new PrimMemberKey(clazz, fieldName, primitiveType);
-		MethodHandle cached = PRIMITIVE_GETTER_CACHE.get(key);
-		if (cached != null) return cached;
-		MethodHandle stub = createExactPrimitiveFieldGetterStub(clazz, fieldName, primitiveType);
-		if (stub != null) PRIMITIVE_GETTER_CACHE.put(key, stub);
-		return stub;
-	}
-
-	public static MethodHandle createExactPrimitiveFieldGetterStub(Class<?> clazz, String fieldName,
-	                                                               Class<?> primitiveType) {
-		Field field = getDeclaredFieldRecursive(clazz, fieldName);
-		if (field == null) return null;
-		field.setAccessible(true);
-		long offset = LinkerHelper.getFieldOffset(field);
-		Class<?> fType = field.getType();
-		MethodHandle mh;
-		if (primitiveType == int.class) {
-			if (fType == int.class) mh = JSLinker.FieldMH.GET_INT_PRIM;
-			else if (fType == double.class) mh = JSLinker.FieldMH.GET_DOUBLE_AS_INT;
-			else if (fType == long.class) mh = JSLinker.FieldMH.GET_LONG_AS_INT;
-			else if (fType == float.class) mh = JSLinker.FieldMH.GET_FLOAT_AS_INT;
-			else if (fType == short.class) mh = JSLinker.FieldMH.GET_SHORT_AS_INT;
-			else if (fType == byte.class) mh = JSLinker.FieldMH.GET_BYTE_AS_INT;
-			else if (fType == char.class) mh = JSLinker.FieldMH.GET_CHAR_AS_INT;
-			else if (fType == boolean.class) mh = JSLinker.FieldMH.GET_BOOLEAN_AS_INT;
-			else mh = JSLinker.FieldMH.GET_OBJECT_AS_INT;
-		} else if (primitiveType == double.class) {
-			if (fType == double.class) mh = JSLinker.FieldMH.GET_DOUBLE_PRIM;
-			else if (fType == int.class) mh = JSLinker.FieldMH.GET_INT_AS_DOUBLE;
-			else if (fType == long.class) mh = JSLinker.FieldMH.GET_LONG_AS_DOUBLE;
-			else if (fType == float.class) mh = JSLinker.FieldMH.GET_FLOAT_AS_DOUBLE;
-			else if (fType == short.class) mh = JSLinker.FieldMH.GET_SHORT_AS_DOUBLE;
-			else if (fType == byte.class) mh = JSLinker.FieldMH.GET_BYTE_AS_DOUBLE;
-			else if (fType == char.class) mh = JSLinker.FieldMH.GET_CHAR_AS_DOUBLE;
-			else if (fType == boolean.class) mh = JSLinker.FieldMH.GET_BOOLEAN_AS_DOUBLE;
-			else mh = JSLinker.FieldMH.GET_OBJECT_AS_DOUBLE;
-		} else if (primitiveType == long.class) {
-			if (fType == long.class) mh = JSLinker.FieldMH.GET_LONG_PRIM;
-			else if (fType == int.class) mh = JSLinker.FieldMH.GET_INT_AS_LONG;
-			else if (fType == double.class) mh = JSLinker.FieldMH.GET_DOUBLE_AS_LONG;
-			else if (fType == float.class) mh = JSLinker.FieldMH.GET_FLOAT_AS_LONG;
-			else if (fType == short.class) mh = JSLinker.FieldMH.GET_SHORT_AS_LONG;
-			else if (fType == byte.class) mh = JSLinker.FieldMH.GET_BYTE_AS_LONG;
-			else if (fType == char.class) mh = JSLinker.FieldMH.GET_CHAR_AS_LONG;
-			else if (fType == boolean.class) mh = JSLinker.FieldMH.GET_BOOLEAN_AS_LONG;
-			else mh = JSLinker.FieldMH.GET_OBJECT_AS_LONG;
-		} else {
-			mh = JSLinker.FieldMH.GET_OBJECT;
-		}
-		return MethodHandles.insertArguments(mh, 0, offset);
-	}
+	// 架构优化说明：
+	// Java 基础类型字段访问已由 JSLinker.FieldMH (基于 Unsafe 直接偏移读取) 配合 createExactFieldGetterStub 统一覆盖。
+	// 原 PRIMITIVE_GETTER_CACHE (ConcurrentHashMap<PrimMemberKey, MethodHandle>)、PrimMemberKey
+	// 以及 getPrimitiveFieldGetterStub / createExactPrimitiveFieldGetterStub 属于冗余死代码，
+	// 全工程无任何调用处，移除以消除死代码、静态类加载初始化开销及并发容器内存占用。
 
 	private static final Map<Method, MethodHandle> EXACT_METHOD_CACHE = new ConcurrentHashMap<>();
 
@@ -581,7 +521,7 @@ public class MagicJIT implements Opcodes {
 		if (targetType == null || fn == null) return null;
 		if (!targetType.isInterface()) return null;
 		try {
-			MethodHandle mh = FN_ADAPTER_MH_CACHE.computeIfAbsent(targetType, MagicJIT::createFunctionAdapterHandle);
+			MethodHandle mh = FN_ADAPTER_MH_CACHE.get(targetType);
 			if (mh != null) {
 				return mh.invoke(fn);
 			}
@@ -594,7 +534,7 @@ public class MagicJIT implements Opcodes {
 		if (targetType == null || jsObj == null) return null;
 		if (!targetType.isInterface()) return null;
 		try {
-			MethodHandle mh = OBJ_ADAPTER_MH_CACHE.computeIfAbsent(targetType, MagicJIT::createObjectAdapterHandle);
+			MethodHandle mh = OBJ_ADAPTER_MH_CACHE.get(targetType);
 			if (mh != null) {
 				return mh.invoke(jsObj);
 			}

@@ -510,7 +510,7 @@ public class JSParser {
 
 		while (true) {
 			if (match(TokenType.DOT)) {
-				Token prop = consume(TokenType.IDENTIFIER, "Expected property name after '.'");
+				Token prop = consumePropertyName("Expected property name after '.'");
 				expr = new Node.MemberAccessExpr(expr, prop.text, prop.line, prop.column);
 			} else if (match(TokenType.LBRACKET)) {
 				Node index = parseExpression();
@@ -1068,6 +1068,14 @@ public class JSParser {
 	private Token consume(TokenType type, String message) {
 		if (check(type)) return advance();
 		Token t = peek();
+		throw new RuntimeException(message + " (found '" + t.text + "' at line " + t.line + ":" + t.column + ")");
+	}
+
+	private Token consumePropertyName(String message) {
+		Token t = peek();
+		if (t.type == TokenType.IDENTIFIER || t.type.ordinal() <= TokenType.UNDEFINED.ordinal()) {
+			return advance();
+		}
 		throw new RuntimeException(message + " (found '" + t.text + "' at line " + t.line + ":" + t.column + ")");
 	}
 

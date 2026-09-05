@@ -2130,7 +2130,7 @@ public class JSCompiler {
 
 		boolean isMember = (call.callee instanceof Node.MemberAccessExpr);
 		Node    target   = isMember ? ((Node.MemberAccessExpr) call.callee).target : call.callee;
-		String  name     = isMember ? ((Node.MemberAccessExpr) call.callee).property : "call";
+		String  name     = isMember ? ((Node.MemberAccessExpr) call.callee).property : "$invoke$";
 
 		compileNode(target, ctx, true);
 		String desc = compileArgsAndGetDesc(call.arguments, ctx);
@@ -2279,14 +2279,15 @@ public class JSCompiler {
 			return mem.target instanceof Node.IdentifierExpr t && t.name.equals("Math");
 		}
 		if (node instanceof Node.BinaryExpr bin) {
-			if (bin.op == TokenType.PLUS) {
+			if (isNumericBinaryOp(bin.op) || bin.op == TokenType.PLUS) {
 				return isNumericReturnExpr(bin.left, params, functionName)
-				       && isNumericReturnExpr(bin.right, params, functionName);
+				       && isNumericReturnExpr(bin.right, params, functionName)
+				       && (bin.op != TokenType.PLUS || hasProvenNumericExpr(bin.left) || hasProvenNumericExpr(bin.right));
 			}
-			return isNumericBinaryOp(bin.op);
+			return false;
 		}
 		if (node instanceof Node.UnaryExpr un) {
-			return isNumericUnaryOp(un.op);
+			return isNumericUnaryOp(un.op) && isNumericReturnExpr(un.expr, params, functionName);
 		}
 		if (node instanceof Node.CallExpr call) {
 			if (call.callee instanceof Node.IdentifierExpr ident && ident.name.equals(functionName)) {
@@ -2297,6 +2298,24 @@ public class JSCompiler {
 		if (node instanceof Node.TernaryExpr ternary) {
 			return isNumericReturnExpr(ternary.thenExpr, params, functionName)
 			       && isNumericReturnExpr(ternary.elseExpr, params, functionName);
+		}
+		return false;
+	}
+
+	private static boolean hasProvenNumericExpr(Node node) {
+		if (node == null) return false;
+		if (node instanceof Node.LiteralExpr lit && lit.value instanceof Number) return true;
+		if (node instanceof Node.BinaryExpr bin) {
+			if (bin.op == TokenType.PLUS) {
+				return hasProvenNumericExpr(bin.left) || hasProvenNumericExpr(bin.right);
+			}
+			return isNumericBinaryOp(bin.op);
+		}
+		if (node instanceof Node.UnaryExpr un) {
+			return isNumericUnaryOp(un.op);
+		}
+		if (node instanceof Node.CallExpr call) {
+			return call.callee instanceof Node.MemberAccessExpr mem && mem.target instanceof Node.IdentifierExpr t && t.name.equals("Math");
 		}
 		return false;
 	}
@@ -2421,6 +2440,7 @@ public class JSCompiler {
 
 			Node.Program   fakeProg = new Node.Program(body.statements, body.line, body.column);
 			CompileContext ctx      = createCompileContext(callMv, funcClassName, fakeProg, functionName, false);
+			ctx.locals.put("this", new LocalVar(2, VarType.OBJECT));
 
 			if (paramCount <= 3) {
 				// 参数直接绑定到 JVM 局部变量槽位 (slot 0=this, 1=cx, 2=thisObj, 3=a0, 4=a1, 5=a2)

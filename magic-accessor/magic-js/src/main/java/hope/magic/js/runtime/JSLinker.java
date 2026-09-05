@@ -143,7 +143,8 @@ public class JSLinker {
 		 CALL0 = findVirtualMH(JSFunction.class, "call0", MethodType.methodType(Object.class, JSContext.class, Object.class)),
 		 CALL1 = findVirtualMH(JSFunction.class, "call1", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class)),
 		 CALL2 = findVirtualMH(JSFunction.class, "call2", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class)),
-		 CALL3 = findVirtualMH(JSFunction.class, "call3", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class, Object.class));
+		 CALL3 = findVirtualMH(JSFunction.class, "call3", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class, Object.class)),
+		 CALL4 = findVirtualMH(JSFunction.class, "call4", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class, Object.class, Object.class));
 	}
 
 	public static final class OpMH {
@@ -2220,8 +2221,14 @@ public class JSLinker {
 			throw new NullPointerException("Cannot invoke method '" + methodName + "' on null/undefined");
 		}
 
-		if (target instanceof JSFunction func && "call".equals(methodName)) {
+		if (target instanceof JSFunction func && "$invoke$".equals(methodName)) {
 			return func.call(null, JSUndefined.INSTANCE, args);
+		}
+
+		if (target instanceof JSFunction func && "call".equals(methodName)) {
+			Object thisArg = args.length > 0 && args[0] != null ? args[0] : JSUndefined.INSTANCE;
+			Object[] rest = args.length > 1 ? Arrays.copyOfRange(args, 1, args.length) : new Object[0];
+			return func.call(null, thisArg, rest);
 		}
 
 		if (target instanceof JSObject jsObj) {
@@ -2263,24 +2270,27 @@ public class JSLinker {
 			throw new NullPointerException("Cannot invoke method '" + methodName + "' on null/undefined");
 		}
 
-		if (target instanceof JSFunction func && "call".equals(methodName)) {
+		if (target instanceof JSFunction func && "$invoke$".equals(methodName)) {
 			int          arity = args.length;
 			MethodHandle directMh;
 			if (arity == 0) {
 				directMh = JSFuncMH.CALL0;
-				directMh = MethodHandles.insertArguments(directMh, 1, null, JSUndefined.INSTANCE);
+				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null, JSUndefined.INSTANCE);
 			} else if (arity == 1) {
 				directMh = JSFuncMH.CALL1;
-				directMh = MethodHandles.insertArguments(directMh, 1, null, JSUndefined.INSTANCE);
+				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null, JSUndefined.INSTANCE);
 			} else if (arity == 2) {
 				directMh = JSFuncMH.CALL2;
-				directMh = MethodHandles.insertArguments(directMh, 1, null, JSUndefined.INSTANCE);
+				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null, JSUndefined.INSTANCE);
 			} else if (arity == 3) {
 				directMh = JSFuncMH.CALL3;
-				directMh = MethodHandles.insertArguments(directMh, 1, null, JSUndefined.INSTANCE);
+				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null, JSUndefined.INSTANCE);
+			} else if (arity == 4) {
+				directMh = JSFuncMH.CALL4;
+				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null, JSUndefined.INSTANCE);
 			} else {
 				directMh = JSFuncMH.CALL;
-				directMh = MethodHandles.insertArguments(directMh, 1, null, JSUndefined.INSTANCE);
+				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null, JSUndefined.INSTANCE);
 				directMh = directMh.asSpreader(Object[].class, arity);
 			}
 
@@ -2294,15 +2304,58 @@ public class JSLinker {
 			if (arity == 1) return func.call1(null, JSUndefined.INSTANCE, args[0]);
 			if (arity == 2) return func.call2(null, JSUndefined.INSTANCE, args[0], args[1]);
 			if (arity == 3) return func.call3(null, JSUndefined.INSTANCE, args[0], args[1], args[2]);
+			if (arity == 4) return func.call4(null, JSUndefined.INSTANCE, args[0], args[1], args[2], args[3]);
 			return func.call(null, JSUndefined.INSTANCE, args);
+		}
+
+		if (target instanceof JSFunction func && "call".equals(methodName)) {
+			int          arity = args.length;
+			MethodHandle directMh;
+			if (arity == 0) {
+				directMh = JSFuncMH.CALL0;
+				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null, JSUndefined.INSTANCE);
+			} else if (arity == 1) {
+				directMh = JSFuncMH.CALL0;
+				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null);
+			} else if (arity == 2) {
+				directMh = JSFuncMH.CALL1;
+				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null);
+			} else if (arity == 3) {
+				directMh = JSFuncMH.CALL2;
+				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null);
+			} else if (arity == 4) {
+				directMh = JSFuncMH.CALL3;
+				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null);
+			} else if (arity == 5) {
+				directMh = JSFuncMH.CALL4;
+				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null);
+			} else {
+				directMh = JSFuncMH.CALL;
+				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null);
+				directMh = directMh.asSpreader(Object[].class, arity - 1);
+			}
+
+			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
+			if (site.type().parameterCount() > 1) {
+				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+			}
+			site.installGuardOrSwitchMegamorphic(test, directMh.asType(site.type()));
+
+			Object thisArg = arity > 0 && args[0] != null ? args[0] : JSUndefined.INSTANCE;
+			if (arity == 0 || arity == 1) return func.call0(null, thisArg);
+			if (arity == 2) return func.call1(null, thisArg, args[1]);
+			if (arity == 3) return func.call2(null, thisArg, args[1], args[2]);
+			if (arity == 4) return func.call3(null, thisArg, args[1], args[2], args[3]);
+			if (arity == 5) return func.call4(null, thisArg, args[1], args[2], args[3], args[4]);
+			return func.call(null, thisArg, Arrays.copyOfRange(args, 1, arity));
 		}
 
 		if (target instanceof JSObject jsObj) {
 			Object member = jsObj.get(methodName);
 			if (member instanceof JSFunction func) {
 				int ownOffset = jsObj.shape.getOffset(methodName);
-				// 当方法不在自身槽位上（offset < 0，即来自原型链），或为内置单例对象（如 JSObjectConstructor）时，函数实例恒定，方可绑定常量
-				if (ownOffset < 0 || jsObj instanceof JSContext.JSObjectConstructor) {
+				// 当方法不在自身槽位上（offset < 0，即来自原型链），或为内置单例对象（如 JSObjectConstructor / JSArrayConstructor）时，函数实例恒定，方可绑定常量
+				if (ownOffset < 0 || jsObj instanceof JSContext.JSObjectConstructor || jsObj instanceof JSContext.JSArrayConstructor) {
 					MethodHandle test = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
 					if (site.type().parameterCount() > 1) {
 						test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
@@ -2317,6 +2370,8 @@ public class JSLinker {
 						exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL2, 1, (Object) null).bindTo(func);
 					} else if (arity == 3) {
 						exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL3, 1, (Object) null).bindTo(func);
+					} else if (arity == 4) {
+						exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL4, 1, (Object) null).bindTo(func);
 					} else {
 						exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL, 1, (Object) null)
 						 .bindTo(func)

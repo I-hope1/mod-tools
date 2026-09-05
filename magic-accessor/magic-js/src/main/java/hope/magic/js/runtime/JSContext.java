@@ -177,6 +177,61 @@ public class JSContext {
 		}
 	}
 
+	public static class JSArrayConstructor extends JSObject implements JSFunction {
+		public JSArrayConstructor(JSObject prototype) {
+			super(prototype);
+		}
+
+		@Override
+		public Object call(JSContext cx, Object thisObj, Object[] args) {
+			if (args.length == 1 && args[0] instanceof Number num) {
+				return createSizedArray(num.doubleValue());
+			}
+			JSArray arr = new JSArray();
+			for (Object arg : args) {
+				arr.push(arg);
+			}
+			return arr;
+		}
+
+		@Override
+		public Object call0(JSContext cx, Object thisObj) {
+			return new JSArray();
+		}
+
+		@Override
+		public Object call1(JSContext cx, Object thisObj, Object a0) {
+			if (a0 instanceof Number num) {
+				return createSizedArray(num.doubleValue());
+			}
+			JSArray arr = new JSArray();
+			arr.push(a0);
+			return arr;
+		}
+
+		@Override
+		public Object call2(JSContext cx, Object thisObj, Object a0, Object a1) {
+			JSArray arr = new JSArray();
+			arr.push(a0);
+			arr.push(a1);
+			return arr;
+		}
+
+		private static JSArray createSizedArray(double len) {
+			if (!Double.isFinite(len) || len < 0 || len > 4294967295L || len != Math.floor(len)) {
+				throw new RuntimeException("RangeError: Invalid array length");
+			}
+			JSArray arr = new JSArray((int) Math.min(len, 65536));
+			arr.setLength(len);
+			return arr;
+		}
+
+		@Override
+		public String toString() {
+			return "function Array() { [native code] }";
+		}
+	}
+
 	public static final int SLOT_NAN          = getGlobalSlot("NaN");
 	public static final int SLOT_INFINITY     = getGlobalSlot("Infinity");
 	public static final int SLOT_UNDEFINED    = getGlobalSlot("undefined");
@@ -188,6 +243,7 @@ public class JSContext {
 	public static final int SLOT_PACKAGES     = getGlobalSlot("Packages");
 	public static final int SLOT_REGEXP       = getGlobalSlot("RegExp");
 	public static final int SLOT_OBJECT       = getGlobalSlot("Object");
+	public static final int SLOT_ARRAY        = getGlobalSlot("Array");
 
 	static class LazyBuiltins {
 		static final JSFunction PRINT = (cx, thisObj, args) -> {
@@ -280,6 +336,8 @@ public class JSContext {
 
 		static final JSObject            OBJECT_PROTOTYPE = createObjectPrototype();
 		static final JSObjectConstructor OBJECT           = createObjectConstructor(OBJECT_PROTOTYPE);
+		static final JSObject            ARRAY_PROTOTYPE  = new JSObject(OBJECT_PROTOTYPE);
+		static final JSArrayConstructor  ARRAY            = createArrayConstructor(ARRAY_PROTOTYPE);
 
 		private static JSObject createObjectPrototype() {
 			// 原型链顶端：Object.prototype 原型严格为 null
@@ -334,6 +392,910 @@ public class JSContext {
 
 			return ctor;
 		}
+
+		private static JSArrayConstructor createArrayConstructor(JSObject proto) {
+			JSArrayConstructor ctor = new JSArrayConstructor(OBJECT_PROTOTYPE);
+			proto.put("constructor", ctor);
+			proto.put("length", 0.0);
+
+			ctor.put("name", "Array");
+			ctor.put("length", 1);
+			ctor.put("prototype", proto);
+
+			ctor.put("isArray", makeMethod("isArray", 1, (cx, thisObj, args) -> {
+				if (args.length == 0) return Boolean.FALSE;
+				return args[0] instanceof JSArray ? Boolean.TRUE : Boolean.FALSE;
+			}));
+
+			ctor.put("of", makeMethod("of", 0, (cx, thisObj, args) -> {
+				JSArray arr = new JSArray();
+				for (Object a : args) arr.push(a);
+				return arr;
+			}));
+
+			ctor.put("from", makeMethod("from", 1, (cx, thisObj, args) -> {
+				if (args.length == 0 || args[0] == null || args[0] == JSUndefined.INSTANCE) {
+					throw new RuntimeException("TypeError: Cannot convert undefined or null to object");
+				}
+				Object items = args[0];
+				JSFunction mapFn = args.length > 1 && args[1] instanceof JSFunction ? (JSFunction) args[1] : null;
+				Object thisArg = args.length > 2 ? args[2] : JSUndefined.INSTANCE;
+
+				JSArray res = new JSArray();
+				if (items instanceof Iterable<?> it) {
+					long idx = 0;
+					for (Object item : it) {
+						if (mapFn != null) {
+							try {
+								res.push(mapFn.call2(cx, thisArg, item, (double) idx++));
+							} catch (Throwable t) {
+								if (t instanceof RuntimeException re) throw re;
+								throw new RuntimeException(t);
+							}
+						} else {
+							res.push(item);
+						}
+					}
+					return res;
+				}
+				long len = toLength(items);
+				for (long k = 0; k < len; k++) {
+					Object val = getProperty(items, k);
+					if (mapFn != null) {
+						try {
+							res.push(mapFn.call2(cx, thisArg, val, (double) k));
+						} catch (Throwable t) {
+							if (t instanceof RuntimeException re) throw re;
+							throw new RuntimeException(t);
+						}
+					} else {
+						res.push(val);
+					}
+				}
+				return res;
+			}));
+
+			mountArrayPrototypeMethods(proto);
+			return ctor;
+		}
+
+		private static void mountArrayPrototypeMethods(JSObject proto) {
+			proto.put("reduce", makeMethod("reduce", 1, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				if (args.length == 0 || !(args[0] instanceof JSFunction callback)) {
+					throw new RuntimeException("TypeError: " + (args.length > 0 ? args[0] : "undefined") + " is not a function");
+				}
+				if (O instanceof JSArray jsArr && jsArr.isDense()) {
+					return fastDenseReduce(cx, jsArr, callback, args);
+				}
+				return genericReduce(cx, O, callback, args);
+			}));
+
+			proto.put("reduceRight", makeMethod("reduceRight", 1, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				if (args.length == 0 || !(args[0] instanceof JSFunction callback)) {
+					throw new RuntimeException("TypeError: " + (args.length > 0 ? args[0] : "undefined") + " is not a function");
+				}
+				long len = toLength(O);
+				long k = len - 1;
+				Object accumulator = null;
+				boolean hasAccumulator = false;
+				if (args.length > 1) {
+					accumulator = args[1];
+					hasAccumulator = true;
+				}
+				if (!hasAccumulator) {
+					while (k >= 0) {
+						if (hasProperty(O, k)) {
+							accumulator = getProperty(O, k);
+							hasAccumulator = true;
+							k--;
+							break;
+						}
+						k--;
+					}
+					if (!hasAccumulator) {
+						throw new RuntimeException("TypeError: Reduce of empty array with no initial value");
+					}
+				}
+				while (k >= 0) {
+					if (hasProperty(O, k)) {
+						Object kValue = getProperty(O, k);
+						try {
+							accumulator = callback.call4(cx, JSUndefined.INSTANCE, accumulator, kValue, (double) k, O);
+						} catch (Throwable t) {
+							if (t instanceof RuntimeException re) throw re;
+							throw new RuntimeException(t);
+						}
+					}
+					k--;
+				}
+				return accumulator;
+			}));
+
+			proto.put("filter", makeMethod("filter", 1, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				if (args.length == 0 || !(args[0] instanceof JSFunction callback)) {
+					throw new RuntimeException("TypeError: " + (args.length > 0 ? args[0] : "undefined") + " is not a function");
+				}
+				Object thisArg = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
+				if (O instanceof JSArray jsArr && jsArr.isDense()) {
+					return fastDenseFilter(cx, jsArr, callback, thisArg);
+				}
+				return genericFilter(cx, O, callback, thisArg);
+			}));
+
+			proto.put("sort", makeMethod("sort", 1, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				JSFunction compareFn = null;
+				if (args.length > 0 && args[0] != null && args[0] != JSUndefined.INSTANCE) {
+					if (!(args[0] instanceof JSFunction)) {
+						throw new RuntimeException("TypeError: The comparison function must be either a function or undefined");
+					}
+					compareFn = (JSFunction) args[0];
+				}
+				long len = toLength(O);
+				if (len <= 1) return O;
+
+				List<Object> definedItems = new ArrayList<>();
+				int undefinedCount = 0;
+				for (long k = 0; k < len; k++) {
+					if (hasProperty(O, k)) {
+						Object val = getProperty(O, k);
+						if (val == JSUndefined.INSTANCE) {
+							undefinedCount++;
+						} else {
+							definedItems.add(val);
+						}
+					}
+				}
+
+				final JSFunction cmp = compareFn;
+				if (cmp != null) {
+					definedItems.sort((a, b) -> {
+						try {
+							Object res = cmp.call2(cx, JSUndefined.INSTANCE, a, b);
+							double d = JSOps.toDouble(res);
+							if (Double.isNaN(d)) return 0;
+							return Double.compare(d, 0.0);
+						} catch (Throwable t) {
+							if (t instanceof RuntimeException re) throw re;
+							throw new RuntimeException(t);
+						}
+					});
+				} else {
+					definedItems.sort((a, b) -> JSOps.toStr(a).compareTo(JSOps.toStr(b)));
+				}
+
+				long idx = 0;
+				for (Object item : definedItems) {
+					setProperty(O, idx++, item);
+				}
+				for (int i = 0; i < undefinedCount; i++) {
+					setProperty(O, idx++, JSUndefined.INSTANCE);
+				}
+				for (; idx < len; idx++) {
+					deleteProperty(O, idx);
+				}
+				return O;
+			}));
+
+			proto.put("map", makeMethod("map", 1, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				if (args.length == 0 || !(args[0] instanceof JSFunction callback)) {
+					throw new RuntimeException("TypeError: " + (args.length > 0 ? args[0] : "undefined") + " is not a function");
+				}
+				Object thisArg = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
+				long len = toLength(O);
+				JSArray result = new JSArray((int) Math.min(len, 65536));
+				result.setLength((double) len);
+				for (long k = 0; k < len; k++) {
+					if (hasProperty(O, k)) {
+						Object kValue = getProperty(O, k);
+						try {
+							Object mapped = callback.call3(cx, thisArg, kValue, (double) k, O);
+							result.setElement(k, mapped);
+						} catch (Throwable t) {
+							if (t instanceof RuntimeException re) throw re;
+							throw new RuntimeException(t);
+						}
+					}
+				}
+				return result;
+			}));
+
+			proto.put("forEach", makeMethod("forEach", 1, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				if (args.length == 0 || !(args[0] instanceof JSFunction callback)) {
+					throw new RuntimeException("TypeError: " + (args.length > 0 ? args[0] : "undefined") + " is not a function");
+				}
+				Object thisArg = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
+				long len = toLength(O);
+				for (long k = 0; k < len; k++) {
+					if (hasProperty(O, k)) {
+						Object kValue = getProperty(O, k);
+						try {
+							callback.call3(cx, thisArg, kValue, (double) k, O);
+						} catch (Throwable t) {
+							if (t instanceof RuntimeException re) throw re;
+							throw new RuntimeException(t);
+						}
+					}
+				}
+				return JSUndefined.INSTANCE;
+			}));
+
+			proto.put("find", makeMethod("find", 1, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				if (args.length == 0 || !(args[0] instanceof JSFunction callback)) {
+					throw new RuntimeException("TypeError: " + (args.length > 0 ? args[0] : "undefined") + " is not a function");
+				}
+				Object thisArg = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
+				long len = toLength(O);
+				for (long k = 0; k < len; k++) {
+					if (hasProperty(O, k)) {
+						Object kValue = getProperty(O, k);
+						try {
+							if (JSOps.toBoolean(callback.call3(cx, thisArg, kValue, (double) k, O))) {
+								return kValue;
+							}
+						} catch (Throwable t) {
+							if (t instanceof RuntimeException re) throw re;
+							throw new RuntimeException(t);
+						}
+					}
+				}
+				return JSUndefined.INSTANCE;
+			}));
+
+			proto.put("findIndex", makeMethod("findIndex", 1, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				if (args.length == 0 || !(args[0] instanceof JSFunction callback)) {
+					throw new RuntimeException("TypeError: " + (args.length > 0 ? args[0] : "undefined") + " is not a function");
+				}
+				Object thisArg = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
+				long len = toLength(O);
+				for (long k = 0; k < len; k++) {
+					if (hasProperty(O, k)) {
+						Object kValue = getProperty(O, k);
+						try {
+							if (JSOps.toBoolean(callback.call3(cx, thisArg, kValue, (double) k, O))) {
+								return (double) k;
+							}
+						} catch (Throwable t) {
+							if (t instanceof RuntimeException re) throw re;
+							throw new RuntimeException(t);
+						}
+					}
+				}
+				return -1.0;
+			}));
+
+			proto.put("some", makeMethod("some", 1, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				if (args.length == 0 || !(args[0] instanceof JSFunction callback)) {
+					throw new RuntimeException("TypeError: " + (args.length > 0 ? args[0] : "undefined") + " is not a function");
+				}
+				Object thisArg = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
+				long len = toLength(O);
+				for (long k = 0; k < len; k++) {
+					if (hasProperty(O, k)) {
+						Object kValue = getProperty(O, k);
+						try {
+							if (JSOps.toBoolean(callback.call3(cx, thisArg, kValue, (double) k, O))) {
+								return Boolean.TRUE;
+							}
+						} catch (Throwable t) {
+							if (t instanceof RuntimeException re) throw re;
+							throw new RuntimeException(t);
+						}
+					}
+				}
+				return Boolean.FALSE;
+			}));
+
+			proto.put("every", makeMethod("every", 1, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				if (args.length == 0 || !(args[0] instanceof JSFunction callback)) {
+					throw new RuntimeException("TypeError: " + (args.length > 0 ? args[0] : "undefined") + " is not a function");
+				}
+				Object thisArg = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
+				long len = toLength(O);
+				for (long k = 0; k < len; k++) {
+					if (hasProperty(O, k)) {
+						Object kValue = getProperty(O, k);
+						try {
+							if (!JSOps.toBoolean(callback.call3(cx, thisArg, kValue, (double) k, O))) {
+								return Boolean.FALSE;
+							}
+						} catch (Throwable t) {
+							if (t instanceof RuntimeException re) throw re;
+							throw new RuntimeException(t);
+						}
+					}
+				}
+				return Boolean.TRUE;
+			}));
+
+			proto.put("indexOf", makeMethod("indexOf", 1, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				long len = toLength(O);
+				if (len == 0 || args.length == 0) return -1.0;
+				Object searchElement = args[0];
+				long fromIndex = 0;
+				if (args.length > 1) {
+					double from = JSOps.toDouble(args[1]);
+					if (Double.isNaN(from)) from = 0;
+					if (from < 0) from = Math.max(0, len + (long) from);
+					fromIndex = (long) from;
+				}
+				for (long k = fromIndex; k < len; k++) {
+					if (hasProperty(O, k)) {
+						Object val = getProperty(O, k);
+						if (JSOps.isStrictEq(val, searchElement)) {
+							return (double) k;
+						}
+					}
+				}
+				return -1.0;
+			}));
+
+			proto.put("lastIndexOf", makeMethod("lastIndexOf", 1, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				long len = toLength(O);
+				if (len == 0 || args.length == 0) return -1.0;
+				Object searchElement = args[0];
+				long fromIndex = len - 1;
+				if (args.length > 1) {
+					double from = JSOps.toDouble(args[1]);
+					if (Double.isNaN(from)) from = len - 1;
+					if (from < 0) from = len + from;
+					fromIndex = Math.min((long) from, len - 1);
+				}
+				for (long k = fromIndex; k >= 0; k--) {
+					if (hasProperty(O, k)) {
+						Object val = getProperty(O, k);
+						if (JSOps.isStrictEq(val, searchElement)) {
+							return (double) k;
+						}
+					}
+				}
+				return -1.0;
+			}));
+
+			proto.put("includes", makeMethod("includes", 1, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				long len = toLength(O);
+				if (len == 0 || args.length == 0) return Boolean.FALSE;
+				Object searchElement = args[0];
+				long fromIndex = 0;
+				if (args.length > 1) {
+					double from = JSOps.toDouble(args[1]);
+					if (Double.isNaN(from)) from = 0;
+					if (from < 0) from = Math.max(0, len + (long) from);
+					fromIndex = (long) from;
+				}
+				for (long k = fromIndex; k < len; k++) {
+					Object val = getProperty(O, k);
+					if (val == searchElement) return Boolean.TRUE;
+					if (val instanceof Number n1 && searchElement instanceof Number n2) {
+						double d1 = n1.doubleValue();
+						double d2 = n2.doubleValue();
+						if (Double.isNaN(d1) && Double.isNaN(d2)) return Boolean.TRUE;
+						if (d1 == d2) return Boolean.TRUE;
+					} else if (Objects.equals(val, searchElement)) {
+						return Boolean.TRUE;
+					}
+				}
+				return Boolean.FALSE;
+			}));
+
+			proto.put("join", makeMethod("join", 1, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				long len = toLength(O);
+				String sep = args.length > 0 && args[0] != JSUndefined.INSTANCE ? JSOps.toStr(args[0]) : ",";
+				if (len == 0) return "";
+				StringBuilder sb = new StringBuilder();
+				for (long k = 0; k < len; k++) {
+					if (k > 0) sb.append(sep);
+					Object val = getProperty(O, k);
+					if (val != null && val != JSUndefined.INSTANCE) {
+						sb.append(JSOps.toStr(val));
+					}
+				}
+				return sb.toString();
+			}));
+
+			proto.put("slice", makeMethod("slice", 2, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				long len = toLength(O);
+				long start = 0;
+				if (args.length > 0 && args[0] != JSUndefined.INSTANCE) {
+					double d = JSOps.toDouble(args[0]);
+					if (Double.isNaN(d)) d = 0;
+					start = d < 0 ? Math.max(0, len + (long) d) : Math.min(len, (long) d);
+				}
+				long end = len;
+				if (args.length > 1 && args[1] != JSUndefined.INSTANCE) {
+					double d = JSOps.toDouble(args[1]);
+					if (Double.isNaN(d)) d = 0;
+					end = d < 0 ? Math.max(0, len + (long) d) : Math.min(len, (long) d);
+				}
+				JSArray result = new JSArray();
+				for (long k = start; k < end; k++) {
+					if (hasProperty(O, k)) {
+						result.push(getProperty(O, k));
+					} else {
+						result.push(JSArray.HOLE);
+					}
+				}
+				return result;
+			}));
+
+			proto.put("splice", makeMethod("splice", 2, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				long len = toLength(O);
+				if (args.length == 0) return new JSArray();
+
+				double startDouble = JSOps.toDouble(args[0]);
+				if (Double.isNaN(startDouble)) startDouble = 0;
+				long actualStart = startDouble < 0 ? Math.max(0, len + (long) startDouble) : Math.min(len, (long) startDouble);
+
+				long actualDeleteCount;
+				if (args.length == 1) {
+					actualDeleteCount = len - actualStart;
+				} else {
+					double dcDouble = JSOps.toDouble(args[1]);
+					if (Double.isNaN(dcDouble) || dcDouble < 0) dcDouble = 0;
+					actualDeleteCount = Math.min((long) dcDouble, len - actualStart);
+				}
+
+				JSArray deleted = new JSArray();
+				for (long k = 0; k < actualDeleteCount; k++) {
+					long from = actualStart + k;
+					if (hasProperty(O, from)) {
+						deleted.push(getProperty(O, from));
+					} else {
+						deleted.push(JSArray.HOLE);
+					}
+				}
+
+				int insertCount = Math.max(0, args.length - 2);
+				long newLen = len - actualDeleteCount + insertCount;
+				if (insertCount < actualDeleteCount) {
+					for (long k = actualStart; k < len - actualDeleteCount; k++) {
+						long from = k + actualDeleteCount;
+						long to = k + insertCount;
+						if (hasProperty(O, from)) {
+							setProperty(O, to, getProperty(O, from));
+						} else {
+							deleteProperty(O, to);
+						}
+					}
+					for (long k = len; k > newLen; k--) {
+						deleteProperty(O, k - 1);
+					}
+				} else if (insertCount > actualDeleteCount) {
+					for (long k = len - actualDeleteCount; k > actualStart; k--) {
+						long from = k + actualDeleteCount - 1;
+						long to = k + insertCount - 1;
+						if (hasProperty(O, from)) {
+							setProperty(O, to, getProperty(O, from));
+						} else {
+							deleteProperty(O, to);
+						}
+					}
+				}
+
+				for (int i = 0; i < insertCount; i++) {
+					setProperty(O, actualStart + i, args[2 + i]);
+				}
+
+				if (O instanceof JSArray arr) {
+					arr.setLength((double) newLen);
+				} else if (O instanceof JSObject jsObj) {
+					jsObj.put("length", (double) newLen);
+				}
+				return deleted;
+			}));
+
+			proto.put("concat", makeMethod("concat", 1, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				JSArray result = new JSArray();
+				appendConcatItem(result, O);
+				for (Object arg : args) {
+					appendConcatItem(result, arg);
+				}
+				return result;
+			}));
+
+			proto.put("push", makeMethod("push", 1, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				if (O instanceof JSArray arr) {
+					for (Object arg : args) arr.push(arg);
+					return (double) arr.length();
+				}
+				long len = toLength(O);
+				for (Object arg : args) {
+					setProperty(O, len++, arg);
+				}
+				if (O instanceof JSObject jsObj) jsObj.put("length", (double) len);
+				return (double) len;
+			}));
+
+			proto.put("pop", makeMethod("pop", 0, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				if (O instanceof JSArray arr) return arr.pop();
+				long len = toLength(O);
+				if (len == 0) {
+					if (O instanceof JSObject jsObj) jsObj.put("length", 0.0);
+					return JSUndefined.INSTANCE;
+				}
+				long newLen = len - 1;
+				Object val = getProperty(O, newLen);
+				deleteProperty(O, newLen);
+				if (O instanceof JSObject jsObj) jsObj.put("length", (double) newLen);
+				return val;
+			}));
+
+			proto.put("shift", makeMethod("shift", 0, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				long len = toLength(O);
+				if (len == 0) {
+					if (O instanceof JSArray arr) arr.setLength(0.0);
+					else if (O instanceof JSObject jsObj) jsObj.put("length", 0.0);
+					return JSUndefined.INSTANCE;
+				}
+				Object first = getProperty(O, 0);
+				for (long k = 1; k < len; k++) {
+					if (hasProperty(O, k)) {
+						setProperty(O, k - 1, getProperty(O, k));
+					} else {
+						deleteProperty(O, k - 1);
+					}
+				}
+				deleteProperty(O, len - 1);
+				long newLen = len - 1;
+				if (O instanceof JSArray arr) arr.setLength((double) newLen);
+				else if (O instanceof JSObject jsObj) jsObj.put("length", (double) newLen);
+				return first;
+			}));
+
+			proto.put("unshift", makeMethod("unshift", 1, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				long len = toLength(O);
+				int argCount = args.length;
+				if (argCount > 0) {
+					for (long k = len; k > 0; k--) {
+						long from = k - 1;
+						long to = k + argCount - 1;
+						if (hasProperty(O, from)) {
+							setProperty(O, to, getProperty(O, from));
+						} else {
+							deleteProperty(O, to);
+						}
+					}
+					for (int j = 0; j < argCount; j++) {
+						setProperty(O, j, args[j]);
+					}
+				}
+				long newLen = len + argCount;
+				if (O instanceof JSArray arr) arr.setLength((double) newLen);
+				else if (O instanceof JSObject jsObj) jsObj.put("length", (double) newLen);
+				return (double) newLen;
+			}));
+
+			proto.put("reverse", makeMethod("reverse", 0, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				long len = toLength(O);
+				long middle = len / 2;
+				for (long lower = 0; lower < middle; lower++) {
+					long upper = len - lower - 1;
+					boolean lowerExists = hasProperty(O, lower);
+					boolean upperExists = hasProperty(O, upper);
+					Object lowerVal = lowerExists ? getProperty(O, lower) : null;
+					Object upperVal = upperExists ? getProperty(O, upper) : null;
+					if (lowerExists && upperExists) {
+						setProperty(O, lower, upperVal);
+						setProperty(O, upper, lowerVal);
+					} else if (!lowerExists && upperExists) {
+						setProperty(O, lower, upperVal);
+						deleteProperty(O, upper);
+					} else if (lowerExists && !upperExists) {
+						deleteProperty(O, lower);
+						setProperty(O, upper, lowerVal);
+					}
+				}
+				return O;
+			}));
+
+			proto.put("fill", makeMethod("fill", 1, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				long len = toLength(O);
+				Object value = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
+				long start = 0;
+				if (args.length > 1 && args[1] != JSUndefined.INSTANCE) {
+					double d = JSOps.toDouble(args[1]);
+					if (Double.isNaN(d)) d = 0;
+					start = d < 0 ? Math.max(0, len + (long) d) : Math.min(len, (long) d);
+				}
+				long end = len;
+				if (args.length > 2 && args[2] != JSUndefined.INSTANCE) {
+					double d = JSOps.toDouble(args[2]);
+					if (Double.isNaN(d)) d = 0;
+					end = d < 0 ? Math.max(0, len + (long) d) : Math.min(len, (long) d);
+				}
+				for (long k = start; k < end; k++) {
+					setProperty(O, k, value);
+				}
+				return O;
+			}));
+
+			proto.put("flat", makeMethod("flat", 0, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				double depth = args.length > 0 && args[0] != JSUndefined.INSTANCE ? JSOps.toDouble(args[0]) : 1.0;
+				if (Double.isNaN(depth) || depth < 0) depth = 0;
+				JSArray result = new JSArray();
+				flattenIntoArray(cx, result, O, (int) Math.min(depth, 1000));
+				return result;
+			}));
+
+			proto.put("toString", makeMethod("toString", 0, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				if (O instanceof JSObject jsObj) {
+					Object joinFn = jsObj.get("join");
+					if (joinFn instanceof JSFunction fn) {
+						try {
+							return fn.call0(cx, O);
+						} catch (Throwable t) {
+							if (t instanceof RuntimeException re) throw re;
+							throw new RuntimeException(t);
+						}
+					}
+				}
+				return "[object Array]";
+			}));
+		}
+
+		private static Object fastDenseReduce(JSContext cx, JSArray jsArr, JSFunction callback, Object[] args) throws Throwable {
+			long len = jsArr.length();
+			int k = 0;
+			Object accumulator = null;
+			boolean hasAccumulator = false;
+			if (args.length > 1) {
+				accumulator = args[1];
+				hasAccumulator = true;
+			} else {
+				while (k < len && k < jsArr.denseSize) {
+					Object val = jsArr.elements[k];
+					if (val != JSArray.HOLE) {
+						accumulator = val;
+						hasAccumulator = true;
+						k++;
+						break;
+					}
+					k++;
+				}
+				if (!hasAccumulator) {
+					throw new RuntimeException("TypeError: Reduce of empty array with no initial value");
+				}
+			}
+			while (k < len) {
+				if (!jsArr.isDense() || k >= jsArr.denseSize) {
+					while (k < len) {
+						if (hasProperty(jsArr, k)) {
+							Object kVal = getProperty(jsArr, k);
+							accumulator = callback.call4(cx, JSUndefined.INSTANCE, accumulator, kVal, (double) k, jsArr);
+						}
+						k++;
+					}
+					return accumulator;
+				}
+				Object kVal = jsArr.elements[k];
+				if (kVal != JSArray.HOLE) {
+					accumulator = callback.call4(cx, JSUndefined.INSTANCE, accumulator, kVal, (double) k, jsArr);
+				}
+				k++;
+			}
+			return accumulator;
+		}
+
+		private static Object genericReduce(JSContext cx, Object O, JSFunction callback, Object[] args) throws Throwable {
+			long len = toLength(O);
+			long k = 0;
+			Object accumulator = null;
+			boolean hasAccumulator = false;
+			if (args.length > 1) {
+				accumulator = args[1];
+				hasAccumulator = true;
+			}
+			if (!hasAccumulator) {
+				while (k < len) {
+					if (hasProperty(O, k)) {
+						accumulator = getProperty(O, k);
+						hasAccumulator = true;
+						k++;
+						break;
+					}
+					k++;
+				}
+				if (!hasAccumulator) {
+					throw new RuntimeException("TypeError: Reduce of empty array with no initial value");
+				}
+			}
+			while (k < len) {
+				if (hasProperty(O, k)) {
+					Object kValue = getProperty(O, k);
+					accumulator = callback.call4(cx, JSUndefined.INSTANCE, accumulator, kValue, (double) k, O);
+				}
+				k++;
+			}
+			return accumulator;
+		}
+
+		private static JSArray fastDenseFilter(JSContext cx, JSArray jsArr, JSFunction callback, Object thisArg) throws Throwable {
+			long len = jsArr.length();
+			JSArray result = new JSArray();
+			for (int i = 0; i < len; i++) {
+				if (!jsArr.isDense() || i >= jsArr.denseSize) {
+					for (long k = i; k < len; k++) {
+						if (hasProperty(jsArr, k)) {
+							Object kValue = getProperty(jsArr, k);
+							Object selected = callback.call3(cx, thisArg, kValue, (double) k, jsArr);
+							if (JSOps.toBoolean(selected)) result.push(kValue);
+						}
+					}
+					return result;
+				}
+				Object kValue = jsArr.elements[i];
+				if (kValue == JSArray.HOLE) continue;
+				Object selected = callback.call3(cx, thisArg, kValue, (double) i, jsArr);
+				if (JSOps.toBoolean(selected)) {
+					result.push(kValue);
+				}
+			}
+			return result;
+		}
+
+		private static JSArray genericFilter(JSContext cx, Object O, JSFunction callback, Object thisArg) throws Throwable {
+			long len = toLength(O);
+			JSArray result = new JSArray();
+			for (long k = 0; k < len; k++) {
+				if (hasProperty(O, k)) {
+					Object kValue = getProperty(O, k);
+					Object selected = callback.call3(cx, thisArg, kValue, (double) k, O);
+					if (JSOps.toBoolean(selected)) {
+						result.push(kValue);
+					}
+				}
+			}
+			return result;
+		}
+
+		private static JSObject makeMethod(String name, int length, JSFunction fn) {
+			class MethodWrapper extends JSObject implements JSFunction {
+				MethodWrapper() {
+					put("name", name);
+					put("length", length);
+				}
+				@Override
+				public Object call(JSContext cx, Object thisObj, Object[] args) throws Throwable {
+					return fn.call(cx, thisObj, args);
+				}
+				@Override
+				public Object call0(JSContext cx, Object thisObj) throws Throwable {
+					return fn.call0(cx, thisObj);
+				}
+				@Override
+				public Object call1(JSContext cx, Object thisObj, Object a0) throws Throwable {
+					return fn.call1(cx, thisObj, a0);
+				}
+				@Override
+				public Object call2(JSContext cx, Object thisObj, Object a0, Object a1) throws Throwable {
+					return fn.call2(cx, thisObj, a0, a1);
+				}
+				@Override
+				public Object call3(JSContext cx, Object thisObj, Object a0, Object a1, Object a2) throws Throwable {
+					return fn.call3(cx, thisObj, a0, a1, a2);
+				}
+				@Override
+				public Object call4(JSContext cx, Object thisObj, Object a0, Object a1, Object a2, Object a3) throws Throwable {
+					return fn.call4(cx, thisObj, a0, a1, a2, a3);
+				}
+				@Override
+				public String toString() {
+					return "function " + name + "() { [native code] }";
+				}
+			}
+			return new MethodWrapper();
+		}
+
+		private static Object toObject(Object value) {
+			if (value == null || value == JSUndefined.INSTANCE) {
+				throw new RuntimeException("TypeError: Cannot convert undefined or null to object");
+			}
+			return value;
+		}
+
+		private static long toLength(Object obj) {
+			if (obj instanceof JSArray arr) return arr.length();
+			if (obj instanceof CharSequence seq) return seq.length();
+			if (obj instanceof List<?> list) return list.size();
+			if (obj instanceof JSObject jsObj) {
+				Object lenVal = jsObj.get("length");
+				if (lenVal == null || lenVal == JSUndefined.INSTANCE) return 0;
+				double d = JSOps.toDouble(lenVal);
+				if (Double.isNaN(d) || d <= 0) return 0;
+				if (d >= 9007199254740991.0) return 9007199254740991L;
+				return (long) d;
+			}
+			return 0;
+		}
+
+		private static boolean hasProperty(Object obj, long index) {
+			if (obj instanceof JSArray arr) return arr.hasElement(index);
+			if (obj instanceof CharSequence seq) return index >= 0 && index < seq.length();
+			if (obj instanceof List<?> list) return index >= 0 && index < list.size();
+			if (obj instanceof JSObject jsObj) return jsObj.has(String.valueOf(index));
+			return false;
+		}
+
+		private static Object getProperty(Object obj, long index) {
+			if (obj instanceof JSArray arr) return arr.getElement(index);
+			if (obj instanceof CharSequence seq) {
+				return (index >= 0 && index < seq.length()) ? String.valueOf(seq.charAt((int) index)) : JSUndefined.INSTANCE;
+			}
+			if (obj instanceof List<?> list) {
+				return (index >= 0 && index < list.size()) ? list.get((int) index) : JSUndefined.INSTANCE;
+			}
+			if (obj instanceof JSObject jsObj) return jsObj.get(String.valueOf(index));
+			return JSUndefined.INSTANCE;
+		}
+
+		private static void setProperty(Object obj, long index, Object value) {
+			if (obj instanceof JSArray arr) {
+				arr.setElement(index, value);
+			} else if (obj instanceof JSObject jsObj) {
+				jsObj.put(String.valueOf(index), value);
+			}
+		}
+
+		private static void deleteProperty(Object obj, long index) {
+			if (obj instanceof JSArray arr) {
+				arr.deleteElement(index);
+			} else if (obj instanceof JSObject jsObj) {
+				jsObj.delete(String.valueOf(index));
+			}
+		}
+
+		private static void appendConcatItem(JSArray result, Object item) {
+			if (item instanceof JSArray arr) {
+				long len = arr.length();
+				for (long k = 0; k < len; k++) {
+					if (arr.hasElement(k)) {
+						result.push(arr.getElement(k));
+					} else {
+						result.push(JSArray.HOLE);
+					}
+				}
+			} else {
+				result.push(item);
+			}
+		}
+
+		private static void flattenIntoArray(JSContext cx, JSArray target, Object source, int depth) {
+			long len = toLength(source);
+			for (long k = 0; k < len; k++) {
+				if (hasProperty(source, k)) {
+					Object val = getProperty(source, k);
+					if (depth > 0 && (val instanceof JSArray)) {
+						flattenIntoArray(cx, target, val, depth - 1);
+					} else {
+						target.push(val);
+					}
+				}
+			}
+		}
 	}
 
 	public long rawReturnBits;
@@ -371,6 +1333,8 @@ public class JSContext {
 			val = LazyBuiltins.REGEXP;
 		} else if (slot == SLOT_OBJECT) {
 			val = LazyBuiltins.OBJECT;
+		} else if (slot == SLOT_ARRAY) {
+			val = LazyBuiltins.ARRAY;
 		}
 
 		if (val != null) {

@@ -1,5 +1,6 @@
 package hope.magic.js.runtime;
 
+import java.lang.reflect.AccessibleObject;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -27,6 +28,14 @@ public final class MethodResolver {
 
 	private MethodResolver() {}
 
+	private static boolean trySetAccessible(AccessibleObject ao) {
+		try {
+			return ao.trySetAccessible();
+		} catch (Throwable ignored) {
+			return false;
+		}
+	}
+
 	/**
 	 * 按类、方法名与参数个数精确查找方法（优先 declared，后 public，匹配 static/instance 语义）。
 	 */
@@ -34,28 +43,34 @@ public final class MethodResolver {
 		if (clazz == null || methodName == null) return null;
 		MethodKey key = new MethodKey(clazz, methodName, arity, isStatic);
 		return METHOD_CACHE.computeIfAbsent(key, k -> {
-			for (Method m : clazz.getDeclaredMethods()) {
-				if (m.getName().equals(methodName) && m.getParameterCount() == arity && Modifier.isStatic(m.getModifiers()) == isStatic) {
-					m.setAccessible(true);
-					return m;
+			try {
+				for (Method m : clazz.getDeclaredMethods()) {
+					if (m.getName().equals(methodName) && m.getParameterCount() == arity && Modifier.isStatic(m.getModifiers()) == isStatic) {
+						if (trySetAccessible(m)) {
+							return m;
+						}
+					}
 				}
-			}
+			} catch (Throwable ignored) {}
 			for (Method m : clazz.getMethods()) {
 				if (m.getName().equals(methodName) && m.getParameterCount() == arity && Modifier.isStatic(m.getModifiers()) == isStatic) {
-					m.setAccessible(true);
+					trySetAccessible(m);
 					return m;
 				}
 			}
 			// 宽松回退（不强求 static 修饰符精确匹配）
-			for (Method m : clazz.getDeclaredMethods()) {
-				if (m.getName().equals(methodName) && m.getParameterCount() == arity) {
-					m.setAccessible(true);
-					return m;
+			try {
+				for (Method m : clazz.getDeclaredMethods()) {
+					if (m.getName().equals(methodName) && m.getParameterCount() == arity) {
+						if (trySetAccessible(m)) {
+							return m;
+						}
+					}
 				}
-			}
+			} catch (Throwable ignored) {}
 			for (Method m : clazz.getMethods()) {
 				if (m.getName().equals(methodName) && m.getParameterCount() == arity) {
-					m.setAccessible(true);
+					trySetAccessible(m);
 					return m;
 				}
 			}
@@ -77,16 +92,19 @@ public final class MethodResolver {
 			List<Method> list = new ArrayList<>();
 			for (Method m : clazz.getMethods()) {
 				if (m.getName().equals(methodName)) {
-					m.setAccessible(true);
+					trySetAccessible(m);
 					list.add(m);
 				}
 			}
-			for (Method m : clazz.getDeclaredMethods()) {
-				if (m.getName().equals(methodName) && !list.contains(m)) {
-					m.setAccessible(true);
-					list.add(m);
+			try {
+				for (Method m : clazz.getDeclaredMethods()) {
+					if (m.getName().equals(methodName) && !list.contains(m)) {
+						if (trySetAccessible(m)) {
+							list.add(m);
+						}
+					}
 				}
-			}
+			} catch (Throwable ignored) {}
 			return Collections.unmodifiableList(list);
 		});
 	}
@@ -98,15 +116,18 @@ public final class MethodResolver {
 		if (clazz == null) return null;
 		CtorKey key = new CtorKey(clazz, arity);
 		return CTOR_CACHE.computeIfAbsent(key, k -> {
-			for (Constructor<?> c : clazz.getDeclaredConstructors()) {
-				if (c.getParameterCount() == arity) {
-					c.setAccessible(true);
-					return c;
+			try {
+				for (Constructor<?> c : clazz.getDeclaredConstructors()) {
+					if (c.getParameterCount() == arity) {
+						if (trySetAccessible(c)) {
+							return c;
+						}
+					}
 				}
-			}
+			} catch (Throwable ignored) {}
 			for (Constructor<?> c : clazz.getConstructors()) {
 				if (c.getParameterCount() == arity) {
-					c.setAccessible(true);
+					trySetAccessible(c);
 					return c;
 				}
 			}
@@ -127,22 +148,25 @@ public final class MethodResolver {
 				try {
 					Method method = clazz.getMethod(candidate);
 					if (method.getParameterCount() == 0) {
-						method.setAccessible(true);
+						trySetAccessible(method);
 						return method;
 					}
 				} catch (Throwable ignored) {
 				}
 			}
-			for (Method m : clazz.getDeclaredMethods()) {
-				if (m.getParameterCount() == 0) {
-					for (String candidate : getterCandidates) {
-						if (m.getName().equals(candidate)) {
-							m.setAccessible(true);
-							return m;
+			try {
+				for (Method m : clazz.getDeclaredMethods()) {
+					if (m.getParameterCount() == 0) {
+						for (String candidate : getterCandidates) {
+							if (m.getName().equals(candidate)) {
+								if (trySetAccessible(m)) {
+									return m;
+								}
+							}
 						}
 					}
 				}
-			}
+			} catch (Throwable ignored) {}
 			return null;
 		});
 	}
@@ -158,16 +182,19 @@ public final class MethodResolver {
 			String setterName = "set" + capName;
 			for (Method m : clazz.getMethods()) {
 				if (m.getName().equals(setterName) && m.getParameterCount() == 1) {
-					m.setAccessible(true);
+					trySetAccessible(m);
 					return m;
 				}
 			}
-			for (Method m : clazz.getDeclaredMethods()) {
-				if (m.getName().equals(setterName) && m.getParameterCount() == 1) {
-					m.setAccessible(true);
-					return m;
+			try {
+				for (Method m : clazz.getDeclaredMethods()) {
+					if (m.getName().equals(setterName) && m.getParameterCount() == 1) {
+						if (trySetAccessible(m)) {
+							return m;
+						}
+					}
 				}
-			}
+			} catch (Throwable ignored) {}
 			return null;
 		});
 	}

@@ -10,6 +10,13 @@ public class JSArray extends JSObject implements Iterable<Object> {
 
 	public static final int LENGTH_PROP_ID = SymbolTable.id("length");
 
+	public static final Object HOLE = new Object() {
+		@Override
+		public String toString() {
+			return "<hole>";
+		}
+	};
+
 	private static final Object   NULL_SENTINEL  = new Object();
 	private static final Object[] EMPTY_ELEMENTS = new Object[0];
 
@@ -21,24 +28,24 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	//region 构造函数
 
 	public JSArray() {
-		super();
+		super(JSContext.LazyBuiltins.ARRAY_PROTOTYPE);
 	}
 
 	public JSArray(int initialCapacity) {
-		super();
+		super(JSContext.LazyBuiltins.ARRAY_PROTOTYPE);
 		if (initialCapacity > 0) {
 			int cap = Math.min(initialCapacity, MAX_DENSE_CAPACITY);
 			this.elements = new Object[Math.max(cap, INITIAL_DENSE_CAPACITY)];
-			Arrays.fill(this.elements, JSUndefined.INSTANCE);
+			Arrays.fill(this.elements, HOLE);
 		}
 	}
 
 	public JSArray(JSObject prototype) {
-		super(prototype);
+		super(prototype != null ? prototype : JSContext.LazyBuiltins.ARRAY_PROTOTYPE);
 	}
 
 	public JSArray(Collection<?> initial) {
-		super();
+		super(JSContext.LazyBuiltins.ARRAY_PROTOTYPE);
 		if (initial != null) {
 			int sz = initial.size();
 			if (sz > 0 && sz <= MAX_DENSE_CAPACITY) {
@@ -49,7 +56,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 					this.elements[idx++] = elem;
 				}
 				for (int i = idx; i < cap; i++) {
-					this.elements[i] = JSUndefined.INSTANCE;
+					this.elements[i] = HOLE;
 				}
 				this.denseSize = sz;
 				this.length = sz;
@@ -62,7 +69,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	}
 
 	public JSArray(Iterable<?> initial) {
-		super();
+		super(JSContext.LazyBuiltins.ARRAY_PROTOTYPE);
 		if (initial != null) {
 			if (initial instanceof Collection<?> c) {
 				int sz = c.size();
@@ -74,7 +81,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 						this.elements[idx++] = elem;
 					}
 					for (int i = idx; i < cap; i++) {
-						this.elements[i] = JSUndefined.INSTANCE;
+						this.elements[i] = HOLE;
 					}
 					this.denseSize = sz;
 					this.length = sz;
@@ -102,7 +109,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			this.length = newLen;
 			if (newLen < denseSize) {
 				for (int i = (int) newLen; i < denseSize; i++) {
-					elements[i] = JSUndefined.INSTANCE;
+					elements[i] = HOLE;
 				}
 				denseSize = (int) newLen;
 			}
@@ -127,28 +134,32 @@ public class JSArray extends JSObject implements Iterable<Object> {
 
 	public Object getElement(int index) {
 		if (index >= 0 && index < denseSize) {
-			return elements[index];
+			Object val = elements[index];
+			return val == HOLE ? JSUndefined.INSTANCE : val;
 		}
 		return getElementSlow(index);
 	}
 
 	public Object getElement(long index) {
 		if (index >= 0 && index < denseSize) {
-			return elements[(int) index];
+			Object val = elements[(int) index];
+			return val == HOLE ? JSUndefined.INSTANCE : val;
 		}
 		return getElementSlow(index);
 	}
 
 	public double getElementDouble(int index) {
 		if (index >= 0 && index < denseSize) {
-			return JSOps.toDouble(elements[index]);
+			Object val = elements[index];
+			return val == HOLE ? Double.NaN : JSOps.toDouble(val);
 		}
 		return JSOps.toDouble(getElementSlow(index));
 	}
 
 	public double getElementDouble(long index) {
 		if (index >= 0 && index < denseSize) {
-			return JSOps.toDouble(elements[(int) index]);
+			Object val = elements[(int) index];
+			return val == HOLE ? Double.NaN : JSOps.toDouble(val);
 		}
 		return JSOps.toDouble(getElementSlow(index));
 	}
@@ -190,8 +201,11 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			if (intIdx >= elements.length) {
 				grow(intIdx + 1);
 			}
-			while (denseSize <= intIdx) {
-				elements[denseSize++] = JSUndefined.INSTANCE;
+			while (denseSize < intIdx) {
+				elements[denseSize++] = HOLE;
+			}
+			if (denseSize == intIdx) {
+				denseSize++;
 			}
 			elements[intIdx] = value;
 		} else {
@@ -212,7 +226,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			System.arraycopy(elements, 0, newArr, 0, denseSize);
 		}
 		for (int i = denseSize; i < newCap; i++) {
-			newArr[i] = JSUndefined.INSTANCE;
+			newArr[i] = HOLE;
 		}
 		this.elements = newArr;
 	}
@@ -239,7 +253,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		Object val = getElement(lastIdx);
 		if (lastIdx < denseSize) {
 			denseSize = (int) lastIdx;
-			elements[denseSize] = JSUndefined.INSTANCE;
+			elements[denseSize] = HOLE;
 		} else {
 			sparse.remove(lastIdx);
 		}
@@ -249,7 +263,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 
 	public boolean hasElement(long index) {
 		if (index >= 0 && index < denseSize) {
-			return elements[(int) index] != JSUndefined.INSTANCE;
+			return elements[(int) index] != HOLE;
 		}
 		if (index >= 0 && index <= MAX_ARRAY_INDEX) {
 			return sparse.containsKey(index);
@@ -259,10 +273,14 @@ public class JSArray extends JSObject implements Iterable<Object> {
 
 	public void deleteElement(long index) {
 		if (index >= 0 && index < denseSize) {
-			elements[(int) index] = JSUndefined.INSTANCE;
+			elements[(int) index] = HOLE;
 		} else if (index >= 0 && index <= MAX_ARRAY_INDEX) {
 			sparse.remove(index);
 		}
+	}
+
+	public boolean isDense() {
+		return sparse.isEmpty() && length == denseSize;
 	}
 
 	//endregion
@@ -423,6 +441,33 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	}
 
 	@Override
+	public boolean hasOwnProperty(String key) {
+		if ("length".equals(key)) {
+			return true;
+		}
+		Long idx = parseIndex(key);
+		if (idx != null) {
+			return hasElement(idx);
+		}
+		return super.hasOwnProperty(key);
+	}
+
+	@Override
+	public boolean hasOwnProperty(int propId) {
+		if (propId == LENGTH_PROP_ID) {
+			return true;
+		}
+		String name = SymbolTable.name(propId);
+		if (name != null) {
+			Long idx = parseIndex(name);
+			if (idx != null) {
+				return hasElement(idx);
+			}
+		}
+		return super.hasOwnProperty(propId);
+	}
+
+	@Override
 	public void delete(int propId) {
 		if (propId == LENGTH_PROP_ID) {
 			return; // ECMAScript: array length is non-configurable
@@ -455,11 +500,17 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	//region 遍历与反射支持
 
 	@Override
+	public JSObject getPrototype() {
+		JSObject p = super.getPrototype();
+		return p != null ? p : JSContext.LazyBuiltins.ARRAY_PROTOTYPE;
+	}
+
+	@Override
 	public Set<String> keys() {
 		Set<String> allKeys = new LinkedHashSet<>();
 		// 1. 数组索引按升序遍历
 		for (int i = 0; i < denseSize; i++) {
-			if (elements[i] != JSUndefined.INSTANCE) {
+			if (elements[i] != HOLE) {
 				allKeys.add(String.valueOf(i));
 			}
 		}
@@ -480,8 +531,8 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		Map<String, Object> map = new LinkedHashMap<>();
 		for (int i = 0; i < denseSize; i++) {
 			Object val = elements[i];
-			if (val != JSUndefined.INSTANCE) {
-				map.put(String.valueOf(i), val);
+			if (val != HOLE) {
+				map.put(String.valueOf(i), val == JSUndefined.INSTANCE ? JSUndefined.INSTANCE : val);
 			}
 		}
 		if (!sparse.isEmpty()) {

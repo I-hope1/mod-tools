@@ -23,6 +23,10 @@ public interface JSFunction {
 		return call(cx, thisObj, new Object[]{ a0, a1, a2 });
 	}
 
+	default Object call4(JSContext cx, Object thisObj, Object a0, Object a1, Object a2, Object a3) throws Throwable {
+		return call(cx, thisObj, new Object[]{ a0, a1, a2, a3 });
+	}
+
 	default double call0Double(JSContext cx) throws Throwable {
 		return JSOps.toDouble(call0(cx, null));
 	}
@@ -37,5 +41,9 @@ public interface JSFunction {
 
 	default double call3Double(JSContext cx, double a0, double a1, double a2) throws Throwable {
 		return JSOps.toDouble(call3(cx, null, a0, a1, a2));
+	}
+
+	default double call4Double(JSContext cx, double a0, double a1, double a2, double a3) throws Throwable {
+		return JSOps.toDouble(call4(cx, null, a0, a1, a2, a3));
 	}
 }

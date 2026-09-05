@@ -2346,5 +2346,181 @@ public class MagicJSTest {
 		Assertions.assertEquals("object", cx.eval("typeof new Object();"));
 		Assertions.assertEquals(Boolean.TRUE, cx.eval("var o = { x: 1 }; Object(o) === o;"));
 	}
+
+	@Test
+	public void testArrayConstructorAndPrototypes() {
+		JSContext cx = new JSContext();
+
+		// 1. Array 构造器元数据与固有属性
+		Assertions.assertEquals("function", cx.eval("typeof Array;"));
+		Assertions.assertEquals("Array", cx.eval("Array.name;"));
+		Assertions.assertEquals(1.0, ((Number) cx.eval("Array.length;")).doubleValue());
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Array.prototype.constructor === Array;"));
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Object.getPrototypeOf(Array.prototype) === Object.prototype;"));
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Object.getPrototypeOf([]) === Array.prototype;"));
+
+		// 2. Array.isArray
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Array.isArray([]);"));
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("Array.isArray(new Array(5));"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("Array.isArray({});"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("Array.isArray('hello');"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("Array.isArray(123);"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("Array.isArray(null);"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("Array.isArray(undefined);"));
+
+		// 3. Array.of & Array.from
+		Assertions.assertEquals("1,2,3", cx.eval("Array.of(1, 2, 3).join(',');"));
+		Assertions.assertEquals("10,20", cx.eval("Array.from({ length: 2, 0: 10, 1: 20 }).join(',');"));
+		Assertions.assertEquals("2,4,6", cx.eval("Array.from([1, 2, 3], x => x * 2).join(',');"));
+
+		// 4. new Array() 参数边界
+		Assertions.assertEquals(0.0, ((Number) cx.eval("new Array().length;")).doubleValue());
+		Assertions.assertEquals(3.0, ((Number) cx.eval("new Array(3).length;")).doubleValue());
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("new Array(3).hasOwnProperty('0');"));
+		Assertions.assertEquals("hello", cx.eval("new Array('hello')[0];"));
+		Assertions.assertEquals(1.0, ((Number) cx.eval("new Array('hello').length;")).doubleValue());
+		Assertions.assertEquals("1,2,3", cx.eval("new Array(1, 2, 3).join(',');"));
+
+		// 5. RangeError 边界校验
+		Assertions.assertThrows(RuntimeException.class, () -> cx.eval("new Array(-1);"));
+		Assertions.assertThrows(RuntimeException.class, () -> cx.eval("new Array(3.14);"));
+		Assertions.assertThrows(RuntimeException.class, () -> cx.eval("new Array(NaN);"));
+		Assertions.assertThrows(RuntimeException.class, () -> cx.eval("new Array(4294967296);"));
+		Assertions.assertThrows(RuntimeException.class, () -> cx.eval("Array(-5);"));
+	}
+
+	@Test
+	public void testArrayPrototypeReduceAndReduceRight() {
+		JSContext cx = new JSContext();
+
+		// 1. 密集数组求和
+		Assertions.assertEquals(10.0, ((Number) cx.eval("[1, 2, 3, 4].reduce((acc, x) => acc + x, 0);")).doubleValue());
+		Assertions.assertEquals(10.0, ((Number) cx.eval("[1, 2, 3, 4].reduce((acc, x) => acc + x);")).doubleValue());
+		Assertions.assertEquals(42.0, ((Number) cx.eval("[42].reduce((acc, x) => acc + x);")).doubleValue());
+		Assertions.assertEquals(100.0, ((Number) cx.eval("[].reduce((acc, x) => acc + x, 100);")).doubleValue());
+
+		// 2. 空数组无初值抛 TypeError
+		Assertions.assertThrows(RuntimeException.class, () -> cx.eval("[].reduce((acc, x) => acc + x);"));
+
+		// 3. 空洞（Holes）与 undefined 的隔离
+		Assertions.assertEquals(1.0, ((Number) cx.eval("[undefined].reduce((acc, x) => acc + 1, 0);")).doubleValue());
+		Assertions.assertEquals(0.0, ((Number) cx.eval("new Array(1).reduce((acc, x) => acc + 1, 0);")).doubleValue());
+		Assertions.assertThrows(RuntimeException.class, () -> cx.eval("new Array(1).reduce((acc, x) => acc + x);"));
+
+		// 4. 归约循环跳过空洞
+		Assertions.assertEquals(15.0, ((Number) cx.eval("var a = new Array(3); a[1] = 10; a.reduce((acc, x) => acc + x, 5);")).doubleValue());
+
+		// 5. 回调 4 个参数精确注入 (acc, cur, idx, arr)
+		Assertions.assertEquals(3.0, ((Number) cx.eval("[10, 20, 30].reduce((acc, v, i, arr) => acc + (arr.length === 3 ? 1 : 0), 0);")).doubleValue());
+
+		// 6. reduceRight
+		Assertions.assertEquals("cba", cx.eval("['a', 'b', 'c'].reduceRight((acc, x) => acc + x, '');"));
+		Assertions.assertEquals(-2.0, ((Number) cx.eval("[1, 2, 3, 4].reduceRight((acc, x) => acc - x);")).doubleValue());
+
+		// 7. 类数组通用调用
+		Assertions.assertEquals(60.0, ((Number) cx.eval("Array.prototype.reduce.call({ length: 3, 0: 10, 1: 20, 2: 30 }, (a, b) => a + b, 0);")).doubleValue());
+	}
+
+	@Test
+	public void testArrayPrototypeFilter() {
+		JSContext cx = new JSContext();
+
+		// 1. 密集快速路径过滤
+		Assertions.assertEquals("2,4,6", cx.eval("[1, 2, 3, 4, 5, 6].filter(x => x % 2 === 0).join(',');"));
+
+		// 2. 跳过空洞
+		Assertions.assertEquals("1,3", cx.eval("var a = new Array(3); a[0] = 1; a[2] = 3; a.filter(() => true).join(',');"));
+		Assertions.assertEquals(2.0, ((Number) cx.eval("var a = new Array(3); a[0] = 1; a[2] = 3; a.filter(() => true).length;")).doubleValue());
+
+		// 3. thisArg 绑定
+		Assertions.assertEquals("4,5", cx.eval("[1, 2, 3, 4, 5].filter(function(x) { return x > this.min; }, { min: 3 }).join(',');"));
+
+		// 4. 类数组通用过滤
+		Assertions.assertEquals("apple,apricot", cx.eval("Array.prototype.filter.call({ length: 4, 0: 'apple', 1: 'banana', 2: 'apricot', 3: 'cherry' }, s => s.startsWith('a')).join(',');"));
+
+		// 5. 非函数抛 TypeError
+		Assertions.assertThrows(RuntimeException.class, () -> cx.eval("[1, 2].filter(null);"));
+	}
+
+	@Test
+	public void testArrayPrototypeSort() {
+		JSContext cx = new JSContext();
+
+		// 1. 默认字典序
+		Assertions.assertEquals("1,10,2,5", cx.eval("[10, 2, 5, 1].sort().join(',');"));
+
+		// 2. 自定义比较器数值序
+		Assertions.assertEquals("1,2,5,10", cx.eval("[10, 2, 5, 1].sort((a, b) => a - b).join(',');"));
+
+		// 3. 原地变异并返回自身
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("var a = [3, 1, 2]; var b = a.sort(); a === b && a[0] === 1 && a[1] === 2 && a[2] === 3;"));
+
+		// 4. undefined 排在有效值之后、空洞之前 (ECMAScript join 把 undefined 输出为空字符串)
+		Assertions.assertEquals("1,2,3,,", cx.eval("var a = [3, undefined, 1, undefined, 2]; a.sort((x, y) => x - y).join(',');"));
+
+		// 5. 空洞排在最末且保持空洞
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("var a = new Array(3); a[0] = 3; a[2] = 1; a.sort(); a[0] === 1 && a[1] === 3 && !a.hasOwnProperty('2') && a.length === 3;"));
+
+		// 6. TimSort 稳定性验证
+		Assertions.assertEquals("a,c,b,d", cx.eval(
+			"var list = [{k: 1, v: 'a'}, {k: 2, v: 'b'}, {k: 1, v: 'c'}, {k: 2, v: 'd'}];\n" +
+			"list.sort((x, y) => x.k - y.k);\n" +
+			"list.map(i => i.v).join(',');"
+		));
+
+		// 7. 类数组通用排序
+		Assertions.assertEquals("10,20,30", cx.eval(
+			"var o = { length: 3, 0: 30, 1: 10, 2: 20 };\n" +
+			"Array.prototype.sort.call(o, (a, b) => a - b);\n" +
+			"[o[0], o[1], o[2]].join(',');"
+		));
+	}
+
+	@Test
+	public void testArrayPrototypeOtherMethodsAndChaining() {
+		JSContext cx = new JSContext();
+
+		// 1. map
+		Assertions.assertEquals("3,6,9", cx.eval("[1, 2, 3].map(x => x * 3).join(',');"));
+
+		// 2. forEach
+		Assertions.assertEquals("20,40,60", cx.eval("var arr = [10, 20, 30]; arr.forEach(function(v, i, a) { a[i] = v * 2; }); arr.join(',');"));
+
+		// 3. some & every
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("[1, 2, 3].some(x => x === 2);"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("[1, 2, 3].some(x => x === 99);"));
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("[1, 2, 3].every(x => x > 0);"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("[1, 2, 3].every(x => x > 2);"));
+
+		// 4. includes (包含 NaN)
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("[1, 2, NaN].includes(NaN);"));
+		Assertions.assertEquals(Boolean.TRUE, cx.eval("[1, 2, 3].includes(2);"));
+		Assertions.assertEquals(Boolean.FALSE, cx.eval("[1, 2, 3].includes(4);"));
+
+		// 5. indexOf & lastIndexOf
+		Assertions.assertEquals(0.0, ((Number) cx.eval("['a', 'b', 'a'].indexOf('a');")).doubleValue());
+		Assertions.assertEquals(2.0, ((Number) cx.eval("['a', 'b', 'a'].lastIndexOf('a');")).doubleValue());
+
+		// 6. slice & splice & concat
+		Assertions.assertEquals("2,3,4", cx.eval("[1, 2, 3, 4, 5].slice(1, 4).join(',');"));
+		Assertions.assertEquals("1,99,100,4;2,3", cx.eval("var a = [1, 2, 3, 4]; var rm = a.splice(1, 2, 99, 100); a.join(',') + ';' + rm.join(',');"));
+		Assertions.assertEquals("1,2,3,4,5", cx.eval("[1, 2].concat([3, 4], 5).join(',');"));
+
+		// 7. push, pop, shift, unshift
+		Assertions.assertEquals("2,3;4;1", cx.eval("var a = [2, 3]; a.unshift(1); a.push(4); var p = a.pop(); var s = a.shift(); a.join(',') + ';' + p + ';' + s;"));
+
+		// 8. reverse, fill, flat
+		Assertions.assertEquals("3,2,1", cx.eval("[1, 2, 3].reverse().join(',');"));
+		Assertions.assertEquals("7,7,7", cx.eval("new Array(3).fill(7).join(',');"));
+		Assertions.assertEquals(3.0, ((Number) cx.eval("[1, [2, 3]].flat().length;")).doubleValue());
+
+		// 9. 链式管道计算 (filter -> map -> reduce)
+		Assertions.assertEquals(90.0, ((Number) cx.eval(
+			"[1, 2, 3, 4, 5]\n" +
+			"    .filter(x => x % 2 === 1)\n" +
+			"    .map(x => x * 10)\n" +
+			"    .reduce((acc, x) => acc + x, 0);"
+		)).doubleValue());
+	}
 }
 

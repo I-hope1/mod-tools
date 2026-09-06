@@ -287,6 +287,10 @@ public class JSObject {
 	//endregion
 	//region 通用读 API (遇 DELETED 视为自身无属性，回退原型链)
 	public Object get(int propId) {
+		return get(propId, this);
+	}
+
+	public Object get(int propId, Object receiver) {
 		int offset = shape.getOffset(propId);
 		if (offset >= 0) {
 			if (isDoubleSlot(offset)) {
@@ -294,21 +298,33 @@ public class JSObject {
 			}
 			Object val = getRawObjectSlot(offset);
 			if (val != DELETED) {
+				if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
+					PropertyAccessor acc = (PropertyAccessor) val;
+					return acc.callGetter(null, receiver);
+				}
 				return val; // 包括 null 与 JSUndefined.INSTANCE 均属于合法属性值
 			}
 		}
-		return getSlow(propId);
+		return getSlow(propId, receiver);
 	}
 
 	public Object get(String key) {
+		return get(key, this);
+	}
+
+	public Object get(String key, Object receiver) {
 		int symId = SymbolTable.lookupId(key);
 		if (symId == SymbolTable.NO_SYMBOL) {
-			return (prototype != null) ? prototype.get(key) : JSUndefined.INSTANCE;
+			return (prototype != null) ? prototype.get(key, receiver) : JSUndefined.INSTANCE;
 		}
-		return get(symId);
+		return get(symId, receiver);
 	}
 
 	public double getAsDouble(int propId) {
+		return getAsDouble(propId, this);
+	}
+
+	public double getAsDouble(int propId, Object receiver) {
 		int offset = shape.getOffset(propId);
 		if (offset >= 0) {
 			if (isDoubleSlot(offset)) {
@@ -316,23 +332,31 @@ public class JSObject {
 			}
 			Object val = getRawObjectSlot(offset);
 			if (val != DELETED) {
+				if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
+					PropertyAccessor acc = (PropertyAccessor) val;
+					return JSOps.toDouble(acc.callGetter(null, receiver));
+				}
 				return JSOps.toDouble(val);
 			}
 		}
-		return JSOps.toDouble(getSlow(propId));
+		return JSOps.toDouble(getSlow(propId, receiver));
 	}
 
 	public double getAsDouble(String key) {
-		int symId = SymbolTable.lookupId(key);
-		if (symId == SymbolTable.NO_SYMBOL) {
-			return (prototype != null) ? prototype.getAsDouble(key) : Double.NaN;
-		}
-		return getAsDouble(symId);
+		return getAsDouble(key, this);
 	}
 
-	private Object getSlow(int propId) {
+	public double getAsDouble(String key, Object receiver) {
+		int symId = SymbolTable.lookupId(key);
+		if (symId == SymbolTable.NO_SYMBOL) {
+			return (prototype != null) ? prototype.getAsDouble(key, receiver) : Double.NaN;
+		}
+		return getAsDouble(symId, receiver);
+	}
+
+	private Object getSlow(int propId, Object receiver) {
 		if (propId < 0 || prototype == null) return JSUndefined.INSTANCE;
-		return prototype.get(propId);
+		return prototype.get(propId, receiver);
 	}
 
 	//endregion
@@ -340,11 +364,24 @@ public class JSObject {
 
 	public void putDouble(int propId, double value) {
 		int offset = shape.getOffset(propId);
-		if (offset < 0 || offset >= 8) {
-			putDoubleSlow(propId, value);
+		if (offset >= 0) {
+			byte slotType = shape.getSlotType(offset);
+			if ((slotType & JSShape.FLAG_ACCESSOR) != 0) {
+				PropertyAccessor acc = (PropertyAccessor) getRawObjectSlot(offset);
+				acc.callSetter(null, this, value);
+				return;
+			}
+			if ((slotType & JSShape.FLAG_NOT_WRITABLE) != 0) {
+				return;
+			}
+			if (offset < 8) {
+				setDoubleSlot(offset, value);
+				return;
+			}
+		} else if (prototype != null && prototype.handlePrototypePut(propId, this, value)) {
 			return;
 		}
-		setDoubleSlot(offset, value);
+		putDoubleSlow(propId, value);
 	}
 
 	public static final int SENTINEL_PROP_ID = Integer.MIN_VALUE;
@@ -377,6 +414,23 @@ public class JSObject {
 		putDouble(SymbolTable.id(key), value);
 	}
 
+	public boolean handlePrototypePut(int propId, Object receiver, Object value) {
+		int offset = shape.getOffset(propId);
+		if (offset >= 0) {
+			byte slotType = shape.getSlotType(offset);
+			if ((slotType & JSShape.FLAG_ACCESSOR) != 0) {
+				PropertyAccessor acc = (PropertyAccessor) getRawObjectSlot(offset);
+				acc.callSetter(null, receiver, value);
+				return true;
+			}
+			if ((slotType & JSShape.FLAG_NOT_WRITABLE) != 0) {
+				return true; // 原型只读属性阻止赋值
+			}
+			return false;
+		}
+		return prototype != null && prototype.handlePrototypePut(propId, receiver, value);
+	}
+
 	public void put(int propId, Object value) {
 		if (value instanceof Number num) {
 			putDouble(propId, num.doubleValue());
@@ -385,9 +439,23 @@ public class JSObject {
 
 		int offset = shape.getOffset(propId);
 		if (offset >= 0) {
+			byte slotType = shape.getSlotType(offset);
+			if ((slotType & JSShape.FLAG_ACCESSOR) != 0) {
+				PropertyAccessor acc = (PropertyAccessor) getRawObjectSlot(offset);
+				acc.callSetter(null, this, value);
+				return;
+			}
+			if ((slotType & JSShape.FLAG_NOT_WRITABLE) != 0) {
+				return; // 只读属性，写入静默忽略
+			}
 			setSlot(offset, value);
 			return;
 		}
+
+		if (prototype != null && prototype.handlePrototypePut(propId, this, value)) {
+			return;
+		}
+
 		putSlow(propId, value);
 	}
 
@@ -455,9 +523,11 @@ public class JSObject {
 	public void delete(int propId) {
 		int offset = shape.getOffset(propId);
 		if (offset >= 0) {
+			if (!shape.isConfigurable(offset)) {
+				return;
+			}
 			clearPrimSlot(offset);
 			setSlot(offset, DELETED); // setSlot 里有 clearDoubleMask(offset);
-
 		}
 	}
 
@@ -476,13 +546,30 @@ public class JSObject {
 
 		Set<String> activeKeys = new LinkedHashSet<>(count);
 		for (int i = 0; i < count; i++) {
-			if (isDoubleSlot(i) || getRawObjectSlot(i) != DELETED) {
+			if (shape.isEnumerable(i) && (isDoubleSlot(i) || getRawObjectSlot(i) != DELETED)) {
 				int    keyId = shape.getKeyId(i);
 				String name  = SymbolTable.name(keyId);
 				if (name != null) activeKeys.add(name);
 			}
 		}
 		return activeKeys;
+	}
+
+	public Set<String> getOwnPropertyNames() {
+		int count = shape.propertyCount;
+		if (count == 0) {
+			return Collections.emptySet();
+		}
+
+		Set<String> allKeys = new LinkedHashSet<>(count);
+		for (int i = 0; i < count; i++) {
+			if (isDoubleSlot(i) || getRawObjectSlot(i) != DELETED) {
+				int    keyId = shape.getKeyId(i);
+				String name  = SymbolTable.name(keyId);
+				if (name != null) allKeys.add(name);
+			}
+		}
+		return allKeys;
 	}
 
 	public Map<String, Object> getProperties() {
@@ -493,6 +580,7 @@ public class JSObject {
 
 		Map<String, Object> map = new LinkedHashMap<>(count);
 		for (int i = 0; i < count; i++) {
+			if (!shape.isEnumerable(i)) continue;
 			if (isDoubleSlot(i)) {
 				int    keyId = shape.getKeyId(i);
 				String name  = SymbolTable.name(keyId);
@@ -505,7 +593,11 @@ public class JSObject {
 					int    keyId = shape.getKeyId(i);
 					String name  = SymbolTable.name(keyId);
 					if (name != null) {
-						map.put(name, raw);
+						if (shape.isAccessor(i) && raw instanceof PropertyAccessor acc) {
+							map.put(name, acc.callGetter(null, this));
+						} else {
+							map.put(name, raw);
+						}
 					}
 				}
 			}

@@ -498,7 +498,8 @@ public class JSContext {
 			"hasOwnProperty", "toString", "valueOf", "constructor"
 		);
 		private static final List<String> OBJECT_CTOR_PROPS = List.of(
-			"name", "length", "prototype", "is", "getPrototypeOf", "getOwnPropertyNames"
+			"name", "length", "prototype", "is", "getPrototypeOf", "setPrototypeOf", "create", "getOwnPropertyNames",
+			"defineProperty", "defineProperties", "getOwnPropertyDescriptor", "getOwnPropertyDescriptors", "keys"
 		);
 
 		static final JSObject            OBJECT_PROTOTYPE = createObjectPrototype();
@@ -543,7 +544,50 @@ public class JSContext {
 				return null;
 			});
 
+			ctor.put("setPrototypeOf", (JSFunction) (cx, thisObj, args) -> {
+				if (args.length < 2 || args[0] == null || args[0] == JSUndefined.INSTANCE) {
+					throw new RuntimeException("TypeError: Object.setPrototypeOf called on null or undefined");
+				}
+				Object p = args[1];
+				if (p != null && p != JSUndefined.INSTANCE && !(p instanceof JSObject)) {
+					throw new RuntimeException("TypeError: Object prototype may only be an Object or null");
+				}
+				if (args[0] instanceof JSObject jsObj) {
+					jsObj.setPrototype(p == null || p == JSUndefined.INSTANCE ? null : (JSObject) p);
+				}
+				return args[0];
+			});
+
+			ctor.put("create", (JSFunction) (cx, thisObj, args) -> {
+				if (args.length == 0) throw new RuntimeException("TypeError: Object.create requires at least 1 argument");
+				Object p = args[0];
+				if (p != null && p != JSUndefined.INSTANCE && !(p instanceof JSObject)) {
+					throw new RuntimeException("TypeError: Object prototype may only be an Object or null");
+				}
+				JSObject res = new JSObject(p == null || p == JSUndefined.INSTANCE ? null : (JSObject) p);
+				if (args.length > 1 && args[1] instanceof JSObject props) {
+					for (String k : props.keys()) {
+						definePropertyCore(cx, res, k, props.get(k));
+					}
+				}
+				return res;
+			});
+
 			ctor.put("getOwnPropertyNames", (JSFunction) (cx, thisObj, args) -> {
+				if (args.length == 0 || args[0] == null || args[0] == JSUndefined.INSTANCE) {
+					throw new RuntimeException("TypeError: Cannot convert undefined or null to object");
+				}
+				if (args[0] instanceof JSObject jsObj) {
+					JSArray arr = new JSArray();
+					for (String k : jsObj.getOwnPropertyNames()) {
+						arr.push(k);
+					}
+					return arr;
+				}
+				return new JSArray();
+			});
+
+			ctor.put("keys", (JSFunction) (cx, thisObj, args) -> {
 				if (args.length == 0 || args[0] == null || args[0] == JSUndefined.INSTANCE) {
 					throw new RuntimeException("TypeError: Cannot convert undefined or null to object");
 				}
@@ -557,7 +601,256 @@ public class JSContext {
 				return new JSArray();
 			});
 
+			ctor.put("defineProperty", (JSFunction) (cx, thisObj, args) -> {
+				Object target = args.length > 0 ? args[0] : null;
+				Object prop = args.length > 1 ? args[1] : null;
+				Object desc = args.length > 2 ? args[2] : null;
+				return definePropertyCore(cx, target, prop, desc);
+			});
+
+			ctor.put("defineProperties", (JSFunction) (cx, thisObj, args) -> {
+				if (args.length == 0 || args[0] == null || args[0] == JSUndefined.INSTANCE) {
+					throw new RuntimeException("TypeError: Object.defineProperties called on non-object");
+				}
+				Object target = args[0];
+				Object propsObj = args.length > 1 ? args[1] : null;
+				if (propsObj == null || propsObj == JSUndefined.INSTANCE || !(propsObj instanceof JSObject props)) {
+					throw new RuntimeException("TypeError: Properties must be an object");
+				}
+				for (String k : props.keys()) {
+					definePropertyCore(cx, target, k, props.get(k));
+				}
+				return target;
+			});
+
+			ctor.put("getOwnPropertyDescriptor", (JSFunction) (cx, thisObj, args) -> {
+				Object target = args.length > 0 ? args[0] : null;
+				Object prop = args.length > 1 ? args[1] : null;
+				return getOwnPropertyDescriptorCore(cx, target, prop);
+			});
+
+			ctor.put("getOwnPropertyDescriptors", (JSFunction) (cx, thisObj, args) -> {
+				if (args.length == 0 || args[0] == null || args[0] == JSUndefined.INSTANCE) {
+					throw new RuntimeException("TypeError: Cannot convert undefined or null to object");
+				}
+				Object target = args[0];
+				JSObject jsObj = (target instanceof JSBridgedObject bridged)
+						? bridged.getJSObject()
+						: (target instanceof JSObject obj ? obj : null);
+				JSObject res = new JSObject();
+				if (jsObj != null) {
+					for (String k : jsObj.getOwnPropertyNames()) {
+						Object d = getOwnPropertyDescriptorCore(cx, target, k);
+						if (d != JSUndefined.INSTANCE) {
+							res.put(k, d);
+						}
+					}
+				}
+				return res;
+			});
+
 			return ctor;
+		}
+
+		private static Object definePropertyCore(JSContext cx, Object target, Object propKey, Object descObj) {
+			if (target == null || target == JSUndefined.INSTANCE || !(target instanceof JSObject || target instanceof JSBridgedObject)) {
+				throw new RuntimeException("TypeError: Object.defineProperty called on non-object");
+			}
+			JSObject jsObj = (target instanceof JSBridgedObject bridged) ? bridged.getJSObject() : (JSObject) target;
+			if (jsObj == null) {
+				throw new RuntimeException("TypeError: Object.defineProperty called on non-object");
+			}
+
+			if (descObj == null || descObj == JSUndefined.INSTANCE || !(descObj instanceof JSObject desc)) {
+				throw new RuntimeException("TypeError: Property description must be an object: " + descObj);
+			}
+
+			boolean hasValue = desc.hasOwnProperty("value");
+			boolean hasWritable = desc.hasOwnProperty("writable");
+			boolean hasGet = desc.hasOwnProperty("get");
+			boolean hasSet = desc.hasOwnProperty("set");
+			boolean hasEnumerable = desc.hasOwnProperty("enumerable");
+			boolean hasConfigurable = desc.hasOwnProperty("configurable");
+
+			if ((hasValue || hasWritable) && (hasGet || hasSet)) {
+				throw new RuntimeException("TypeError: Invalid property descriptor. Cannot both specify accessors and a value or writable attribute");
+			}
+
+			Object getVal = hasGet ? desc.get("get") : null;
+			Object setVal = hasSet ? desc.get("set") : null;
+
+			if (hasGet && getVal != JSUndefined.INSTANCE && getVal != null && !(getVal instanceof JSFunction)) {
+				throw new RuntimeException("TypeError: Getter must be a function: " + getVal);
+			}
+			if (hasSet && setVal != JSUndefined.INSTANCE && setVal != null && !(setVal instanceof JSFunction)) {
+				throw new RuntimeException("TypeError: Setter must be a function: " + setVal);
+			}
+
+			JSFunction getter = (getVal instanceof JSFunction fn) ? fn : null;
+			JSFunction setter = (setVal instanceof JSFunction fn) ? fn : null;
+
+			String key = JSOps.toStr(propKey);
+			int propId = SymbolTable.id(key);
+
+			int offset = jsObj.shape.getOffset(propId);
+			boolean exists = offset >= 0 && (jsObj.isDoubleSlot(offset) || jsObj.getRawObjectSlot(offset) != JSObject.DELETED);
+
+			if (!exists) {
+				if (hasGet || hasSet) {
+					boolean enumerable = hasEnumerable && JSOps.toBoolean(desc.get("enumerable"));
+					boolean configurable = hasConfigurable && JSOps.toBoolean(desc.get("configurable"));
+					byte type = JSShape.FLAG_ACCESSOR;
+					if (!enumerable) type |= JSShape.FLAG_NOT_ENUMERABLE;
+					if (!configurable) type |= JSShape.FLAG_NOT_CONFIGURABLE;
+
+					jsObj.shape = jsObj.shape.addProperty(propId, type);
+					int newOffset = jsObj.shape.getOffset(propId);
+					jsObj.setSlot(newOffset, new PropertyAccessor(getter, setter));
+				} else {
+					Object value = hasValue ? desc.get("value") : JSUndefined.INSTANCE;
+					boolean writable = hasWritable && JSOps.toBoolean(desc.get("writable"));
+					boolean enumerable = hasEnumerable && JSOps.toBoolean(desc.get("enumerable"));
+					boolean configurable = hasConfigurable && JSOps.toBoolean(desc.get("configurable"));
+
+					byte type = (value instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
+					if (!writable) type |= JSShape.FLAG_NOT_WRITABLE;
+					if (!enumerable) type |= JSShape.FLAG_NOT_ENUMERABLE;
+					if (!configurable) type |= JSShape.FLAG_NOT_CONFIGURABLE;
+
+					jsObj.shape = jsObj.shape.addProperty(propId, type);
+					int newOffset = jsObj.shape.getOffset(propId);
+					if ((type & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE) {
+						jsObj.setDoubleSlot(newOffset, JSOps.toDouble(value));
+					} else {
+						jsObj.setSlot(newOffset, value);
+					}
+				}
+			} else {
+				byte currentType = jsObj.shape.getSlotType(offset);
+				boolean currentIsAccessor = (currentType & JSShape.FLAG_ACCESSOR) != 0;
+				boolean currentWritable = (currentType & JSShape.FLAG_NOT_WRITABLE) == 0;
+				boolean currentEnumerable = (currentType & JSShape.FLAG_NOT_ENUMERABLE) == 0;
+				boolean currentConfigurable = (currentType & JSShape.FLAG_NOT_CONFIGURABLE) == 0;
+				Object currentValue = currentIsAccessor ? null : jsObj.getSlot(offset);
+				PropertyAccessor currentAcc = currentIsAccessor ? (PropertyAccessor) jsObj.getRawObjectSlot(offset) : null;
+
+				if (!currentConfigurable) {
+					if (hasConfigurable && JSOps.toBoolean(desc.get("configurable"))) {
+						throw new RuntimeException("TypeError: Cannot redefine property: " + key);
+					}
+					if (hasEnumerable && JSOps.toBoolean(desc.get("enumerable")) != currentEnumerable) {
+						throw new RuntimeException("TypeError: Cannot redefine property: " + key);
+					}
+					if ((hasGet || hasSet) != currentIsAccessor) {
+						throw new RuntimeException("TypeError: Cannot redefine property: " + key);
+					}
+					if (currentIsAccessor) {
+						if (hasGet && getter != (currentAcc != null ? currentAcc.getter : null)) {
+							throw new RuntimeException("TypeError: Cannot redefine property: " + key);
+						}
+						if (hasSet && setter != (currentAcc != null ? currentAcc.setter : null)) {
+							throw new RuntimeException("TypeError: Cannot redefine property: " + key);
+						}
+					} else {
+						if (!currentWritable) {
+							if (hasWritable && JSOps.toBoolean(desc.get("writable"))) {
+								throw new RuntimeException("TypeError: Cannot redefine property: " + key);
+							}
+							if (hasValue && !JSOps.sameValue(desc.get("value"), currentValue)) {
+								throw new RuntimeException("TypeError: Cannot redefine property: " + key);
+							}
+						}
+					}
+				}
+
+				boolean newConfigurable = hasConfigurable ? JSOps.toBoolean(desc.get("configurable")) : currentConfigurable;
+				boolean newEnumerable = hasEnumerable ? JSOps.toBoolean(desc.get("enumerable")) : currentEnumerable;
+
+				if ((hasGet || hasSet) && !currentIsAccessor) {
+					JSFunction newGetter = hasGet ? getter : null;
+					JSFunction newSetter = hasSet ? setter : null;
+					byte newType = JSShape.FLAG_ACCESSOR;
+					if (!newEnumerable) newType |= JSShape.FLAG_NOT_ENUMERABLE;
+					if (!newConfigurable) newType |= JSShape.FLAG_NOT_CONFIGURABLE;
+
+					jsObj.shape = jsObj.shape.updatePropertyType(offset, newType);
+					jsObj.clearDoubleMask(offset);
+					jsObj.setSlot(offset, new PropertyAccessor(newGetter, newSetter));
+				} else if (!(hasGet || hasSet) && (hasValue || hasWritable) && currentIsAccessor) {
+					Object newValue = hasValue ? desc.get("value") : JSUndefined.INSTANCE;
+					boolean newWritable = hasWritable && JSOps.toBoolean(desc.get("writable"));
+					byte newType = (newValue instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
+					if (!newWritable) newType |= JSShape.FLAG_NOT_WRITABLE;
+					if (!newEnumerable) newType |= JSShape.FLAG_NOT_ENUMERABLE;
+					if (!newConfigurable) newType |= JSShape.FLAG_NOT_CONFIGURABLE;
+
+					jsObj.shape = jsObj.shape.updatePropertyType(offset, newType);
+					if ((newType & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE) {
+						jsObj.setDoubleSlot(offset, JSOps.toDouble(newValue));
+					} else {
+						jsObj.setSlot(offset, newValue);
+					}
+				} else if (currentIsAccessor) {
+					JSFunction newGetter = hasGet ? getter : (currentAcc != null ? currentAcc.getter : null);
+					JSFunction newSetter = hasSet ? setter : (currentAcc != null ? currentAcc.setter : null);
+					byte newType = JSShape.FLAG_ACCESSOR;
+					if (!newEnumerable) newType |= JSShape.FLAG_NOT_ENUMERABLE;
+					if (!newConfigurable) newType |= JSShape.FLAG_NOT_CONFIGURABLE;
+
+					jsObj.shape = jsObj.shape.updatePropertyType(offset, newType);
+					jsObj.setSlot(offset, new PropertyAccessor(newGetter, newSetter));
+				} else {
+					boolean newWritable = hasWritable ? JSOps.toBoolean(desc.get("writable")) : currentWritable;
+					Object newValue = hasValue ? desc.get("value") : currentValue;
+					byte newType = (newValue instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
+					if (!newWritable) newType |= JSShape.FLAG_NOT_WRITABLE;
+					if (!newEnumerable) newType |= JSShape.FLAG_NOT_ENUMERABLE;
+					if (!newConfigurable) newType |= JSShape.FLAG_NOT_CONFIGURABLE;
+
+					jsObj.shape = jsObj.shape.updatePropertyType(offset, newType);
+					if (hasValue) {
+						if ((newType & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE) {
+							jsObj.setDoubleSlot(offset, JSOps.toDouble(newValue));
+						} else {
+							jsObj.setSlot(offset, newValue);
+						}
+					}
+				}
+			}
+
+			return target;
+		}
+
+		private static Object getOwnPropertyDescriptorCore(JSContext cx, Object target, Object propKey) {
+			if (target == null || target == JSUndefined.INSTANCE) {
+				throw new RuntimeException("TypeError: Cannot convert undefined or null to object");
+			}
+			JSObject jsObj = (target instanceof JSBridgedObject bridged)
+					? bridged.getJSObject()
+					: (target instanceof JSObject obj ? obj : null);
+			if (jsObj == null) return JSUndefined.INSTANCE;
+
+			String key = JSOps.toStr(propKey);
+			int propId = SymbolTable.id(key);
+			int offset = jsObj.shape.getOffset(propId);
+			if (offset < 0 || (!jsObj.isDoubleSlot(offset) && jsObj.getRawObjectSlot(offset) == JSObject.DELETED)) {
+				return JSUndefined.INSTANCE;
+			}
+
+			JSObject desc = new JSObject();
+			if (jsObj.shape.isAccessor(offset)) {
+				PropertyAccessor acc = (PropertyAccessor) jsObj.getRawObjectSlot(offset);
+				desc.put("get", acc != null && acc.getter != null ? acc.getter : JSUndefined.INSTANCE);
+				desc.put("set", acc != null && acc.setter != null ? acc.setter : JSUndefined.INSTANCE);
+				desc.put("enumerable", jsObj.shape.isEnumerable(offset));
+				desc.put("configurable", jsObj.shape.isConfigurable(offset));
+			} else {
+				desc.put("value", jsObj.getSlot(offset));
+				desc.put("writable", jsObj.shape.isWritable(offset));
+				desc.put("enumerable", jsObj.shape.isEnumerable(offset));
+				desc.put("configurable", jsObj.shape.isConfigurable(offset));
+			}
+			return desc;
 		}
 	}
 

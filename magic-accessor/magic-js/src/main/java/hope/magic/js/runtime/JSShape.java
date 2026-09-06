@@ -32,8 +32,8 @@ public final class JSShape {
 	public static final int  BITMASK_MAX_SHAPES          = 64;
 	public static final int  PRECOMPUTED_SHAPES_CAPACITY = 65536;
 	public static final int  INLINE_PROPERTY_CAPACITY    = 4;
-	public static final int  TRANSITION_TYPE_SHIFT       = 3;
-	public static final int  TRANSITION_TYPE_MASK        = 0x7;
+	public static final int  TRANSITION_TYPE_SHIFT       = 6;
+	public static final int  TRANSITION_TYPE_MASK        = 0x3F;
 
 	public static long packIC(int shapeId, int offset) {
 		return ((long) shapeId << SHAPE_ID_SHIFT) | (offset & OFFSET_MASK);
@@ -43,6 +43,12 @@ public final class JSShape {
 	public static final byte TYPE_DOUBLE  = 1;
 	public static final byte TYPE_INT     = 2;
 	public static final byte TYPE_OBJECT  = 3;
+
+	public static final byte FLAG_ACCESSOR         = 1 << 2; // 0x04: 访问器属性 (getter/setter)
+	public static final byte FLAG_NOT_WRITABLE     = 1 << 3; // 0x08: 只读属性 (writable: false)
+	public static final byte FLAG_NOT_ENUMERABLE   = 1 << 4; // 0x10: 不可枚举 (enumerable: false)
+	public static final byte FLAG_NOT_CONFIGURABLE = 1 << 5; // 0x20: 不可配置 (configurable: false)
+	public static final byte TYPE_MASK             = 0x03;   // 基础类型掩码
 
 	public static volatile JSShape[]   PRECOMPUTED_SHAPES = new JSShape[PRECOMPUTED_SHAPES_CAPACITY];
 	private static final AtomicInteger PRECOMPUTED_ID     = new AtomicInteger(0);
@@ -61,6 +67,7 @@ public final class JSShape {
 	public final int     id;
 	public final long    mask;            // 单指令位掩码 (1L << id，当 id < 64 时有效)
 	public final boolean isBuiltin;
+	public final boolean hasAccessors;
 	public final int     propertyCount;
 	public final int     propertyId;      // 本次迁移引入的属性 ID
 	public final byte    propertyType;   // 本次迁移引入的类型
@@ -84,6 +91,7 @@ public final class JSShape {
 
 	private JSShape(JSShape parent, int propId, byte propType, boolean isBuiltin) {
 		this.isBuiltin = isBuiltin;
+		this.hasAccessors = (parent != null && parent.hasAccessors) || ((propType & FLAG_ACCESSOR) != 0);
 		this.id = isBuiltin ? BUILTIN_ID_GEN.getAndDecrement() : USER_ID_GEN.getAndIncrement();
 		this.mask = (!isBuiltin && this.id < BITMASK_MAX_SHAPES) ? (1L << this.id) : 0L;
 		this.propertyId = propId;
@@ -157,6 +165,14 @@ public final class JSShape {
 
 	private JSShape(int[] propIds, byte[] types, boolean isBuiltin) {
 		this.isBuiltin = isBuiltin;
+		boolean hasAcc = false;
+		for (byte t : types) {
+			if ((t & FLAG_ACCESSOR) != 0) {
+				hasAcc = true;
+				break;
+			}
+		}
+		this.hasAccessors = hasAcc;
 		this.id = isBuiltin ? BUILTIN_ID_GEN.getAndDecrement() : USER_ID_GEN.getAndIncrement();
 		this.mask = (!isBuiltin && this.id < BITMASK_MAX_SHAPES) ? (1L << this.id) : 0L;
 		int count = propIds.length;
@@ -267,11 +283,42 @@ public final class JSShape {
 	public static final int SENTINEL_ENCODED = 0x7FFFFFFF;
 
 	public static int encodeKey(int propId, byte type) {
-		assert (type >= 0 && type <= 3) : "Invalid property type: " + type;
+		assert (type >= 0 && (type & ~TRANSITION_TYPE_MASK) == 0) : "Invalid property type: " + type;
 		assert propId >= 0 : "Invalid propId: " + propId;
 		int encoded = (propId << TRANSITION_TYPE_SHIFT) | (type & TRANSITION_TYPE_MASK);
 		assert encoded != SENTINEL_ENCODED : "Mathematical impossibility violated: encoded collided with SENTINEL_ENCODED";
 		return encoded;
+	}
+
+	public boolean isAccessor(int offset) {
+		return (getSlotType(offset) & FLAG_ACCESSOR) != 0;
+	}
+
+	public boolean isWritable(int offset) {
+		return (getSlotType(offset) & FLAG_NOT_WRITABLE) == 0;
+	}
+
+	public boolean isEnumerable(int offset) {
+		return (getSlotType(offset) & FLAG_NOT_ENUMERABLE) == 0;
+	}
+
+	public boolean isConfigurable(int offset) {
+		return (getSlotType(offset) & FLAG_NOT_CONFIGURABLE) == 0;
+	}
+
+	public byte getBaseType(int offset) {
+		return (byte) (getSlotType(offset) & TYPE_MASK);
+	}
+
+	public JSShape updatePropertyType(int offset, byte newType) {
+		if (getSlotType(offset) == newType) return this;
+		int n = propertyCount;
+		int[] keys = getKeyIds();
+		byte[] types = new byte[n];
+		for (int i = 0; i < n; i++) {
+			types[i] = (i == offset) ? newType : getSlotType(i);
+		}
+		return new JSShape(keys, types, this.isBuiltin);
 	}
 
 	// 迁移树构建 (极简编码，快路径 < 28 字节，100% C2 内联)

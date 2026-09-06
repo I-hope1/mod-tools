@@ -42,6 +42,9 @@ public class JSLinker {
 	public static final MethodHandle   MH_TRANSITION_SET_DOUBLE;
 	public static final MethodHandle   MH_TRANSITION_SET_OBJECT;
 	public static final MethodHandle   MH_TRANSITION_SET_OBJECT_DOUBLE;
+	public static final MethodHandle   MH_GET_ACCESSOR_PROP;
+	public static final MethodHandle   MH_SET_ACCESSOR_PROP;
+	public static final MethodHandle   MH_SET_NOOP_PROP;
 	public static final class SlotMH {
 		public static final MethodHandle[] MH_GET_SLOT_DOUBLE = new MethodHandle[8];
 		public static final MethodHandle[] MH_SET_SLOT_DOUBLE = new MethodHandle[8];
@@ -103,6 +106,9 @@ public class JSLinker {
 			MH_TRANSITION_SET_DOUBLE = LOOKUP.findStatic(JSLinker.class, "transitionSetDouble", MethodType.methodType(void.class, JSShape.class, int.class, Object.class, double.class));
 			MH_TRANSITION_SET_OBJECT = LOOKUP.findStatic(JSLinker.class, "transitionSetObject", MethodType.methodType(void.class, JSShape.class, int.class, Object.class, Object.class));
 			MH_TRANSITION_SET_OBJECT_DOUBLE = LOOKUP.findStatic(JSLinker.class, "transitionSetObjectDouble", MethodType.methodType(void.class, JSShape.class, int.class, Object.class, Object.class));
+			MH_GET_ACCESSOR_PROP = LOOKUP.findStatic(JSLinker.class, "getAccessorProp", MethodType.methodType(Object.class, int.class, Object.class));
+			MH_SET_ACCESSOR_PROP = LOOKUP.findStatic(JSLinker.class, "setAccessorProp", MethodType.methodType(void.class, int.class, Object.class, Object.class));
+			MH_SET_NOOP_PROP = LOOKUP.findStatic(JSLinker.class, "setNoopProp", MethodType.methodType(void.class, Object.class, Object.class));
 		} catch (Throwable e) {
 			throw new ExceptionInInitializerError(e);
 		}
@@ -1454,6 +1460,9 @@ public class JSLinker {
 			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
 			if (entry != 0L && (int) (entry >>> 32) == s.id) {
 				int    offset = (int) entry;
+				if (s.isAccessor(offset)) {
+					return jsObj.get(propName);
+				}
 				Object raw    = jsObj.getRawObjectSlot(offset);
 				if (raw != JSObject.DELETED) {
 					return jsObj.getSlot(offset);
@@ -1466,6 +1475,9 @@ public class JSLinker {
 				// 64-bit 原子无锁写入 (高位 shape.id, 低位 offset)
 				long newEntry = ((long) s.id << 32) | (offset & 0xFFFFFFFFL);
 				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, newEntry);
+				if (s.isAccessor(offset)) {
+					return jsObj.get(propName);
+				}
 				Object raw = jsObj.getRawObjectSlot(offset);
 				if (raw != JSObject.DELETED) {
 					return jsObj.getSlot(offset);
@@ -1572,13 +1584,30 @@ public class JSLinker {
 			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
 			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
 			if (entry != 0L && (int) (entry >>> 32) == s.id) {
-				jsObj.setSlot((int) entry, value);
+				int offset = (int) entry;
+				if (s.isAccessor(offset) || !s.isWritable(offset)) {
+					jsObj.put(propName, value);
+					return;
+				}
+				if (s.getBaseType(offset) == JSShape.TYPE_DOUBLE && value instanceof Number) {
+					jsObj.setDoubleSlot(offset, JSOps.toDouble(value));
+					return;
+				}
+				jsObj.setSlot(offset, value);
 				return;
 			}
 
 			int offset = s.getOffset(propName);
 			if (offset >= 0) {
 				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
+				if (s.isAccessor(offset) || !s.isWritable(offset)) {
+					jsObj.put(propName, value);
+					return;
+				}
+				if (s.getBaseType(offset) == JSShape.TYPE_DOUBLE && value instanceof Number) {
+					jsObj.setDoubleSlot(offset, JSOps.toDouble(value));
+					return;
+				}
 				jsObj.setSlot(offset, value);
 				return;
 			}
@@ -1595,13 +1624,22 @@ public class JSLinker {
 
 			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
 			if (entry != 0L && (int) (entry >>> 32) == s.id) {
-				jsObj.setDoubleSlot((int) entry, value);
+				int offset = (int) entry;
+				if (s.isAccessor(offset) || !s.isWritable(offset)) {
+					jsObj.putDouble(propName, value);
+					return;
+				}
+				jsObj.setDoubleSlot(offset, value);
 				return;
 			}
 
 			int offset = s.getOffset(propName);
 			if (offset >= 0) {
 				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
+				if (s.isAccessor(offset) || !s.isWritable(offset)) {
+					jsObj.putDouble(propName, value);
+					return;
+				}
 				jsObj.setDoubleSlot(offset, value);
 				return;
 			}
@@ -1800,6 +1838,29 @@ public class JSLinker {
 		return c;
 	}
 
+	public static Object getAccessorProp(int offset, Object target) {
+		if (target instanceof JSObject jsObj) {
+			Object raw = jsObj.getRawObjectSlot(offset);
+			if (raw instanceof PropertyAccessor acc) {
+				return acc.callGetter(null, target);
+			}
+		}
+		return JSUndefined.INSTANCE;
+	}
+
+	public static void setAccessorProp(int offset, Object target, Object value) {
+		if (target instanceof JSObject jsObj) {
+			Object raw = jsObj.getRawObjectSlot(offset);
+			if (raw instanceof PropertyAccessor acc) {
+				acc.callSetter(null, target, value);
+			}
+		}
+	}
+
+	public static void setNoopProp(Object target, Object value) {
+		// 只读属性静默忽略
+	}
+
 	public static Object getPropFallback(ChainedCallSite site, Object target, String propName) {
 		if (site.getPropId() < 0) site.setPropId(SymbolTable.id(propName));
 		if (target == null || target == JSUndefined.INSTANCE) {
@@ -1810,6 +1871,12 @@ public class JSLinker {
 			int offset = jsObj.shape.getOffset(propName);
 			if (offset >= 0) {
 				byte type = jsObj.shape.getSlotType(offset);
+				if ((type & JSShape.FLAG_ACCESSOR) != 0) {
+					MethodHandle test = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
+					MethodHandle getterTarget = MethodHandles.insertArguments(MH_GET_ACCESSOR_PROP, 0, offset);
+					site.installGuardOrSwitchMegamorphic(test, getterTarget.asType(site.type()));
+					return getAccessorProp(offset, target);
+				}
 				site.recordShape(jsObj.shape, offset, type);
 
 				if (site.isOffsetEquivalent()) {
@@ -1918,17 +1985,39 @@ public class JSLinker {
 			int offset = jsObj.shape.getOffset(propName);
 			if (offset >= 0) {
 				byte type = jsObj.shape.getSlotType(offset);
+				if ((type & JSShape.FLAG_ACCESSOR) != 0) {
+					MethodHandle test = MH_IS_EXACT_SHAPE_SETTER_OBJECT.bindTo(jsObj.shape);
+					MethodHandle setterTarget = MethodHandles.insertArguments(MH_SET_ACCESSOR_PROP, 0, offset);
+					site.installGuardOrSwitchMegamorphic(test, setterTarget.asType(site.type()));
+					setAccessorProp(offset, target, value);
+					return;
+				}
+				if ((type & JSShape.FLAG_NOT_WRITABLE) != 0) {
+					MethodHandle test = MH_IS_EXACT_SHAPE_SETTER_OBJECT.bindTo(jsObj.shape);
+					site.installGuardOrSwitchMegamorphic(test, MH_SET_NOOP_PROP.asType(site.type()));
+					return;
+				}
 				site.recordShape(jsObj.shape, offset, type);
 
+				boolean isDouble = (type & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE && (value instanceof Number);
 				if (site.isOffsetEquivalent()) {
 					int          commonOff = site.getCommonOffset();
+					byte         commonType = site.getCommonType();
+					boolean      isCommonDouble = (commonType & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE && (value instanceof Number);
 					MethodHandle test      = buildMultiShapeGuardSetterObject(site.getObservedShapes());
-					MethodHandle directSlotSetter = (commonOff >= 0 && commonOff < 8)
-					 ? MH_SET_SLOT_OBJECT[commonOff]
-					 : MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT, 0, commonOff);
+					MethodHandle baseSetter = (commonOff >= 0 && commonOff < 8)
+					 ? (isCommonDouble ? MH_SET_SLOT_DOUBLE[commonOff] : MH_SET_SLOT_OBJECT[commonOff])
+					 : (isCommonDouble ? MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT_DOUBLE, 0, commonOff) : MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT, 0, commonOff));
+					MethodHandle directSlotSetter = isCommonDouble
+					 ? MethodHandles.filterArguments(baseSetter, 1, MH_TO_DOUBLE)
+					 : baseSetter;
 					MethodHandle fallbackTarget = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget() : (site.getInitialFallback() != null ? site.getInitialFallback() : site.getTarget());
 					site.setTarget(MethodHandles.guardWithTest(test, directSlotSetter.asType(site.type()), fallbackTarget.asType(site.type())));
-					jsObj.setSlot(commonOff, value);
+					if (isCommonDouble) {
+						jsObj.setDoubleSlot(commonOff, JSOps.toDouble(value));
+					} else {
+						jsObj.setSlot(commonOff, value);
+					}
 					return;
 				}
 
@@ -1939,18 +2028,28 @@ public class JSLinker {
 					site.installFlatPolyGuard(buildFlatPolySwitchSetterObject(site.snapshotPoly(), fb));
 				} else {
 					MethodHandle test = MH_IS_EXACT_SHAPE_SETTER_OBJECT.bindTo(jsObj.shape);
-					MethodHandle directSlotSetter = offset < 8
-					 ? MH_SET_SLOT_OBJECT[offset]
-					 : MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT, 0, offset);
-					site.installGuardOrSwitchMegamorphic(test, directSlotSetter);
+					MethodHandle baseSetter = offset < 8
+					 ? (isDouble ? MH_SET_SLOT_DOUBLE[offset] : MH_SET_SLOT_OBJECT[offset])
+					 : (isDouble ? MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT_DOUBLE, 0, offset) : MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT, 0, offset));
+					MethodHandle directSlotSetter = isDouble
+					 ? MethodHandles.filterArguments(baseSetter, 1, MH_TO_DOUBLE)
+					 : baseSetter;
+					site.installGuardOrSwitchMegamorphic(test, directSlotSetter.asType(site.type()));
 				}
-				jsObj.setSlot(offset, value);
+				if (isDouble) {
+					jsObj.setDoubleSlot(offset, JSOps.toDouble(value));
+				} else {
+					jsObj.setSlot(offset, value);
+				}
 				return;
 			}
 			int propId = site.getPropId();
 			if (propId < 0) {
 				propId = SymbolTable.id(propName);
 				site.setPropId(propId);
+			}
+			if (jsObj.getPrototype() != null && jsObj.getPrototype().handlePrototypePut(propId, target, value)) {
+				return;
 			}
 			JSShape oldShape = jsObj.shape;
 			byte valType = (value instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
@@ -2040,6 +2139,19 @@ public class JSLinker {
 			}
 			int offset = jsObj.shape.getOffset(propName);
 			if (offset >= 0) {
+				byte type = jsObj.shape.getSlotType(offset);
+				if ((type & JSShape.FLAG_ACCESSOR) != 0) {
+					MethodHandle test = MH_IS_EXACT_SHAPE_SETTER_DOUBLE.bindTo(jsObj.shape);
+					MethodHandle setterTarget = MethodHandles.insertArguments(MH_SET_ACCESSOR_PROP, 0, offset);
+					site.installGuardOrSwitchMegamorphic(test, setterTarget.asType(site.type()));
+					setAccessorProp(offset, target, value);
+					return;
+				}
+				if ((type & JSShape.FLAG_NOT_WRITABLE) != 0) {
+					MethodHandle test = MH_IS_EXACT_SHAPE_SETTER_DOUBLE.bindTo(jsObj.shape);
+					site.installGuardOrSwitchMegamorphic(test, MH_SET_NOOP_PROP.asType(site.type()));
+					return;
+				}
 				site.recordShape(jsObj.shape, offset, JSShape.TYPE_DOUBLE);
 
 				if (site.isOffsetEquivalent()) {
@@ -2073,6 +2185,9 @@ public class JSLinker {
 			if (propId < 0) {
 				propId = SymbolTable.id(propName);
 				site.setPropId(propId);
+			}
+			if (jsObj.getPrototype() != null && jsObj.getPrototype().handlePrototypePut(propId, target, value)) {
+				return;
 			}
 			JSShape oldShape = jsObj.shape;
 			JSShape newShape = oldShape.addProperty(propId, JSShape.TYPE_DOUBLE);

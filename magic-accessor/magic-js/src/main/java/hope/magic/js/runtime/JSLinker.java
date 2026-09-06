@@ -2958,7 +2958,8 @@ public class JSLinker {
 		if (ctor instanceof JSFunction) {
 			Object proto = (ctor instanceof JSObject jsObj) ? jsObj.get("prototype") : JSUndefined.INSTANCE;
 			JSObject newObj = (proto instanceof JSObject sp) ? new JSObject(sp) : new JSObject();
-			Object res = ((JSFunction) ctor).call(null, newObj, args);
+			JSContext currentCx = JSContext.current();
+			Object res = ((JSFunction) ctor).call(currentCx, newObj, args);
 			if (res instanceof JSBridgedObject || res instanceof JSObject || (res != null && res != JSUndefined.INSTANCE && !(res instanceof Number || res instanceof Boolean || res instanceof String || res instanceof Character))) {
 				return res;
 			}
@@ -2985,6 +2986,66 @@ public class JSLinker {
 
 	public static JSContext.JSArguments createArguments(JSFunction callee, Object[] args) {
 		return new JSContext.JSArguments(callee, args);
+	}
+
+	@FunctionalInterface
+	public interface AsyncAction {
+		Object run() throws Throwable;
+	}
+
+	@FunctionalInterface
+	public interface AsyncJSFunction {
+		Object callAsync(JSContext cx, Object thisObj, Object[] args) throws Throwable;
+	}
+
+	public static JSPromise startAsync(JSContext cx, AsyncAction action) throws Throwable {
+		JSPromise returnPromise = new JSPromise(cx);
+		java.util.concurrent.CompletableFuture<Void> firstSuspendOrDone = new java.util.concurrent.CompletableFuture<>();
+		AsyncExecutionState state = new AsyncExecutionState(cx, returnPromise, firstSuspendOrDone);
+
+		Thread.ofVirtual().name("MagicJS-Async").start(() -> {
+			JSContext.CURRENT.set(cx);
+			AsyncExecutionState.CURRENT.set(state);
+			try {
+				Object res = action.run();
+				returnPromise.resolve(res);
+			} catch (Throwable t) {
+				Object reason = t instanceof JSOps.JSException je ? je.value : t;
+				returnPromise.reject(reason);
+			} finally {
+				JSContext.CURRENT.remove();
+				AsyncExecutionState.CURRENT.remove();
+				state.onDone();
+			}
+		});
+
+		firstSuspendOrDone.join();
+		return returnPromise;
+	}
+
+	public static JSPromise runAsync(AsyncJSFunction target, JSContext cx, Object thisObj, Object[] args) throws Throwable {
+		JSPromise returnPromise = new JSPromise(cx);
+		java.util.concurrent.CompletableFuture<Void> firstSuspendOrDone = new java.util.concurrent.CompletableFuture<>();
+		AsyncExecutionState state = new AsyncExecutionState(cx, returnPromise, firstSuspendOrDone);
+
+		Thread.ofVirtual().name("MagicJS-Async").start(() -> {
+			JSContext.CURRENT.set(cx);
+			AsyncExecutionState.CURRENT.set(state);
+			try {
+				Object res = target.callAsync(cx, thisObj, args);
+				returnPromise.resolve(res);
+			} catch (Throwable t) {
+				Object reason = t instanceof JSOps.JSException je ? je.value : t;
+				returnPromise.reject(reason);
+			} finally {
+				JSContext.CURRENT.remove();
+				AsyncExecutionState.CURRENT.remove();
+				state.onDone();
+			}
+		});
+
+		firstSuspendOrDone.join();
+		return returnPromise;
 	}
 
 	public static void transitionSetDouble(JSShape newShape, int slot, Object target, double val) {

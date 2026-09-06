@@ -100,7 +100,7 @@ public class JSCompiler {
 		);
 		initGmv.visitCode();
 		for (Node.FunctionDecl fd : topFuncDecls) {
-			String funcClass = generateFunctionClass(fd.name, fd.params, fd.body);
+			String funcClass = generateFunctionClass(fd.name, fd.params, fd.body, fd.isAsync);
 			int    slot      = JSContext.getGlobalSlot(fd.name);
 			initGmv.visitVarInsn(Opcodes.ALOAD, 1); // cx
 			pushInt(initGmv, slot);
@@ -142,6 +142,9 @@ public class JSCompiler {
 			Node    stmt   = program.body.get(i);
 			boolean isLast = (i == program.body.size() - 1);
 			if (isLast && (stmt instanceof Node.ExprStmt exprStmt)) {
+				mv.visitVarInsn(Opcodes.ALOAD, 1);
+				mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "drainMicrotasks", "()V", false);
+
 				switch (returnType) {
 					case DOUBLE -> {
 						compileNodeAsDouble(exprStmt.expr, ctx);
@@ -157,6 +160,8 @@ public class JSCompiler {
 					}
 					default -> {
 						compileNode(exprStmt.expr, ctx, true);
+						mv.visitVarInsn(Opcodes.ALOAD, 1);
+						mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "drainMicrotasks", "()V", false);
 						mv.visitInsn(Opcodes.ARETURN);
 					}
 				}
@@ -181,6 +186,8 @@ public class JSCompiler {
 					mv.visitInsn(Opcodes.LRETURN);
 				}
 				default -> {
+					mv.visitVarInsn(Opcodes.ALOAD, 1);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "drainMicrotasks", "()V", false);
 					visitUndefined(mv);
 					mv.visitInsn(Opcodes.ARETURN);
 				}
@@ -222,6 +229,7 @@ public class JSCompiler {
 		boolean isFunction          = false;
 		String  functionName        = null;
 		boolean isDoubleSpecialized = false;
+		boolean isAsync             = false;
 
 		final Deque<Label> breakTargets    = new ArrayDeque<>();
 		final Deque<Label> continueTargets = new ArrayDeque<>();
@@ -942,6 +950,21 @@ public class JSCompiler {
 				compileIdentifier(new Node.IdentifierExpr("this", superExpr.line, superExpr.column), ctx);
 			}
 			return;
+		}
+		if (node instanceof Node.AwaitExpr awaitExpr) {
+			compileAwaitExpr(awaitExpr, ctx, needResult);
+			return;
+		}
+	}
+
+	private static void compileAwaitExpr(Node.AwaitExpr awaitExpr, CompileContext ctx, boolean needResult) {
+		MethodVisitor mv = ctx.mv;
+		compileNode(awaitExpr.expr, ctx, true);
+		mv.visitVarInsn(Opcodes.ALOAD, 1); // cx (always in slot 1)
+		mv.visitInsn(Opcodes.SWAP);
+		mv.visitMethodInsn(Opcodes.INVOKESTATIC, "hope/magic/js/runtime/JSPromise", "await", "(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;)Ljava/lang/Object;", false);
+		if (!needResult) {
+			mv.visitInsn(Opcodes.POP);
 		}
 	}
 
@@ -2379,7 +2402,7 @@ public class JSCompiler {
 	}
 
 	private static void compileFunctionExpr(Node.FunctionExpr funcExpr, CompileContext ctx, boolean needResult) {
-		String funcClass = generateFunctionClass(funcExpr.name, funcExpr.params, funcExpr.body);
+		String funcClass = generateFunctionClass(funcExpr.name, funcExpr.params, funcExpr.body, funcExpr.isAsync);
 		if (needResult) {
 			instantiateFunction(ctx.mv, funcClass);
 		}
@@ -2396,7 +2419,7 @@ public class JSCompiler {
 		}
 		LocalVar var = ctx.getLocal(funcDecl.name);
 		if (var == null) {
-			String funcClass = generateFunctionClass(funcDecl.name, funcDecl.params, funcDecl.body);
+			String funcClass = generateFunctionClass(funcDecl.name, funcDecl.params, funcDecl.body, funcDecl.isAsync);
 			int    slot      = JSContext.getGlobalSlot(funcDecl.name);
 			mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
 			pushInt(mv, slot);
@@ -2441,7 +2464,7 @@ public class JSCompiler {
 
 			mv.visitInsn(Opcodes.DUP);
 			pushInt(mv, i * 3 + 1);
-			String mClass = generateFunctionClass(m.name, m.params, m.body);
+			String mClass = generateFunctionClass(m.name, m.params, m.body, m.isAsync);
 			instantiateFunction(mv, mClass);
 			mv.visitInsn(Opcodes.AASTORE);
 
@@ -2465,7 +2488,7 @@ public class JSCompiler {
 
 			mv.visitInsn(Opcodes.DUP);
 			pushInt(mv, i * 3 + 1);
-			String smClass = generateFunctionClass(sm.name, sm.params, sm.body);
+			String smClass = generateFunctionClass(sm.name, sm.params, sm.body, sm.isAsync);
 			instantiateFunction(mv, smClass);
 			mv.visitInsn(Opcodes.AASTORE);
 
@@ -2478,7 +2501,7 @@ public class JSCompiler {
 
 		// 6. constructor JSFunction (or null)
 		if (classDecl.constructor != null) {
-			String ctorClass = generateFunctionClass("constructor", classDecl.constructor.params, classDecl.constructor.body);
+			String ctorClass = generateFunctionClass("constructor", classDecl.constructor.params, classDecl.constructor.body, false);
 			instantiateFunction(mv, ctorClass);
 		} else {
 			mv.visitInsn(Opcodes.ACONST_NULL);
@@ -2692,13 +2715,19 @@ public class JSCompiler {
 	}
 
 	public static String generateFunctionClass(List<String> params, Node.BlockStmt body) {
-		return generateFunctionClass(null, params, body);
+		return generateFunctionClass(null, params, body, false);
 	}
 
 	public static String generateFunctionClass(String functionName, List<String> params, Node.BlockStmt body) {
+		return generateFunctionClass(functionName, params, body, false);
+	}
+
+	public static String generateFunctionClass(String functionName, List<String> params, Node.BlockStmt body, boolean isAsync) {
 		String      funcClassName = "hope/magic/gen/MagicJSFunction_" + SCRIPT_ID.incrementAndGet();
 		ClassWriter cw            = new FastClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
-		cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, funcClassName, null, IN_JSObject, new String[]{Type.getInternalName(JSFunction.class)});
+		cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, funcClassName, null, IN_JSObject, isAsync
+				? new String[]{Type.getInternalName(JSFunction.class), "hope/magic/js/runtime/JSLinker$AsyncJSFunction"}
+				: new String[]{Type.getInternalName(JSFunction.class)});
 
 		// public JSContext cx;
 		cw.visitField(Opcodes.ACC_PUBLIC, "cx", "L" + IN_JSContext + ";", null, null).visitEnd();
@@ -2737,106 +2766,65 @@ public class JSCompiler {
 
 		boolean hasArguments = usesArguments(body) && !params.contains("arguments");
 		int    paramCount       = params.size();
-		boolean useCallMethod   = hasArguments || paramCount > 3;
-		String targetMethodName = !useCallMethod ? "call" + paramCount : "call";
-		String targetMethodDesc = !useCallMethod
-		 ? "(L" + IN_JSContext + ";Ljava/lang/Object;" + "Ljava/lang/Object;".repeat(paramCount) + ")Ljava/lang/Object;"
-		 : "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;";
 
-		boolean isNumFunc = !hasArguments && isNumericFunction(body, params, functionName) && paramCount <= 3;
-
-		if (isNumFunc) {
-			String primMethodName = "call" + paramCount + "Double";
-			String primMethodDesc = getPrimDesc(paramCount);
-			MethodVisitor primMv = cw.visitMethod(
-			 Opcodes.ACC_PUBLIC,
-			 primMethodName,
-			 primMethodDesc,
-			 null,
-			 new String[]{"java/lang/Throwable"}
-			);
-			primMv.visitCode();
-
-			ensureContext(primMv, funcClassName);
-
-			Node.Program   fakeProgPrim = new Node.Program(body.statements, body.line, body.column);
-			CompileContext primCtx      = createCompileContext(primMv, funcClassName, fakeProgPrim, functionName, true);
-
-			primCtx.nextLocalSlot = 2;
-			for (int i = 0; i < paramCount; i++) {
-				primCtx.declareLocal(params.get(i), VarType.DOUBLE);
-			}
-
-			// 嵌套函数局部作用域与提升
-			hoistNestedFunctions(fakeProgPrim, primCtx);
-
-			for (int i = 0; i < body.statements.size(); i++) {
-				compileNode(body.statements.get(i), primCtx, false);
-			}
-
-			primMv.visitLdcInsn(0.0);
-			primMv.visitInsn(Opcodes.DRETURN);
-			primMv.visitMaxs(0, 0);
-			primMv.visitEnd();
-
-			// 生成转发到 callXDouble 的快速包装方法 targetMethodName (call0..call3)
+		if (isAsync) {
+			// 1. call(cx, thisObj, args) -> JSLinker.runAsync(this, cx, thisObj, args)
 			MethodVisitor callMv = cw.visitMethod(
-			 Opcodes.ACC_PUBLIC,
-			 targetMethodName,
-			 targetMethodDesc,
-			 null,
-			 new String[]{"java/lang/Throwable"}
+					Opcodes.ACC_PUBLIC,
+					"call",
+					"(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
+					null,
+					new String[]{"java/lang/Throwable"}
 			);
 			callMv.visitCode();
 			callMv.visitVarInsn(Opcodes.ALOAD, 0); // this
 			callMv.visitVarInsn(Opcodes.ALOAD, 1); // cx
-			for (int i = 0; i < paramCount; i++) {
-				callMv.visitVarInsn(Opcodes.ALOAD, 3 + i);
-				callMv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toDouble", "(Ljava/lang/Object;)D", false);
-			}
-			callMv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, funcClassName, primMethodName, primMethodDesc, false);
-			boxDouble(callMv);
+			callMv.visitVarInsn(Opcodes.ALOAD, 2); // thisObj
+			callMv.visitVarInsn(Opcodes.ALOAD, 3); // args
+			callMv.visitMethodInsn(
+					Opcodes.INVOKESTATIC,
+					IN_JSLinker,
+					"runAsync",
+					"(Lhope/magic/js/runtime/JSLinker$AsyncJSFunction;L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Lhope/magic/js/runtime/JSPromise;",
+					false
+			);
 			callMv.visitInsn(Opcodes.ARETURN);
 			callMv.visitMaxs(0, 0);
 			callMv.visitEnd();
-		} else {
-			// 主执行方法
-			MethodVisitor callMv = cw.visitMethod(
-			 Opcodes.ACC_PUBLIC,
-			 targetMethodName,
-			 targetMethodDesc,
-			 null,
-			 new String[]{"java/lang/Throwable"}
-			);
-			callMv.visitCode();
 
-			ensureContext(callMv, funcClassName);
+			// 2. call0..call3 桥接转发
+			generateCallBridges(cw, funcClassName);
+
+			// 3. callAsync(cx, thisObj, args) 编译实际异步函数体
+			MethodVisitor asyncMv = cw.visitMethod(
+					Opcodes.ACC_PUBLIC,
+					"callAsync",
+					"(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
+					null,
+					new String[]{"java/lang/Throwable"}
+			);
+			asyncMv.visitCode();
+
+			ensureContext(asyncMv, funcClassName);
 
 			Node.Program   fakeProg = new Node.Program(body.statements, body.line, body.column);
-			CompileContext ctx      = createCompileContext(callMv, funcClassName, fakeProg, functionName, false);
+			CompileContext ctx      = createCompileContext(asyncMv, funcClassName, fakeProg, functionName, false);
+			ctx.isFunction = true;
+			ctx.isAsync = true;
 			ctx.locals.put("this", new LocalVar(2, VarType.OBJECT));
 
-			if (!useCallMethod) {
-				// 参数直接绑定到 JVM 局部变量槽位 (slot 0=this, 1=cx, 2=thisObj, 3=a0, 4=a1, 5=a2)
-				ctx.nextLocalSlot = 3;
-				for (int i = 0; i < paramCount; i++) {
-					ctx.declareLocal(params.get(i), VarType.OBJECT);
-				}
-			} else {
-				ctx.nextLocalSlot = 4; // slot 0=this, 1=cx, 2=thisObj, 3=args
-				// Bind parameters
-				for (int i = 0; i < params.size(); i++) {
-					LocalVar var = ctx.declareLocal(params.get(i), VarType.OBJECT);
-					loadArgSafe(callMv, 3, i);
-					callMv.visitVarInsn(Opcodes.ASTORE, var.slot);
-				}
-				if (hasArguments) {
-					LocalVar argVar = ctx.declareLocal("arguments", VarType.OBJECT);
-					callMv.visitVarInsn(Opcodes.ALOAD, 0); // this
-					callMv.visitVarInsn(Opcodes.ALOAD, 3); // args
-					callMv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSLinker, "createArguments", "(Lhope/magic/js/runtime/JSFunction;[Ljava/lang/Object;)Lhope/magic/js/runtime/JSContext$JSArguments;", false);
-					callMv.visitVarInsn(Opcodes.ASTORE, argVar.slot);
-				}
+			ctx.nextLocalSlot = 4; // slot 0=this, 1=cx, 2=thisObj, 3=args
+			for (int i = 0; i < params.size(); i++) {
+				LocalVar var = ctx.declareLocal(params.get(i), VarType.OBJECT);
+				loadArgSafe(asyncMv, 3, i);
+				asyncMv.visitVarInsn(Opcodes.ASTORE, var.slot);
+			}
+			if (hasArguments) {
+				LocalVar argVar = ctx.declareLocal("arguments", VarType.OBJECT);
+				asyncMv.visitVarInsn(Opcodes.ALOAD, 0); // this
+				asyncMv.visitVarInsn(Opcodes.ALOAD, 3); // args
+				asyncMv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSLinker, "createArguments", "(Lhope/magic/js/runtime/JSFunction;[Ljava/lang/Object;)Lhope/magic/js/runtime/JSContext$JSArguments;", false);
+				asyncMv.visitVarInsn(Opcodes.ASTORE, argVar.slot);
 			}
 
 			// 嵌套函数局部作用域与提升 (Nested Function Hoisting)
@@ -2848,107 +2836,153 @@ public class JSCompiler {
 				compileNode(stmt, ctx, false);
 			}
 
-			visitUndefined(callMv);
-			callMv.visitInsn(Opcodes.ARETURN);
-			callMv.visitMaxs(0, 0);
-			callMv.visitEnd();
-		}
+			visitUndefined(asyncMv);
+			asyncMv.visitInsn(Opcodes.ARETURN);
+			asyncMv.visitMaxs(0, 0);
+			asyncMv.visitEnd();
+		} else {
+			boolean useCallMethod   = hasArguments || paramCount > 3;
+			String targetMethodName = !useCallMethod ? "call" + paramCount : "call";
+			String targetMethodDesc = !useCallMethod
+			 ? "(L" + IN_JSContext + ";Ljava/lang/Object;" + "Ljava/lang/Object;".repeat(paramCount) + ")Ljava/lang/Object;"
+			 : "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;";
 
-		if (hasArguments) {
-			// call0(cx, thisObj)
-			MethodVisitor c0Mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "call0", "(L" + IN_JSContext + ";Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
-			c0Mv.visitCode();
-			c0Mv.visitVarInsn(Opcodes.ALOAD, 0);
-			c0Mv.visitVarInsn(Opcodes.ALOAD, 1);
-			c0Mv.visitVarInsn(Opcodes.ALOAD, 2);
-			c0Mv.visitFieldInsn(Opcodes.GETSTATIC, "hope/magic/js/runtime/JSFunction", "EMPTY_ARGS", "[Ljava/lang/Object;");
-			c0Mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, funcClassName, "call", "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
-			c0Mv.visitInsn(Opcodes.ARETURN);
-			c0Mv.visitMaxs(0, 0);
-			c0Mv.visitEnd();
+			boolean isNumFunc = !hasArguments && isNumericFunction(body, params, functionName) && paramCount <= 3;
 
-			// call1(cx, thisObj, a0)
-			MethodVisitor c1Mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "call1", "(L" + IN_JSContext + ";Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
-			c1Mv.visitCode();
-			c1Mv.visitVarInsn(Opcodes.ALOAD, 0);
-			c1Mv.visitVarInsn(Opcodes.ALOAD, 1);
-			c1Mv.visitVarInsn(Opcodes.ALOAD, 2);
-			c1Mv.visitInsn(Opcodes.ICONST_1);
-			c1Mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
-			c1Mv.visitInsn(Opcodes.DUP);
-			c1Mv.visitInsn(Opcodes.ICONST_0);
-			c1Mv.visitVarInsn(Opcodes.ALOAD, 3);
-			c1Mv.visitInsn(Opcodes.AASTORE);
-			c1Mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, funcClassName, "call", "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
-			c1Mv.visitInsn(Opcodes.ARETURN);
-			c1Mv.visitMaxs(0, 0);
-			c1Mv.visitEnd();
+			if (isNumFunc) {
+				String primMethodName = "call" + paramCount + "Double";
+				String primMethodDesc = getPrimDesc(paramCount);
+				MethodVisitor primMv = cw.visitMethod(
+				 Opcodes.ACC_PUBLIC,
+				 primMethodName,
+				 primMethodDesc,
+				 null,
+				 new String[]{"java/lang/Throwable"}
+				);
+				primMv.visitCode();
 
-			// call2(cx, thisObj, a0, a1)
-			MethodVisitor c2Mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "call2", "(L" + IN_JSContext + ";Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
-			c2Mv.visitCode();
-			c2Mv.visitVarInsn(Opcodes.ALOAD, 0);
-			c2Mv.visitVarInsn(Opcodes.ALOAD, 1);
-			c2Mv.visitVarInsn(Opcodes.ALOAD, 2);
-			c2Mv.visitInsn(Opcodes.ICONST_2);
-			c2Mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
-			c2Mv.visitInsn(Opcodes.DUP);
-			c2Mv.visitInsn(Opcodes.ICONST_0);
-			c2Mv.visitVarInsn(Opcodes.ALOAD, 3);
-			c2Mv.visitInsn(Opcodes.AASTORE);
-			c2Mv.visitInsn(Opcodes.DUP);
-			c2Mv.visitInsn(Opcodes.ICONST_1);
-			c2Mv.visitVarInsn(Opcodes.ALOAD, 4);
-			c2Mv.visitInsn(Opcodes.AASTORE);
-			c2Mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, funcClassName, "call", "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
-			c2Mv.visitInsn(Opcodes.ARETURN);
-			c2Mv.visitMaxs(0, 0);
-			c2Mv.visitEnd();
+				ensureContext(primMv, funcClassName);
 
-			// call3(cx, thisObj, a0, a1, a2)
-			MethodVisitor c3Mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "call3", "(L" + IN_JSContext + ";Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
-			c3Mv.visitCode();
-			c3Mv.visitVarInsn(Opcodes.ALOAD, 0);
-			c3Mv.visitVarInsn(Opcodes.ALOAD, 1);
-			c3Mv.visitVarInsn(Opcodes.ALOAD, 2);
-			pushInt(c3Mv, 3);
-			c3Mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
-			c3Mv.visitInsn(Opcodes.DUP);
-			c3Mv.visitInsn(Opcodes.ICONST_0);
-			c3Mv.visitVarInsn(Opcodes.ALOAD, 3);
-			c3Mv.visitInsn(Opcodes.AASTORE);
-			c3Mv.visitInsn(Opcodes.DUP);
-			c3Mv.visitInsn(Opcodes.ICONST_1);
-			c3Mv.visitVarInsn(Opcodes.ALOAD, 4);
-			c3Mv.visitInsn(Opcodes.AASTORE);
-			c3Mv.visitInsn(Opcodes.DUP);
-			c3Mv.visitInsn(Opcodes.ICONST_2);
-			c3Mv.visitVarInsn(Opcodes.ALOAD, 5);
-			c3Mv.visitInsn(Opcodes.AASTORE);
-			c3Mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, funcClassName, "call", "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
-			c3Mv.visitInsn(Opcodes.ARETURN);
-			c3Mv.visitMaxs(0, 0);
-			c3Mv.visitEnd();
-		} else if (paramCount <= 3) {
-			// 当 paramCount <= 3 时，补充通用的 call(cx, thisObj, args[]) 桥接转发器
-			MethodVisitor bridgeMv = cw.visitMethod(
-			 Opcodes.ACC_PUBLIC,
-			 "call",
-			 "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
-			 null,
-			 new String[]{"java/lang/Throwable"}
-			);
-			bridgeMv.visitCode();
-			bridgeMv.visitVarInsn(Opcodes.ALOAD, 0); // this
-			bridgeMv.visitVarInsn(Opcodes.ALOAD, 1); // cx
-			bridgeMv.visitVarInsn(Opcodes.ALOAD, 2); // thisObj
-			for (int i = 0; i < paramCount; i++) {
-				loadArgSafe(bridgeMv, 3, i);
+				Node.Program   fakeProgPrim = new Node.Program(body.statements, body.line, body.column);
+				CompileContext primCtx      = createCompileContext(primMv, funcClassName, fakeProgPrim, functionName, true);
+				primCtx.isFunction = true;
+
+				primCtx.nextLocalSlot = 2;
+				for (int i = 0; i < paramCount; i++) {
+					primCtx.declareLocal(params.get(i), VarType.DOUBLE);
+				}
+
+				// 嵌套函数局部作用域与提升
+				hoistNestedFunctions(fakeProgPrim, primCtx);
+
+				for (int i = 0; i < body.statements.size(); i++) {
+					compileNode(body.statements.get(i), primCtx, false);
+				}
+
+				primMv.visitLdcInsn(0.0);
+				primMv.visitInsn(Opcodes.DRETURN);
+				primMv.visitMaxs(0, 0);
+				primMv.visitEnd();
+
+				// 生成转发到 callXDouble 的快速包装方法 targetMethodName (call0..call3)
+				MethodVisitor callMv = cw.visitMethod(
+				 Opcodes.ACC_PUBLIC,
+				 targetMethodName,
+				 targetMethodDesc,
+				 null,
+				 new String[]{"java/lang/Throwable"}
+				);
+				callMv.visitCode();
+				callMv.visitVarInsn(Opcodes.ALOAD, 0); // this
+				callMv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+				for (int i = 0; i < paramCount; i++) {
+					callMv.visitVarInsn(Opcodes.ALOAD, 3 + i);
+					callMv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toDouble", "(Ljava/lang/Object;)D", false);
+				}
+				callMv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, funcClassName, primMethodName, primMethodDesc, false);
+				boxDouble(callMv);
+				callMv.visitInsn(Opcodes.ARETURN);
+				callMv.visitMaxs(0, 0);
+				callMv.visitEnd();
+			} else {
+				// 主执行方法
+				MethodVisitor callMv = cw.visitMethod(
+				 Opcodes.ACC_PUBLIC,
+				 targetMethodName,
+				 targetMethodDesc,
+				 null,
+				 new String[]{"java/lang/Throwable"}
+				);
+				callMv.visitCode();
+
+				ensureContext(callMv, funcClassName);
+
+				Node.Program   fakeProg = new Node.Program(body.statements, body.line, body.column);
+				CompileContext ctx      = createCompileContext(callMv, funcClassName, fakeProg, functionName, false);
+				ctx.isFunction = true;
+				ctx.locals.put("this", new LocalVar(2, VarType.OBJECT));
+
+				if (!useCallMethod) {
+					// 参数直接绑定到 JVM 局部变量槽位 (slot 0=this, 1=cx, 2=thisObj, 3=a0, 4=a1, 5=a2)
+					ctx.nextLocalSlot = 3;
+					for (int i = 0; i < paramCount; i++) {
+						ctx.declareLocal(params.get(i), VarType.OBJECT);
+					}
+				} else {
+					ctx.nextLocalSlot = 4; // slot 0=this, 1=cx, 2=thisObj, 3=args
+					// Bind parameters
+					for (int i = 0; i < params.size(); i++) {
+						LocalVar var = ctx.declareLocal(params.get(i), VarType.OBJECT);
+						loadArgSafe(callMv, 3, i);
+						callMv.visitVarInsn(Opcodes.ASTORE, var.slot);
+					}
+					if (hasArguments) {
+						LocalVar argVar = ctx.declareLocal("arguments", VarType.OBJECT);
+						callMv.visitVarInsn(Opcodes.ALOAD, 0); // this
+						callMv.visitVarInsn(Opcodes.ALOAD, 3); // args
+						callMv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSLinker, "createArguments", "(Lhope/magic/js/runtime/JSFunction;[Ljava/lang/Object;)Lhope/magic/js/runtime/JSContext$JSArguments;", false);
+						callMv.visitVarInsn(Opcodes.ASTORE, argVar.slot);
+					}
+				}
+
+				// 嵌套函数局部作用域与提升 (Nested Function Hoisting)
+				hoistNestedFunctions(fakeProg, ctx);
+
+				// Compile statements
+				for (int i = 0; i < body.statements.size(); i++) {
+					Node stmt = body.statements.get(i);
+					compileNode(stmt, ctx, false);
+				}
+
+				visitUndefined(callMv);
+				callMv.visitInsn(Opcodes.ARETURN);
+				callMv.visitMaxs(0, 0);
+				callMv.visitEnd();
 			}
-			bridgeMv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, funcClassName, targetMethodName, targetMethodDesc, false);
-			bridgeMv.visitInsn(Opcodes.ARETURN);
-			bridgeMv.visitMaxs(0, 0);
-			bridgeMv.visitEnd();
+
+			if (hasArguments) {
+				generateCallBridges(cw, funcClassName);
+			} else if (paramCount <= 3) {
+				// 当 paramCount <= 3 时，补充通用的 call(cx, thisObj, args[]) 桥接转发器
+				MethodVisitor bridgeMv = cw.visitMethod(
+				 Opcodes.ACC_PUBLIC,
+				 "call",
+				 "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
+				 null,
+				 new String[]{"java/lang/Throwable"}
+				);
+				bridgeMv.visitCode();
+				bridgeMv.visitVarInsn(Opcodes.ALOAD, 0); // this
+				bridgeMv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+				bridgeMv.visitVarInsn(Opcodes.ALOAD, 2); // thisObj
+				for (int i = 0; i < paramCount; i++) {
+					loadArgSafe(bridgeMv, 3, i);
+				}
+				bridgeMv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, funcClassName, targetMethodName, targetMethodDesc, false);
+				bridgeMv.visitInsn(Opcodes.ARETURN);
+				bridgeMv.visitMaxs(0, 0);
+				bridgeMv.visitEnd();
+			}
 		}
 
 		cw.visitEnd();
@@ -2957,6 +2991,83 @@ public class JSCompiler {
 		if (loader == null) loader = JSCompiler.class.getClassLoader();
 		Magic.defineClass(loader, bytes);
 		return funcClassName;
+	}
+
+	private static void generateCallBridges(ClassWriter cw, String funcClassName) {
+		// call0(cx, thisObj)
+		MethodVisitor c0Mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "call0", "(L" + IN_JSContext + ";Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+		c0Mv.visitCode();
+		c0Mv.visitVarInsn(Opcodes.ALOAD, 0);
+		c0Mv.visitVarInsn(Opcodes.ALOAD, 1);
+		c0Mv.visitVarInsn(Opcodes.ALOAD, 2);
+		c0Mv.visitFieldInsn(Opcodes.GETSTATIC, "hope/magic/js/runtime/JSFunction", "EMPTY_ARGS", "[Ljava/lang/Object;");
+		c0Mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, funcClassName, "call", "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+		c0Mv.visitInsn(Opcodes.ARETURN);
+		c0Mv.visitMaxs(0, 0);
+		c0Mv.visitEnd();
+
+		// call1(cx, thisObj, a0)
+		MethodVisitor c1Mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "call1", "(L" + IN_JSContext + ";Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+		c1Mv.visitCode();
+		c1Mv.visitVarInsn(Opcodes.ALOAD, 0);
+		c1Mv.visitVarInsn(Opcodes.ALOAD, 1);
+		c1Mv.visitVarInsn(Opcodes.ALOAD, 2);
+		c1Mv.visitInsn(Opcodes.ICONST_1);
+		c1Mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+		c1Mv.visitInsn(Opcodes.DUP);
+		c1Mv.visitInsn(Opcodes.ICONST_0);
+		c1Mv.visitVarInsn(Opcodes.ALOAD, 3);
+		c1Mv.visitInsn(Opcodes.AASTORE);
+		c1Mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, funcClassName, "call", "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+		c1Mv.visitInsn(Opcodes.ARETURN);
+		c1Mv.visitMaxs(0, 0);
+		c1Mv.visitEnd();
+
+		// call2(cx, thisObj, a0, a1)
+		MethodVisitor c2Mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "call2", "(L" + IN_JSContext + ";Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+		c2Mv.visitCode();
+		c2Mv.visitVarInsn(Opcodes.ALOAD, 0);
+		c2Mv.visitVarInsn(Opcodes.ALOAD, 1);
+		c2Mv.visitVarInsn(Opcodes.ALOAD, 2);
+		c2Mv.visitInsn(Opcodes.ICONST_2);
+		c2Mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+		c2Mv.visitInsn(Opcodes.DUP);
+		c2Mv.visitInsn(Opcodes.ICONST_0);
+		c2Mv.visitVarInsn(Opcodes.ALOAD, 3);
+		c2Mv.visitInsn(Opcodes.AASTORE);
+		c2Mv.visitInsn(Opcodes.DUP);
+		c2Mv.visitInsn(Opcodes.ICONST_1);
+		c2Mv.visitVarInsn(Opcodes.ALOAD, 4);
+		c2Mv.visitInsn(Opcodes.AASTORE);
+		c2Mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, funcClassName, "call", "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+		c2Mv.visitInsn(Opcodes.ARETURN);
+		c2Mv.visitMaxs(0, 0);
+		c2Mv.visitEnd();
+
+		// call3(cx, thisObj, a0, a1, a2)
+		MethodVisitor c3Mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "call3", "(L" + IN_JSContext + ";Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+		c3Mv.visitCode();
+		c3Mv.visitVarInsn(Opcodes.ALOAD, 0);
+		c3Mv.visitVarInsn(Opcodes.ALOAD, 1);
+		c3Mv.visitVarInsn(Opcodes.ALOAD, 2);
+		pushInt(c3Mv, 3);
+		c3Mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+		c3Mv.visitInsn(Opcodes.DUP);
+		c3Mv.visitInsn(Opcodes.ICONST_0);
+		c3Mv.visitVarInsn(Opcodes.ALOAD, 3);
+		c3Mv.visitInsn(Opcodes.AASTORE);
+		c3Mv.visitInsn(Opcodes.DUP);
+		c3Mv.visitInsn(Opcodes.ICONST_1);
+		c3Mv.visitVarInsn(Opcodes.ALOAD, 4);
+		c3Mv.visitInsn(Opcodes.AASTORE);
+		c3Mv.visitInsn(Opcodes.DUP);
+		c3Mv.visitInsn(Opcodes.ICONST_2);
+		c3Mv.visitVarInsn(Opcodes.ALOAD, 5);
+		c3Mv.visitInsn(Opcodes.AASTORE);
+		c3Mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, funcClassName, "call", "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+		c3Mv.visitInsn(Opcodes.ARETURN);
+		c3Mv.visitMaxs(0, 0);
+		c3Mv.visitEnd();
 	}
 
 	private static void ensureContext(MethodVisitor mv, String funcClassName) {
@@ -2998,7 +3109,7 @@ public class JSCompiler {
 		for (Node.FunctionDecl fd : nestedFuncs) {
 			LocalVar var = ctx.getLocal(fd.name);
 			if (var != null) {
-				String childFuncClass = generateFunctionClass(fd.name, fd.params, fd.body);
+				String childFuncClass = generateFunctionClass(fd.name, fd.params, fd.body, fd.isAsync);
 				instantiateFunction(ctx.mv, childFuncClass);
 				ctx.mv.visitVarInsn(Opcodes.ASTORE, var.slot);
 			}

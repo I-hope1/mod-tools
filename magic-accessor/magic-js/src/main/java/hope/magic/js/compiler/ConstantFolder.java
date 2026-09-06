@@ -311,11 +311,15 @@ public class ConstantFolder {
 		}
 
 		if (node instanceof Node.FunctionDecl fn) {
-			return new Node.FunctionDecl(fn.name, fn.params, (BlockStmt) foldNode(fn.body), fn.kind, fn.line, fn.column);
+			return new Node.FunctionDecl(fn.name, fn.params, (BlockStmt) foldNode(fn.body), fn.kind, fn.isAsync, fn.line, fn.column);
 		}
 
 		if (node instanceof Node.FunctionExpr fn) {
-			return new Node.FunctionExpr(fn.name, fn.params, (BlockStmt) foldNode(fn.body), fn.line, fn.column);
+			return new Node.FunctionExpr(fn.name, fn.params, (BlockStmt) foldNode(fn.body), fn.isAsync, fn.line, fn.column);
+		}
+
+		if (node instanceof Node.AwaitExpr awaitExpr) {
+			return new Node.AwaitExpr(foldNode(awaitExpr.expr), awaitExpr.line, awaitExpr.column);
 		}
 
 		return node;

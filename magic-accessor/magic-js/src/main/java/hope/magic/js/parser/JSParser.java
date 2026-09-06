@@ -38,8 +38,12 @@ public class JSParser {
 		if (t.type == TokenType.VAR || t.type == TokenType.LET || t.type == TokenType.CONST) {
 			return parseVarDecl();
 		}
+		if (t.type == TokenType.ASYNC && peekNext().type == TokenType.FUNCTION) {
+			advance(); // consume async
+			return parseFunctionDecl(true);
+		}
 		if (t.type == TokenType.FUNCTION) {
-			return parseFunctionDecl();
+			return parseFunctionDecl(false);
 		}
 		if (t.type == TokenType.CLASS) {
 			advance();
@@ -159,7 +163,7 @@ public class JSParser {
 		return new Node.BlockStmt(stmts, kw.line, kw.column);
 	}
 
-	private Node parseFunctionDecl() {
+	private Node parseFunctionDecl(boolean isAsync) {
 		Token kw = advance();
 		Token id = consume(TokenType.IDENTIFIER, "Expected function name");
 		consume(TokenType.LPAREN, "Expected '(' after function name");
@@ -170,7 +174,7 @@ public class JSParser {
 		Node.BlockStmt rawBody = parseBlockStatement();
 		List<Node> allStmts = new ArrayList<>(paramRes.unpackStmts);
 		allStmts.addAll(rawBody.statements);
-		return new Node.FunctionDecl(id.text, paramRes.params, new Node.BlockStmt(allStmts, rawBody.line, rawBody.column), kw.line, kw.column);
+		return new Node.FunctionDecl(id.text, paramRes.params, new Node.BlockStmt(allStmts, rawBody.line, rawBody.column), Node.PropertyKind.NORMAL, isAsync, kw.line, kw.column);
 	}
 
 	private Node.ClassDecl parseClassDecl(Token classToken) {
@@ -205,6 +209,14 @@ public class JSParser {
 				Token accToken = advance();
 				kind = "get".equals(accToken.text) ? Node.PropertyKind.GETTER : Node.PropertyKind.SETTER;
 			}
+			boolean isAsync = false;
+			if (kind == Node.PropertyKind.NORMAL && check(TokenType.ASYNC)
+					&& peekNext().type != TokenType.LPAREN
+					&& peekNext().type != TokenType.SEMICOLON
+					&& peekNext().type != TokenType.RBRACE) {
+				advance();
+				isAsync = true;
+			}
 			Token nameToken;
 			if (match(TokenType.IDENTIFIER, TokenType.STRING, TokenType.NUMBER)) {
 				nameToken = previous();
@@ -222,13 +234,16 @@ public class JSParser {
 			if (kind == Node.PropertyKind.SETTER && paramRes.params.size() != 1) {
 				throw new RuntimeException("SyntaxError: Setter must have exactly one formal parameter");
 			}
+			if ("constructor".equals(methodName) && isAsync) {
+				throw new RuntimeException("SyntaxError: Class constructor may not be an async method");
+			}
 
 			Node.BlockStmt rawBody = parseBlockStatement();
 			List<Node> allStmts = new ArrayList<>(paramRes.unpackStmts);
 			allStmts.addAll(rawBody.statements);
 			Node.BlockStmt body = new Node.BlockStmt(allStmts, rawBody.line, rawBody.column);
 
-			Node.FunctionDecl fn = new Node.FunctionDecl(methodName, paramRes.params, body, kind, nameToken.line, nameToken.column);
+			Node.FunctionDecl fn = new Node.FunctionDecl(methodName, paramRes.params, body, kind, isAsync, nameToken.line, nameToken.column);
 			if ("constructor".equals(methodName) && !isStatic && kind == Node.PropertyKind.NORMAL) {
 				constructor = fn;
 			} else if (isStatic) {
@@ -574,6 +589,11 @@ public class JSParser {
 			Node right = parseUnary();
 			return new Node.UnaryExpr(TokenType.DELETE, right, true, op.line, op.column);
 		}
+		if (match(TokenType.AWAIT)) {
+			Token op = previous();
+			Node right = parseUnary();
+			return new Node.AwaitExpr(right, op.line, op.column);
+		}
 		return parsePostfix();
 	}
 
@@ -689,6 +709,60 @@ public class JSParser {
 			return new Node.FunctionExpr(null, Collections.singletonList(param.text), body, param.line, param.column);
 		}
 
+		if (match(TokenType.ASYNC)) {
+			Token asyncToken = previous();
+			if (match(TokenType.FUNCTION)) {
+				Token kw = previous();
+				String name = null;
+				if (check(TokenType.IDENTIFIER)) {
+					name = advance().text;
+				}
+				consume(TokenType.LPAREN, "Expected '(' in function expression");
+				ParamParseResult paramRes = parseFunctionParams(kw);
+				consume(TokenType.RPAREN, "Expected ')' after parameters");
+				Node.BlockStmt rawBody = parseBlockStatement();
+				List<Node> allStmts = new ArrayList<>(paramRes.unpackStmts);
+				allStmts.addAll(rawBody.statements);
+				return new Node.FunctionExpr(name, paramRes.params, new Node.BlockStmt(allStmts, rawBody.line, rawBody.column), true, asyncToken.line, asyncToken.column);
+			}
+			// 单参数异步箭头函数: async x => x * 2 或 async x => { ... }
+			if (check(TokenType.IDENTIFIER) && peekNext().type == TokenType.ARROW) {
+				Token param = advance();
+				consume(TokenType.ARROW, "Expected '=>'");
+				Node.BlockStmt body;
+				if (check(TokenType.LBRACE)) {
+					body = parseBlockStatement();
+				} else {
+					Node expr = parseExpression();
+					body = new Node.BlockStmt(Collections.singletonList(new Node.ReturnStmt(expr, expr.line, expr.column)), expr.line, expr.column);
+				}
+				return new Node.FunctionExpr(null, Collections.singletonList(param.text), body, true, asyncToken.line, asyncToken.column);
+			}
+			// 括号异步箭头函数: async ( a, b ) => expr
+			if (check(TokenType.LPAREN) && isAsyncArrowParamList()) {
+				Token lparen = advance();
+				ParamParseResult paramRes = parseFunctionParams(lparen);
+				consume(TokenType.RPAREN, "Expected ')' after parameters");
+				consume(TokenType.ARROW, "Expected '=>'");
+				Node.BlockStmt body;
+				if (check(TokenType.LBRACE)) {
+					Node.BlockStmt rawBody = parseBlockStatement();
+					List<Node> allStmts = new ArrayList<>(paramRes.unpackStmts);
+					allStmts.addAll(rawBody.statements);
+					body = new Node.BlockStmt(allStmts, rawBody.line, rawBody.column);
+				} else {
+					Node expr = parseExpression();
+					List<Node> allStmts = new ArrayList<>(paramRes.unpackStmts);
+					allStmts.add(new Node.ReturnStmt(expr, expr.line, expr.column));
+					body = new Node.BlockStmt(allStmts, expr.line, expr.column);
+				}
+				return new Node.FunctionExpr(null, paramRes.params, body, true, asyncToken.line, asyncToken.column);
+			}
+
+			// 否则将 async 视为普通标识符 (如变量 async 或函数调用 async())
+			return new Node.IdentifierExpr("async", asyncToken.line, asyncToken.column);
+		}
+
 		if (match(TokenType.IDENTIFIER)) {
 			return new Node.IdentifierExpr(previous().text, previous().line, previous().column);
 		}
@@ -709,13 +783,19 @@ public class JSParser {
 			return new Node.FunctionExpr(name, paramRes.params, new Node.BlockStmt(allStmts, rawBody.line, rawBody.column), kw.line, kw.column);
 		}
 
-		// 对象字面量 { a: 1, b: 2 } 或属性简写 { a, b } 或访问器 { get foo() {}, set foo(v) {} }
+		// 对象字面量 { a: 1, b: 2 } 或属性简写 { a, b } 或访问器 { get foo() {}, set foo(v) {} } 或异步方法 { async foo() {} }
 		if (match(TokenType.LBRACE)) {
 			Token lbrace = previous();
 			List<Node.ObjectLiteralExpr.Entry> entries = new ArrayList<>();
 			if (!check(TokenType.RBRACE)) {
 				do {
 					if (check(TokenType.RBRACE)) break;
+					boolean isAsyncMethod = check(TokenType.ASYNC)
+							&& peekNext().type != TokenType.COLON
+							&& peekNext().type != TokenType.COMMA
+							&& peekNext().type != TokenType.RBRACE
+							&& peekNext().type != TokenType.LPAREN;
+
 					boolean isAccessor = check(TokenType.IDENTIFIER)
 							&& ("get".equals(peek().text) || "set".equals(peek().text))
 							&& peekNext().type != TokenType.COLON
@@ -723,7 +803,25 @@ public class JSParser {
 							&& peekNext().type != TokenType.COMMA
 							&& peekNext().type != TokenType.RBRACE;
 
-					if (isAccessor) {
+					if (isAsyncMethod) {
+						Token asyncToken = advance();
+						Token nameToken;
+						if (match(TokenType.IDENTIFIER, TokenType.STRING, TokenType.NUMBER)) {
+							nameToken = previous();
+						} else {
+							nameToken = consumePropertyName("Expected method name after 'async'");
+						}
+						String key = nameToken.text;
+						consume(TokenType.LPAREN, "Expected '(' after method name");
+						ParamParseResult paramRes = parseFunctionParams(nameToken);
+						consume(TokenType.RPAREN, "Expected ')' after parameters");
+						Node.BlockStmt rawBody = parseBlockStatement();
+						List<Node> allStmts = new ArrayList<>(paramRes.unpackStmts);
+						allStmts.addAll(rawBody.statements);
+						Node.BlockStmt body = new Node.BlockStmt(allStmts, rawBody.line, rawBody.column);
+						Node val = new Node.FunctionExpr(key, paramRes.params, body, true, nameToken.line, nameToken.column);
+						entries.add(new Node.ObjectLiteralExpr.Entry(key, val, Node.PropertyKind.NORMAL));
+					} else if (isAccessor) {
 						Token accToken = advance();
 						Node.PropertyKind kind = "get".equals(accToken.text) ? Node.PropertyKind.GETTER : Node.PropertyKind.SETTER;
 						Token nameToken;
@@ -1171,6 +1269,24 @@ public class JSParser {
 
 	private boolean isArrowParamList() {
 		int i = cursor;
+		int depth = 1;
+		while (i < tokens.size()) {
+			TokenType type = tokens.get(i).type;
+			if (type == TokenType.LPAREN || type == TokenType.LBRACE || type == TokenType.LBRACKET) {
+				depth++;
+			} else if (type == TokenType.RPAREN || type == TokenType.RBRACE || type == TokenType.RBRACKET) {
+				depth--;
+				if (depth == 0) {
+					return i + 1 < tokens.size() && tokens.get(i + 1).type == TokenType.ARROW;
+				}
+			}
+			i++;
+		}
+		return false;
+	}
+
+	private boolean isAsyncArrowParamList() {
+		int i = cursor + 1;
 		int depth = 1;
 		while (i < tokens.size()) {
 			TokenType type = tokens.get(i).type;

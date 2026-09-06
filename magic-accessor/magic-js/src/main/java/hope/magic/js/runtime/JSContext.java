@@ -282,6 +282,8 @@ public class JSContext {
 	public static final int SLOT_PROXY           = getGlobalSlot("Proxy");
 	public static final int SLOT_REFLECT         = getGlobalSlot("Reflect");
 	public static final int SLOT_DATE            = getGlobalSlot("Date");
+	public static final int SLOT_PROMISE         = getGlobalSlot("Promise");
+	public static final int SLOT_QUEUE_MICROTASK = getGlobalSlot("queueMicrotask");
 	public static final int SLOT_GLOBAL_THIS     = getGlobalSlot("globalThis");
 	public static final int SLOT_DOLLAR_262      = getGlobalSlot("$262");
 
@@ -1949,31 +1951,69 @@ public class JSContext {
 		return (int) rawReturnBits;
 	}
 
+	public static final ThreadLocal<JSContext> CURRENT = new ThreadLocal<>();
+
+	public static JSContext current() {
+		return CURRENT.get();
+	}
+
+	private final ArrayDeque<Runnable> microtaskQueue = new ArrayDeque<>();
+	private final Object               microtaskLock  = new Object();
+
+	public void queueMicrotask(Runnable task) {
+		synchronized (microtaskLock) {
+			microtaskQueue.add(task);
+		}
+	}
+
+	public void drainMicrotasks() {
+		JSContext old = CURRENT.get();
+		CURRENT.set(this);
+		try {
+			while (true) {
+				Runnable task;
+				synchronized (microtaskLock) {
+					task = microtaskQueue.poll();
+				}
+				if (task == null) break;
+				try {
+					task.run();
+				} catch (Throwable ignored) {
+				}
+			}
+		} finally {
+			CURRENT.set(old);
+		}
+	}
+
 	public JSContext() {
 		// 100% 零成本实例化：按需懒加载所有 Built-in 对象，首调 0 类加载突发
 	}
 
 	public static class LazyBuiltins {
-		public static final JSObject            OBJECT_PROTOTYPE = LazyObject.OBJECT_PROTOTYPE;
-		public static final JSObject            ARRAY_PROTOTYPE  = LazyArray.ARRAY_PROTOTYPE;
-		public static final JSObjectConstructor OBJECT           = LazyObject.OBJECT;
-		public static final JSArrayConstructor  ARRAY            = LazyArray.ARRAY;
-		public static final JSObject            CONSOLE          = LazyConsole.CONSOLE;
-		public static final JSObject            MATH             = LazyMath.MATH;
-		public static final JSFunction          PRINT            = LazyMisc.PRINT;
-		public static final JSFunction          IMPORT_CLASS     = LazyMisc.IMPORT_CLASS;
-		public static final JSObject            PACKAGES         = LazyMisc.PACKAGES;
-		public static final JSFunction          REGEXP           = LazyMisc.REGEXP;
-		public static final JSObject            JAVA             = LazyMisc.JAVA;
-		public static final JSObject            JAVA_PKG         = LazyMisc.JAVA_PKG;
-		public static final JSObject            JAVAX_PKG        = LazyMisc.JAVAX_PKG;
-		public static final JSObject            ERROR            = LazyErrors.ERROR;
-		public static final JSObject            TYPE_ERROR       = LazyErrors.TYPE_ERROR;
-		public static final JSObject            RANGE_ERROR      = LazyErrors.RANGE_ERROR;
-		public static final JSObject            SYNTAX_ERROR     = LazyErrors.SYNTAX_ERROR;
-		public static final JSObject            REFERENCE_ERROR  = LazyErrors.REFERENCE_ERROR;
-		public static final JSObject            URI_ERROR        = LazyErrors.URI_ERROR;
-		public static final JSObject            EVAL_ERROR       = LazyErrors.EVAL_ERROR;
+		public static final JSObject            OBJECT_PROTOTYPE  = LazyObject.OBJECT_PROTOTYPE;
+		public static final JSObject            ARRAY_PROTOTYPE   = LazyArray.ARRAY_PROTOTYPE;
+		public static final JSObjectConstructor OBJECT            = LazyObject.OBJECT;
+		public static final JSArrayConstructor  ARRAY             = LazyArray.ARRAY;
+		public static final JSObject            CONSOLE           = LazyConsole.CONSOLE;
+		public static final JSObject            MATH              = LazyMath.MATH;
+		public static final JSFunction          PRINT             = LazyMisc.PRINT;
+		public static final JSFunction          IMPORT_CLASS      = LazyMisc.IMPORT_CLASS;
+		public static final JSObject            PACKAGES          = LazyMisc.PACKAGES;
+		public static final JSFunction          REGEXP            = LazyMisc.REGEXP;
+		public static final JSObject            JAVA              = LazyMisc.JAVA;
+		public static final JSObject            JAVA_PKG          = LazyMisc.JAVA_PKG;
+		public static final JSObject            JAVAX_PKG         = LazyMisc.JAVAX_PKG;
+		public static final JSObject            ERROR             = LazyErrors.ERROR;
+		public static final JSObject            TYPE_ERROR        = LazyErrors.TYPE_ERROR;
+		public static final JSObject            RANGE_ERROR       = LazyErrors.RANGE_ERROR;
+		public static final JSObject            SYNTAX_ERROR      = LazyErrors.SYNTAX_ERROR;
+		public static final JSObject            REFERENCE_ERROR   = LazyErrors.REFERENCE_ERROR;
+		public static final JSObject            URI_ERROR         = LazyErrors.URI_ERROR;
+		public static final JSObject            EVAL_ERROR        = LazyErrors.EVAL_ERROR;
+		public static final JSObject            PROMISE_PROTOTYPE = LazyPromise.PROMISE_PROTOTYPE;
+		public static final JSObject            PROMISE           = LazyPromise.PROMISE;
+		public static final JSFunction          QUEUE_MICROTASK   = LazyPromise.QUEUE_MICROTASK;
 	}
 
 	public static JSOps.JSException makeTypeError(String message) {
@@ -2404,6 +2444,119 @@ public class JSContext {
 		}
 	}
 
+	public static class LazyPromise {
+		public static final JSObject   PROMISE_PROTOTYPE = createPromisePrototype();
+		public static final JSObject   PROMISE           = createPromiseConstructor(PROMISE_PROTOTYPE);
+		public static final JSFunction QUEUE_MICROTASK   = (cx, thisObj, args) -> {
+			if (args.length > 0 && args[0] instanceof JSFunction fn) {
+				JSContext current = cx != null ? cx : JSContext.current();
+				if (current != null) {
+					current.queueMicrotask(() -> {
+						try {
+							fn.call0(current, null);
+						} catch (Throwable ignored) {
+						}
+					});
+				}
+			}
+			return JSUndefined.INSTANCE;
+		};
+
+		private static JSObject createPromisePrototype() {
+			JSObject proto = new JSObject(LazyObject.OBJECT_PROTOTYPE);
+			proto.put("name", "Promise");
+			proto.put("then", makeMethod("then", 2, (cx, thisObj, args) -> {
+				if (thisObj instanceof JSPromise p) {
+					JSContext current = cx != null ? cx : (p.cx != null ? p.cx : JSContext.current());
+					Object onF = args.length > 0 ? args[0] : null;
+					Object onR = args.length > 1 ? args[1] : null;
+					return p.then(current, onF, onR);
+				}
+				throw makeTypeError("Promise.prototype.then called on non-promise");
+			}));
+			proto.put("catch", makeMethod("catch", 1, (cx, thisObj, args) -> {
+				if (thisObj instanceof JSPromise p) {
+					JSContext current = cx != null ? cx : (p.cx != null ? p.cx : JSContext.current());
+					Object onR = args.length > 0 ? args[0] : null;
+					return p.catch_(current, onR);
+				}
+				throw makeTypeError("Promise.prototype.catch called on non-promise");
+			}));
+			proto.put("finally", makeMethod("finally", 1, (cx, thisObj, args) -> {
+				if (thisObj instanceof JSPromise p) {
+					JSContext current = cx != null ? cx : (p.cx != null ? p.cx : JSContext.current());
+					Object onFin = args.length > 0 ? args[0] : null;
+					return p.finally_(current, onFin);
+				}
+				throw makeTypeError("Promise.prototype.finally called on non-promise");
+			}));
+			return proto;
+		}
+
+		private static JSObject createPromiseConstructor(JSObject proto) {
+			JSBuiltinConstructor ctor = new JSBuiltinConstructor("Promise", 1, proto, (cx, thisObj, args) -> {
+				if (args.length == 0 || !(args[0] instanceof JSFunction executor)) {
+					throw makeTypeError("Promise resolver undefined is not a function");
+				}
+				JSContext current = cx != null ? cx : JSContext.current();
+				JSPromise promise = (thisObj instanceof JSPromise p && p.getPrototype() == proto) ? p : new JSPromise(current, proto);
+				java.util.concurrent.atomic.AtomicBoolean called = new java.util.concurrent.atomic.AtomicBoolean(false);
+				JSFunction resolveFn = (c, self, a) -> {
+					if (called.compareAndSet(false, true)) {
+						promise.resolve(a.length > 0 ? a[0] : JSUndefined.INSTANCE);
+					}
+					return JSUndefined.INSTANCE;
+				};
+				JSFunction rejectFn = (c, self, a) -> {
+					if (called.compareAndSet(false, true)) {
+						promise.reject(a.length > 0 ? a[0] : JSUndefined.INSTANCE);
+					}
+					return JSUndefined.INSTANCE;
+				};
+				try {
+					executor.call2(current, null, resolveFn, rejectFn);
+				} catch (Throwable t) {
+					if (called.compareAndSet(false, true)) {
+						promise.reject(t instanceof JSOps.JSException je ? je.value : t);
+					}
+				}
+				return promise;
+			});
+
+			ctor.put("resolve", makeMethod("resolve", 1, (cx, thisObj, args) -> {
+				JSContext current = cx != null ? cx : JSContext.current();
+				Object val = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
+				return JSPromise.resolve(current, val);
+			}));
+			ctor.put("reject", makeMethod("reject", 1, (cx, thisObj, args) -> {
+				JSContext current = cx != null ? cx : JSContext.current();
+				Object reason = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
+				return JSPromise.reject(current, reason);
+			}));
+			ctor.put("all", makeMethod("all", 1, (cx, thisObj, args) -> {
+				JSContext current = cx != null ? cx : JSContext.current();
+				Object iterable = args.length > 0 ? args[0] : null;
+				return JSPromise.all(current, iterable);
+			}));
+			ctor.put("allSettled", makeMethod("allSettled", 1, (cx, thisObj, args) -> {
+				JSContext current = cx != null ? cx : JSContext.current();
+				Object iterable = args.length > 0 ? args[0] : null;
+				return JSPromise.allSettled(current, iterable);
+			}));
+			ctor.put("race", makeMethod("race", 1, (cx, thisObj, args) -> {
+				JSContext current = cx != null ? cx : JSContext.current();
+				Object iterable = args.length > 0 ? args[0] : null;
+				return JSPromise.race(current, iterable);
+			}));
+			ctor.put("any", makeMethod("any", 1, (cx, thisObj, args) -> {
+				JSContext current = cx != null ? cx : JSContext.current();
+				Object iterable = args.length > 0 ? args[0] : null;
+				return JSPromise.any(current, iterable);
+			}));
+			return ctor;
+		}
+	}
+
 	public static class JSGlobalThis extends JSObject {
 		private final JSContext cx;
 
@@ -2467,6 +2620,10 @@ public class JSContext {
 			put("createRealm", makeMethod("createRealm", 0, (c, thisObj, args) -> {
 				JSContext realmCtx = new JSContext();
 				return realmCtx.get("$262");
+			}));
+			put("drainMicrotasks", makeMethod("drainMicrotasks", 0, (c, thisObj, args) -> {
+				c.drainMicrotasks();
+				return JSUndefined.INSTANCE;
 			}));
 		}
 	}
@@ -2538,6 +2695,10 @@ public class JSContext {
 			val = LazyReflect.REFLECT;
 		} else if (slot == SLOT_DATE) {
 			val = LazyDate.DATE;
+		} else if (slot == SLOT_PROMISE) {
+			val = LazyBuiltins.PROMISE;
+		} else if (slot == SLOT_QUEUE_MICROTASK) {
+			val = LazyBuiltins.QUEUE_MICROTASK;
 		} else if (slot == SLOT_GLOBAL_THIS) {
 			val = getGlobalThis();
 		} else if (slot == SLOT_DOLLAR_262) {
@@ -2630,6 +2791,8 @@ public class JSContext {
 	}
 
 	public Object eval(String code) {
+		JSContext old = CURRENT.get();
+		CURRENT.set(this);
 		try {
 			JSLexer      lexer   = new JSLexer(code);
 			List<Token>  tokens  = lexer.tokenize();
@@ -2643,6 +2806,8 @@ public class JSContext {
 				throw (RuntimeException) t;
 			}
 			throw new RuntimeException("Script execution error: " + t.getMessage(), t);
+		} finally {
+			CURRENT.set(old);
 		}
 	}
 }

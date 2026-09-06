@@ -16,6 +16,8 @@ public class JSLexer {
 		KEYWORDS.put("let", TokenType.LET);
 		KEYWORDS.put("const", TokenType.CONST);
 		KEYWORDS.put("function", TokenType.FUNCTION);
+		KEYWORDS.put("async", TokenType.ASYNC);
+		KEYWORDS.put("await", TokenType.AWAIT);
 		KEYWORDS.put("return", TokenType.RETURN);
 		KEYWORDS.put("if", TokenType.IF);
 		KEYWORDS.put("else", TokenType.ELSE);

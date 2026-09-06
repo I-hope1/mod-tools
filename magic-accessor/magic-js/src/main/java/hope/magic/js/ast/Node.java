@@ -50,6 +50,7 @@ public abstract class Node {
 		R visitTernaryExpr(TernaryExpr node, C context);
 		R visitClassDecl(ClassDecl node, C context);
 		R visitSuperExpr(SuperExpr node, C context);
+		R visitAwaitExpr(AwaitExpr node, C context);
 	}
 
 	//region 语句 Statements
@@ -333,17 +334,27 @@ public abstract class Node {
 		public final List<String> params;
 		public final BlockStmt body;
 		public final PropertyKind kind;
+		public final boolean isAsync;
 
-		public FunctionDecl(String name, List<String> params, BlockStmt body, PropertyKind kind, int line, int column) {
+		public FunctionDecl(String name, List<String> params, BlockStmt body, PropertyKind kind, boolean isAsync, int line, int column) {
 			super(line, column);
 			this.name = name;
 			this.params = params;
 			this.body = body;
 			this.kind = kind != null ? kind : PropertyKind.NORMAL;
+			this.isAsync = isAsync;
+		}
+
+		public FunctionDecl(String name, List<String> params, BlockStmt body, PropertyKind kind, int line, int column) {
+			this(name, params, body, kind, false, line, column);
+		}
+
+		public FunctionDecl(String name, List<String> params, BlockStmt body, boolean isAsync, int line, int column) {
+			this(name, params, body, PropertyKind.NORMAL, isAsync, line, column);
 		}
 
 		public FunctionDecl(String name, List<String> params, BlockStmt body, int line, int column) {
-			this(name, params, body, PropertyKind.NORMAL, line, column);
+			this(name, params, body, PropertyKind.NORMAL, false, line, column);
 		}
 
 		@Override
@@ -583,12 +594,18 @@ public abstract class Node {
 		public final String name; // can be null
 		public final List<String> params;
 		public final BlockStmt body;
+		public final boolean isAsync;
 
-		public FunctionExpr(String name, List<String> params, BlockStmt body, int line, int column) {
+		public FunctionExpr(String name, List<String> params, BlockStmt body, boolean isAsync, int line, int column) {
 			super(line, column);
 			this.name = name;
 			this.params = params;
 			this.body = body;
+			this.isAsync = isAsync;
+		}
+
+		public FunctionExpr(String name, List<String> params, BlockStmt body, int line, int column) {
+			this(name, params, body, false, line, column);
 		}
 
 		@Override
@@ -647,6 +664,20 @@ public abstract class Node {
 		@Override
 		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
 			return visitor.visitSuperExpr(this, context);
+		}
+	}
+
+	public static class AwaitExpr extends Node {
+		public final Node expr;
+
+		public AwaitExpr(Node expr, int line, int column) {
+			super(line, column);
+			this.expr = expr;
+		}
+
+		@Override
+		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+			return visitor.visitAwaitExpr(this, context);
 		}
 	}
 	//endregion

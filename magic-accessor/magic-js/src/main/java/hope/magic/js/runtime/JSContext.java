@@ -18,8 +18,8 @@ public class JSContext {
 
 	private static final Object NULL_VALUE = new Object();
 
-	public static final int                               INITIAL_GLOBAL_SLOTS_CAPACITY = 64;
-	public volatile     Object[]                          globalSlots                   = new Object[INITIAL_GLOBAL_SLOTS_CAPACITY];
+	public static final int                 INITIAL_GLOBAL_SLOTS_CAPACITY = 64;
+	public volatile     Object[]            globalSlots                   = new Object[INITIAL_GLOBAL_SLOTS_CAPACITY];
 	// 架构优化说明：
 	// 原 globals 采用 ConcurrentHashMap<String, Object> 作为实例字段，
 	// 导致每个 JSContext 实例化时均需要分配包含并发分段/计数器单元的重型哈希表，增加了堆分配与 GC 压力。
@@ -27,7 +27,7 @@ public class JSContext {
 	// 仅在首次冷加载或反射兜底时才会访问 globals。
 	// 故将其替换为轻量 HashMap<String, Object>，写操作集中在 synchronized 的 set() 中，
 	// 读操作通过 synchronized (globals) 块保证复合原子性与线程安全，大幅减少 Context 创建开销。
-	private final       Map<String, Object>               globals                       = new HashMap<>();
+	private final       Map<String, Object> globals                       = new HashMap<>();
 
 	public static class JSMathFunction implements JSFunction {
 		public static final int OP_ABS    = 0;
@@ -198,6 +198,12 @@ public class JSContext {
 		}
 
 		@Override
+		public JSObject getPrototype() {
+			JSObject p = super.getPrototype();
+			return (p != null && p != LazyObject.OBJECT_PROTOTYPE) ? p : LazyFunction.FUNCTION_PROTOTYPE;
+		}
+
+		@Override
 		public Object call(JSContext cx, Object thisObj, Object[] args) {
 			if (args.length == 1 && args[0] instanceof Number num) {
 				return createSizedArray(num.doubleValue());
@@ -247,25 +253,47 @@ public class JSContext {
 		}
 	}
 
-	public static final int SLOT_NAN          = getGlobalSlot("NaN");
-	public static final int SLOT_INFINITY     = getGlobalSlot("Infinity");
-	public static final int SLOT_UNDEFINED    = getGlobalSlot("undefined");
-	public static final int SLOT_JSOPS        = getGlobalSlot("JSOps");
-	public static final int SLOT_PRINT        = getGlobalSlot("print");
-	public static final int SLOT_CONSOLE      = getGlobalSlot("console");
-	public static final int SLOT_MATH         = getGlobalSlot("Math");
-	public static final int SLOT_IMPORT_CLASS = getGlobalSlot("importClass");
-	public static final int SLOT_PACKAGES     = getGlobalSlot("Packages");
-	public static final int SLOT_REGEXP       = getGlobalSlot("RegExp");
-	public static final int SLOT_OBJECT       = getGlobalSlot("Object");
-	public static final int SLOT_ARRAY        = getGlobalSlot("Array");
-	public static final int SLOT_JAVA         = getGlobalSlot("Java");
-	public static final int SLOT_JAVA_PKG     = getGlobalSlot("java");
-	public static final int SLOT_JAVAX_PKG    = getGlobalSlot("javax");
+	public static final int SLOT_NAN             = getGlobalSlot("NaN");
+	public static final int SLOT_INFINITY        = getGlobalSlot("Infinity");
+	public static final int SLOT_UNDEFINED       = getGlobalSlot("undefined");
+	public static final int SLOT_JSOPS           = getGlobalSlot("JSOps");
+	public static final int SLOT_PRINT           = getGlobalSlot("print");
+	public static final int SLOT_CONSOLE         = getGlobalSlot("console");
+	public static final int SLOT_MATH            = getGlobalSlot("Math");
+	public static final int SLOT_IMPORT_CLASS    = getGlobalSlot("importClass");
+	public static final int SLOT_PACKAGES        = getGlobalSlot("Packages");
+	public static final int SLOT_REGEXP          = getGlobalSlot("RegExp");
+	public static final int SLOT_OBJECT          = getGlobalSlot("Object");
+	public static final int SLOT_ARRAY           = getGlobalSlot("Array");
+	public static final int SLOT_JAVA            = getGlobalSlot("Java");
+	public static final int SLOT_JAVA_PKG        = getGlobalSlot("java");
+	public static final int SLOT_JAVAX_PKG       = getGlobalSlot("javax");
+	public static final int SLOT_ERROR           = getGlobalSlot("Error");
+	public static final int SLOT_TYPE_ERROR      = getGlobalSlot("TypeError");
+	public static final int SLOT_RANGE_ERROR     = getGlobalSlot("RangeError");
+	public static final int SLOT_SYNTAX_ERROR    = getGlobalSlot("SyntaxError");
+	public static final int SLOT_REFERENCE_ERROR = getGlobalSlot("ReferenceError");
+	public static final int SLOT_URI_ERROR       = getGlobalSlot("URIError");
+	public static final int SLOT_EVAL_ERROR      = getGlobalSlot("EvalError");
+	public static final int SLOT_BOOLEAN         = getGlobalSlot("Boolean");
+	public static final int SLOT_NUMBER          = getGlobalSlot("Number");
+	public static final int SLOT_STRING          = getGlobalSlot("String");
+	public static final int SLOT_FUNCTION        = getGlobalSlot("Function");
+	public static final int SLOT_PROXY           = getGlobalSlot("Proxy");
+	public static final int SLOT_REFLECT         = getGlobalSlot("Reflect");
+	public static final int SLOT_DATE            = getGlobalSlot("Date");
+	public static final int SLOT_GLOBAL_THIS     = getGlobalSlot("globalThis");
+	public static final int SLOT_DOLLAR_262      = getGlobalSlot("$262");
 
 	public static class JSBuiltinMethod extends JSObject implements JSFunction {
 		private static final List<String> BUILTIN_METHOD_PROPS = List.of("name", "length");
-		private static final JSShape METHOD_SHAPE = JSShape.createStaticPrototypeShape(BUILTIN_METHOD_PROPS);
+		private static final JSShape      METHOD_SHAPE         = JSShape.createStaticPrototypeShape(
+		 BUILTIN_METHOD_PROPS,
+		 new byte[]{
+			(byte) (JSShape.TYPE_OBJECT | JSShape.FLAG_NOT_WRITABLE | JSShape.FLAG_NOT_ENUMERABLE),
+			(byte) (JSShape.TYPE_DOUBLE | JSShape.FLAG_NOT_WRITABLE | JSShape.FLAG_NOT_ENUMERABLE)
+		 }
+		);
 
 		private final JSFunction fn;
 
@@ -275,6 +303,16 @@ public class JSContext {
 			this.prim1 = Double.doubleToRawLongBits((double) length);
 			this.doubleFieldMask = (1L << 1);
 			this.fn = fn;
+		}
+
+		public String getMethodName() {
+			return obj0 instanceof String s ? s : "";
+		}
+
+		@Override
+		public JSObject getPrototype() {
+			JSObject p = super.getPrototype();
+			return p != null ? p : LazyFunction.FUNCTION_PROTOTYPE;
 		}
 
 		@Override
@@ -338,12 +376,81 @@ public class JSContext {
 		}
 	}
 
+	public static JSBuiltinMethod makeMethod(String name, int length, JSFunction fn) {
+		return new JSBuiltinMethod(name, length, fn);
+	}
+
+	public static class BoundFunction extends JSObject implements JSFunction {
+		private final JSFunction target;
+		private final Object     boundThis;
+		private final Object[]   boundArgs;
+
+		public BoundFunction(JSFunction target, Object boundThis, Object[] boundArgs, JSObject prototype) {
+			super(prototype);
+			this.target = target;
+			this.boundThis = boundThis;
+			this.boundArgs = boundArgs;
+			put("name", "bound ");
+			put("length", 0);
+		}
+
+		@Override
+		public JSObject getPrototype() {
+			JSObject p = super.getPrototype();
+			return p != null ? p : LazyFunction.FUNCTION_PROTOTYPE;
+		}
+
+		@Override
+		public Object call(JSContext cx, Object thisObj, Object[] args) throws Throwable {
+			Object[] fullArgs = new Object[boundArgs.length + args.length];
+			System.arraycopy(boundArgs, 0, fullArgs, 0, boundArgs.length);
+			System.arraycopy(args, 0, fullArgs, boundArgs.length, args.length);
+			return target.call(cx, boundThis, fullArgs);
+		}
+
+		@Override
+		public String toString() {
+			return "function () { [native code] }";
+		}
+	}
+
+	public static class JSBuiltinConstructor extends JSObject implements JSFunction {
+		private final JSFunction fn;
+
+		public JSBuiltinConstructor(String name, int length, JSObject prototype, JSFunction fn) {
+			super(LazyFunction.FUNCTION_PROTOTYPE);
+			put("name", name);
+			put("length", length);
+			put("prototype", prototype);
+			if (prototype != null) {
+				prototype.put("constructor", this);
+			}
+			this.fn = fn;
+		}
+
+		@Override
+		public JSObject getPrototype() {
+			JSObject p = super.getPrototype();
+			return (p != null && p != LazyObject.OBJECT_PROTOTYPE) ? p : LazyFunction.FUNCTION_PROTOTYPE;
+		}
+
+		@Override
+		public Object call(JSContext cx, Object thisObj, Object[] args) throws Throwable {
+			return fn.call(cx, thisObj, args);
+		}
+
+		@Override
+		public String toString() {
+			return "function " + get("name") + "() { [native code] }";
+		}
+	}
+
 	static class LazyMisc {
 		static final JSFunction PRINT = (cx, thisObj, args) -> {
 			StringBuilder sb = new StringBuilder();
 			for (int i = 0; i < args.length; i++) {
 				if (i > 0) sb.append(" ");
-				sb.append(args[i]);
+				sb.append(JSOps.toStr(args[i]));
 			}
 			System.out.println(sb);
 			return JSUndefined.INSTANCE;
@@ -391,10 +498,10 @@ public class JSContext {
 			}
 		}
 
-		static final JSObject PACKAGES = new PackageObject("");
-		static final JSObject JAVA_PKG = new PackageObject("java");
+		static final JSObject PACKAGES  = new PackageObject("");
+		static final JSObject JAVA_PKG  = new PackageObject("java");
 		static final JSObject JAVAX_PKG = new PackageObject("javax");
-		static final JSObject JAVA = createJavaObject();
+		static final JSObject JAVA      = createJavaObject();
 
 		private static JSObject createJavaObject() {
 			JSObject javaObj = new JSObject();
@@ -444,8 +551,8 @@ public class JSContext {
 	static class LazyConsole {
 		static final JSObject CONSOLE = createConsole();
 		private static JSObject createConsole() {
-			JSShape shape = JSShape.createStaticPrototypeShape(List.of("log"));
-			JSObject c = new JSObject(shape, null);
+			JSShape  shape = JSShape.createStaticPrototypeShape(List.of("log"));
+			JSObject c     = new JSObject(shape, null);
 			c.put("log", LazyMisc.PRINT);
 			return c;
 		}
@@ -453,13 +560,13 @@ public class JSContext {
 
 	static class LazyMath {
 		private static final List<String> MATH_PROPS = List.of(
-			"PI", "E", "abs", "sqrt", "floor", "ceil", "round",
-			"sin", "cos", "tan", "asin", "acos", "atan", "exp",
-			"log", "log10", "log2", "cbrt", "sign", "trunc",
-			"random", "max", "min", "pow", "atan2", "hypot"
+		 "PI", "E", "abs", "sqrt", "floor", "ceil", "round",
+		 "sin", "cos", "tan", "asin", "acos", "atan", "exp",
+		 "log", "log10", "log2", "cbrt", "sign", "trunc",
+		 "random", "max", "min", "pow", "atan2", "hypot"
 		);
-		private static final JSShape MATH_SHAPE = JSShape.createStaticPrototypeShape(MATH_PROPS);
-		static final JSObject MATH = createMath();
+		private static final JSShape      MATH_SHAPE = JSShape.createStaticPrototypeShape(MATH_PROPS);
+		static final         JSObject     MATH       = createMath();
 
 		private static JSObject createMath() {
 			JSObject math = new JSObject(MATH_SHAPE, null);
@@ -495,11 +602,11 @@ public class JSContext {
 
 	static class LazyObject {
 		private static final List<String> OBJECT_PROTO_PROPS = List.of(
-			"hasOwnProperty", "toString", "valueOf", "constructor"
+		 "hasOwnProperty", "toString", "valueOf", "constructor", "propertyIsEnumerable", "isPrototypeOf"
 		);
-		private static final List<String> OBJECT_CTOR_PROPS = List.of(
-			"name", "length", "prototype", "is", "getPrototypeOf", "setPrototypeOf", "create", "getOwnPropertyNames",
-			"defineProperty", "defineProperties", "getOwnPropertyDescriptor", "getOwnPropertyDescriptors", "keys"
+		private static final List<String> OBJECT_CTOR_PROPS  = List.of(
+		 "name", "length", "prototype", "is", "getPrototypeOf", "setPrototypeOf", "create", "getOwnPropertyNames",
+		 "defineProperty", "defineProperties", "getOwnPropertyDescriptor", "getOwnPropertyDescriptors", "keys"
 		);
 
 		static final JSObject            OBJECT_PROTOTYPE = createObjectPrototype();
@@ -507,24 +614,65 @@ public class JSContext {
 
 		private static JSObject createObjectPrototype() {
 			// 原型链顶端：Object.prototype 原型严格为 null，采用批量烘焙终态 Shape
-			JSShape shape = JSShape.createStaticPrototypeShape(OBJECT_PROTO_PROPS);
+			JSShape  shape = JSShape.createStaticPrototypeShape(OBJECT_PROTO_PROPS);
 			JSObject proto = new JSObject(shape, null);
-			proto.put("hasOwnProperty", (JSFunction) (cx, thisObj, args) -> {
+			proto.put("hasOwnProperty", makeMethod("hasOwnProperty", 1, (cx, thisObj, args) -> {
 				if (args.length == 0) return Boolean.FALSE;
 				String key = JSOps.toStr(args[0]);
 				if (thisObj instanceof JSObject jsObj) {
 					return jsObj.hasOwnProperty(key);
 				}
 				return Boolean.FALSE;
-			});
-			proto.put("toString", (JSFunction) (cx, thisObj, args) -> "[object Object]");
-			proto.put("valueOf", (JSFunction) (cx, thisObj, args) -> thisObj);
+			}));
+			proto.put("toString", makeMethod("toString", 0, (cx, thisObj, args) -> {
+				if (thisObj == null || thisObj == JSUndefined.INSTANCE) {
+					return "[object Undefined]";
+				}
+
+				// 2. Built-in tag checks:
+				String tag;
+				if (thisObj instanceof JSArray) {
+					tag = "Array";
+				} else if (thisObj instanceof JSFunction) {
+					tag = "Function";
+				} else if (thisObj instanceof JSDate) { // adjust to your class names
+					tag = "Date";
+				} else if (thisObj instanceof JSRegExp) {
+					tag = "RegExp";
+				} else {
+					tag = "Object";
+				}
+
+				return "[object " + tag + "]";
+			}));
+			proto.put("valueOf", makeMethod("valueOf", 0, (cx, thisObj, args) -> thisObj));
+			proto.put("propertyIsEnumerable", makeMethod("propertyIsEnumerable", 1, (cx, thisObj, args) -> {
+				if (args.length == 0 || !(thisObj instanceof JSObject jsObj)) return Boolean.FALSE;
+				String key   = JSOps.toStr(args[0]);
+				int    symId = SymbolTable.lookupId(key);
+				if (symId == SymbolTable.NO_SYMBOL) return Boolean.FALSE;
+				int offset = jsObj.shape.getOffset(symId);
+				if (offset < 0 || (!jsObj.isDoubleSlot(offset) && jsObj.getRawObjectSlot(offset) == JSObject.DELETED)) {
+					return Boolean.FALSE;
+				}
+				return jsObj.shape.isEnumerable(offset) ? Boolean.TRUE : Boolean.FALSE;
+			}));
+			proto.put("isPrototypeOf", makeMethod("isPrototypeOf", 1, (cx, thisObj, args) -> {
+				if (args.length == 0 || !(args[0] instanceof JSObject target)) return Boolean.FALSE;
+				if (!(thisObj instanceof JSObject protoObj)) return Boolean.FALSE;
+				JSObject p = target.getPrototype();
+				while (p != null) {
+					if (p == protoObj) return Boolean.TRUE;
+					p = p.getPrototype();
+				}
+				return Boolean.FALSE;
+			}));
 			return proto;
 		}
 
 		private static JSObjectConstructor createObjectConstructor(JSObject proto) {
-			JSShape shape = JSShape.createStaticPrototypeShape(proto.shape, OBJECT_CTOR_PROPS);
-			JSObjectConstructor ctor = new JSObjectConstructor(shape, proto);
+			JSShape             shape = JSShape.createStaticPrototypeShape(proto.shape, OBJECT_CTOR_PROPS);
+			JSObjectConstructor ctor  = new JSObjectConstructor(shape, proto);
 			proto.put("constructor", ctor);
 
 			// 固有属性 (Own Properties)
@@ -603,8 +751,8 @@ public class JSContext {
 
 			ctor.put("defineProperty", (JSFunction) (cx, thisObj, args) -> {
 				Object target = args.length > 0 ? args[0] : null;
-				Object prop = args.length > 1 ? args[1] : null;
-				Object desc = args.length > 2 ? args[2] : null;
+				Object prop   = args.length > 1 ? args[1] : null;
+				Object desc   = args.length > 2 ? args[2] : null;
 				return definePropertyCore(cx, target, prop, desc);
 			});
 
@@ -612,7 +760,7 @@ public class JSContext {
 				if (args.length == 0 || args[0] == null || args[0] == JSUndefined.INSTANCE) {
 					throw new RuntimeException("TypeError: Object.defineProperties called on non-object");
 				}
-				Object target = args[0];
+				Object target   = args[0];
 				Object propsObj = args.length > 1 ? args[1] : null;
 				if (propsObj == null || propsObj == JSUndefined.INSTANCE || !(propsObj instanceof JSObject props)) {
 					throw new RuntimeException("TypeError: Properties must be an object");
@@ -625,7 +773,7 @@ public class JSContext {
 
 			ctor.put("getOwnPropertyDescriptor", (JSFunction) (cx, thisObj, args) -> {
 				Object target = args.length > 0 ? args[0] : null;
-				Object prop = args.length > 1 ? args[1] : null;
+				Object prop   = args.length > 1 ? args[1] : null;
 				return getOwnPropertyDescriptorCore(cx, target, prop);
 			});
 
@@ -635,8 +783,8 @@ public class JSContext {
 				}
 				Object target = args[0];
 				JSObject jsObj = (target instanceof JSBridgedObject bridged)
-						? bridged.getJSObject()
-						: (target instanceof JSObject obj ? obj : null);
+				 ? bridged.getJSObject()
+				 : (target instanceof JSObject obj ? obj : null);
 				JSObject res = new JSObject();
 				if (jsObj != null) {
 					for (String k : jsObj.getOwnPropertyNames()) {
@@ -665,11 +813,11 @@ public class JSContext {
 				throw new RuntimeException("TypeError: Property description must be an object: " + descObj);
 			}
 
-			boolean hasValue = desc.hasOwnProperty("value");
-			boolean hasWritable = desc.hasOwnProperty("writable");
-			boolean hasGet = desc.hasOwnProperty("get");
-			boolean hasSet = desc.hasOwnProperty("set");
-			boolean hasEnumerable = desc.hasOwnProperty("enumerable");
+			boolean hasValue        = desc.hasOwnProperty("value");
+			boolean hasWritable     = desc.hasOwnProperty("writable");
+			boolean hasGet          = desc.hasOwnProperty("get");
+			boolean hasSet          = desc.hasOwnProperty("set");
+			boolean hasEnumerable   = desc.hasOwnProperty("enumerable");
 			boolean hasConfigurable = desc.hasOwnProperty("configurable");
 
 			if ((hasValue || hasWritable) && (hasGet || hasSet)) {
@@ -689,17 +837,17 @@ public class JSContext {
 			JSFunction getter = (getVal instanceof JSFunction fn) ? fn : null;
 			JSFunction setter = (setVal instanceof JSFunction fn) ? fn : null;
 
-			String key = JSOps.toStr(propKey);
-			int propId = SymbolTable.id(key);
+			String key    = JSOps.toStr(propKey);
+			int    propId = SymbolTable.id(key);
 
-			int offset = jsObj.shape.getOffset(propId);
+			int     offset = jsObj.shape.getOffset(propId);
 			boolean exists = offset >= 0 && (jsObj.isDoubleSlot(offset) || jsObj.getRawObjectSlot(offset) != JSObject.DELETED);
 
 			if (!exists) {
 				if (hasGet || hasSet) {
-					boolean enumerable = hasEnumerable && JSOps.toBoolean(desc.get("enumerable"));
+					boolean enumerable   = hasEnumerable && JSOps.toBoolean(desc.get("enumerable"));
 					boolean configurable = hasConfigurable && JSOps.toBoolean(desc.get("configurable"));
-					byte type = JSShape.FLAG_ACCESSOR;
+					byte    type         = JSShape.FLAG_ACCESSOR;
 					if (!enumerable) type |= JSShape.FLAG_NOT_ENUMERABLE;
 					if (!configurable) type |= JSShape.FLAG_NOT_CONFIGURABLE;
 
@@ -707,9 +855,9 @@ public class JSContext {
 					int newOffset = jsObj.shape.getOffset(propId);
 					jsObj.setSlot(newOffset, new PropertyAccessor(getter, setter));
 				} else {
-					Object value = hasValue ? desc.get("value") : JSUndefined.INSTANCE;
-					boolean writable = hasWritable && JSOps.toBoolean(desc.get("writable"));
-					boolean enumerable = hasEnumerable && JSOps.toBoolean(desc.get("enumerable"));
+					Object  value        = hasValue ? desc.get("value") : JSUndefined.INSTANCE;
+					boolean writable     = hasWritable && JSOps.toBoolean(desc.get("writable"));
+					boolean enumerable   = hasEnumerable && JSOps.toBoolean(desc.get("enumerable"));
 					boolean configurable = hasConfigurable && JSOps.toBoolean(desc.get("configurable"));
 
 					byte type = (value instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
@@ -726,13 +874,13 @@ public class JSContext {
 					}
 				}
 			} else {
-				byte currentType = jsObj.shape.getSlotType(offset);
-				boolean currentIsAccessor = (currentType & JSShape.FLAG_ACCESSOR) != 0;
-				boolean currentWritable = (currentType & JSShape.FLAG_NOT_WRITABLE) == 0;
-				boolean currentEnumerable = (currentType & JSShape.FLAG_NOT_ENUMERABLE) == 0;
-				boolean currentConfigurable = (currentType & JSShape.FLAG_NOT_CONFIGURABLE) == 0;
-				Object currentValue = currentIsAccessor ? null : jsObj.getSlot(offset);
-				PropertyAccessor currentAcc = currentIsAccessor ? (PropertyAccessor) jsObj.getRawObjectSlot(offset) : null;
+				byte             currentType         = jsObj.shape.getSlotType(offset);
+				boolean          currentIsAccessor   = (currentType & JSShape.FLAG_ACCESSOR) != 0;
+				boolean          currentWritable     = (currentType & JSShape.FLAG_NOT_WRITABLE) == 0;
+				boolean          currentEnumerable   = (currentType & JSShape.FLAG_NOT_ENUMERABLE) == 0;
+				boolean          currentConfigurable = (currentType & JSShape.FLAG_NOT_CONFIGURABLE) == 0;
+				Object           currentValue        = currentIsAccessor ? null : jsObj.getSlot(offset);
+				PropertyAccessor currentAcc          = currentIsAccessor ? (PropertyAccessor) jsObj.getRawObjectSlot(offset) : null;
 
 				if (!currentConfigurable) {
 					if (hasConfigurable && JSOps.toBoolean(desc.get("configurable"))) {
@@ -764,12 +912,12 @@ public class JSContext {
 				}
 
 				boolean newConfigurable = hasConfigurable ? JSOps.toBoolean(desc.get("configurable")) : currentConfigurable;
-				boolean newEnumerable = hasEnumerable ? JSOps.toBoolean(desc.get("enumerable")) : currentEnumerable;
+				boolean newEnumerable   = hasEnumerable ? JSOps.toBoolean(desc.get("enumerable")) : currentEnumerable;
 
 				if ((hasGet || hasSet) && !currentIsAccessor) {
 					JSFunction newGetter = hasGet ? getter : null;
 					JSFunction newSetter = hasSet ? setter : null;
-					byte newType = JSShape.FLAG_ACCESSOR;
+					byte       newType   = JSShape.FLAG_ACCESSOR;
 					if (!newEnumerable) newType |= JSShape.FLAG_NOT_ENUMERABLE;
 					if (!newConfigurable) newType |= JSShape.FLAG_NOT_CONFIGURABLE;
 
@@ -777,9 +925,9 @@ public class JSContext {
 					jsObj.clearDoubleMask(offset);
 					jsObj.setSlot(offset, new PropertyAccessor(newGetter, newSetter));
 				} else if (!(hasGet || hasSet) && (hasValue || hasWritable) && currentIsAccessor) {
-					Object newValue = hasValue ? desc.get("value") : JSUndefined.INSTANCE;
+					Object  newValue    = hasValue ? desc.get("value") : JSUndefined.INSTANCE;
 					boolean newWritable = hasWritable && JSOps.toBoolean(desc.get("writable"));
-					byte newType = (newValue instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
+					byte    newType     = (newValue instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
 					if (!newWritable) newType |= JSShape.FLAG_NOT_WRITABLE;
 					if (!newEnumerable) newType |= JSShape.FLAG_NOT_ENUMERABLE;
 					if (!newConfigurable) newType |= JSShape.FLAG_NOT_CONFIGURABLE;
@@ -793,7 +941,7 @@ public class JSContext {
 				} else if (currentIsAccessor) {
 					JSFunction newGetter = hasGet ? getter : (currentAcc != null ? currentAcc.getter : null);
 					JSFunction newSetter = hasSet ? setter : (currentAcc != null ? currentAcc.setter : null);
-					byte newType = JSShape.FLAG_ACCESSOR;
+					byte       newType   = JSShape.FLAG_ACCESSOR;
 					if (!newEnumerable) newType |= JSShape.FLAG_NOT_ENUMERABLE;
 					if (!newConfigurable) newType |= JSShape.FLAG_NOT_CONFIGURABLE;
 
@@ -801,8 +949,8 @@ public class JSContext {
 					jsObj.setSlot(offset, new PropertyAccessor(newGetter, newSetter));
 				} else {
 					boolean newWritable = hasWritable ? JSOps.toBoolean(desc.get("writable")) : currentWritable;
-					Object newValue = hasValue ? desc.get("value") : currentValue;
-					byte newType = (newValue instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
+					Object  newValue    = hasValue ? desc.get("value") : currentValue;
+					byte    newType     = (newValue instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
 					if (!newWritable) newType |= JSShape.FLAG_NOT_WRITABLE;
 					if (!newEnumerable) newType |= JSShape.FLAG_NOT_ENUMERABLE;
 					if (!newConfigurable) newType |= JSShape.FLAG_NOT_CONFIGURABLE;
@@ -826,13 +974,13 @@ public class JSContext {
 				throw new RuntimeException("TypeError: Cannot convert undefined or null to object");
 			}
 			JSObject jsObj = (target instanceof JSBridgedObject bridged)
-					? bridged.getJSObject()
-					: (target instanceof JSObject obj ? obj : null);
+			 ? bridged.getJSObject()
+			 : (target instanceof JSObject obj ? obj : null);
 			if (jsObj == null) return JSUndefined.INSTANCE;
 
-			String key = JSOps.toStr(propKey);
-			int propId = SymbolTable.id(key);
-			int offset = jsObj.shape.getOffset(propId);
+			String key    = JSOps.toStr(propKey);
+			int    propId = SymbolTable.id(key);
+			int    offset = jsObj.shape.getOffset(propId);
 			if (offset < 0 || (!jsObj.isDoubleSlot(offset) && jsObj.getRawObjectSlot(offset) == JSObject.DELETED)) {
 				return JSUndefined.INSTANCE;
 			}
@@ -856,51 +1004,75 @@ public class JSContext {
 
 	static class LazyArray {
 		private static final List<String> ARRAY_PROTO_PROPS = List.of(
-			"constructor", "length", "reduce", "reduceRight", "filter", "sort",
-			"map", "forEach", "find", "findIndex", "some", "every",
-			"includes", "indexOf", "lastIndexOf", "slice", "splice",
-			"concat", "push", "pop", "shift", "unshift", "reverse",
-			"fill", "flat", "toString", "join"
+		 "constructor", "length", "reduce", "reduceRight", "filter", "sort",
+		 "map", "forEach", "find", "findIndex", "some", "every",
+		 "includes", "indexOf", "lastIndexOf", "slice", "splice",
+		 "concat", "push", "pop", "shift", "unshift", "reverse",
+		 "fill", "flat", "toString", "join"
 		);
-		private static final List<String> ARRAY_CTOR_PROPS = List.of(
-			"name", "length", "prototype", "isArray", "of", "from"
+		private static final List<String> ARRAY_CTOR_PROPS  = List.of(
+		 "name", "length", "prototype", "isArray", "of", "from"
 		);
 
-		static final JSObject            ARRAY_PROTOTYPE = createArrayPrototype(LazyObject.OBJECT_PROTOTYPE);
-		static final JSArrayConstructor  ARRAY           = createArrayConstructor(ARRAY_PROTOTYPE);
+		private static final byte[] ARRAY_CTOR_TYPES = new byte[]{
+		 (byte) (JSShape.TYPE_OBJECT | JSShape.FLAG_NOT_WRITABLE | JSShape.FLAG_NOT_ENUMERABLE),
+		 (byte) (JSShape.TYPE_DOUBLE | JSShape.FLAG_NOT_WRITABLE | JSShape.FLAG_NOT_ENUMERABLE),
+		 (byte) (JSShape.TYPE_OBJECT | JSShape.FLAG_NOT_WRITABLE | JSShape.FLAG_NOT_ENUMERABLE | JSShape.FLAG_NOT_CONFIGURABLE),
+		 (byte) (JSShape.TYPE_OBJECT | JSShape.FLAG_NOT_ENUMERABLE),
+		 (byte) (JSShape.TYPE_OBJECT | JSShape.FLAG_NOT_ENUMERABLE),
+		 (byte) (JSShape.TYPE_OBJECT | JSShape.FLAG_NOT_ENUMERABLE),
+		 };
 
-		private static JSObject createArrayPrototype(JSObject objectProto) {
+		static final JSArray            ARRAY_PROTOTYPE = createArrayPrototype(LazyObject.OBJECT_PROTOTYPE);
+		static final JSArrayConstructor ARRAY           = createArrayConstructor(ARRAY_PROTOTYPE);
+
+		private static JSArray createArrayPrototype(JSObject objectProto) {
 			JSShape shape = JSShape.createStaticPrototypeShape(objectProto.shape, ARRAY_PROTO_PROPS);
-			return new JSObject(shape, objectProto);
+			return new JSArray(shape, objectProto);
+		}
+
+		static boolean isArray(Object arg) {
+			Object cur = arg;
+			while (cur instanceof JSProxy proxy) {
+				if (proxy.revoked) {
+					throw makeTypeError("Cannot perform 'isArray' on a revoked proxy");
+				}
+				cur = proxy.target;
+			}
+			return cur instanceof JSArray;
 		}
 
 		private static JSArrayConstructor createArrayConstructor(JSObject proto) {
-			JSShape shape = JSShape.createStaticPrototypeShape(LazyObject.OBJECT_PROTOTYPE.shape, ARRAY_CTOR_PROPS);
-			JSArrayConstructor ctor = new JSArrayConstructor(shape, LazyObject.OBJECT_PROTOTYPE);
+			JSShape            shape = JSShape.createStaticPrototypeShape(ARRAY_CTOR_PROPS, ARRAY_CTOR_TYPES);
+			JSArrayConstructor ctor  = new JSArrayConstructor(shape, LazyFunction.FUNCTION_PROTOTYPE);
 			proto.put("constructor", ctor);
 			proto.put("length", 0.0);
 
-			ctor.put("name", "Array");
-			ctor.put("length", 1);
-			ctor.put("prototype", proto);
-
-			ctor.put("isArray", makeMethod("isArray", 1, (cx, thisObj, args) -> {
+			ctor.setSlot(0, "Array");
+			ctor.setDoubleSlot(1, 1.0);
+			ctor.setSlot(2, proto);
+			ctor.setSlot(3, makeMethod("isArray", 1, (cx, thisObj, args) -> {
 				if (args.length == 0) return Boolean.FALSE;
-				return args[0] instanceof JSArray ? Boolean.TRUE : Boolean.FALSE;
+				return isArray(args[0]) ? Boolean.TRUE : Boolean.FALSE;
 			}));
-
-			ctor.put("of", makeMethod("of", 0, (cx, thisObj, args) -> {
+			ctor.setSlot(4, makeMethod("of", 0, (cx, thisObj, args) -> {
 				JSArray arr = new JSArray();
 				for (Object a : args) arr.push(a);
 				return arr;
 			}));
-
-			ctor.put("from", makeMethod("from", 1, (cx, thisObj, args) -> {
+			ctor.setSlot(5, makeMethod("from", 1, (cx, thisObj, args) -> {
 				if (args.length == 0 || args[0] == null || args[0] == JSUndefined.INSTANCE) {
-					throw new RuntimeException("TypeError: Cannot convert undefined or null to object");
+					throw makeTypeError("Cannot convert undefined or null to object");
 				}
-				Object items = args[0];
-				JSFunction mapFn = args.length > 1 && args[1] instanceof JSFunction ? (JSFunction) args[1] : null;
+				Object     items = args[0];
+				JSFunction mapFn = null;
+				if (args.length > 1 && args[1] != JSUndefined.INSTANCE && args[1] != null) {
+					if (args[1] instanceof JSFunction fn) {
+						mapFn = fn;
+					} else {
+						throw makeTypeError("Array.from: mapfn is not callable");
+					}
+				}
 				Object thisArg = args.length > 2 ? args[2] : JSUndefined.INSTANCE;
 
 				JSArray res = new JSArray();
@@ -958,9 +1130,9 @@ public class JSContext {
 				if (args.length == 0 || !(args[0] instanceof JSFunction callback)) {
 					throw new RuntimeException("TypeError: " + (args.length > 0 ? args[0] : "undefined") + " is not a function");
 				}
-				long len = toLength(O);
-				long k = len - 1;
-				Object accumulator = null;
+				long    len            = toLength(O);
+				long    k              = len - 1;
+				Object  accumulator    = null;
 				boolean hasAccumulator = false;
 				if (args.length > 1) {
 					accumulator = args[1];
@@ -1008,7 +1180,7 @@ public class JSContext {
 			}));
 
 			proto.put("sort", makeMethod("sort", 1, (cx, thisObj, args) -> {
-				Object O = toObject(thisObj);
+				Object     O         = toObject(thisObj);
 				JSFunction compareFn = null;
 				if (args.length > 0 && args[0] != null && args[0] != JSUndefined.INSTANCE) {
 					if (!(args[0] instanceof JSFunction)) {
@@ -1019,8 +1191,8 @@ public class JSContext {
 				long len = toLength(O);
 				if (len <= 1) return O;
 
-				List<Object> definedItems = new ArrayList<>();
-				int undefinedCount = 0;
+				List<Object> definedItems   = new ArrayList<>();
+				int          undefinedCount = 0;
 				for (long k = 0; k < len; k++) {
 					if (hasProperty(O, k)) {
 						Object val = getProperty(O, k);
@@ -1037,7 +1209,7 @@ public class JSContext {
 					definedItems.sort((a, b) -> {
 						try {
 							Object res = cmp.call2(cx, JSUndefined.INSTANCE, a, b);
-							double d = JSOps.toDouble(res);
+							double d   = JSOps.toDouble(res);
 							if (Double.isNaN(d)) return 0;
 							return Double.compare(d, 0.0);
 						} catch (Throwable t) {
@@ -1067,9 +1239,9 @@ public class JSContext {
 				if (args.length == 0 || !(args[0] instanceof JSFunction callback)) {
 					throw new RuntimeException("TypeError: " + (args.length > 0 ? args[0] : "undefined") + " is not a function");
 				}
-				Object thisArg = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
-				long len = toLength(O);
-				JSArray result = new JSArray((int) Math.min(len, 65536));
+				Object  thisArg = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
+				long    len     = toLength(O);
+				JSArray result  = new JSArray((int) Math.min(len, 65536));
 				result.setLength((double) len);
 				for (long k = 0; k < len; k++) {
 					if (hasProperty(O, k)) {
@@ -1092,7 +1264,7 @@ public class JSContext {
 					throw new RuntimeException("TypeError: " + (args.length > 0 ? args[0] : "undefined") + " is not a function");
 				}
 				Object thisArg = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
-				long len = toLength(O);
+				long   len     = toLength(O);
 				for (long k = 0; k < len; k++) {
 					if (hasProperty(O, k)) {
 						Object kValue = getProperty(O, k);
@@ -1113,7 +1285,7 @@ public class JSContext {
 					throw new RuntimeException("TypeError: " + (args.length > 0 ? args[0] : "undefined") + " is not a function");
 				}
 				Object thisArg = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
-				long len = toLength(O);
+				long   len     = toLength(O);
 				for (long k = 0; k < len; k++) {
 					if (hasProperty(O, k)) {
 						Object kValue = getProperty(O, k);
@@ -1136,7 +1308,7 @@ public class JSContext {
 					throw new RuntimeException("TypeError: " + (args.length > 0 ? args[0] : "undefined") + " is not a function");
 				}
 				Object thisArg = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
-				long len = toLength(O);
+				long   len     = toLength(O);
 				for (long k = 0; k < len; k++) {
 					if (hasProperty(O, k)) {
 						Object kValue = getProperty(O, k);
@@ -1159,7 +1331,7 @@ public class JSContext {
 					throw new RuntimeException("TypeError: " + (args.length > 0 ? args[0] : "undefined") + " is not a function");
 				}
 				Object thisArg = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
-				long len = toLength(O);
+				long   len     = toLength(O);
 				for (long k = 0; k < len; k++) {
 					if (hasProperty(O, k)) {
 						Object kValue = getProperty(O, k);
@@ -1182,7 +1354,7 @@ public class JSContext {
 					throw new RuntimeException("TypeError: " + (args.length > 0 ? args[0] : "undefined") + " is not a function");
 				}
 				Object thisArg = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
-				long len = toLength(O);
+				long   len     = toLength(O);
 				for (long k = 0; k < len; k++) {
 					if (hasProperty(O, k)) {
 						Object kValue = getProperty(O, k);
@@ -1200,11 +1372,11 @@ public class JSContext {
 			}));
 
 			proto.put("indexOf", makeMethod("indexOf", 1, (cx, thisObj, args) -> {
-				Object O = toObject(thisObj);
-				long len = toLength(O);
+				Object O   = toObject(thisObj);
+				long   len = toLength(O);
 				if (len == 0 || args.length == 0) return -1.0;
 				Object searchElement = args[0];
-				long fromIndex = 0;
+				long   fromIndex     = 0;
 				if (args.length > 1) {
 					double from = JSOps.toDouble(args[1]);
 					if (Double.isNaN(from)) from = 0;
@@ -1223,11 +1395,11 @@ public class JSContext {
 			}));
 
 			proto.put("lastIndexOf", makeMethod("lastIndexOf", 1, (cx, thisObj, args) -> {
-				Object O = toObject(thisObj);
-				long len = toLength(O);
+				Object O   = toObject(thisObj);
+				long   len = toLength(O);
 				if (len == 0 || args.length == 0) return -1.0;
 				Object searchElement = args[0];
-				long fromIndex = len - 1;
+				long   fromIndex     = len - 1;
 				if (args.length > 1) {
 					double from = JSOps.toDouble(args[1]);
 					if (Double.isNaN(from)) from = len - 1;
@@ -1246,11 +1418,11 @@ public class JSContext {
 			}));
 
 			proto.put("includes", makeMethod("includes", 1, (cx, thisObj, args) -> {
-				Object O = toObject(thisObj);
-				long len = toLength(O);
+				Object O   = toObject(thisObj);
+				long   len = toLength(O);
 				if (len == 0 || args.length == 0) return Boolean.FALSE;
 				Object searchElement = args[0];
-				long fromIndex = 0;
+				long   fromIndex     = 0;
 				if (args.length > 1) {
 					double from = JSOps.toDouble(args[1]);
 					if (Double.isNaN(from)) from = 0;
@@ -1273,8 +1445,8 @@ public class JSContext {
 			}));
 
 			proto.put("join", makeMethod("join", 1, (cx, thisObj, args) -> {
-				Object O = toObject(thisObj);
-				long len = toLength(O);
+				Object O   = toObject(thisObj);
+				long   len = toLength(O);
 				String sep = args.length > 0 && args[0] != JSUndefined.INSTANCE ? JSOps.toStr(args[0]) : ",";
 				if (len == 0) return "";
 				StringBuilder sb = new StringBuilder();
@@ -1289,9 +1461,9 @@ public class JSContext {
 			}));
 
 			proto.put("slice", makeMethod("slice", 2, (cx, thisObj, args) -> {
-				Object O = toObject(thisObj);
-				long len = toLength(O);
-				long start = 0;
+				Object O     = toObject(thisObj);
+				long   len   = toLength(O);
+				long   start = 0;
 				if (args.length > 0 && args[0] != JSUndefined.INSTANCE) {
 					double d = JSOps.toDouble(args[0]);
 					if (Double.isNaN(d)) d = 0;
@@ -1315,8 +1487,8 @@ public class JSContext {
 			}));
 
 			proto.put("splice", makeMethod("splice", 2, (cx, thisObj, args) -> {
-				Object O = toObject(thisObj);
-				long len = toLength(O);
+				Object O   = toObject(thisObj);
+				long   len = toLength(O);
 				if (args.length == 0) return new JSArray();
 
 				double startDouble = JSOps.toDouble(args[0]);
@@ -1342,12 +1514,12 @@ public class JSContext {
 					}
 				}
 
-				int insertCount = Math.max(0, args.length - 2);
-				long newLen = len - actualDeleteCount + insertCount;
+				int  insertCount = Math.max(0, args.length - 2);
+				long newLen      = len - actualDeleteCount + insertCount;
 				if (insertCount < actualDeleteCount) {
 					for (long k = actualStart; k < len - actualDeleteCount; k++) {
 						long from = k + actualDeleteCount;
-						long to = k + insertCount;
+						long to   = k + insertCount;
 						if (hasProperty(O, from)) {
 							setProperty(O, to, getProperty(O, from));
 						} else {
@@ -1360,7 +1532,7 @@ public class JSContext {
 				} else if (insertCount > actualDeleteCount) {
 					for (long k = len - actualDeleteCount; k > actualStart; k--) {
 						long from = k + actualDeleteCount - 1;
-						long to = k + insertCount - 1;
+						long to   = k + insertCount - 1;
 						if (hasProperty(O, from)) {
 							setProperty(O, to, getProperty(O, from));
 						} else {
@@ -1382,7 +1554,7 @@ public class JSContext {
 			}));
 
 			proto.put("concat", makeMethod("concat", 1, (cx, thisObj, args) -> {
-				Object O = toObject(thisObj);
+				Object  O      = toObject(thisObj);
 				JSArray result = new JSArray();
 				appendConcatItem(result, O);
 				for (Object arg : args) {
@@ -1413,19 +1585,20 @@ public class JSContext {
 					if (O instanceof JSObject jsObj) jsObj.put("length", 0.0);
 					return JSUndefined.INSTANCE;
 				}
-				long newLen = len - 1;
-				Object val = getProperty(O, newLen);
+				long   newLen = len - 1;
+				Object val    = getProperty(O, newLen);
 				deleteProperty(O, newLen);
 				if (O instanceof JSObject jsObj) jsObj.put("length", (double) newLen);
 				return val;
 			}));
 
 			proto.put("shift", makeMethod("shift", 0, (cx, thisObj, args) -> {
-				Object O = toObject(thisObj);
-				long len = toLength(O);
+				Object O   = toObject(thisObj);
+				long   len = toLength(O);
 				if (len == 0) {
-					if (O instanceof JSArray arr) arr.setLength(0.0);
-					else if (O instanceof JSObject jsObj) jsObj.put("length", 0.0);
+					if (O instanceof JSArray arr) { arr.setLength(0.0); } else if (O instanceof JSObject jsObj) {
+						jsObj.put("length", 0.0);
+					}
 					return JSUndefined.INSTANCE;
 				}
 				Object first = getProperty(O, 0);
@@ -1438,19 +1611,20 @@ public class JSContext {
 				}
 				deleteProperty(O, len - 1);
 				long newLen = len - 1;
-				if (O instanceof JSArray arr) arr.setLength((double) newLen);
-				else if (O instanceof JSObject jsObj) jsObj.put("length", (double) newLen);
+				if (O instanceof JSArray arr) { arr.setLength((double) newLen); } else if (O instanceof JSObject jsObj) {
+					jsObj.put("length", (double) newLen);
+				}
 				return first;
 			}));
 
 			proto.put("unshift", makeMethod("unshift", 1, (cx, thisObj, args) -> {
-				Object O = toObject(thisObj);
-				long len = toLength(O);
-				int argCount = args.length;
+				Object O        = toObject(thisObj);
+				long   len      = toLength(O);
+				int    argCount = args.length;
 				if (argCount > 0) {
 					for (long k = len; k > 0; k--) {
 						long from = k - 1;
-						long to = k + argCount - 1;
+						long to   = k + argCount - 1;
 						if (hasProperty(O, from)) {
 							setProperty(O, to, getProperty(O, from));
 						} else {
@@ -1462,21 +1636,22 @@ public class JSContext {
 					}
 				}
 				long newLen = len + argCount;
-				if (O instanceof JSArray arr) arr.setLength((double) newLen);
-				else if (O instanceof JSObject jsObj) jsObj.put("length", (double) newLen);
+				if (O instanceof JSArray arr) { arr.setLength((double) newLen); } else if (O instanceof JSObject jsObj) {
+					jsObj.put("length", (double) newLen);
+				}
 				return (double) newLen;
 			}));
 
 			proto.put("reverse", makeMethod("reverse", 0, (cx, thisObj, args) -> {
-				Object O = toObject(thisObj);
-				long len = toLength(O);
-				long middle = len / 2;
+				Object O      = toObject(thisObj);
+				long   len    = toLength(O);
+				long   middle = len / 2;
 				for (long lower = 0; lower < middle; lower++) {
-					long upper = len - lower - 1;
+					long    upper       = len - lower - 1;
 					boolean lowerExists = hasProperty(O, lower);
 					boolean upperExists = hasProperty(O, upper);
-					Object lowerVal = lowerExists ? getProperty(O, lower) : null;
-					Object upperVal = upperExists ? getProperty(O, upper) : null;
+					Object  lowerVal    = lowerExists ? getProperty(O, lower) : null;
+					Object  upperVal    = upperExists ? getProperty(O, upper) : null;
 					if (lowerExists && upperExists) {
 						setProperty(O, lower, upperVal);
 						setProperty(O, upper, lowerVal);
@@ -1492,10 +1667,10 @@ public class JSContext {
 			}));
 
 			proto.put("fill", makeMethod("fill", 1, (cx, thisObj, args) -> {
-				Object O = toObject(thisObj);
-				long len = toLength(O);
+				Object O     = toObject(thisObj);
+				long   len   = toLength(O);
 				Object value = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
-				long start = 0;
+				long   start = 0;
 				if (args.length > 1 && args[1] != JSUndefined.INSTANCE) {
 					double d = JSOps.toDouble(args[1]);
 					if (Double.isNaN(d)) d = 0;
@@ -1514,7 +1689,7 @@ public class JSContext {
 			}));
 
 			proto.put("flat", makeMethod("flat", 0, (cx, thisObj, args) -> {
-				Object O = toObject(thisObj);
+				Object O     = toObject(thisObj);
 				double depth = args.length > 0 && args[0] != JSUndefined.INSTANCE ? JSOps.toDouble(args[0]) : 1.0;
 				if (Double.isNaN(depth) || depth < 0) depth = 0;
 				JSArray result = new JSArray();
@@ -1539,10 +1714,11 @@ public class JSContext {
 			}));
 		}
 
-		private static Object fastDenseReduce(JSContext cx, JSArray jsArr, JSFunction callback, Object[] args) throws Throwable {
-			long len = jsArr.length();
-			int k = 0;
-			Object accumulator = null;
+		private static Object fastDenseReduce(JSContext cx, JSArray jsArr, JSFunction callback, Object[] args)
+		 throws Throwable {
+			long    len            = jsArr.length();
+			int     k              = 0;
+			Object  accumulator    = null;
 			boolean hasAccumulator = false;
 			if (args.length > 1) {
 				accumulator = args[1];
@@ -1583,9 +1759,9 @@ public class JSContext {
 		}
 
 		private static Object genericReduce(JSContext cx, Object O, JSFunction callback, Object[] args) throws Throwable {
-			long len = toLength(O);
-			long k = 0;
-			Object accumulator = null;
+			long    len            = toLength(O);
+			long    k              = 0;
+			Object  accumulator    = null;
 			boolean hasAccumulator = false;
 			if (args.length > 1) {
 				accumulator = args[1];
@@ -1615,14 +1791,15 @@ public class JSContext {
 			return accumulator;
 		}
 
-		private static JSArray fastDenseFilter(JSContext cx, JSArray jsArr, JSFunction callback, Object thisArg) throws Throwable {
-			long len = jsArr.length();
+		private static JSArray fastDenseFilter(JSContext cx, JSArray jsArr, JSFunction callback, Object thisArg)
+		 throws Throwable {
+			long    len    = jsArr.length();
 			JSArray result = new JSArray();
 			for (int i = 0; i < len; i++) {
 				if (!jsArr.isDense() || i >= jsArr.denseSize) {
 					for (long k = i; k < len; k++) {
 						if (hasProperty(jsArr, k)) {
-							Object kValue = getProperty(jsArr, k);
+							Object kValue   = getProperty(jsArr, k);
 							Object selected = callback.call3(cx, thisArg, kValue, (double) k, jsArr);
 							if (JSOps.toBoolean(selected)) result.push(kValue);
 						}
@@ -1640,11 +1817,11 @@ public class JSContext {
 		}
 
 		private static JSArray genericFilter(JSContext cx, Object O, JSFunction callback, Object thisArg) throws Throwable {
-			long len = toLength(O);
+			long    len    = toLength(O);
 			JSArray result = new JSArray();
 			for (long k = 0; k < len; k++) {
 				if (hasProperty(O, k)) {
-					Object kValue = getProperty(O, k);
+					Object kValue   = getProperty(O, k);
 					Object selected = callback.call3(cx, thisArg, kValue, (double) k, O);
 					if (JSOps.toBoolean(selected)) {
 						result.push(kValue);
@@ -1773,6 +1950,517 @@ public class JSContext {
 		public static final JSObject            JAVA             = LazyMisc.JAVA;
 		public static final JSObject            JAVA_PKG         = LazyMisc.JAVA_PKG;
 		public static final JSObject            JAVAX_PKG        = LazyMisc.JAVAX_PKG;
+		public static final JSObject            ERROR            = LazyErrors.ERROR;
+		public static final JSObject            TYPE_ERROR       = LazyErrors.TYPE_ERROR;
+		public static final JSObject            RANGE_ERROR      = LazyErrors.RANGE_ERROR;
+		public static final JSObject            SYNTAX_ERROR     = LazyErrors.SYNTAX_ERROR;
+		public static final JSObject            REFERENCE_ERROR  = LazyErrors.REFERENCE_ERROR;
+		public static final JSObject            URI_ERROR        = LazyErrors.URI_ERROR;
+		public static final JSObject            EVAL_ERROR       = LazyErrors.EVAL_ERROR;
+	}
+
+	public static JSOps.JSException makeTypeError(String message) {
+		return new JSOps.JSException(LazyErrors.createErrorInstance(LazyErrors.TYPE_ERROR, message));
+	}
+
+	public static JSOps.JSException makeRangeError(String message) {
+		return new JSOps.JSException(LazyErrors.createErrorInstance(LazyErrors.RANGE_ERROR, message));
+	}
+
+	public static class LazyErrors {
+		public static final JSObject ERROR           = createErrorConstructor("Error");
+		public static final JSObject TYPE_ERROR      = createErrorConstructor("TypeError");
+		public static final JSObject RANGE_ERROR     = createErrorConstructor("RangeError");
+		public static final JSObject SYNTAX_ERROR    = createErrorConstructor("SyntaxError");
+		public static final JSObject REFERENCE_ERROR = createErrorConstructor("ReferenceError");
+		public static final JSObject URI_ERROR       = createErrorConstructor("URIError");
+		public static final JSObject EVAL_ERROR      = createErrorConstructor("EvalError");
+
+		public static JSObject createErrorInstance(JSObject constructor, String message) {
+			try {
+				if (constructor instanceof JSFunction fn) {
+					Object res = fn.call(null, null, new Object[]{message});
+					if (res instanceof JSObject o) return o;
+				}
+			} catch (Throwable ignored) { }
+			JSObject err = new JSObject();
+			err.put("message", message);
+			return err;
+		}
+
+		public static JSObject createErrorConstructor(String errorName) {
+			JSObject proto = new JSObject();
+			proto.put("name", errorName);
+			proto.put("message", "");
+			proto.put("toString", (JSFunction) (cx, thisObj, args) -> {
+				if (thisObj instanceof JSObject o) {
+					Object n       = o.get("name");
+					Object m       = o.get("message");
+					String nameStr = (n != JSUndefined.INSTANCE && n != null) ? JSOps.toStr(n) : errorName;
+					String msgStr  = (m != JSUndefined.INSTANCE && m != null) ? JSOps.toStr(m) : "";
+					return msgStr.isEmpty() ? nameStr : nameStr + ": " + msgStr;
+				}
+				return errorName;
+			});
+
+			class JSErrorConstructor extends JSObject implements JSFunction {
+				public JSErrorConstructor() {
+					super(LazyFunction.FUNCTION_PROTOTYPE);
+					put("prototype", proto);
+					put("name", errorName);
+					put("length", 1);
+					proto.put("constructor", this);
+				}
+
+				@Override
+				public JSObject getPrototype() {
+					JSObject p = super.getPrototype();
+					return (p != null && p != LazyObject.OBJECT_PROTOTYPE) ? p : LazyFunction.FUNCTION_PROTOTYPE;
+				}
+
+				@Override
+				public String toString() {
+					return "function " + errorName + "() { [native code] }";
+				}
+
+				@Override
+				public Object call(JSContext cx, Object thisObj, Object[] args) {
+					JSObject err = (thisObj instanceof JSObject o && o.getPrototype() == proto) ? o : new JSObject(proto);
+					err.put("name", errorName);
+					if (args.length > 0 && args[0] != JSUndefined.INSTANCE && args[0] != null) {
+						err.put("message", JSOps.toStr(args[0]));
+					} else {
+						err.put("message", "");
+					}
+					return err;
+				}
+			}
+
+			return new JSErrorConstructor();
+		}
+	}
+
+	public static class JSProxy extends JSObject {
+		public Object  target;
+		public Object  handler;
+		public boolean revoked;
+
+		public JSProxy(Object target, Object handler) {
+			super(LazyObject.OBJECT_PROTOTYPE);
+			this.target = target;
+			this.handler = handler;
+		}
+
+		@Override
+		public Object get(String key) {
+			if (revoked) throw makeTypeError("Cannot perform 'get' on a revoked proxy");
+			if (target instanceof JSObject jo) return jo.get(key);
+			return super.get(key);
+		}
+	}
+
+	public static class ProxyConstructor extends JSObject implements JSFunction {
+		public ProxyConstructor() {
+			super(LazyFunction.FUNCTION_PROTOTYPE);
+			put("name", "Proxy");
+			put("length", 2);
+			put("revocable", makeMethod("revocable", 2, (cx, thisObj, args) -> {
+				if (args.length < 2) throw makeTypeError("Cannot create proxy with less than 2 arguments");
+				JSProxy  proxy  = new JSProxy(args[0], args[1]);
+				JSObject result = new JSObject();
+				result.put("proxy", proxy);
+				result.put("revoke", makeMethod("revoke", 0, (c, t, a) -> {
+					proxy.revoked = true;
+					proxy.target = null;
+					proxy.handler = null;
+					return JSUndefined.INSTANCE;
+				}));
+				return result;
+			}));
+		}
+
+		@Override
+		public JSObject getPrototype() {
+			JSObject p = super.getPrototype();
+			return (p != null && p != LazyObject.OBJECT_PROTOTYPE) ? p : LazyFunction.FUNCTION_PROTOTYPE;
+		}
+
+		@Override
+		public Object call(JSContext cx, Object thisObj, Object[] args) {
+			if (args.length < 2) throw makeTypeError("Cannot create proxy with less than 2 arguments");
+			return new JSProxy(args[0], args[1]);
+		}
+	}
+
+	public static class LazyProxy {
+		public static final JSObject PROXY = new ProxyConstructor();
+	}
+
+	public static class LazyReflect {
+		public static final JSObject REFLECT = createReflect();
+
+		private static JSObject createReflect() {
+			JSObject reflect = new JSObject();
+			reflect.put("construct", makeMethod("construct", 2, (cx, thisObj, args) -> {
+				if (args.length < 2) throw makeTypeError("Reflect.construct requires at least 2 arguments");
+				Object target = args[0];
+				if (target instanceof JSBuiltinMethod || !(target instanceof JSFunction)) {
+					throw makeTypeError("Target is not a constructor");
+				}
+				Object newTarget = args.length > 2 ? args[2] : target;
+				if (newTarget instanceof JSBuiltinMethod || !(newTarget instanceof JSFunction)) {
+					throw makeTypeError("newTarget is not a constructor");
+				}
+				Object[] constructArgs;
+				if (args[1] instanceof JSArray arr) {
+					constructArgs = arr.toArray();
+				} else if (args[1] instanceof Object[] oa) {
+					constructArgs = oa;
+				} else {
+					constructArgs = JSFunction.EMPTY_ARGS;
+				}
+				try {
+					return JSLinker.newGeneric(target, constructArgs);
+				} catch (Throwable t) {
+					if (t instanceof RuntimeException re) throw re;
+					throw new RuntimeException(t);
+				}
+			}));
+			return reflect;
+		}
+	}
+
+	public static class LazyPrimitiveConstructors {
+		public static final JSObject BOOLEAN_PROTOTYPE = createBooleanPrototype();
+		public static final JSObject BOOLEAN           = createBooleanConstructor(BOOLEAN_PROTOTYPE);
+
+		public static final JSObject NUMBER_PROTOTYPE = createNumberPrototype();
+		public static final JSObject NUMBER           = createNumberConstructor(NUMBER_PROTOTYPE);
+
+		public static final JSObject STRING_PROTOTYPE = createStringPrototype();
+		public static final JSObject STRING           = createStringConstructor(STRING_PROTOTYPE);
+
+		private static JSObject createBooleanPrototype() {
+			JSObject proto = new JSObject(LazyObject.OBJECT_PROTOTYPE);
+			proto.put("name", "Boolean");
+			proto.put("valueOf", makeMethod("valueOf", 0, (cx, thisObj, args) -> {
+				if (thisObj instanceof Boolean b) return b;
+				if (thisObj instanceof JSObject jo && jo.has("[[PrimitiveValue]]")) {
+					return jo.get("[[PrimitiveValue]]");
+				}
+				throw new RuntimeException("TypeError: Boolean.prototype.valueOf requires that 'this' be a Boolean");
+			}));
+			proto.put("toString", makeMethod("toString", 0, (cx, thisObj, args) -> {
+				if (thisObj instanceof Boolean b) return b.toString();
+				if (thisObj instanceof JSObject jo && jo.has("[[PrimitiveValue]]")) {
+					return JSOps.toStr(jo.get("[[PrimitiveValue]]"));
+				}
+				throw new RuntimeException("TypeError: Boolean.prototype.toString requires that 'this' be a Boolean");
+			}));
+			return proto;
+		}
+
+		private static JSObject createBooleanConstructor(JSObject proto) {
+			return new JSBuiltinConstructor("Boolean", 1, proto, (cx, thisObj, args) -> {
+				boolean b = args.length > 0 && JSOps.isTruthy(args[0]);
+				if (thisObj instanceof JSObject jo && jo.getPrototype() == proto) {
+					jo.put("[[PrimitiveValue]]", b);
+					return jo;
+				}
+				return b ? Boolean.TRUE : Boolean.FALSE;
+			});
+		}
+
+		private static JSObject createNumberPrototype() {
+			JSObject proto = new JSObject(LazyObject.OBJECT_PROTOTYPE);
+			proto.put("name", "Number");
+			proto.put("valueOf", makeMethod("valueOf", 0, (cx, thisObj, args) -> {
+				if (thisObj instanceof Number n) return n;
+				if (thisObj instanceof JSObject jo && jo.has("[[PrimitiveValue]]")) {
+					return jo.get("[[PrimitiveValue]]");
+				}
+				throw new RuntimeException("TypeError: Number.prototype.valueOf requires that 'this' be a Number");
+			}));
+			proto.put("toString", makeMethod("toString", 0, (cx, thisObj, args) -> {
+				if (thisObj instanceof Number n) return JSOps.toStr(n);
+				if (thisObj instanceof JSObject jo && jo.has("[[PrimitiveValue]]")) {
+					return JSOps.toStr(jo.get("[[PrimitiveValue]]"));
+				}
+				throw new RuntimeException("TypeError: Number.prototype.toString requires that 'this' be a Number");
+			}));
+			return proto;
+		}
+
+		private static JSObject createNumberConstructor(JSObject proto) {
+			JSObject ctor = new JSBuiltinConstructor("Number", 1, proto, (cx, thisObj, args) -> {
+				double d = args.length > 0 ? JSOps.toDouble(args[0]) : 0.0;
+				if (thisObj instanceof JSObject jo && jo.getPrototype() == proto) {
+					jo.put("[[PrimitiveValue]]", d);
+					return jo;
+				}
+				return d;
+			});
+			ctor.put("NaN", Double.NaN);
+			ctor.put("POSITIVE_INFINITY", Double.POSITIVE_INFINITY);
+			ctor.put("NEGATIVE_INFINITY", Double.NEGATIVE_INFINITY);
+			ctor.put("MAX_VALUE", Double.MAX_VALUE);
+			ctor.put("MIN_VALUE", Double.MIN_VALUE);
+			return ctor;
+		}
+
+		private static JSObject createStringPrototype() {
+			JSObject proto = new JSObject(LazyObject.OBJECT_PROTOTYPE);
+			proto.put("name", "String");
+			proto.put("valueOf", makeMethod("valueOf", 0, (cx, thisObj, args) -> {
+				if (thisObj instanceof CharSequence s) return s.toString();
+				if (thisObj instanceof JSObject jo && jo.has("[[PrimitiveValue]]")) {
+					return jo.get("[[PrimitiveValue]]");
+				}
+				throw new RuntimeException("TypeError: String.prototype.valueOf requires that 'this' be a String");
+			}));
+			proto.put("toString", makeMethod("toString", 0, (cx, thisObj, args) -> {
+				if (thisObj instanceof CharSequence s) return s.toString();
+				if (thisObj instanceof JSObject jo && jo.has("[[PrimitiveValue]]")) {
+					return JSOps.toStr(jo.get("[[PrimitiveValue]]"));
+				}
+				throw new RuntimeException("TypeError: String.prototype.toString requires that 'this' be a String");
+			}));
+			return proto;
+		}
+
+		private static JSObject createStringConstructor(JSObject proto) {
+			return new JSBuiltinConstructor("String", 1, proto, (cx, thisObj, args) -> {
+				String s = args.length > 0 ? JSOps.toStr(args[0]) : "";
+				if (thisObj instanceof JSObject jo && jo.getPrototype() == proto) {
+					jo.put("[[PrimitiveValue]]", s);
+					return jo;
+				}
+				return s;
+			});
+		}
+	}
+
+	public static class JSDate extends JSObject {
+		private double time;
+
+		public JSDate(double time, JSObject prototype) {
+			super(prototype);
+			this.time = time;
+		}
+
+		public double getTime() {
+			return time;
+		}
+
+		public void setTime(double time) {
+			this.time = time;
+		}
+
+		@Override
+		public String toString() {
+			if (Double.isNaN(time)) return "Invalid Date";
+			return new java.util.Date((long) time).toString();
+		}
+	}
+
+	public static class LazyDate {
+		public static final JSObject DATE_PROTOTYPE = createDatePrototype();
+		public static final JSObject DATE           = createDateConstructor(DATE_PROTOTYPE);
+
+		private static JSObject createDatePrototype() {
+			JSObject proto = new JSObject(LazyObject.OBJECT_PROTOTYPE);
+			proto.put("name", "Date");
+			proto.put("getTime", makeMethod("getTime", 0, (cx, thisObj, args) -> {
+				if (thisObj instanceof JSDate d) return d.getTime();
+				throw makeTypeError("this is not a Date object");
+			}));
+			proto.put("valueOf", makeMethod("valueOf", 0, (cx, thisObj, args) -> {
+				if (thisObj instanceof JSDate d) return d.getTime();
+				throw makeTypeError("this is not a Date object");
+			}));
+			proto.put("toString", makeMethod("toString", 0, (cx, thisObj, args) -> {
+				if (thisObj instanceof JSDate d) return d.toString();
+				throw makeTypeError("this is not a Date object");
+			}));
+			return proto;
+		}
+
+		private static JSObject createDateConstructor(JSObject proto) {
+			JSBuiltinConstructor ctor = new JSBuiltinConstructor("Date", 7, proto, (cx, thisObj, args) -> {
+				double time;
+				if (args.length == 0) {
+					time = (double) System.currentTimeMillis();
+				} else if (args.length == 1) {
+					time = JSOps.toDouble(args[0]);
+				} else {
+					int                year  = JSOps.toInt(args[0]);
+					int                month = JSOps.toInt(args[1]);
+					int                day   = args.length > 2 ? JSOps.toInt(args[2]) : 1;
+					int                hour  = args.length > 3 ? JSOps.toInt(args[3]) : 0;
+					int                min   = args.length > 4 ? JSOps.toInt(args[4]) : 0;
+					int                sec   = args.length > 5 ? JSOps.toInt(args[5]) : 0;
+					int                ms    = args.length > 6 ? JSOps.toInt(args[6]) : 0;
+					java.util.Calendar cal   = java.util.Calendar.getInstance();
+					cal.set(year < 100 ? 1900 + year : year, month, day, hour, min, sec);
+					cal.set(java.util.Calendar.MILLISECOND, ms);
+					time = (double) cal.getTimeInMillis();
+				}
+				if (thisObj == null || thisObj == JSUndefined.INSTANCE || thisObj instanceof JSContext.JSGlobalThis) {
+					return new java.util.Date((long) time).toString();
+				}
+				if (thisObj instanceof JSDate d) {
+					d.setTime(time);
+					return d;
+				}
+				return new JSDate(time, proto);
+			});
+			ctor.put("now", makeMethod("now", 0, (cx, thisObj, args) -> (double) System.currentTimeMillis()));
+			return ctor;
+		}
+	}
+
+	public static class LazyFunction {
+		public static final JSObject FUNCTION_PROTOTYPE = createFunctionPrototype();
+		public static final JSObject FUNCTION           = createFunctionConstructor(FUNCTION_PROTOTYPE);
+
+		private static JSObject createFunctionPrototype() {
+			JSObject proto = new JSObject(LazyObject.OBJECT_PROTOTYPE);
+			proto.put("name", "");
+			proto.put("length", 0);
+			proto.put("call", makeMethod("call", 1, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSFunction fn)) {
+					throw new RuntimeException("TypeError: Function.prototype.call called on non-function");
+				}
+				Object   newThis = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
+				Object[] newArgs = args.length > 1 ? Arrays.copyOfRange(args, 1, args.length) : JSFunction.EMPTY_ARGS;
+				return fn.call(cx, newThis, newArgs);
+			}));
+			proto.put("apply", makeMethod("apply", 2, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSFunction fn)) {
+					throw new RuntimeException("TypeError: Function.prototype.apply called on non-function");
+				}
+				Object   newThis = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
+				Object[] newArgs;
+				if (args.length > 1 && args[1] != null && args[1] != JSUndefined.INSTANCE) {
+					if (args[1] instanceof JSArray arr) {
+						newArgs = arr.toArray();
+					} else if (args[1] instanceof Object[] oa) {
+						newArgs = oa;
+					} else {
+						newArgs = JSFunction.EMPTY_ARGS;
+					}
+				} else {
+					newArgs = JSFunction.EMPTY_ARGS;
+				}
+				return fn.call(cx, newThis, newArgs);
+			}));
+			proto.put("bind", makeMethod("bind", 1, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSFunction fn)) {
+					throw new RuntimeException("TypeError: Function.prototype.bind called on non-function");
+				}
+				Object   boundThis = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
+				Object[] boundArgs = args.length > 1 ? Arrays.copyOfRange(args, 1, args.length) : JSFunction.EMPTY_ARGS;
+				return new BoundFunction(fn, boundThis, boundArgs, proto);
+			}));
+			proto.put("toString", makeMethod("toString", 0, (cx, thisObj, args) -> {
+				if (thisObj instanceof JSFunction) {
+					return "function () { [native code] }";
+				}
+				throw new RuntimeException("TypeError: Function.prototype.toString requires that 'this' be a Function");
+			}));
+			return proto;
+		}
+
+		private static JSObject createFunctionConstructor(JSObject proto) {
+			return new JSBuiltinConstructor("Function", 1, proto, (cx, thisObj, args) -> {
+				StringBuilder sb = new StringBuilder("function anonymous(");
+				for (int i = 0; i < args.length - 1; i++) {
+					if (i > 0) sb.append(", ");
+					sb.append(JSOps.toStr(args[i]));
+				}
+				sb.append(") {\n");
+				if (args.length > 0) sb.append(JSOps.toStr(args[args.length - 1]));
+				sb.append("\n}");
+				JSScript script = JSCompiler.compile(sb.toString());
+				return script.run(cx);
+			});
+		}
+	}
+
+	public static class JSGlobalThis extends JSObject {
+		private final JSContext cx;
+
+		public JSGlobalThis(JSContext cx) {
+			super(LazyObject.OBJECT_PROTOTYPE);
+			this.cx = cx;
+			put("globalThis", this);
+			put("window", this);
+			put("global", this);
+		}
+
+		@Override
+		public Object get(String name) {
+			Object val = cx.get(name);
+			if (val != JSUndefined.INSTANCE) return val;
+			return super.get(name);
+		}
+
+		@Override
+		public void put(String name, Object value) {
+			cx.set(name, value);
+		}
+	}
+
+	public static class Dollar262 extends JSObject {
+		public Dollar262(JSContext cx) {
+			super(LazyObject.OBJECT_PROTOTYPE);
+			put("global", cx.getGlobalThis());
+			put("destroy", makeMethod("destroy", 0, (c, thisObj, args) -> JSUndefined.INSTANCE));
+			put("gc", makeMethod("gc", 0, (c, thisObj, args) -> {
+				System.gc();
+				return JSUndefined.INSTANCE;
+			}));
+			put("evalScript", makeMethod("evalScript", 1, (c, thisObj, args) -> {
+				if (args.length == 0 || args[0] == null) return JSUndefined.INSTANCE;
+				String src = JSOps.toStr(args[0]);
+				try {
+					JSScript script = JSCompiler.compile(src);
+					Object   val    = script.run(c);
+					JSObject res    = new JSObject();
+					res.put("type", "normal");
+					res.put("value", val);
+					return res;
+				} catch (Throwable t) {
+					JSObject res = new JSObject();
+					res.put("type", "throw");
+					res.put("value", t);
+					return res;
+				}
+			}));
+			put("getGlobal", makeMethod("getGlobal", 1, (c, thisObj, args) -> {
+				String name = args.length > 0 ? JSOps.toStr(args[0]) : "";
+				return c.get(name);
+			}));
+			put("setGlobal", makeMethod("setGlobal", 2, (c, thisObj, args) -> {
+				String name = args.length > 0 ? JSOps.toStr(args[0]) : "";
+				Object val  = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
+				c.set(name, val);
+				return JSUndefined.INSTANCE;
+			}));
+			put("createRealm", makeMethod("createRealm", 0, (c, thisObj, args) -> {
+				JSContext realmCtx = new JSContext();
+				return realmCtx.get("$262");
+			}));
+		}
+	}
+
+	private JSObject globalThisObject;
+
+	public synchronized JSObject getGlobalThis() {
+		if (globalThisObject == null) {
+			globalThisObject = new JSGlobalThis(this);
+		}
+		return globalThisObject;
 	}
 
 	private Object resolveLazyGlobal(int slot) {
@@ -1805,6 +2493,38 @@ public class JSContext {
 			val = LazyMisc.JAVA_PKG;
 		} else if (slot == SLOT_JAVAX_PKG) {
 			val = LazyMisc.JAVAX_PKG;
+		} else if (slot == SLOT_ERROR) {
+			val = LazyErrors.ERROR;
+		} else if (slot == SLOT_TYPE_ERROR) {
+			val = LazyErrors.TYPE_ERROR;
+		} else if (slot == SLOT_RANGE_ERROR) {
+			val = LazyErrors.RANGE_ERROR;
+		} else if (slot == SLOT_SYNTAX_ERROR) {
+			val = LazyErrors.SYNTAX_ERROR;
+		} else if (slot == SLOT_REFERENCE_ERROR) {
+			val = LazyErrors.REFERENCE_ERROR;
+		} else if (slot == SLOT_URI_ERROR) {
+			val = LazyErrors.URI_ERROR;
+		} else if (slot == SLOT_EVAL_ERROR) {
+			val = LazyErrors.EVAL_ERROR;
+		} else if (slot == SLOT_BOOLEAN) {
+			val = LazyPrimitiveConstructors.BOOLEAN;
+		} else if (slot == SLOT_NUMBER) {
+			val = LazyPrimitiveConstructors.NUMBER;
+		} else if (slot == SLOT_STRING) {
+			val = LazyPrimitiveConstructors.STRING;
+		} else if (slot == SLOT_FUNCTION) {
+			val = LazyFunction.FUNCTION;
+		} else if (slot == SLOT_PROXY) {
+			val = LazyProxy.PROXY;
+		} else if (slot == SLOT_REFLECT) {
+			val = LazyReflect.REFLECT;
+		} else if (slot == SLOT_DATE) {
+			val = LazyDate.DATE;
+		} else if (slot == SLOT_GLOBAL_THIS) {
+			val = getGlobalThis();
+		} else if (slot == SLOT_DOLLAR_262) {
+			val = new Dollar262(this);
 		}
 
 		if (val != null) {

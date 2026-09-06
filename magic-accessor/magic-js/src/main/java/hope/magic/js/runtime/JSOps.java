@@ -418,6 +418,37 @@ public class JSOps {
 		return toDouble(a) >= toDouble(b) ? Boolean.TRUE : Boolean.FALSE;
 	}
 
+	public static boolean instanceOf(Object left, Object right) {
+		if (right instanceof Class<?> clazz) {
+			return clazz.isInstance(left);
+		}
+		if (!(right instanceof JSObject ctor)) {
+			throw JSContext.makeTypeError("Right-hand side of 'instanceof' is not callable");
+		}
+		Object proto = ctor.get("prototype");
+		if (!(proto instanceof JSObject targetProto)) {
+			throw JSContext.makeTypeError("Function has non-object prototype in instanceof check");
+		}
+		if (left instanceof JSObject current) {
+			JSObject p = current.getPrototype();
+			while (p != null) {
+				if (p == targetProto) {
+					return true;
+				}
+				p = p.getPrototype();
+			}
+		}
+		return false;
+	}
+
+	public static boolean in(Object left, Object right) {
+		if (!(right instanceof JSObject jsObj)) {
+			throw JSContext.makeTypeError("Cannot use 'in' operator to search for '" + left + "' in " + right);
+		}
+		String key = toStr(left);
+		return jsObj.has(key);
+	}
+
 	public static Object and(Object a, Object b) {
 		return isTruthy(a) ? b : a;
 	}
@@ -711,7 +742,23 @@ public class JSOps {
 	public static Object unwrapException(Throwable t) {
 		if (t instanceof JSException jse) return jse.value;
 		if (t != null && t.getCause() instanceof JSException jse) return jse.value;
-		return t != null ? (t.getMessage() != null ? t.getMessage() : t.toString()) : "Error";
+		if (t != null) {
+			String msg = t.getMessage();
+			if (msg != null && msg.startsWith("TypeError: ")) {
+				return JSContext.LazyErrors.createErrorInstance(JSContext.LazyErrors.TYPE_ERROR, msg.substring(11));
+			}
+			if (msg != null && msg.startsWith("RangeError: ")) {
+				return JSContext.LazyErrors.createErrorInstance(JSContext.LazyErrors.RANGE_ERROR, msg.substring(12));
+			}
+			if (msg != null && msg.startsWith("ReferenceError: ")) {
+				return JSContext.LazyErrors.createErrorInstance(JSContext.LazyErrors.REFERENCE_ERROR, msg.substring(16));
+			}
+			if (msg != null && msg.startsWith("SyntaxError: ")) {
+				return JSContext.LazyErrors.createErrorInstance(JSContext.LazyErrors.SYNTAX_ERROR, msg.substring(13));
+			}
+			return msg != null ? msg : t.toString();
+		}
+		return "Error";
 	}
 
 	//region 位运算操作 (Bitwise Operations)

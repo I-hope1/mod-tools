@@ -1716,6 +1716,29 @@ public class JSCompiler {
 			return;
 		}
 
+		if (bin.op == TokenType.INSTANCEOF) {
+			compileNode(bin.left, ctx, true);
+			compileNode(bin.right, ctx, true);
+			mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "instanceOf", "(Ljava/lang/Object;Ljava/lang/Object;)Z", false);
+			if (needResult) {
+				boxBoolean(mv);
+			} else {
+				mv.visitInsn(Opcodes.POP);
+			}
+			return;
+		}
+		if (bin.op == TokenType.IN) {
+			compileNode(bin.left, ctx, true);
+			compileNode(bin.right, ctx, true);
+			mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "in", "(Ljava/lang/Object;Ljava/lang/Object;)Z", false);
+			if (needResult) {
+				boxBoolean(mv);
+			} else {
+				mv.visitInsn(Opcodes.POP);
+			}
+			return;
+		}
+
 		VarType leftType  = inferVarType(bin.left, ctx);
 		VarType rightType = inferVarType(bin.right, ctx);
 
@@ -2561,7 +2584,7 @@ public class JSCompiler {
 	public static String generateFunctionClass(String functionName, List<String> params, Node.BlockStmt body) {
 		String      funcClassName = "hope/magic/gen/MagicJSFunction_" + SCRIPT_ID.incrementAndGet();
 		ClassWriter cw            = new FastClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
-		cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, funcClassName, null, "java/lang/Object", new String[]{Type.getInternalName(JSFunction.class)});
+		cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, funcClassName, null, IN_JSObject, new String[]{Type.getInternalName(JSFunction.class)});
 
 		// public JSContext cx;
 		cw.visitField(Opcodes.ACC_PUBLIC, "cx", "L" + IN_JSContext + ";", null, null).visitEnd();
@@ -2570,12 +2593,22 @@ public class JSCompiler {
 		MethodVisitor initCxMv = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "(L" + IN_JSContext + ";)V", null, null);
 		initCxMv.visitCode();
 		initCxMv.visitVarInsn(Opcodes.ALOAD, 0);
-		initCxMv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+		initCxMv.visitMethodInsn(Opcodes.INVOKESPECIAL, IN_JSObject, "<init>", "()V", false);
 		initCxMv.visitVarInsn(Opcodes.ALOAD, 0);
 		initCxMv.visitVarInsn(Opcodes.ALOAD, 1);
 		initCxMv.visitFieldInsn(Opcodes.PUTFIELD, funcClassName, "cx", "L" + IN_JSContext + ";");
+
+		initCxMv.visitVarInsn(Opcodes.ALOAD, 0);
+		if (functionName != null) {
+			initCxMv.visitLdcInsn(functionName);
+		} else {
+			initCxMv.visitInsn(Opcodes.ACONST_NULL);
+		}
+		pushInt(initCxMv, params.size());
+		initCxMv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSLinker, "initUserFunction", "(L" + IN_JSObject + ";Ljava/lang/String;I)V", false);
+
 		initCxMv.visitInsn(Opcodes.RETURN);
-		initCxMv.visitMaxs(2, 2);
+		initCxMv.visitMaxs(3, 2);
 		initCxMv.visitEnd();
 
 		// <init>()
@@ -3173,8 +3206,28 @@ public class JSCompiler {
 	                                           boolean jumpOnTrue) {
 		MethodVisitor mv = ctx.mv;
 
+		if (condition instanceof Node.UnaryExpr un && un.op == TokenType.NOT) {
+			compileConditionJumpTo(un.expr, ctx, targetLabel, !jumpOnTrue);
+			return;
+		}
+
 		if (condition instanceof Node.BinaryExpr bin) {
 			TokenType op = bin.op;
+
+			if (op == TokenType.INSTANCEOF) {
+				compileNode(bin.left, ctx, true);
+				compileNode(bin.right, ctx, true);
+				mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "instanceOf", "(Ljava/lang/Object;Ljava/lang/Object;)Z", false);
+				mv.visitJumpInsn(jumpOnTrue ? Opcodes.IFNE : Opcodes.IFEQ, targetLabel);
+				return;
+			}
+			if (op == TokenType.IN) {
+				compileNode(bin.left, ctx, true);
+				compileNode(bin.right, ctx, true);
+				mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "in", "(Ljava/lang/Object;Ljava/lang/Object;)Z", false);
+				mv.visitJumpInsn(jumpOnTrue ? Opcodes.IFNE : Opcodes.IFEQ, targetLabel);
+				return;
+			}
 
 			if (op == TokenType.LT || op == TokenType.LTE || op == TokenType.GT || op == TokenType.GTE
 			    || op == TokenType.EQ || op == TokenType.EQ_EQ || op == TokenType.NOT_EQ || op == TokenType.NOT_EQ_EQ) {

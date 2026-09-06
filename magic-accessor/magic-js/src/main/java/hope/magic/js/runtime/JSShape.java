@@ -157,7 +157,18 @@ public final class JSShape {
 
 		for (int i = 0; i < n; i++) {
 			propIds[i] = SymbolTable.symbolId(propNames.get(i));
-			types[i]   = TYPE_OBJECT;
+			types[i]   = (byte) (TYPE_OBJECT | FLAG_NOT_ENUMERABLE);
+		}
+
+		return new JSShape(propIds, types, true);
+	}
+
+	public static JSShape createStaticPrototypeShape(List<String> propNames, byte[] types) {
+		int n = propNames.size();
+		int[] propIds = new int[n];
+
+		for (int i = 0; i < n; i++) {
+			propIds[i] = SymbolTable.symbolId(propNames.get(i));
 		}
 
 		return new JSShape(propIds, types, true);

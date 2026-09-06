@@ -42,6 +42,14 @@ tasks.register('magicjs', JavaExec) {
 	}
 }
 
+tasks.register('test262', JavaExec) {
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'hope.magic.js.test.Test262BatchRunner'
+	if (project.hasProperty('test262Dir')) {
+		args = [project.property('test262Dir').toString()]
+	}
+}
+
 publishing {
 	publications {
 		maven(MavenPublication) {

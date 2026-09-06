@@ -44,6 +44,10 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		super(prototype != null ? prototype : JSContext.LazyArray.ARRAY_PROTOTYPE);
 	}
 
+	public JSArray(JSShape shape, JSObject prototype) {
+		super(shape, prototype);
+	}
+
 	public JSArray(Collection<?> initial) {
 		super(JSContext.LazyArray.ARRAY_PROTOTYPE);
 		if (initial != null) {
@@ -596,6 +600,16 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			return list.toString();
 		}
 		return "[JSArray (length: " + length + ")]";
+	}
+
+	public Object[] toArray() {
+		int len = (int) Math.min(length, Integer.MAX_VALUE);
+		Object[] result = new Object[len];
+		for (int i = 0; i < len; i++) {
+			Object val = getElement(i);
+			result[i] = (val == HOLE) ? JSUndefined.INSTANCE : val;
+		}
+		return result;
 	}
 
 	//endregion

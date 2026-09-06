@@ -2947,6 +2947,14 @@ public class JSLinker {
 			throw new NoSuchMethodException("No matching constructor for " + clazz.getName() + " with " + args.length + " args");
 		}
 
+		if (ctor instanceof JSContext.JSBuiltinMethod bm) {
+			throw JSContext.makeTypeError(bm.getMethodName() + " is not a constructor");
+		}
+
+		if (ctor == JSContext.LazyDate.DATE) {
+			return ((JSFunction) ctor).call(null, new JSContext.JSDate(0, JSContext.LazyDate.DATE_PROTOTYPE), args);
+		}
+
 		if (ctor instanceof JSFunction) {
 			Object proto = (ctor instanceof JSObject jsObj) ? jsObj.get("prototype") : JSUndefined.INSTANCE;
 			JSObject newObj = (proto instanceof JSObject sp) ? new JSObject(sp) : new JSObject();
@@ -2957,11 +2965,22 @@ public class JSLinker {
 			return newObj;
 		}
 
-		throw new IllegalArgumentException("Cannot instantiate non-constructor: " + ctor);
+		throw JSContext.makeTypeError(ctor + " is not a constructor");
 	}
 
 	public static boolean isSameObject(Object expected, Object actual) {
 		return expected == actual;
+	}
+
+	public static void initUserFunction(JSObject func, String name, int length) {
+		try {
+			func.setPrototype(JSContext.LazyFunction.FUNCTION_PROTOTYPE);
+		} catch (Throwable ignored) {}
+		func.put("name", name != null ? name : "");
+		func.put("length", length);
+		JSObject proto = new JSObject();
+		proto.put("constructor", func);
+		func.put("prototype", proto);
 	}
 
 	public static void transitionSetDouble(JSShape newShape, int slot, Object target, double val) {

@@ -515,7 +515,7 @@ public class JSParser {
 
 	private Node parseRelational() {
 		Node expr = parseShift();
-		while (match(TokenType.LT, TokenType.LTE, TokenType.GT, TokenType.GTE)) {
+		while (match(TokenType.LT, TokenType.LTE, TokenType.GT, TokenType.GTE, TokenType.INSTANCEOF, TokenType.IN)) {
 			Token op = previous();
 			Node right = parseShift();
 			expr = new Node.BinaryExpr(expr, op.type, right, op.line, op.column);

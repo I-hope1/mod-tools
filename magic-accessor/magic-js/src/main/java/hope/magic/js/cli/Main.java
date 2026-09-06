@@ -7,6 +7,8 @@ import hope.magic.js.compiler.JSCompiler;
 import hope.magic.js.parser.JSLexer;
 import hope.magic.js.parser.JSParser;
 import hope.magic.js.runtime.JSContext;
+import hope.magic.js.runtime.JSObject;
+import hope.magic.js.runtime.JSOps;
 import hope.magic.js.runtime.JSScript;
 import hope.magic.js.runtime.JSUndefined;
 
@@ -15,6 +17,7 @@ import java.io.File;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -22,6 +25,7 @@ import java.util.List;
  *
  * 用法:
  *   java -jar magic-js.jar <script.js>                 执行 JS 脚本文件
+ *   java -jar magic-js.jar <f1.js> <f2.js> ...          顺序执行多个 JS 文件 (共享上下文)
  *   java -jar magic-js.jar -e "console.log(1+2);"       直接执行单行表达式
  *   java -jar magic-js.jar --bench <script.js> [runs]   基准测试模式 (微秒级冷热时延拆解)
  *   java -jar magic-js.jar --bench -e "<code>" [runs]   基准测试模式 (行内代码)
@@ -49,71 +53,147 @@ public class Main {
 		}
 
 		boolean isBench = false;
-		int argIdx = 0;
-		if (first.equals("--bench") || first.equals("-b")) {
-			isBench = true;
-			argIdx++;
-			if (argIdx >= args.length) {
-				System.err.println("错误: --bench 需要提供脚本文件或 -e 表达式");
-				System.exit(1);
-			}
-		}
-
-		String code = null;
-		String sourceName = "<stdin>";
-
-		if (args[argIdx].equals("-e")) {
-			if (argIdx + 1 >= args.length) {
-				System.err.println("错误: -e 需要提供代码字符串");
-				System.exit(1);
-			}
-			code = args[argIdx + 1];
-			sourceName = "-e";
-			argIdx += 2;
-		} else {
-			String filePath = args[argIdx];
-			File f = new File(filePath);
-			if (!f.exists() || !f.isFile()) {
-				System.err.println("错误: 找不到脚本文件: " + filePath);
-				System.exit(1);
-			}
-			try {
-				code = Files.readString(f.toPath(), StandardCharsets.UTF_8);
-				sourceName = f.getName();
-				argIdx++;
-			} catch (Throwable e) {
-				System.err.println("错误: 读取文件失败: " + e.getMessage());
-				System.exit(1);
-			}
-		}
-
+		String inlineCode = null;
+		List<String> scriptFiles = new ArrayList<>();
 		int benchRuns = 1000;
-		if (isBench && argIdx < args.length) {
-			try {
-				benchRuns = Integer.parseInt(args[argIdx]);
-			} catch (NumberFormatException ignored) {}
+		boolean readStdin = false;
+
+		for (int i = 0; i < args.length; i++) {
+			String arg = args[i];
+			if (arg.equals("--bench") || arg.equals("-b")) {
+				isBench = true;
+				if (i + 1 < args.length && args[i + 1].matches("\\d+")) {
+					try {
+						benchRuns = Integer.parseInt(args[++i]);
+					} catch (NumberFormatException ignored) {}
+				}
+			} else if (arg.equals("-e")) {
+				if (i + 1 >= args.length) {
+					System.err.println("错误: -e 需要提供代码字符串");
+					System.exit(1);
+				}
+				inlineCode = args[++i];
+			} else if (arg.equals("-")) {
+				readStdin = true;
+			} else if (arg.startsWith("-")) {
+				// 忽略未知的引擎选项（如 --module, --harmony, --strict 等），确保兼容各类外部宿主 runner
+			} else {
+				scriptFiles.add(arg);
+			}
 		}
 
 		if (isBench) {
-			runBenchmark(sourceName, code, benchRuns);
-		} else {
-			runScript(sourceName, code);
+			if (inlineCode != null) {
+				runBenchmark("-e", inlineCode, benchRuns);
+			} else if (!scriptFiles.isEmpty()) {
+				String filePath = scriptFiles.get(0);
+				try {
+					String code = Files.readString(new File(filePath).toPath(), StandardCharsets.UTF_8);
+					runBenchmark(filePath, code, benchRuns);
+				} catch (Throwable e) {
+					System.err.println("错误: 读取脚本文件失败: " + e.getMessage());
+					System.exit(1);
+				}
+			} else {
+				System.err.println("错误: --bench 需要提供脚本文件或 -e 表达式");
+				System.exit(1);
+			}
+			return;
+		}
+
+		if (inlineCode != null) {
+			runInlineCode(inlineCode);
+			return;
+		}
+
+		if (readStdin) {
+			runStdin();
+			return;
+		}
+
+		if (!scriptFiles.isEmpty()) {
+			runScriptFiles(scriptFiles);
+			return;
+		}
+
+		runRepl();
+	}
+
+	private static void runScriptFiles(List<String> filePaths) {
+		try {
+			JSContext cx = new JSContext();
+			for (String path : filePaths) {
+				File f = new File(path);
+				if (!f.exists() || !f.isFile()) {
+					System.err.println("Error: Script file not found: " + path);
+					System.exit(1);
+				}
+				String code = Files.readString(f.toPath(), StandardCharsets.UTF_8);
+				JSScript script = JSCompiler.compile(code);
+				script.run(cx);
+			}
+		} catch (Throwable e) {
+			System.err.println(formatError(e));
+			System.exit(1);
 		}
 	}
 
-	private static void runScript(String sourceName, String code) {
+	private static void runInlineCode(String code) {
 		try {
 			JSContext cx = new JSContext();
 			JSScript script = JSCompiler.compile(code);
 			Object res = script.run(cx);
 			if (res != null && res != JSUndefined.INSTANCE) {
-				System.out.println(res);
+				System.out.println(JSOps.toStr(res));
 			}
 		} catch (Throwable e) {
-			System.err.println("运行时异常 [" + sourceName + "]: " + e.getMessage());
-			e.printStackTrace();
+			System.err.println(formatError(e));
 			System.exit(1);
 		}
+	}
+
+	private static void runStdin() {
+		try {
+			String code = new String(System.in.readAllBytes(), StandardCharsets.UTF_8);
+			JSContext cx = new JSContext();
+			JSScript script = JSCompiler.compile(code);
+			Object res = script.run(cx);
+			if (res != null && res != JSUndefined.INSTANCE) {
+				System.out.println(JSOps.toStr(res));
+			}
+		} catch (Throwable e) {
+			System.err.println(formatError(e));
+			System.exit(1);
+		}
+	}
+
+	public static String formatError(Throwable t) {
+		if (t == null) return "Error";
+		if (t instanceof JSOps.JSException jse) {
+			Object val = jse.value;
+			if (val instanceof JSObject obj) {
+				Object name = obj.get("name");
+				Object msg = obj.get("message");
+				String nameStr = (name != JSUndefined.INSTANCE && name != null) ? JSOps.toStr(name) : "Error";
+				String msgStr = (msg != JSUndefined.INSTANCE && msg != null) ? JSOps.toStr(msg) : "";
+				return msgStr.isEmpty() ? nameStr : nameStr + ": " + msgStr;
+			}
+			return JSOps.toStr(val);
+		}
+		String msg = t.getMessage();
+		String simpleName = t.getClass().getSimpleName();
+		if (msg == null || msg.isEmpty()) return simpleName;
+		if (msg.startsWith("Test262Error") || msg.startsWith("TypeError") || msg.startsWith("SyntaxError")
+				|| msg.startsWith("ReferenceError") || msg.startsWith("RangeError") || msg.startsWith("Error")) {
+			return msg;
+		}
+		if (msg.startsWith("Unexpected") || msg.startsWith("Unterminated") || msg.startsWith("Expected")) {
+			return "SyntaxError: " + msg;
+		}
+		if (t instanceof NullPointerException || t instanceof ClassCastException || t instanceof IllegalArgumentException) {
+			return "TypeError: " + msg;
+		}
+		return simpleName + ": " + msg;
 	}
 
 	private static void runBenchmark(String sourceName, String code, int runs) {

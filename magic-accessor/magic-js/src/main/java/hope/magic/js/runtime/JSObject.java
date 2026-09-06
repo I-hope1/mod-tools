@@ -315,7 +315,8 @@ public class JSObject {
 	public Object get(String key, Object receiver) {
 		int symId = SymbolTable.lookupId(key);
 		if (symId == SymbolTable.NO_SYMBOL) {
-			return (prototype != null) ? prototype.get(key, receiver) : JSUndefined.INSTANCE;
+			JSObject proto = getPrototype();
+			return (proto != null) ? proto.get(key, receiver) : JSUndefined.INSTANCE;
 		}
 		return get(symId, receiver);
 	}
@@ -349,14 +350,16 @@ public class JSObject {
 	public double getAsDouble(String key, Object receiver) {
 		int symId = SymbolTable.lookupId(key);
 		if (symId == SymbolTable.NO_SYMBOL) {
-			return (prototype != null) ? prototype.getAsDouble(key, receiver) : Double.NaN;
+			JSObject proto = getPrototype();
+			return (proto != null) ? proto.getAsDouble(key, receiver) : Double.NaN;
 		}
 		return getAsDouble(symId, receiver);
 	}
 
 	private Object getSlow(int propId, Object receiver) {
-		if (propId < 0 || prototype == null) return JSUndefined.INSTANCE;
-		return prototype.get(propId, receiver);
+		JSObject proto = getPrototype();
+		if (propId < 0 || proto == null) return JSUndefined.INSTANCE;
+		return proto.get(propId, receiver);
 	}
 
 	//endregion
@@ -428,7 +431,8 @@ public class JSObject {
 			}
 			return false;
 		}
-		return prototype != null && prototype.handlePrototypePut(propId, receiver, value);
+		JSObject proto = getPrototype();
+		return proto != null && proto.handlePrototypePut(propId, receiver, value);
 	}
 
 	public void defineAccessor(String key, JSFunction getter, JSFunction setter, boolean enumerable) {
@@ -473,7 +477,8 @@ public class JSObject {
 			return;
 		}
 
-		if (prototype != null && prototype.handlePrototypePut(propId, this, value)) {
+		JSObject proto = getPrototype();
+		if (proto != null && proto.handlePrototypePut(propId, this, value)) {
 			return;
 		}
 
@@ -516,13 +521,15 @@ public class JSObject {
 			// 只有 DELETED 表示不存在；null 和 undefined 均为对象上的有效属性
 			return getRawObjectSlot(offset) != DELETED;
 		}
-		return prototype != null && propId >= 0 && prototype.has(propId);
+		JSObject proto = getPrototype();
+		return proto != null && propId >= 0 && proto.has(propId);
 	}
 
 	public boolean has(String key) {
 		int symId = SymbolTable.lookupId(key);
 		if (symId == SymbolTable.NO_SYMBOL) {
-			return prototype != null && prototype.has(key);
+			JSObject proto = getPrototype();
+			return proto != null && proto.has(key);
 		}
 		return has(symId);
 	}

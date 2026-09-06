@@ -414,6 +414,23 @@ public class JSContext {
 		}
 	}
 
+	public static class JSArguments extends JSObject {
+		public JSArguments(JSFunction callee, Object[] args) {
+			super(LazyObject.OBJECT_PROTOTYPE);
+			int len = (args != null) ? args.length : 0;
+			put("length", (double) len);
+			if (callee != null) {
+				put("callee", callee);
+			}
+			if (args != null) {
+				for (int i = 0; i < len; i++) {
+					Object v = args[i];
+					put(String.valueOf(i), v != null ? v : JSUndefined.INSTANCE);
+				}
+			}
+		}
+	}
+
 	public static class JSBuiltinConstructor extends JSObject implements JSFunction {
 		private final JSFunction fn;
 

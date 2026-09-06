@@ -2983,6 +2983,10 @@ public class JSLinker {
 		func.put("prototype", proto);
 	}
 
+	public static JSContext.JSArguments createArguments(JSFunction callee, Object[] args) {
+		return new JSContext.JSArguments(callee, args);
+	}
+
 	public static void transitionSetDouble(JSShape newShape, int slot, Object target, double val) {
 		JSObject obj = (JSObject) target;
 		obj.shape = newShape;
@@ -3081,6 +3085,14 @@ public class JSLinker {
 				return ctorSpreader.invokeExact(args);
 			}
 			throw new NoSuchMethodException("No matching constructor for " + clazz.getName() + " with " + arity + " args");
+		}
+
+		if (ctor instanceof JSContext.JSBuiltinMethod bm) {
+			throw JSContext.makeTypeError(bm.getMethodName() + " is not a constructor");
+		}
+
+		if (ctor == JSContext.LazyDate.DATE) {
+			return ((JSFunction) ctor).call(null, new JSContext.JSDate(0, JSContext.LazyDate.DATE_PROTOTYPE), args);
 		}
 
 		if (ctor instanceof JSFunction func) {

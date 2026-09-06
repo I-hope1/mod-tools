@@ -751,6 +751,35 @@ public class JSCompiler {
 		mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false);
 	}
 
+	private static void boxInt(MethodVisitor mv) {
+		mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+	}
+
+	private static void boxLong(MethodVisitor mv) {
+		mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
+	}
+
+	private static void syncGlobalVar(MethodVisitor mv, CompileContext ctx, LocalVar var, String varName) {
+		if (ctx != null && !ctx.isFunction && varName != null) {
+			int slot = JSContext.getGlobalSlot(varName);
+			mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+			pushInt(mv, slot);
+			if (var.isInt()) {
+				mv.visitVarInsn(Opcodes.ILOAD, var.slot);
+				boxInt(mv);
+			} else if (var.isLong()) {
+				mv.visitVarInsn(Opcodes.LLOAD, var.slot);
+				boxLong(mv);
+			} else if (var.isDouble()) {
+				mv.visitVarInsn(Opcodes.DLOAD, var.slot);
+				boxDouble(mv);
+			} else {
+				mv.visitVarInsn(Opcodes.ALOAD, var.slot);
+			}
+			mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "setSlot", "(ILjava/lang/Object;)V", false);
+		}
+	}
+
 	private static void loadGlobal(MethodVisitor mv, String name) {
 		int slot = JSContext.getGlobalSlot(name);
 		mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
@@ -933,6 +962,7 @@ public class JSCompiler {
 			if (varDecl.init != null) { compileNode(varDecl.init, ctx, true); } else visitUndefined(mv);
 			mv.visitVarInsn(Opcodes.ASTORE, var.slot);
 		}
+		syncGlobalVar(mv, ctx, var, varDecl.name);
 		if (needResult) visitUndefined(mv);
 	}
 
@@ -1296,7 +1326,7 @@ public class JSCompiler {
 		}
 	}
 
-	private static void storeAndResult(MethodVisitor mv, LocalVar var, boolean needResult) {
+	private static void storeAndResult(MethodVisitor mv, LocalVar var, boolean needResult, CompileContext ctx, String varName) {
 		if (var.isInt()) {
 			if (needResult) {
 				mv.visitInsn(Opcodes.DUP);
@@ -1327,6 +1357,7 @@ public class JSCompiler {
 			if (needResult) mv.visitInsn(Opcodes.DUP);
 			mv.visitVarInsn(Opcodes.ASTORE, var.slot);
 		}
+		syncGlobalVar(mv, ctx, var, varName);
 	}
 
 	private static int getIntCompoundOpcode(TokenType op) {
@@ -1419,7 +1450,7 @@ public class JSCompiler {
 						compileNodeAsInt(assign.value, ctx);
 						mv.visitInsn(getIntCompoundOpcode(assign.op));
 					}
-					storeAndResult(mv, var, needResult);
+					storeAndResult(mv, var, needResult, ctx, name);
 					return;
 				}
 
@@ -1449,7 +1480,7 @@ public class JSCompiler {
 						compileNodeAsLong(assign.value, ctx);
 						mv.visitInsn(getLongCompoundOpcode(assign.op));
 					}
-					storeAndResult(mv, var, needResult);
+					storeAndResult(mv, var, needResult, ctx, name);
 					return;
 				}
 
@@ -1459,7 +1490,7 @@ public class JSCompiler {
 					} else if (isCompound) {
 						compileDoubleCompound(mv, var, assign, ctx);
 					}
-					storeAndResult(mv, var, needResult);
+					storeAndResult(mv, var, needResult, ctx, name);
 					return;
 				}
 
@@ -1470,7 +1501,7 @@ public class JSCompiler {
 					compileNode(assign.value, ctx, true);
 					mv.visitInvokeDynamicInsn("op", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", BSM_BINARY_OP, opStr);
 				}
-				storeAndResult(mv, var, needResult);
+				storeAndResult(mv, var, needResult, ctx, name);
 			} else {
 				int slot = JSContext.getGlobalSlot(name);
 				mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
@@ -2058,6 +2089,7 @@ public class JSCompiler {
 				LocalVar var = ctx.getLocal(ident.name);
 				if (var != null) {
 					compileIncDec(un, var, ctx, needResult);
+					syncGlobalVar(mv, ctx, var, ident.name);
 				} else {
 					compileGlobalIncDec(un, ident.name, ctx, needResult);
 				}
@@ -2577,6 +2609,88 @@ public class JSCompiler {
 		}
 	}
 
+	private static boolean usesArguments(Node node) {
+		if (node == null) return false;
+		if (node instanceof Node.IdentifierExpr ident) {
+			return "arguments".equals(ident.name);
+		}
+		if (node instanceof Node.FunctionExpr || node instanceof Node.FunctionDecl) {
+			return false;
+		}
+		if (node instanceof Node.BlockStmt block) {
+			for (Node s : block.statements) {
+				if (usesArguments(s)) return true;
+			}
+			return false;
+		}
+		if (node instanceof Node.Program prog) {
+			for (Node s : prog.body) {
+				if (usesArguments(s)) return true;
+			}
+			return false;
+		}
+		if (node instanceof Node.ExprStmt exprStmt) return usesArguments(exprStmt.expr);
+		if (node instanceof Node.ReturnStmt ret) return usesArguments(ret.value);
+		if (node instanceof Node.ThrowStmt thr) return usesArguments(thr.expr);
+		if (node instanceof Node.IfStmt ifStmt) {
+			return usesArguments(ifStmt.condition) || usesArguments(ifStmt.thenBranch) || usesArguments(ifStmt.elseBranch);
+		}
+		if (node instanceof Node.WhileStmt whileStmt) {
+			return usesArguments(whileStmt.condition) || usesArguments(whileStmt.body);
+		}
+		if (node instanceof Node.DoWhileStmt doWhile) {
+			return usesArguments(doWhile.body) || usesArguments(doWhile.condition);
+		}
+		if (node instanceof Node.ForStmt forStmt) {
+			return usesArguments(forStmt.init) || usesArguments(forStmt.condition) || usesArguments(forStmt.update) || usesArguments(forStmt.body);
+		}
+		if (node instanceof Node.ForOfStmt forOf) {
+			return usesArguments(forOf.iterable) || usesArguments(forOf.body);
+		}
+		if (node instanceof Node.ForInStmt forIn) {
+			return usesArguments(forIn.object) || usesArguments(forIn.body);
+		}
+		if (node instanceof Node.TryStmt tryStmt) {
+			return usesArguments(tryStmt.tryBlock) || usesArguments(tryStmt.catchBlock) || usesArguments(tryStmt.finallyBlock);
+		}
+		if (node instanceof Node.SwitchStmt sw) {
+			if (usesArguments(sw.discriminant)) return true;
+			for (var c : sw.cases) {
+				if (usesArguments(c.test)) return true;
+				for (Node s : c.consequent) if (usesArguments(s)) return true;
+			}
+			return false;
+		}
+		if (node instanceof Node.BinaryExpr bin) return usesArguments(bin.left) || usesArguments(bin.right);
+		if (node instanceof Node.UnaryExpr un) return usesArguments(un.expr);
+		if (node instanceof Node.AssignExpr assign) return usesArguments(assign.target) || usesArguments(assign.value);
+		if (node instanceof Node.MemberAccessExpr mem) return usesArguments(mem.target);
+		if (node instanceof Node.IndexAccessExpr idx) return usesArguments(idx.target) || usesArguments(idx.index);
+		if (node instanceof Node.CallExpr call) {
+			if (usesArguments(call.callee)) return true;
+			for (Node arg : call.arguments) if (usesArguments(arg)) return true;
+			return false;
+		}
+		if (node instanceof Node.NewExpr newExpr) {
+			if (usesArguments(newExpr.constructor)) return true;
+			for (Node arg : newExpr.arguments) if (usesArguments(arg)) return true;
+			return false;
+		}
+		if (node instanceof Node.TernaryExpr ter) {
+			return usesArguments(ter.condition) || usesArguments(ter.thenExpr) || usesArguments(ter.elseExpr);
+		}
+		if (node instanceof Node.ArrayLiteralExpr arr) {
+			for (Node elem : arr.elements) if (usesArguments(elem)) return true;
+			return false;
+		}
+		if (node instanceof Node.ObjectLiteralExpr obj) {
+			for (var entry : obj.entries) if (usesArguments(entry.value())) return true;
+			return false;
+		}
+		if (node instanceof Node.VarDecl vd) return usesArguments(vd.init);
+		return false;
+	}
+
 	public static String generateFunctionClass(List<String> params, Node.BlockStmt body) {
 		return generateFunctionClass(null, params, body);
 	}
@@ -2621,13 +2735,15 @@ public class JSCompiler {
 		initMv.visitMaxs(2, 1);
 		initMv.visitEnd();
 
+		boolean hasArguments = usesArguments(body) && !params.contains("arguments");
 		int    paramCount       = params.size();
-		String targetMethodName = paramCount <= 3 ? "call" + paramCount : "call";
-		String targetMethodDesc = paramCount <= 3
+		boolean useCallMethod   = hasArguments || paramCount > 3;
+		String targetMethodName = !useCallMethod ? "call" + paramCount : "call";
+		String targetMethodDesc = !useCallMethod
 		 ? "(L" + IN_JSContext + ";Ljava/lang/Object;" + "Ljava/lang/Object;".repeat(paramCount) + ")Ljava/lang/Object;"
 		 : "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;";
 
-		boolean isNumFunc = isNumericFunction(body, params, functionName) && paramCount <= 3;
+		boolean isNumFunc = !hasArguments && isNumericFunction(body, params, functionName) && paramCount <= 3;
 
 		if (isNumFunc) {
 			String primMethodName = "call" + paramCount + "Double";
@@ -2684,7 +2800,7 @@ public class JSCompiler {
 			callMv.visitMaxs(0, 0);
 			callMv.visitEnd();
 		} else {
-			// 主执行方法 (当 paramCount <= 3 时编译为特化 call0..call3，零 Object[] 堆分配)
+			// 主执行方法
 			MethodVisitor callMv = cw.visitMethod(
 			 Opcodes.ACC_PUBLIC,
 			 targetMethodName,
@@ -2700,7 +2816,7 @@ public class JSCompiler {
 			CompileContext ctx      = createCompileContext(callMv, funcClassName, fakeProg, functionName, false);
 			ctx.locals.put("this", new LocalVar(2, VarType.OBJECT));
 
-			if (paramCount <= 3) {
+			if (!useCallMethod) {
 				// 参数直接绑定到 JVM 局部变量槽位 (slot 0=this, 1=cx, 2=thisObj, 3=a0, 4=a1, 5=a2)
 				ctx.nextLocalSlot = 3;
 				for (int i = 0; i < paramCount; i++) {
@@ -2713,6 +2829,13 @@ public class JSCompiler {
 					LocalVar var = ctx.declareLocal(params.get(i), VarType.OBJECT);
 					loadArgSafe(callMv, 3, i);
 					callMv.visitVarInsn(Opcodes.ASTORE, var.slot);
+				}
+				if (hasArguments) {
+					LocalVar argVar = ctx.declareLocal("arguments", VarType.OBJECT);
+					callMv.visitVarInsn(Opcodes.ALOAD, 0); // this
+					callMv.visitVarInsn(Opcodes.ALOAD, 3); // args
+					callMv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSLinker, "createArguments", "(Lhope/magic/js/runtime/JSFunction;[Ljava/lang/Object;)Lhope/magic/js/runtime/JSContext$JSArguments;", false);
+					callMv.visitVarInsn(Opcodes.ASTORE, argVar.slot);
 				}
 			}
 
@@ -2731,8 +2854,83 @@ public class JSCompiler {
 			callMv.visitEnd();
 		}
 
-		// 当 paramCount <= 3 时，补充通用的 call(cx, thisObj, args[]) 桥接转发器
-		if (paramCount <= 3) {
+		if (hasArguments) {
+			// call0(cx, thisObj)
+			MethodVisitor c0Mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "call0", "(L" + IN_JSContext + ";Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			c0Mv.visitCode();
+			c0Mv.visitVarInsn(Opcodes.ALOAD, 0);
+			c0Mv.visitVarInsn(Opcodes.ALOAD, 1);
+			c0Mv.visitVarInsn(Opcodes.ALOAD, 2);
+			c0Mv.visitFieldInsn(Opcodes.GETSTATIC, "hope/magic/js/runtime/JSFunction", "EMPTY_ARGS", "[Ljava/lang/Object;");
+			c0Mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, funcClassName, "call", "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+			c0Mv.visitInsn(Opcodes.ARETURN);
+			c0Mv.visitMaxs(0, 0);
+			c0Mv.visitEnd();
+
+			// call1(cx, thisObj, a0)
+			MethodVisitor c1Mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "call1", "(L" + IN_JSContext + ";Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			c1Mv.visitCode();
+			c1Mv.visitVarInsn(Opcodes.ALOAD, 0);
+			c1Mv.visitVarInsn(Opcodes.ALOAD, 1);
+			c1Mv.visitVarInsn(Opcodes.ALOAD, 2);
+			c1Mv.visitInsn(Opcodes.ICONST_1);
+			c1Mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+			c1Mv.visitInsn(Opcodes.DUP);
+			c1Mv.visitInsn(Opcodes.ICONST_0);
+			c1Mv.visitVarInsn(Opcodes.ALOAD, 3);
+			c1Mv.visitInsn(Opcodes.AASTORE);
+			c1Mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, funcClassName, "call", "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+			c1Mv.visitInsn(Opcodes.ARETURN);
+			c1Mv.visitMaxs(0, 0);
+			c1Mv.visitEnd();
+
+			// call2(cx, thisObj, a0, a1)
+			MethodVisitor c2Mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "call2", "(L" + IN_JSContext + ";Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			c2Mv.visitCode();
+			c2Mv.visitVarInsn(Opcodes.ALOAD, 0);
+			c2Mv.visitVarInsn(Opcodes.ALOAD, 1);
+			c2Mv.visitVarInsn(Opcodes.ALOAD, 2);
+			c2Mv.visitInsn(Opcodes.ICONST_2);
+			c2Mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+			c2Mv.visitInsn(Opcodes.DUP);
+			c2Mv.visitInsn(Opcodes.ICONST_0);
+			c2Mv.visitVarInsn(Opcodes.ALOAD, 3);
+			c2Mv.visitInsn(Opcodes.AASTORE);
+			c2Mv.visitInsn(Opcodes.DUP);
+			c2Mv.visitInsn(Opcodes.ICONST_1);
+			c2Mv.visitVarInsn(Opcodes.ALOAD, 4);
+			c2Mv.visitInsn(Opcodes.AASTORE);
+			c2Mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, funcClassName, "call", "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+			c2Mv.visitInsn(Opcodes.ARETURN);
+			c2Mv.visitMaxs(0, 0);
+			c2Mv.visitEnd();
+
+			// call3(cx, thisObj, a0, a1, a2)
+			MethodVisitor c3Mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "call3", "(L" + IN_JSContext + ";Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			c3Mv.visitCode();
+			c3Mv.visitVarInsn(Opcodes.ALOAD, 0);
+			c3Mv.visitVarInsn(Opcodes.ALOAD, 1);
+			c3Mv.visitVarInsn(Opcodes.ALOAD, 2);
+			pushInt(c3Mv, 3);
+			c3Mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+			c3Mv.visitInsn(Opcodes.DUP);
+			c3Mv.visitInsn(Opcodes.ICONST_0);
+			c3Mv.visitVarInsn(Opcodes.ALOAD, 3);
+			c3Mv.visitInsn(Opcodes.AASTORE);
+			c3Mv.visitInsn(Opcodes.DUP);
+			c3Mv.visitInsn(Opcodes.ICONST_1);
+			c3Mv.visitVarInsn(Opcodes.ALOAD, 4);
+			c3Mv.visitInsn(Opcodes.AASTORE);
+			c3Mv.visitInsn(Opcodes.DUP);
+			c3Mv.visitInsn(Opcodes.ICONST_2);
+			c3Mv.visitVarInsn(Opcodes.ALOAD, 5);
+			c3Mv.visitInsn(Opcodes.AASTORE);
+			c3Mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, funcClassName, "call", "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+			c3Mv.visitInsn(Opcodes.ARETURN);
+			c3Mv.visitMaxs(0, 0);
+			c3Mv.visitEnd();
+		} else if (paramCount <= 3) {
+			// 当 paramCount <= 3 时，补充通用的 call(cx, thisObj, args[]) 桥接转发器
 			MethodVisitor bridgeMv = cw.visitMethod(
 			 Opcodes.ACC_PUBLIC,
 			 "call",

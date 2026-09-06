@@ -578,7 +578,7 @@ public class JSParser {
 	}
 
 	private Node parsePostfix() {
-		Node expr = parsePrimary();
+		Node expr = parseMemberExpression();
 
 		while (true) {
 			if (match(TokenType.DOT)) {
@@ -600,6 +600,41 @@ public class JSParser {
 			} else if (match(TokenType.PLUS_PLUS, TokenType.MINUS_MINUS)) {
 				Token op = previous();
 				expr = new Node.UnaryExpr(op.type, expr, false, op.line, op.column);
+			} else {
+				break;
+			}
+		}
+
+		return expr;
+	}
+
+	private Node parseMemberExpression() {
+		Node expr;
+		if (match(TokenType.NEW)) {
+			Token kw = previous();
+			Node ctor = parseMemberExpression();
+			List<Node> args = new ArrayList<>();
+			if (match(TokenType.LPAREN)) {
+				if (!check(TokenType.RPAREN)) {
+					do {
+						args.add(parseExpression());
+					} while (match(TokenType.COMMA));
+				}
+				consume(TokenType.RPAREN, "Expected ')' after arguments");
+			}
+			expr = new Node.NewExpr(ctor, args, kw.line, kw.column);
+		} else {
+			expr = parsePrimary();
+		}
+
+		while (true) {
+			if (match(TokenType.DOT)) {
+				Token prop = consumePropertyName("Expected property name after '.'");
+				expr = new Node.MemberAccessExpr(expr, prop.text, prop.line, prop.column);
+			} else if (match(TokenType.LBRACKET)) {
+				Node index = parseExpression();
+				consume(TokenType.RBRACKET, "Expected ']' after index");
+				expr = new Node.IndexAccessExpr(expr, index, peek().line, peek().column);
 			} else {
 				break;
 			}
@@ -658,20 +693,6 @@ public class JSParser {
 			return new Node.IdentifierExpr(previous().text, previous().line, previous().column);
 		}
 
-		if (match(TokenType.NEW)) {
-			Token kw = previous();
-			Node ctor = parsePrimary();
-			List<Node> args = new ArrayList<>();
-			if (match(TokenType.LPAREN)) {
-				if (!check(TokenType.RPAREN)) {
-					do {
-						args.add(parseExpression());
-					} while (match(TokenType.COMMA));
-				}
-				consume(TokenType.RPAREN, "Expected ')' after arguments");
-			}
-			return new Node.NewExpr(ctor, args, kw.line, kw.column);
-		}
 
 		if (match(TokenType.FUNCTION)) {
 			Token kw = previous();

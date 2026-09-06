@@ -190,12 +190,23 @@ public class JSParser {
 		while (!check(TokenType.RBRACE) && !isAtEnd()) {
 			if (match(TokenType.SEMICOLON)) continue;
 			boolean isStatic = false;
-			if (check(TokenType.IDENTIFIER) && "static".equals(peek().text)) {
+			if (check(TokenType.IDENTIFIER) && "static".equals(peek().text)
+					&& peekNext().type != TokenType.LPAREN
+					&& peekNext().type != TokenType.SEMICOLON
+					&& peekNext().type != TokenType.RBRACE) {
 				advance();
 				isStatic = true;
 			}
+			Node.PropertyKind kind = Node.PropertyKind.NORMAL;
+			if (check(TokenType.IDENTIFIER) && ("get".equals(peek().text) || "set".equals(peek().text))
+					&& peekNext().type != TokenType.LPAREN
+					&& peekNext().type != TokenType.SEMICOLON
+					&& peekNext().type != TokenType.RBRACE) {
+				Token accToken = advance();
+				kind = "get".equals(accToken.text) ? Node.PropertyKind.GETTER : Node.PropertyKind.SETTER;
+			}
 			Token nameToken;
-			if (match(TokenType.IDENTIFIER, TokenType.STRING)) {
+			if (match(TokenType.IDENTIFIER, TokenType.STRING, TokenType.NUMBER)) {
 				nameToken = previous();
 			} else {
 				nameToken = consumePropertyName("Expected method name in class body");
@@ -204,13 +215,21 @@ public class JSParser {
 			consume(TokenType.LPAREN, "Expected '(' after method name");
 			ParamParseResult paramRes = parseFunctionParams(nameToken);
 			consume(TokenType.RPAREN, "Expected ')' after parameters");
+
+			if (kind == Node.PropertyKind.GETTER && !paramRes.params.isEmpty()) {
+				throw new RuntimeException("SyntaxError: Getter must not have any formal parameters");
+			}
+			if (kind == Node.PropertyKind.SETTER && paramRes.params.size() != 1) {
+				throw new RuntimeException("SyntaxError: Setter must have exactly one formal parameter");
+			}
+
 			Node.BlockStmt rawBody = parseBlockStatement();
 			List<Node> allStmts = new ArrayList<>(paramRes.unpackStmts);
 			allStmts.addAll(rawBody.statements);
 			Node.BlockStmt body = new Node.BlockStmt(allStmts, rawBody.line, rawBody.column);
 
-			Node.FunctionDecl fn = new Node.FunctionDecl(methodName, paramRes.params, body, nameToken.line, nameToken.column);
-			if ("constructor".equals(methodName) && !isStatic) {
+			Node.FunctionDecl fn = new Node.FunctionDecl(methodName, paramRes.params, body, kind, nameToken.line, nameToken.column);
+			if ("constructor".equals(methodName) && !isStatic && kind == Node.PropertyKind.NORMAL) {
 				constructor = fn;
 			} else if (isStatic) {
 				staticMethods.add(fn);
@@ -669,31 +688,65 @@ public class JSParser {
 			return new Node.FunctionExpr(name, paramRes.params, new Node.BlockStmt(allStmts, rawBody.line, rawBody.column), kw.line, kw.column);
 		}
 
-		// 对象字面量 { a: 1, b: 2 } 或属性简写 { a, b }
+		// 对象字面量 { a: 1, b: 2 } 或属性简写 { a, b } 或访问器 { get foo() {}, set foo(v) {} }
 		if (match(TokenType.LBRACE)) {
 			Token lbrace = previous();
 			List<Node.ObjectLiteralExpr.Entry> entries = new ArrayList<>();
 			if (!check(TokenType.RBRACE)) {
 				do {
 					if (check(TokenType.RBRACE)) break;
-					Token keyToken = advance();
-					String key = keyToken.text;
-					Node val;
-					if (match(TokenType.COLON)) {
-						val = parseExpression();
-					} else if (check(TokenType.LPAREN)) {
-						consume(TokenType.LPAREN, "Expected '('");
-						ParamParseResult paramRes = parseFunctionParams(previous());
+					boolean isAccessor = check(TokenType.IDENTIFIER)
+							&& ("get".equals(peek().text) || "set".equals(peek().text))
+							&& peekNext().type != TokenType.COLON
+							&& peekNext().type != TokenType.LPAREN
+							&& peekNext().type != TokenType.COMMA
+							&& peekNext().type != TokenType.RBRACE;
+
+					if (isAccessor) {
+						Token accToken = advance();
+						Node.PropertyKind kind = "get".equals(accToken.text) ? Node.PropertyKind.GETTER : Node.PropertyKind.SETTER;
+						Token nameToken;
+						if (match(TokenType.IDENTIFIER, TokenType.STRING, TokenType.NUMBER)) {
+							nameToken = previous();
+						} else {
+							nameToken = consumePropertyName("Expected property name after '" + accToken.text + "'");
+						}
+						String key = nameToken.text;
+						consume(TokenType.LPAREN, "Expected '(' after accessor name");
+						ParamParseResult paramRes = parseFunctionParams(nameToken);
 						consume(TokenType.RPAREN, "Expected ')' after parameters");
+						if (kind == Node.PropertyKind.GETTER && !paramRes.params.isEmpty()) {
+							throw new RuntimeException("SyntaxError: Getter must not have any formal parameters");
+						}
+						if (kind == Node.PropertyKind.SETTER && paramRes.params.size() != 1) {
+							throw new RuntimeException("SyntaxError: Setter must have exactly one formal parameter");
+						}
 						Node.BlockStmt rawBody = parseBlockStatement();
 						List<Node> allStmts = new ArrayList<>(paramRes.unpackStmts);
 						allStmts.addAll(rawBody.statements);
 						Node.BlockStmt body = new Node.BlockStmt(allStmts, rawBody.line, rawBody.column);
-						val = new Node.FunctionExpr(key, paramRes.params, body, keyToken.line, keyToken.column);
+						Node val = new Node.FunctionExpr(key, paramRes.params, body, nameToken.line, nameToken.column);
+						entries.add(new Node.ObjectLiteralExpr.Entry(key, val, kind));
 					} else {
-						val = new Node.IdentifierExpr(key, keyToken.line, keyToken.column);
+						Token keyToken = advance();
+						String key = keyToken.text;
+						Node val;
+						if (match(TokenType.COLON)) {
+							val = parseExpression();
+						} else if (check(TokenType.LPAREN)) {
+							consume(TokenType.LPAREN, "Expected '('");
+							ParamParseResult paramRes = parseFunctionParams(previous());
+							consume(TokenType.RPAREN, "Expected ')' after parameters");
+							Node.BlockStmt rawBody = parseBlockStatement();
+							List<Node> allStmts = new ArrayList<>(paramRes.unpackStmts);
+							allStmts.addAll(rawBody.statements);
+							Node.BlockStmt body = new Node.BlockStmt(allStmts, rawBody.line, rawBody.column);
+							val = new Node.FunctionExpr(key, paramRes.params, body, keyToken.line, keyToken.column);
+						} else {
+							val = new Node.IdentifierExpr(key, keyToken.line, keyToken.column);
+						}
+						entries.add(new Node.ObjectLiteralExpr.Entry(key, val));
 					}
-					entries.add(new Node.ObjectLiteralExpr.Entry(key, val));
 				} while (match(TokenType.COMMA));
 			}
 			consume(TokenType.RBRACE, "Expected '}' after object literal");
@@ -1141,7 +1194,7 @@ public class JSParser {
 
 	private Token consumePropertyName(String message) {
 		Token t = peek();
-		if (t.type == TokenType.IDENTIFIER || t.type.ordinal() <= TokenType.UNDEFINED.ordinal()) {
+		if (t.type == TokenType.IDENTIFIER || t.type == TokenType.STRING || t.type == TokenType.NUMBER || t.type.ordinal() <= TokenType.UNDEFINED.ordinal()) {
 			return advance();
 		}
 		throw new RuntimeException(message + " (found '" + t.text + "' at line " + t.line + ":" + t.column + ")");

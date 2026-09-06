@@ -1910,7 +1910,7 @@ public class JSLinker {
 		if (target instanceof JSBridgedObject bridged) {
 			JSObject jsObj = bridged.getJSObject();
 			if (jsObj != null) {
-				Object v = jsObj.get(propName);
+				Object v = jsObj.get(propName, target);
 				if (v != JSUndefined.INSTANCE) {
 					return v;
 				}
@@ -2071,6 +2071,18 @@ public class JSLinker {
 			return;
 		}
 
+		if (target instanceof JSBridgedObject bridged) {
+			JSObject jsObj = bridged.getJSObject();
+			if (jsObj != null) {
+				int propId = site.getPropId() >= 0 ? site.getPropId() : SymbolTable.id(propName);
+				if (jsObj.getPrototype() != null && jsObj.getPrototype().handlePrototypePut(propId, target, value)) {
+					return;
+				}
+				jsObj.put(propName, value);
+				return;
+			}
+		}
+
 		if (target instanceof Map) {
 			((Map<Object, Object>) target).put(propName, value);
 			return;
@@ -2200,6 +2212,18 @@ public class JSLinker {
 			jsObj.shape = newShape;
 			jsObj.setDoubleSlot(newOffset, value);
 			return;
+		}
+
+		if (target instanceof JSBridgedObject bridged) {
+			JSObject jsObj = bridged.getJSObject();
+			if (jsObj != null) {
+				int propId = site.getPropId() >= 0 ? site.getPropId() : SymbolTable.id(propName);
+				if (jsObj.getPrototype() != null && jsObj.getPrototype().handlePrototypePut(propId, target, value)) {
+					return;
+				}
+				jsObj.put(propName, value);
+				return;
+			}
 		}
 
 		if (target instanceof Map) {

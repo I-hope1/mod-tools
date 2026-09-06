@@ -277,17 +277,17 @@ public class ConstantFolder {
 
 			for (var e : objLit.entries) {
 				var     foldedVal        = foldNode(e.value());
-				boolean currentIsLiteral = foldedVal instanceof Node.LiteralExpr;
+				boolean currentIsLiteral = (e.kind() == Node.PropertyKind.NORMAL) && (foldedVal instanceof Node.LiteralExpr);
 				Integer prevLiteralIdx   = literalIndexMap.get(e.key());
 
 				if (prevLiteralIdx != null && currentIsLiteral) {
 					// 条件满足：旧值是纯字面量，且新值也是纯字面量
 					// 原地替换！不仅删除了旧死代码，还完美保留了第一次声明时的 Key 遍历顺序
-					newEntries.set(prevLiteralIdx, new Node.ObjectLiteralExpr.Entry(e.key(), foldedVal));
+					newEntries.set(prevLiteralIdx, new Node.ObjectLiteralExpr.Entry(e.key(), foldedVal, e.kind()));
 				} else {
 					// 含有副作用（旧值含副作用需保留，或新值含副作用不能随意提前）
 					// 追加到末尾，保留原样交给运行时
-					newEntries.add(new Node.ObjectLiteralExpr.Entry(e.key(), foldedVal));
+					newEntries.add(new Node.ObjectLiteralExpr.Entry(e.key(), foldedVal, e.kind()));
 
 					if (currentIsLiteral) {
 						// 如果当前是纯字面量，记录其位置，供后续可能出现的同名属性替换
@@ -311,7 +311,7 @@ public class ConstantFolder {
 		}
 
 		if (node instanceof Node.FunctionDecl fn) {
-			return new Node.FunctionDecl(fn.name, fn.params, (BlockStmt) foldNode(fn.body), fn.line, fn.column);
+			return new Node.FunctionDecl(fn.name, fn.params, (BlockStmt) foldNode(fn.body), fn.kind, fn.line, fn.column);
 		}
 
 		if (node instanceof Node.FunctionExpr fn) {

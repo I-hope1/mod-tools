@@ -431,6 +431,27 @@ public class JSObject {
 		return prototype != null && prototype.handlePrototypePut(propId, receiver, value);
 	}
 
+	public void defineAccessor(String key, JSFunction getter, JSFunction setter, boolean enumerable) {
+		int propId = SymbolTable.id(key);
+		int offset = shape.getOffset(propId);
+		boolean exists = offset >= 0 && (isDoubleSlot(offset) || getRawObjectSlot(offset) != DELETED);
+		if (exists) {
+			byte currentType = shape.getSlotType(offset);
+			if ((currentType & JSShape.FLAG_ACCESSOR) != 0) {
+				PropertyAccessor current = (PropertyAccessor) getRawObjectSlot(offset);
+				JSFunction newGetter = getter != null ? getter : (current != null ? current.getter : null);
+				JSFunction newSetter = setter != null ? setter : (current != null ? current.setter : null);
+				setSlot(offset, new PropertyAccessor(newGetter, newSetter));
+				return;
+			}
+		}
+		byte type = JSShape.FLAG_ACCESSOR;
+		if (!enumerable) type |= JSShape.FLAG_NOT_ENUMERABLE;
+		shape = shape.addProperty(propId, type);
+		int newOffset = shape.getOffset(propId);
+		setSlot(newOffset, new PropertyAccessor(getter, setter));
+	}
+
 	public void put(int propId, Object value) {
 		if (value instanceof Number num) {
 			putDouble(propId, num.doubleValue());

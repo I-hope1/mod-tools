@@ -2190,6 +2190,48 @@ public class JSCompiler {
 
 	private static void compileObjectLiteral(Node.ObjectLiteralExpr objLit, CompileContext ctx, boolean needResult) {
 		MethodVisitor mv = ctx.mv;
+
+		boolean hasAccessors = false;
+		for (var entry : objLit.entries) {
+			if (entry.kind() != Node.PropertyKind.NORMAL) {
+				hasAccessors = true;
+				break;
+			}
+		}
+
+		if (hasAccessors) {
+			mv.visitTypeInsn(Opcodes.NEW, IN_JSObject);
+			mv.visitInsn(Opcodes.DUP);
+			mv.visitMethodInsn(Opcodes.INVOKESPECIAL, IN_JSObject, "<init>", "()V", false);
+			for (var entry : objLit.entries) {
+				mv.visitInsn(Opcodes.DUP);
+				if (entry.kind() == Node.PropertyKind.GETTER) {
+					mv.visitLdcInsn(entry.key());
+					compileNode(entry.value(), ctx, true);
+					mv.visitTypeInsn(Opcodes.CHECKCAST, "hope/magic/js/runtime/JSFunction");
+					mv.visitInsn(Opcodes.ACONST_NULL);
+					mv.visitInsn(Opcodes.ICONST_1); // enumerable = true
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "defineAccessor",
+							"(Ljava/lang/String;Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSFunction;Z)V", false);
+				} else if (entry.kind() == Node.PropertyKind.SETTER) {
+					mv.visitLdcInsn(entry.key());
+					mv.visitInsn(Opcodes.ACONST_NULL);
+					compileNode(entry.value(), ctx, true);
+					mv.visitTypeInsn(Opcodes.CHECKCAST, "hope/magic/js/runtime/JSFunction");
+					mv.visitInsn(Opcodes.ICONST_1); // enumerable = true
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "defineAccessor",
+							"(Ljava/lang/String;Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSFunction;Z)V", false);
+				} else {
+					mv.visitLdcInsn(entry.key());
+					compileNode(entry.value(), ctx, true);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "put",
+							"(Ljava/lang/String;Ljava/lang/Object;)V", false);
+				}
+			}
+			if (!needResult) mv.visitInsn(Opcodes.POP);
+			return;
+		}
+
 		// 1. 预先在编译期推断完整 Shape，避免对象字面量构造过程中反复触发 3~5 次动态迁移与 putDoubleSlow
 		JSShape   finalShape    = JSShape.ROOT;
 		boolean[] isDoubleField = new boolean[objLit.entries.size()];
@@ -2331,39 +2373,51 @@ public class JSCompiler {
 			mv.visitInsn(Opcodes.ACONST_NULL);
 		}
 
-		// 4. methods array: [name0, fn0, name1, fn1, ...]
+		// 4. methods array: [name0, fn0, kind0, name1, fn1, kind1, ...]
 		int methodCount = classDecl.methods.size();
-		pushInt(mv, methodCount * 2);
+		pushInt(mv, methodCount * 3);
 		mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
 		for (int i = 0; i < methodCount; i++) {
 			Node.FunctionDecl m = classDecl.methods.get(i);
 			mv.visitInsn(Opcodes.DUP);
-			pushInt(mv, i * 2);
+			pushInt(mv, i * 3);
 			mv.visitLdcInsn(m.name);
 			mv.visitInsn(Opcodes.AASTORE);
 
 			mv.visitInsn(Opcodes.DUP);
-			pushInt(mv, i * 2 + 1);
+			pushInt(mv, i * 3 + 1);
 			String mClass = generateFunctionClass(m.name, m.params, m.body);
 			instantiateFunction(mv, mClass);
 			mv.visitInsn(Opcodes.AASTORE);
+
+			mv.visitInsn(Opcodes.DUP);
+			pushInt(mv, i * 3 + 2);
+			pushInt(mv, m.kind.ordinal());
+			mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+			mv.visitInsn(Opcodes.AASTORE);
 		}
 
-		// 5. staticMethods array: [name0, fn0, ...]
+		// 5. staticMethods array: [name0, fn0, kind0, ...]
 		int staticCount = classDecl.staticMethods.size();
-		pushInt(mv, staticCount * 2);
+		pushInt(mv, staticCount * 3);
 		mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
 		for (int i = 0; i < staticCount; i++) {
 			Node.FunctionDecl sm = classDecl.staticMethods.get(i);
 			mv.visitInsn(Opcodes.DUP);
-			pushInt(mv, i * 2);
+			pushInt(mv, i * 3);
 			mv.visitLdcInsn(sm.name);
 			mv.visitInsn(Opcodes.AASTORE);
 
 			mv.visitInsn(Opcodes.DUP);
-			pushInt(mv, i * 2 + 1);
+			pushInt(mv, i * 3 + 1);
 			String smClass = generateFunctionClass(sm.name, sm.params, sm.body);
 			instantiateFunction(mv, smClass);
+			mv.visitInsn(Opcodes.AASTORE);
+
+			mv.visitInsn(Opcodes.DUP);
+			pushInt(mv, i * 3 + 2);
+			pushInt(mv, sm.kind.ordinal());
+			mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
 			mv.visitInsn(Opcodes.AASTORE);
 		}
 

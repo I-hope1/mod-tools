@@ -322,16 +322,28 @@ public abstract class Node {
 		}
 	}
 
+	public enum PropertyKind {
+		NORMAL,
+		GETTER,
+		SETTER
+	}
+
 	public static class FunctionDecl extends Node {
 		public final String name;
 		public final List<String> params;
 		public final BlockStmt body;
+		public final PropertyKind kind;
 
-		public FunctionDecl(String name, List<String> params, BlockStmt body, int line, int column) {
+		public FunctionDecl(String name, List<String> params, BlockStmt body, PropertyKind kind, int line, int column) {
 			super(line, column);
 			this.name = name;
 			this.params = params;
 			this.body = body;
+			this.kind = kind != null ? kind : PropertyKind.NORMAL;
+		}
+
+		public FunctionDecl(String name, List<String> params, BlockStmt body, int line, int column) {
+			this(name, params, body, PropertyKind.NORMAL, line, column);
 		}
 
 		@Override
@@ -520,7 +532,11 @@ public abstract class Node {
 	public static class ObjectLiteralExpr extends Node {
 		public final List<Entry> entries;
 
-		public record Entry(String key, Node value) { }
+		public record Entry(String key, Node value, PropertyKind kind) {
+			public Entry(String key, Node value) {
+				this(key, value, PropertyKind.NORMAL);
+			}
+		}
 
 		public ObjectLiteralExpr(List<Entry> entries, int line, int column) {
 			super(line, column);

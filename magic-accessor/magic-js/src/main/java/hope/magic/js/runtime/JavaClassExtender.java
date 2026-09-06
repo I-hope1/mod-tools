@@ -95,6 +95,41 @@ public final class JavaClassExtender {
 		return null;
 	}
 
+	public record ClassMethodDef(String name, JSFunction fn, int kind) {}
+
+	private static List<ClassMethodDef> parseMethodDefs(Object[] methodData) {
+		List<ClassMethodDef> list = new ArrayList<>();
+		if (methodData == null) return list;
+		if (methodData.length % 3 == 0) {
+			for (int i = 0; i < methodData.length; i += 3) {
+				String name = (String) methodData[i];
+				JSFunction fn = (JSFunction) methodData[i + 1];
+				int kind = (methodData[i + 2] instanceof Number n) ? n.intValue() : 0;
+				list.add(new ClassMethodDef(name, fn, kind));
+			}
+		} else if (methodData.length % 2 == 0) {
+			for (int i = 0; i < methodData.length; i += 2) {
+				String name = (String) methodData[i];
+				JSFunction fn = (JSFunction) methodData[i + 1];
+				list.add(new ClassMethodDef(name, fn, 0));
+			}
+		}
+		return list;
+	}
+
+	public static void attachMethod(JSObject target, ClassMethodDef def) {
+		if (def.kind == 1) {
+			// GETTER (类方法与访问器在 ES 中为不可枚举 enumerable: false)
+			target.defineAccessor(def.name, def.fn, null, false);
+		} else if (def.kind == 2) {
+			// SETTER
+			target.defineAccessor(def.name, null, def.fn, false);
+		} else {
+			// NORMAL
+			target.put(def.name, def.fn);
+		}
+	}
+
 	public static JSFunction defineClass(
 			JSContext cx,
 			Object superClassObj,
@@ -103,19 +138,8 @@ public final class JavaClassExtender {
 			Object[] staticMethodPairs,
 			JSFunction ctorFn
 	) {
-		Map<String, JSFunction> methods = new LinkedHashMap<>();
-		if (methodPairs != null) {
-			for (int i = 0; i < methodPairs.length; i += 2) {
-				methods.put((String) methodPairs[i], (JSFunction) methodPairs[i + 1]);
-			}
-		}
-
-		Map<String, JSFunction> staticMethods = new LinkedHashMap<>();
-		if (staticMethodPairs != null) {
-			for (int i = 0; i < staticMethodPairs.length; i += 2) {
-				staticMethods.put((String) staticMethodPairs[i], (JSFunction) staticMethodPairs[i + 1]);
-			}
-		}
+		List<ClassMethodDef> methods = parseMethodDefs(methodPairs);
+		List<ClassMethodDef> staticMethods = parseMethodDefs(staticMethodPairs);
 
 		JSFunction resultCtor;
 		Class<?> javaSuperClass = getJavaSuperClass(superClassObj);
@@ -131,8 +155,8 @@ public final class JavaClassExtender {
 		}
 
 		if (resultCtor instanceof JSObject ctorObj) {
-			for (Map.Entry<String, JSFunction> entry : staticMethods.entrySet()) {
-				ctorObj.put(entry.getKey(), entry.getValue());
+			for (ClassMethodDef sm : staticMethods) {
+				attachMethod(ctorObj, sm);
 			}
 		}
 
@@ -142,7 +166,7 @@ public final class JavaClassExtender {
 	private static JSFunction createJSClassConstructor(
 			JSContext cx,
 			JSFunction superCtor,
-			Map<String, JSFunction> methods,
+			List<ClassMethodDef> methods,
 			JSFunction jsCtor
 	) {
 		JSObject proto;
@@ -153,8 +177,8 @@ public final class JavaClassExtender {
 			proto = new JSObject();
 		}
 
-		for (Map.Entry<String, JSFunction> entry : methods.entrySet()) {
-			proto.put(entry.getKey(), entry.getValue());
+		for (ClassMethodDef m : methods) {
+			attachMethod(proto, m);
 		}
 
 		JSFunctionObject ctor = new JSFunctionObject((callCx, thisObj, args) -> {
@@ -183,7 +207,7 @@ public final class JavaClassExtender {
 	public static JSFunction createClassConstructor(
 			Class<?> javaSuperClass,
 			JSFunction superJSClass,
-			Map<String, JSFunction> methods,
+			List<ClassMethodDef> methods,
 			JSFunction jsCtor
 	) {
 		ClassInfo info = getClassInfo(javaSuperClass);
@@ -199,10 +223,12 @@ public final class JavaClassExtender {
 			}
 		}
 		if (methods != null) {
-			for (String methodName : methods.keySet()) {
-				Long shift = info.methodMasks.get(methodName);
-				if (shift != null && shift < 64) {
-					mask |= (1L << shift);
+			for (ClassMethodDef m : methods) {
+				if (m.kind == 0) {
+					Long shift = info.methodMasks.get(m.name);
+					if (shift != null && shift < 64) {
+						mask |= (1L << shift);
+					}
 				}
 			}
 		}
@@ -217,8 +243,8 @@ public final class JavaClassExtender {
 		}
 
 		if (methods != null) {
-			for (Map.Entry<String, JSFunction> entry : methods.entrySet()) {
-				proto.put(entry.getKey(), entry.getValue());
+			for (ClassMethodDef m : methods) {
+				attachMethod(proto, m);
 			}
 		}
 
@@ -250,6 +276,20 @@ public final class JavaClassExtender {
 			ctor.setPrototype(superCtorObj);
 		}
 		return ctor;
+	}
+	public static JSFunction createClassConstructor(
+			Class<?> javaSuperClass,
+			JSFunction superJSClass,
+			Map<String, JSFunction> methods,
+			JSFunction jsCtor
+	) {
+		List<ClassMethodDef> list = new ArrayList<>();
+		if (methods != null) {
+			for (Map.Entry<String, JSFunction> e : methods.entrySet()) {
+				list.add(new ClassMethodDef(e.getKey(), e.getValue(), 0));
+			}
+		}
+		return createClassConstructor(javaSuperClass, superJSClass, list, jsCtor);
 	}
 
 	public static JSFunction createClassConstructor(Class<?> superClass, Map<String, JSFunction> methods, JSFunction jsCtor) {

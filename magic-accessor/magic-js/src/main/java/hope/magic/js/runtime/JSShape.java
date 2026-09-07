@@ -2,8 +2,7 @@ package hope.magic.js.runtime;
 
 import hope.magic.runtime.Magic;
 
-import java.lang.invoke.*;
-import java.lang.reflect.Field;
+import java.lang.invoke.MethodHandles;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -230,8 +229,7 @@ public final class JSShape {
 
 	private int getOverflowOffset(int propId) {
 		int[] of = this.overflowKeys;
-		if (of == null) return -1;
-		return scanOverflow(of, propId);
+		return of == null ? -1 : scanOverflow(of, propId);
 	}
 
 	private static int scanOverflow(int[] of, int propId) {
@@ -247,53 +245,47 @@ public final class JSShape {
 		return symId == SymbolTable.NO_SYMBOL ? -1 : getOffset(symId);
 	}
 
-	/**
-	 * Shape 归属验证：验证当前 Shape 在指定的 offset 槽位上确为指定的 propId。
-	 * 常数时间 O(1)，无任何循环或哈希查找，C2 可完美内联为单条内存比较指令。
-	 */
+	/** 直接复用 {@link #getPropertyId} */
 	public boolean hasPropertyAt(int propId, int offset) {
-		if (propId < 0 || offset < 0 || offset >= propertyCount) return false;
-		if (offset == 0) return k0 == propId;
-		if (offset == 1) return k1 == propId;
-		if (offset == 2) return k2 == propId;
-		if (offset == 3) return k3 == propId;
-		int[] of = overflowKeys;
-		if (of != null) {
-			int ofIdx = offset - INLINE_PROPERTY_CAPACITY;
-			return ofIdx < of.length && of[ofIdx] == propId;
-		}
-		return false;
+		return propId >= 0 && getPropertyId(offset) == propId;
 	}
 
+	/** Fast-Path */
 	public byte getSlotType(int offset) {
-		return switch (offset) {
-			case 0 -> t0;
-			case 1 -> t1;
-			case 2 -> t2;
-			case 3 -> t3;
-			default -> {
-				int ofIdx = offset - INLINE_PROPERTY_CAPACITY;
-				// 严密修复下界 >= 0，彻底根治 offset = -1 时的 Index -5 崩溃
-				yield (overflowTypes != null && ofIdx >= 0 && ofIdx < overflowTypes.length)
-				 ? overflowTypes[ofIdx]
-				 : TYPE_UNKNOWN;
-			}
-		};
+		if (offset == 0) return t0;
+		if (offset == 1) return t1;
+		return getSlotTypeRest(offset);
 	}
 
+	private byte getSlotTypeRest(int offset) {
+		if (offset == 2) return t2;
+		if (offset == 3) return t3;
+		return getOverflowSlotType(offset);
+	}
+
+	private byte getOverflowSlotType(int offset) {
+		int ofIdx = offset - INLINE_PROPERTY_CAPACITY;
+		byte[] of = this.overflowTypes;
+		return (of != null && ofIdx >= 0 && ofIdx < of.length) ? of[ofIdx] : TYPE_UNKNOWN;
+	}
+
+	/** Fast-Path */
 	public int getPropertyId(int offset) {
-		return switch (offset) {
-			case 0 -> k0;
-			case 1 -> k1;
-			case 2 -> k2;
-			case 3 -> k3;
-			default -> {
-				int ofIdx = offset - INLINE_PROPERTY_CAPACITY;
-				yield (overflowKeys != null && ofIdx >= 0 && ofIdx < overflowKeys.length)
-					? overflowKeys[ofIdx]
-					: SymbolTable.NO_SYMBOL;
-			}
-		};
+		if (offset == 0) return k0;
+		if (offset == 1) return k1;
+		return getPropertyIdRest(offset);
+	}
+
+	private int getPropertyIdRest(int offset) {
+		if (offset == 2) return k2;
+		if (offset == 3) return k3;
+		return getOverflowPropertyId(offset);
+	}
+
+	private int getOverflowPropertyId(int offset) {
+		int ofIdx = offset - INLINE_PROPERTY_CAPACITY;
+		int[] of = this.overflowKeys;
+		return (of != null && ofIdx >= 0 && ofIdx < of.length) ? of[ofIdx] : SymbolTable.NO_SYMBOL;
 	}
 
 	/**
@@ -316,18 +308,16 @@ public final class JSShape {
 		return encoded;
 	}
 
+	// 标志位方法
 	public boolean isAccessor(int offset) {
 		return (getSlotType(offset) & FLAG_ACCESSOR) != 0;
 	}
-
 	public boolean isWritable(int offset) {
 		return (getSlotType(offset) & FLAG_NOT_WRITABLE) == 0;
 	}
-
 	public boolean isEnumerable(int offset) {
 		return (getSlotType(offset) & FLAG_NOT_ENUMERABLE) == 0;
 	}
-
 	public boolean isConfigurable(int offset) {
 		return (getSlotType(offset) & FLAG_NOT_CONFIGURABLE) == 0;
 	}
@@ -420,34 +410,25 @@ public final class JSShape {
 		return propertyCount;
 	}
 
+	/** @see #getPropertyId(int)  */
 	public int getKeyId(int index) {
-		return switch (index) {
-			case 0 -> k0;
-			case 1 -> k1;
-			case 2 -> k2;
-			case 3 -> k3;
-			default -> {
-				int ofIdx = index - 4;
-				yield (overflowKeys != null && ofIdx >= 0 && ofIdx < overflowKeys.length)
-				 ? overflowKeys[ofIdx]
-				 : -1;
-			}
-		};
+		return getPropertyId(index);
 	}
 
+	/** 不使用table switch，减少字节码体积  */
 	public int[] getKeyIds() {
-		int[] all = new int[propertyCount];
-		for (int i = 0; i < propertyCount; i++) {
-			all[i] = switch (i) {
-				case 0 -> k0;
-				case 1 -> k1;
-				case 2 -> k2;
-				case 3 -> k3;
-				default -> overflowKeys[i - 4];
-			};
+		int n = propertyCount;
+		int[] all = new int[n];
+		if (n > 0) all[0] = k0;
+		if (n > 1) all[1] = k1;
+		if (n > 2) all[2] = k2;
+		if (n > 3) all[3] = k3;
+		if (n > INLINE_PROPERTY_CAPACITY && overflowKeys != null) {
+			System.arraycopy(overflowKeys, 0, all, INLINE_PROPERTY_CAPACITY, n - INLINE_PROPERTY_CAPACITY);
 		}
 		return all;
 	}
+
 
 	public Set<String> keys() {
 		Set<String> set = new LinkedHashSet<>(propertyCount);

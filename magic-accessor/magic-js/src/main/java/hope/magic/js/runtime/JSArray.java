@@ -130,6 +130,20 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			if (!sparse.isEmpty()) {
 				sparse.keySet().removeIf(k -> k >= newLen);
 			}
+			if (shape.propertyCount > 0) {
+				for (int i = 0; i < shape.propertyCount; i++) {
+					int pid = shape.getPropertyId(i);
+					if (pid >= 0) {
+						String pname = SymbolTable.name(pid);
+						if (pname != null) {
+							Long pidx = parseIndex(pname);
+							if (pidx != null && pidx >= newLen) {
+								delete(pid);
+							}
+						}
+					}
+				}
+			}
 			return;
 		}
 		throw new IllegalArgumentException("RangeError: Invalid array length: " + d);
@@ -149,7 +163,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	public Object getElement(int index) {
 		if (index >= 0 && index < denseSize) {
 			Object val = elements[index];
-			return val == HOLE ? JSUndefined.INSTANCE : val;
+			if (val != HOLE) return val;
 		}
 		return getElementSlow(index);
 	}
@@ -157,7 +171,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	public Object getElement(long index) {
 		if (index >= 0 && index < denseSize) {
 			Object val = elements[(int) index];
-			return val == HOLE ? JSUndefined.INSTANCE : val;
+			if (val != HOLE) return val;
 		}
 		return getElementSlow(index);
 	}
@@ -165,7 +179,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	public double getElementDouble(int index) {
 		if (index >= 0 && index < denseSize) {
 			Object val = elements[index];
-			return val == HOLE ? Double.NaN : JSOps.toDouble(val);
+			if (val != HOLE) return JSOps.toDouble(val);
 		}
 		return JSOps.toDouble(getElementSlow(index));
 	}
@@ -173,18 +187,68 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	public double getElementDouble(long index) {
 		if (index >= 0 && index < denseSize) {
 			Object val = elements[(int) index];
-			return val == HOLE ? Double.NaN : JSOps.toDouble(val);
+			if (val != HOLE) return JSOps.toDouble(val);
 		}
 		return JSOps.toDouble(getElementSlow(index));
 	}
 
+	public Object getElementOwn(long index) {
+		if (index >= 0 && index < denseSize) {
+			Object val = elements[(int) index];
+			if (val != HOLE) return val;
+		}
+		if (index >= 0 && index <= MAX_ARRAY_INDEX) {
+			Object sparseVal = sparse.get(index);
+			if (sparseVal != null) {
+				return sparseVal == NULL_SENTINEL ? null : sparseVal;
+			}
+		}
+		return JSUndefined.INSTANCE;
+	}
+
+	public double getElementDoubleOwn(long index) {
+		if (index >= 0 && index < denseSize) {
+			Object val = elements[(int) index];
+			if (val != HOLE) return JSOps.toDouble(val);
+		}
+		if (index >= 0 && index <= MAX_ARRAY_INDEX) {
+			Object sparseVal = sparse.get(index);
+			if (sparseVal != null) {
+				return sparseVal == NULL_SENTINEL ? 0.0 : JSOps.toDouble(sparseVal);
+			}
+		}
+		return Double.NaN;
+	}
+
 	private Object getElementSlow(long index) {
 		if (index < 0 || index > MAX_ARRAY_INDEX) {
-			return super.get(String.valueOf(index));
+			return super.get(String.valueOf(index), this);
 		}
 		Object sparseVal = sparse.get(index);
 		if (sparseVal != null) {
 			return sparseVal == NULL_SENTINEL ? null : sparseVal;
+		}
+		String key = JSLinker.fastIntToString((int) index);
+		int symId = SymbolTable.lookupId(key);
+		if (symId != SymbolTable.NO_SYMBOL) {
+			int offset = shape.getOffset(symId);
+			if (offset >= 0) {
+				if (isDoubleSlot(offset)) {
+					return getBoxedDouble(offset);
+				}
+				Object val = getRawObjectSlot(offset);
+				if (val != DELETED) {
+					if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
+						PropertyAccessor acc = (PropertyAccessor) val;
+						return acc.callGetter(null, this);
+					}
+					return val;
+				}
+			}
+		}
+		JSObject proto = getPrototype();
+		if (proto != null) {
+			return proto.get(key, this);
 		}
 		return JSUndefined.INSTANCE;
 	}
@@ -302,37 +366,85 @@ public class JSArray extends JSObject implements Iterable<Object> {
 
 	@Override
 	public Object get(int propId) {
+		return get(propId, this);
+	}
+
+	@Override
+	public Object get(int propId, Object receiver) {
 		if (propId == LENGTH_PROP_ID) {
 			return (double) length;
 		}
 		int offset = shape.getOffset(propId);
 		if (offset >= 0) {
-			return getSlot(offset);
+			if (isDoubleSlot(offset)) {
+				return getBoxedDouble(offset);
+			}
+			Object val = getRawObjectSlot(offset);
+			if (val != DELETED) {
+				if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
+					PropertyAccessor acc = (PropertyAccessor) val;
+					return acc.callGetter(null, receiver);
+				}
+				return val;
+			}
 		}
 		String name = SymbolTable.name(propId);
 		if (name != null) {
 			Long idx = parseIndex(name);
 			if (idx != null) {
-				return getElement(idx);
+				if (hasElement(idx)) {
+					return getElementOwn(idx);
+				}
 			}
 		}
-		return super.get(propId);
+		JSObject proto = getPrototype();
+		return proto != null ? proto.get(propId, receiver) : JSUndefined.INSTANCE;
 	}
 
 	@Override
 	public Object get(String key) {
+		return get(key, this);
+	}
+
+	@Override
+	public Object get(String key, Object receiver) {
 		if ("length".equals(key)) {
 			return (double) length;
 		}
 		Long idx = parseIndex(key);
 		if (idx != null) {
-			return getElement(idx);
+			if (hasElement(idx)) {
+				return getElementOwn(idx);
+			}
 		}
-		return super.get(key);
+		int symId = SymbolTable.lookupId(key);
+		if (symId != SymbolTable.NO_SYMBOL) {
+			int offset = shape.getOffset(symId);
+			if (offset >= 0) {
+				if (isDoubleSlot(offset)) {
+					return getBoxedDouble(offset);
+				}
+				Object val = getRawObjectSlot(offset);
+				if (val != DELETED) {
+					if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
+						PropertyAccessor acc = (PropertyAccessor) val;
+						return acc.callGetter(null, receiver);
+					}
+					return val;
+				}
+			}
+		}
+		JSObject proto = getPrototype();
+		return proto != null ? proto.get(key, receiver) : JSUndefined.INSTANCE;
 	}
 
 	@Override
 	public double getAsDouble(int propId) {
+		return getAsDouble(propId, this);
+	}
+
+	@Override
+	public double getAsDouble(int propId, Object receiver) {
 		if (propId == LENGTH_PROP_ID) {
 			return (double) length;
 		}
@@ -341,28 +453,63 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			if (isDoubleSlot(offset)) {
 				return getDoubleSlot(offset);
 			}
-			return JSOps.toDouble(getObjectSlot(offset));
+			Object val = getRawObjectSlot(offset);
+			if (val != DELETED) {
+				if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
+					PropertyAccessor acc = (PropertyAccessor) val;
+					return JSOps.toDouble(acc.callGetter(null, receiver));
+				}
+				return JSOps.toDouble(val);
+			}
 		}
 		String name = SymbolTable.name(propId);
 		if (name != null) {
 			Long idx = parseIndex(name);
 			if (idx != null) {
-				return getElementDouble(idx);
+				if (hasElement(idx)) {
+					return getElementDoubleOwn(idx);
+				}
 			}
 		}
-		return super.getAsDouble(propId);
+		JSObject proto = getPrototype();
+		return proto != null ? proto.getAsDouble(propId, receiver) : Double.NaN;
 	}
 
 	@Override
 	public double getAsDouble(String key) {
+		return getAsDouble(key, this);
+	}
+
+	@Override
+	public double getAsDouble(String key, Object receiver) {
 		if ("length".equals(key)) {
 			return (double) length;
 		}
 		Long idx = parseIndex(key);
 		if (idx != null) {
-			return getElementDouble(idx);
+			if (hasElement(idx)) {
+				return getElementDoubleOwn(idx);
+			}
 		}
-		return super.getAsDouble(key);
+		int symId = SymbolTable.lookupId(key);
+		if (symId != SymbolTable.NO_SYMBOL) {
+			int offset = shape.getOffset(symId);
+			if (offset >= 0) {
+				if (isDoubleSlot(offset)) {
+					return getDoubleSlot(offset);
+				}
+				Object val = getRawObjectSlot(offset);
+				if (val != DELETED) {
+					if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
+						PropertyAccessor acc = (PropertyAccessor) val;
+						return JSOps.toDouble(acc.callGetter(null, receiver));
+					}
+					return JSOps.toDouble(val);
+				}
+			}
+		}
+		JSObject proto = getPrototype();
+		return proto != null ? proto.getAsDouble(key, receiver) : Double.NaN;
 	}
 
 	@Override
@@ -427,6 +574,21 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		super.putDouble(key, value);
 	}
 
+	public boolean has(long index) {
+		if (hasElement(index)) return true;
+		String key = JSLinker.fastIntToString((int) index);
+		int symId = SymbolTable.lookupId(key);
+		if (symId != SymbolTable.NO_SYMBOL) {
+			int offset = shape.getOffset(symId);
+			if (offset >= 0) {
+				if (isDoubleSlot(offset)) return true;
+				return getRawObjectSlot(offset) != DELETED;
+			}
+		}
+		JSObject proto = getPrototype();
+		return proto != null && proto.has(key);
+	}
+
 	@Override
 	public boolean has(int propId) {
 		if (propId == LENGTH_PROP_ID) {
@@ -436,7 +598,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		if (name != null) {
 			Long idx = parseIndex(name);
 			if (idx != null) {
-				return hasElement(idx);
+				if (hasElement(idx)) return true;
 			}
 		}
 		return super.has(propId);
@@ -449,7 +611,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		}
 		Long idx = parseIndex(key);
 		if (idx != null) {
-			return hasElement(idx);
+			if (hasElement(idx)) return true;
 		}
 		return super.has(key);
 	}

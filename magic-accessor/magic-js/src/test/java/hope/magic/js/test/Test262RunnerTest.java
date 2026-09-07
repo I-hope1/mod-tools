@@ -729,6 +729,31 @@ public class Test262RunnerTest {
 		}
 
 		@Test
+		@DisplayName("test262: S15.4.5.1_A1.2_T2 - Array length truncation and inherited prototype property")
+		public void testArrayPrototypeInheritedPropertyTruncationAndDeletion() {
+			runTest262("""
+				/*---
+				info: |
+				    For every integer k that is less than the value of
+				    the length property of A but not less than ToUint32(length),
+				    if A itself has a property (not an inherited property) named ToString(k),
+				    then delete that property
+				es5id: 15.4.5.1_A1.2_T2
+				description: Checking an inherited property
+				---*/
+
+				Array.prototype[2] = -1;
+				var x = [0, 1, 2];
+				assert.sameValue(x[2], 2, 'The value of x[2] is expected to be 2');
+
+				x.length = 2;
+				assert.sameValue(x[2], -1, 'The value of x[2] is expected to be -1');
+
+				delete Array.prototype[2];
+			""");
+		}
+
+		@Test
 		@DisplayName("test262: S22.1.3.18 - Array.prototype.reduce & reduceRight")
 		public void testArrayPrototypeReduce() {
 			runTest262("""

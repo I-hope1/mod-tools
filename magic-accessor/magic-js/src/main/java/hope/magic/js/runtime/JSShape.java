@@ -281,6 +281,21 @@ public final class JSShape {
 		};
 	}
 
+	public int getPropertyId(int offset) {
+		return switch (offset) {
+			case 0 -> k0;
+			case 1 -> k1;
+			case 2 -> k2;
+			case 3 -> k3;
+			default -> {
+				int ofIdx = offset - INLINE_PROPERTY_CAPACITY;
+				yield (overflowKeys != null && ofIdx >= 0 && ofIdx < overflowKeys.length)
+					? overflowKeys[ofIdx]
+					: SymbolTable.NO_SYMBOL;
+			}
+		};
+	}
+
 	/**
 	 * 哨兵编码值：低 3 位设为 0b111 (7)，高位全为 1 (0x7FFFFFFF)。
 	 * <p>

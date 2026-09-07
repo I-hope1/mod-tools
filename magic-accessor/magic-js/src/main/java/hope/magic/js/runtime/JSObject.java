@@ -280,7 +280,7 @@ public class JSObject {
 		return getBoxedDouble(offset);
 	}
 
-	private Object getBoxedDouble(int offset) {
+	public Object getBoxedDouble(int offset) {
 		return getDoubleSlot(offset);
 	}
 

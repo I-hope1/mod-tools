@@ -1877,7 +1877,7 @@ public class JSContext {
 		}
 
 		private static boolean hasProperty(Object obj, long index) {
-			if (obj instanceof JSArray arr) return arr.hasElement(index);
+			if (obj instanceof JSArray arr) return arr.has(index);
 			if (obj instanceof CharSequence seq) return index >= 0 && index < seq.length();
 			if (obj instanceof List<?> list) return index >= 0 && index < list.size();
 			if (obj instanceof JSObject jsObj) return jsObj.has(String.valueOf(index));

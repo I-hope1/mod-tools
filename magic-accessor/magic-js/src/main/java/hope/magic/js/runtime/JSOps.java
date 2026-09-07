@@ -713,8 +713,17 @@ public class JSOps {
 
 	public static boolean delete(Object target, Object key) {
 		if (target == null || target == JSUndefined.INSTANCE) return true;
+		if (target instanceof JSArray jsArr) {
+			Long idx = JSArray.toValidArrayIndex(key);
+			if (idx != null) {
+				jsArr.deleteElement(idx);
+				return true;
+			}
+			jsArr.delete(JSArray.toPropertyKey(key));
+			return true;
+		}
 		if (target instanceof JSObject obj) {
-			obj.delete(String.valueOf(key));
+			obj.delete(JSArray.toPropertyKey(key));
 			return true;
 		}
 		if (target instanceof java.util.Map<?, ?> map) {

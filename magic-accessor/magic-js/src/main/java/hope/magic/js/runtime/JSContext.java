@@ -1972,14 +1972,21 @@ public class JSContext {
 
 	private final ArrayDeque<Runnable> microtaskQueue = new ArrayDeque<>();
 	private final Object               microtaskLock  = new Object();
+	private volatile boolean           hasMicrotasks  = false;
 
 	public void queueMicrotask(Runnable task) {
 		synchronized (microtaskLock) {
 			microtaskQueue.add(task);
+			hasMicrotasks = true;
 		}
 	}
 
 	public void drainMicrotasks() {
+		if (!hasMicrotasks) return;
+		drainMicrotasksSlow();
+	}
+
+	private void drainMicrotasksSlow() {
 		JSContext old = CURRENT.get();
 		CURRENT.set(this);
 		try {
@@ -1987,8 +1994,11 @@ public class JSContext {
 				Runnable task;
 				synchronized (microtaskLock) {
 					task = microtaskQueue.poll();
+					if (task == null) {
+						hasMicrotasks = false;
+						break;
+					}
 				}
-				if (task == null) break;
 				try {
 					task.run();
 				} catch (Throwable ignored) {

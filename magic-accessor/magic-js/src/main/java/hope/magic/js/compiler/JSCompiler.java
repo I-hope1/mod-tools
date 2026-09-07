@@ -50,6 +50,15 @@ public class JSCompiler {
 		return JSCompiler.compile(program);
 	}
 
+	public static byte[] compileToBytes(String code) throws Exception {
+		JSLexer      lexer   = new JSLexer(code);
+		JSParser     parser  = new JSParser(lexer.tokenize());
+		Node.Program program = parser.parse();
+		Node.Program foldedProgram = ConstantFolder.fold(program);
+		String       className     = "hope/magic/gen/MagicJSScript_" + SCRIPT_ID.incrementAndGet();
+		return generateScriptBytecode(className, foldedProgram);
+	}
+
 	public static JSScript compile(Node.Program program) throws Exception {
 		Node.Program foldedProgram = ConstantFolder.fold(program);
 		String       className     = "hope/magic/gen/MagicJSScript_" + SCRIPT_ID.incrementAndGet();
@@ -150,20 +159,36 @@ public class JSCompiler {
 				switch (returnType) {
 					case DOUBLE -> {
 						compileNodeAsDouble(exprStmt.expr, ctx);
+						int retSlot = ctx.nextLocalSlot;
+						ctx.nextLocalSlot += 2;
+						mv.visitVarInsn(Opcodes.DSTORE, retSlot);
+						flushUncapturedTopLevelVars(mv, ctx);
+						mv.visitVarInsn(Opcodes.DLOAD, retSlot);
 						mv.visitInsn(Opcodes.DRETURN);
 					}
 					case INT -> {
 						compileNodeAsInt(exprStmt.expr, ctx);
+						int retSlot = ctx.nextLocalSlot++;
+						mv.visitVarInsn(Opcodes.ISTORE, retSlot);
+						flushUncapturedTopLevelVars(mv, ctx);
+						mv.visitVarInsn(Opcodes.ILOAD, retSlot);
 						mv.visitInsn(Opcodes.IRETURN);
 					}
 					case LONG -> {
 						compileNodeAsLong(exprStmt.expr, ctx);
+						int retSlot = ctx.nextLocalSlot;
+						ctx.nextLocalSlot += 2;
+						mv.visitVarInsn(Opcodes.LSTORE, retSlot);
+						flushUncapturedTopLevelVars(mv, ctx);
+						mv.visitVarInsn(Opcodes.LLOAD, retSlot);
 						mv.visitInsn(Opcodes.LRETURN);
 					}
 					default -> {
 						compileNode(exprStmt.expr, ctx, true);
-						mv.visitVarInsn(Opcodes.ALOAD, 1);
-						mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "drainMicrotasks", "()V", false);
+						int retSlot = ctx.nextLocalSlot++;
+						mv.visitVarInsn(Opcodes.ASTORE, retSlot);
+						flushUncapturedTopLevelVars(mv, ctx);
+						mv.visitVarInsn(Opcodes.ALOAD, retSlot);
 						mv.visitInsn(Opcodes.ARETURN);
 					}
 				}
@@ -174,6 +199,9 @@ public class JSCompiler {
 		}
 
 		if (!hasReturned) {
+			mv.visitVarInsn(Opcodes.ALOAD, 1);
+			mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "drainMicrotasks", "()V", false);
+			flushUncapturedTopLevelVars(mv, ctx);
 			switch (returnType) {
 				case DOUBLE -> {
 					mv.visitLdcInsn(0.0);
@@ -224,7 +252,9 @@ public class JSCompiler {
 		final Node                              rootNode;
 		final Map<String, LocalVar>             locals           = new LinkedHashMap<>();
 		final Map<String, VarType>              preInferredTypes = new LinkedHashMap<>();
-		final Map<Node.TryStmt, TryCatchLabels> tryCatchMap      = new IdentityHashMap<>();
+		final Map<Node.TryStmt, TryCatchLabels> tryCatchMap            = new IdentityHashMap<>();
+		final Set<String>                       capturedVars           = new HashSet<>();
+		final Set<String>                       uncapturedTopLevelVars = new LinkedHashSet<>();
 		int     nextLocalSlot       = 2; // Slot 0 is 'this', Slot 1 is 'cx' (JSContext)
 		int     nextSiteId          = 0;
 		int     tempVarCounter      = 0;
@@ -278,6 +308,8 @@ public class JSCompiler {
 		if (functionName != null) {
 			ctx.isFunction = true;
 			ctx.functionName = functionName;
+		} else {
+			collectCapturedVars(program, ctx.capturedVars);
 		}
 		registerTryCatchBlocks(program, mv, ctx.tryCatchMap);
 		preScanVariables(program, ctx);
@@ -508,6 +540,202 @@ public class JSCompiler {
 				}
 			}
 			if (!changed) break;
+		}
+	}
+
+	private record ScopeInfo(List<String> params, Node body) {}
+
+	private static void collectCapturedVars(Node root, Set<String> capturedVars) {
+		if (root == null) return;
+		boolean[] hasEval = new boolean[1];
+		List<ScopeInfo> nestedScopes = new ArrayList<>();
+		findNestedScopesAndEval(root, nestedScopes, hasEval);
+
+		if (hasEval[0]) {
+			List<Node.VarDecl> allDecls = new ArrayList<>();
+			collectVarDecls(root, allDecls);
+			for (Node.VarDecl d : allDecls) {
+				capturedVars.add(d.name);
+			}
+			return;
+		}
+
+		for (ScopeInfo scope : nestedScopes) {
+			collectScopeCapturedIdentifiers(scope.body, scope.params, capturedVars);
+		}
+	}
+
+	private static void findNestedScopesAndEval(Node node, List<ScopeInfo> nestedScopes, boolean[] hasEval) {
+		if (node == null) return;
+		if (node instanceof Node.FunctionDecl decl) {
+			nestedScopes.add(new ScopeInfo(decl.params, decl.body));
+			return;
+		}
+		if (node instanceof Node.FunctionExpr expr) {
+			nestedScopes.add(new ScopeInfo(expr.params, expr.body));
+			return;
+		}
+		if (node instanceof Node.ClassDecl cls) {
+			if (cls.constructor != null) {
+				nestedScopes.add(new ScopeInfo(cls.constructor.params, cls.constructor.body));
+			}
+			for (Node.FunctionDecl m : cls.methods) {
+				nestedScopes.add(new ScopeInfo(m.params, m.body));
+			}
+			for (Node.FunctionDecl m : cls.staticMethods) {
+				nestedScopes.add(new ScopeInfo(m.params, m.body));
+			}
+			return;
+		}
+		if (node instanceof Node.CallExpr call) {
+			if (call.callee instanceof Node.IdentifierExpr ident && "eval".equals(ident.name)) {
+				hasEval[0] = true;
+			}
+		}
+		forEachChildNode(node, child -> findNestedScopesAndEval(child, nestedScopes, hasEval));
+	}
+
+	private static void collectScopeCapturedIdentifiers(Node scope, List<String> params, Set<String> out) {
+		Set<String> innerLocals = new HashSet<>();
+		if (params != null) innerLocals.addAll(params);
+		List<Node.VarDecl> localDecls = new ArrayList<>();
+		collectVarDecls(scope, localDecls);
+		for (Node.VarDecl d : localDecls) innerLocals.add(d.name);
+
+		Set<String> allIdents = new HashSet<>();
+		collectReferencedIdentifiers(scope, allIdents);
+		for (String id : allIdents) {
+			if (!innerLocals.contains(id)) {
+				out.add(id);
+			}
+		}
+	}
+
+	private static void collectReferencedIdentifiers(Node node, Set<String> out) {
+		if (node == null) return;
+		if (node instanceof Node.IdentifierExpr ident) {
+			out.add(ident.name);
+			return;
+		}
+		if (node instanceof Node.MemberAccessExpr member) {
+			collectReferencedIdentifiers(member.target, out);
+			return;
+		}
+		forEachChildNode(node, child -> collectReferencedIdentifiers(child, out));
+	}
+
+	private static void forEachChildNode(Node node, java.util.function.Consumer<Node> action) {
+		if (node == null) return;
+		if (node instanceof Node.Program prog) {
+			for (Node s : prog.body) action.accept(s);
+		} else if (node instanceof Node.BlockStmt block) {
+			for (Node s : block.statements) action.accept(s);
+		} else if (node instanceof Node.ExprStmt exprStmt) {
+			action.accept(exprStmt.expr);
+		} else if (node instanceof Node.IfStmt ifStmt) {
+			action.accept(ifStmt.condition);
+			action.accept(ifStmt.thenBranch);
+			if (ifStmt.elseBranch != null) action.accept(ifStmt.elseBranch);
+		} else if (node instanceof Node.WhileStmt whileStmt) {
+			action.accept(whileStmt.condition);
+			action.accept(whileStmt.body);
+		} else if (node instanceof Node.DoWhileStmt doWhile) {
+			action.accept(doWhile.body);
+			action.accept(doWhile.condition);
+		} else if (node instanceof Node.ForStmt forStmt) {
+			if (forStmt.init != null) action.accept(forStmt.init);
+			if (forStmt.condition != null) action.accept(forStmt.condition);
+			if (forStmt.update != null) action.accept(forStmt.update);
+			action.accept(forStmt.body);
+		} else if (node instanceof Node.ForOfStmt forOf) {
+			action.accept(forOf.iterable);
+			action.accept(forOf.body);
+		} else if (node instanceof Node.ForInStmt forIn) {
+			action.accept(forIn.object);
+			action.accept(forIn.body);
+		} else if (node instanceof Node.TryStmt tryStmt) {
+			action.accept(tryStmt.tryBlock);
+			if (tryStmt.catchBlock != null) action.accept(tryStmt.catchBlock);
+			if (tryStmt.finallyBlock != null) action.accept(tryStmt.finallyBlock);
+		} else if (node instanceof Node.SwitchStmt switchStmt) {
+			action.accept(switchStmt.discriminant);
+			for (Node.CaseClause c : switchStmt.cases) {
+				if (c.test != null) action.accept(c.test);
+				for (Node s : c.consequent) action.accept(s);
+			}
+		} else if (node instanceof Node.ReturnStmt ret) {
+			if (ret.value != null) action.accept(ret.value);
+		} else if (node instanceof Node.ThrowStmt thr) {
+			action.accept(thr.expr);
+		} else if (node instanceof Node.VarDecl decl) {
+			if (decl.init != null) action.accept(decl.init);
+		} else if (node instanceof Node.AssignExpr assign) {
+			action.accept(assign.target);
+			action.accept(assign.value);
+		} else if (node instanceof Node.BinaryExpr bin) {
+			action.accept(bin.left);
+			action.accept(bin.right);
+		} else if (node instanceof Node.UnaryExpr un) {
+			action.accept(un.expr);
+		} else if (node instanceof Node.TypeOfExpr typeOf) {
+			action.accept(typeOf.expr);
+		} else if (node instanceof Node.VoidExpr voidExpr) {
+			action.accept(voidExpr.expr);
+		} else if (node instanceof Node.MemberAccessExpr member) {
+			action.accept(member.target);
+		} else if (node instanceof Node.IndexAccessExpr idx) {
+			action.accept(idx.target);
+			action.accept(idx.index);
+		} else if (node instanceof Node.CallExpr call) {
+			action.accept(call.callee);
+			for (Node arg : call.arguments) action.accept(arg);
+		} else if (node instanceof Node.NewExpr newExpr) {
+			action.accept(newExpr.constructor);
+			for (Node arg : newExpr.arguments) action.accept(arg);
+		} else if (node instanceof Node.TernaryExpr ternary) {
+			action.accept(ternary.condition);
+			action.accept(ternary.thenExpr);
+			action.accept(ternary.elseExpr);
+		} else if (node instanceof Node.ArrayLiteralExpr arr) {
+			for (Node el : arr.elements) action.accept(el);
+		} else if (node instanceof Node.ObjectLiteralExpr obj) {
+			for (Node.ObjectLiteralExpr.Entry e : obj.entries) action.accept(e.value());
+		} else if (node instanceof Node.AwaitExpr awaitExpr) {
+			action.accept(awaitExpr.expr);
+		} else if (node instanceof Node.FunctionDecl fn) {
+			action.accept(fn.body);
+		} else if (node instanceof Node.FunctionExpr fn) {
+			action.accept(fn.body);
+		} else if (node instanceof Node.ClassDecl cls) {
+			if (cls.superClass != null) action.accept(cls.superClass);
+			if (cls.constructor != null) action.accept(cls.constructor.body);
+			for (Node.FunctionDecl m : cls.methods) action.accept(m.body);
+			for (Node.FunctionDecl m : cls.staticMethods) action.accept(m.body);
+		}
+	}
+
+	private static void flushUncapturedTopLevelVars(MethodVisitor mv, CompileContext ctx) {
+		if (ctx.isFunction || ctx.uncapturedTopLevelVars.isEmpty()) return;
+		for (String varName : ctx.uncapturedTopLevelVars) {
+			LocalVar var = ctx.getLocal(varName);
+			if (var != null) {
+				int slot = JSContext.getGlobalSlot(varName);
+				mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+				pushInt(mv, slot);
+				if (var.isInt()) {
+					mv.visitVarInsn(Opcodes.ILOAD, var.slot);
+					boxInt(mv);
+				} else if (var.isLong()) {
+					mv.visitVarInsn(Opcodes.LLOAD, var.slot);
+					boxLong(mv);
+				} else if (var.isDouble()) {
+					mv.visitVarInsn(Opcodes.DLOAD, var.slot);
+					boxDouble(mv);
+				} else {
+					mv.visitVarInsn(Opcodes.ALOAD, var.slot);
+				}
+				mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "setSlot", "(ILjava/lang/Object;)V", false);
+			}
 		}
 	}
 
@@ -773,27 +1001,6 @@ public class JSCompiler {
 		mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
 	}
 
-	private static void syncGlobalVar(MethodVisitor mv, CompileContext ctx, LocalVar var, String varName) {
-		if (ctx != null && !ctx.isFunction && varName != null) {
-			int slot = JSContext.getGlobalSlot(varName);
-			mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
-			pushInt(mv, slot);
-			if (var.isInt()) {
-				mv.visitVarInsn(Opcodes.ILOAD, var.slot);
-				boxInt(mv);
-			} else if (var.isLong()) {
-				mv.visitVarInsn(Opcodes.LLOAD, var.slot);
-				boxLong(mv);
-			} else if (var.isDouble()) {
-				mv.visitVarInsn(Opcodes.DLOAD, var.slot);
-				boxDouble(mv);
-			} else {
-				mv.visitVarInsn(Opcodes.ALOAD, var.slot);
-			}
-			mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "setSlot", "(ILjava/lang/Object;)V", false);
-		}
-	}
-
 	private static void loadGlobal(MethodVisitor mv, String name) {
 		int slot = JSContext.getGlobalSlot(name);
 		mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
@@ -976,7 +1183,7 @@ public class JSCompiler {
 
 	private static void compileVarDecl(Node.VarDecl varDecl, CompileContext ctx, boolean needResult) {
 		MethodVisitor mv = ctx.mv;
-		if (!ctx.isFunction) {
+		if (!ctx.isFunction && ctx.capturedVars.contains(varDecl.name)) {
 			if (varDecl.init != null) {
 				int slot = JSContext.getGlobalSlot(varDecl.name);
 				mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
@@ -989,6 +1196,9 @@ public class JSCompiler {
 		}
 		VarType       type = preInferVarType(varDecl, ctx);
 		LocalVar      var  = ctx.declareLocal(varDecl.name, type);
+		if (!ctx.isFunction) {
+			ctx.uncapturedTopLevelVars.add(varDecl.name);
+		}
 		if (varDecl.init != null) {
 			if (var.isInt()) {
 				compileNodeAsInt(varDecl.init, ctx);
@@ -1003,7 +1213,6 @@ public class JSCompiler {
 				compileNode(varDecl.init, ctx, true);
 				mv.visitVarInsn(Opcodes.ASTORE, var.slot);
 			}
-			syncGlobalVar(mv, ctx, var, varDecl.name);
 		}
 		if (needResult) visitUndefined(mv);
 	}
@@ -1399,7 +1608,6 @@ public class JSCompiler {
 			if (needResult) mv.visitInsn(Opcodes.DUP);
 			mv.visitVarInsn(Opcodes.ASTORE, var.slot);
 		}
-		syncGlobalVar(mv, ctx, var, varName);
 	}
 
 	private static int getIntCompoundOpcode(TokenType op) {
@@ -2131,7 +2339,6 @@ public class JSCompiler {
 				LocalVar var = ctx.getLocal(ident.name);
 				if (var != null) {
 					compileIncDec(un, var, ctx, needResult);
-					syncGlobalVar(mv, ctx, var, ident.name);
 				} else {
 					compileGlobalIncDec(un, ident.name, ctx, needResult);
 				}
@@ -3125,11 +3332,13 @@ public class JSCompiler {
 
 	private static void hoistVariables(Node root, CompileContext ctx) {
 		if (root == null || ctx == null) return;
-		if (!ctx.isFunction) return;
 		List<Node.VarDecl> varDecls = new ArrayList<>();
 		collectVarDecls(root, varDecls);
 		MethodVisitor mv = ctx.mv;
 		for (Node.VarDecl decl : varDecls) {
+			if (!ctx.isFunction && ctx.capturedVars.contains(decl.name)) {
+				continue;
+			}
 			if (ctx.getLocal(decl.name) == null) {
 				VarType type = preInferVarType(decl, ctx);
 				LocalVar var = ctx.declareLocal(decl.name, type);
@@ -3146,7 +3355,9 @@ public class JSCompiler {
 					visitUndefined(mv);
 					mv.visitVarInsn(Opcodes.ASTORE, var.slot);
 				}
-				syncGlobalVar(mv, ctx, var, decl.name);
+				if (!ctx.isFunction) {
+					ctx.uncapturedTopLevelVars.add(decl.name);
+				}
 			}
 		}
 	}

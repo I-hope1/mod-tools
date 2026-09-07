@@ -4,6 +4,8 @@ import hope.magic.js.ast.*;
 import hope.magic.js.compiler.JSCompiler;
 import hope.magic.js.parser.*;
 
+import java.time.*;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -863,6 +865,7 @@ public class JSContext {
 			boolean exists = offset >= 0 && (jsObj.isDoubleSlot(offset) || jsObj.getRawObjectSlot(offset) != JSObject.DELETED);
 
 			if (!exists) {
+				int targetOffset;
 				if (hasGet || hasSet) {
 					boolean enumerable   = hasEnumerable && JSOps.toBoolean(desc.get("enumerable"));
 					boolean configurable = hasConfigurable && JSOps.toBoolean(desc.get("configurable"));
@@ -870,9 +873,14 @@ public class JSContext {
 					if (!enumerable) type |= JSShape.FLAG_NOT_ENUMERABLE;
 					if (!configurable) type |= JSShape.FLAG_NOT_CONFIGURABLE;
 
-					jsObj.shape = jsObj.shape.addProperty(propId, type);
-					int newOffset = jsObj.shape.getOffset(propId);
-					jsObj.setSlot(newOffset, new PropertyAccessor(getter, setter));
+					if (offset >= 0) {
+						jsObj.shape = jsObj.shape.updatePropertyType(offset, type);
+						targetOffset = offset;
+					} else {
+						jsObj.shape = jsObj.shape.addProperty(propId, type);
+						targetOffset = jsObj.shape.getOffset(propId);
+					}
+					jsObj.setSlot(targetOffset, new PropertyAccessor(getter, setter));
 				} else {
 					Object  value        = hasValue ? desc.get("value") : JSUndefined.INSTANCE;
 					boolean writable     = hasWritable && JSOps.toBoolean(desc.get("writable"));
@@ -884,12 +892,17 @@ public class JSContext {
 					if (!enumerable) type |= JSShape.FLAG_NOT_ENUMERABLE;
 					if (!configurable) type |= JSShape.FLAG_NOT_CONFIGURABLE;
 
-					jsObj.shape = jsObj.shape.addProperty(propId, type);
-					int newOffset = jsObj.shape.getOffset(propId);
-					if ((type & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE) {
-						jsObj.setDoubleSlot(newOffset, JSOps.toDouble(value));
+					if (offset >= 0) {
+						jsObj.shape = jsObj.shape.updatePropertyType(offset, type);
+						targetOffset = offset;
 					} else {
-						jsObj.setSlot(newOffset, value);
+						jsObj.shape = jsObj.shape.addProperty(propId, type);
+						targetOffset = jsObj.shape.getOffset(propId);
+					}
+					if ((type & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE) {
+						jsObj.setDoubleSlot(targetOffset, JSOps.toDouble(value));
+					} else {
+						jsObj.setSlot(targetOffset, value);
 					}
 				}
 			} else {
@@ -2321,12 +2334,26 @@ public class JSContext {
 	}
 
 	public static class LazyDate {
+		private static final List<String> DATE_PROTO_PROPS = List.of(
+		 "constructor", "getTime", "valueOf", "toString", "toUTCString", "toGMTString",
+		 "toISOString", "toJSON", "toDateString", "toTimeString",
+		 "getFullYear", "getUTCFullYear", "getMonth", "getUTCMonth", "getDate", "getUTCDate",
+		 "getDay", "getUTCDay", "getHours", "getUTCHours", "getMinutes", "getUTCMinutes",
+		 "getSeconds", "getUTCSeconds", "getMilliseconds", "getUTCMilliseconds", "getTimezoneOffset",
+		 "setTime", "setMilliseconds", "setUTCMilliseconds", "setSeconds", "setUTCSeconds",
+		 "setMinutes", "setUTCMinutes", "setHours", "setUTCHours", "setDate", "setUTCDate",
+		 "setMonth", "setUTCMonth", "setFullYear", "setUTCFullYear"
+		);
+
+		private static final DateTimeFormatter UTC_FORMATTER = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss 'GMT'", Locale.US).withZone(ZoneOffset.UTC);
+
 		public static final JSObject DATE_PROTOTYPE = createDatePrototype();
 		public static final JSObject DATE           = createDateConstructor(DATE_PROTOTYPE);
 
 		private static JSObject createDatePrototype() {
-			JSObject proto = new JSObject(LazyObject.OBJECT_PROTOTYPE);
-			proto.put("name", "Date");
+			JSShape  shape = JSShape.createStaticPrototypeShape(LazyObject.OBJECT_PROTOTYPE.shape, DATE_PROTO_PROPS);
+			JSObject proto = new JSObject(shape, LazyObject.OBJECT_PROTOTYPE);
+
 			proto.put("getTime", makeMethod("getTime", 0, (cx, thisObj, args) -> {
 				if (thisObj instanceof JSDate d) return d.getTime();
 				throw makeTypeError("this is not a Date object");
@@ -2338,6 +2365,363 @@ public class JSContext {
 			proto.put("toString", makeMethod("toString", 0, (cx, thisObj, args) -> {
 				if (thisObj instanceof JSDate d) return d.toString();
 				throw makeTypeError("this is not a Date object");
+			}));
+			proto.put("toDateString", makeMethod("toDateString", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return "Invalid Date";
+				Calendar cal = Calendar.getInstance();
+				cal.setTimeInMillis((long) t);
+				return String.format(Locale.US, "%ta %tb %02d %tY", cal, cal, cal.get(Calendar.DAY_OF_MONTH), cal);
+			}));
+			proto.put("toTimeString", makeMethod("toTimeString", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return "Invalid Date";
+				Calendar cal = Calendar.getInstance();
+				cal.setTimeInMillis((long) t);
+				return String.format(Locale.US, "%02d:%02d:%02d GMT%tz", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), cal.get(Calendar.SECOND), cal);
+			}));
+			JSBuiltinMethod toUTCStringMethod = makeMethod("toUTCString", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return "Invalid Date";
+				Instant instant = Instant.ofEpochMilli((long) t);
+				return UTC_FORMATTER.format(instant);
+			});
+			proto.put("toUTCString", toUTCStringMethod);
+			proto.put("toGMTString", toUTCStringMethod);
+
+			proto.put("toISOString", makeMethod("toISOString", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) throw makeRangeError("Invalid time value");
+				return Instant.ofEpochMilli((long) t).toString();
+			}));
+			proto.put("toJSON", makeMethod("toJSON", 1, (cx, thisObj, args) -> {
+				if (thisObj instanceof JSDate d) {
+					double t = d.getTime();
+					if (Double.isNaN(t)) return null;
+					return Instant.ofEpochMilli((long) t).toString();
+				}
+				if (thisObj instanceof JSObject jo) {
+					Object toISO = jo.get("toISOString");
+					if (toISO instanceof JSFunction fn) {
+						return fn.call(cx, thisObj, JSFunction.EMPTY_ARGS);
+					}
+				}
+				throw makeTypeError("this is not a Date object");
+			}));
+			proto.put("getFullYear", makeMethod("getFullYear", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance();
+				cal.setTimeInMillis((long) t);
+				return (double) cal.get(Calendar.YEAR);
+			}));
+			proto.put("getUTCFullYear", makeMethod("getUTCFullYear", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+				cal.setTimeInMillis((long) t);
+				return (double) cal.get(Calendar.YEAR);
+			}));
+			proto.put("getMonth", makeMethod("getMonth", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance();
+				cal.setTimeInMillis((long) t);
+				return (double) cal.get(Calendar.MONTH);
+			}));
+			proto.put("getUTCMonth", makeMethod("getUTCMonth", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+				cal.setTimeInMillis((long) t);
+				return (double) cal.get(Calendar.MONTH);
+			}));
+			proto.put("getDate", makeMethod("getDate", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance();
+				cal.setTimeInMillis((long) t);
+				return (double) cal.get(Calendar.DAY_OF_MONTH);
+			}));
+			proto.put("getUTCDate", makeMethod("getUTCDate", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+				cal.setTimeInMillis((long) t);
+				return (double) cal.get(Calendar.DAY_OF_MONTH);
+			}));
+			proto.put("getDay", makeMethod("getDay", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance();
+				cal.setTimeInMillis((long) t);
+				return (double) (cal.get(Calendar.DAY_OF_WEEK) - 1);
+			}));
+			proto.put("getUTCDay", makeMethod("getUTCDay", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+				cal.setTimeInMillis((long) t);
+				return (double) (cal.get(Calendar.DAY_OF_WEEK) - 1);
+			}));
+			proto.put("getHours", makeMethod("getHours", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance();
+				cal.setTimeInMillis((long) t);
+				return (double) cal.get(Calendar.HOUR_OF_DAY);
+			}));
+			proto.put("getUTCHours", makeMethod("getUTCHours", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+				cal.setTimeInMillis((long) t);
+				return (double) cal.get(Calendar.HOUR_OF_DAY);
+			}));
+			proto.put("getMinutes", makeMethod("getMinutes", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance();
+				cal.setTimeInMillis((long) t);
+				return (double) cal.get(Calendar.MINUTE);
+			}));
+			proto.put("getUTCMinutes", makeMethod("getUTCMinutes", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+				cal.setTimeInMillis((long) t);
+				return (double) cal.get(Calendar.MINUTE);
+			}));
+			proto.put("getSeconds", makeMethod("getSeconds", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance();
+				cal.setTimeInMillis((long) t);
+				return (double) cal.get(Calendar.SECOND);
+			}));
+			proto.put("getUTCSeconds", makeMethod("getUTCSeconds", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+				cal.setTimeInMillis((long) t);
+				return (double) cal.get(Calendar.SECOND);
+			}));
+			proto.put("getMilliseconds", makeMethod("getMilliseconds", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance();
+				cal.setTimeInMillis((long) t);
+				return (double) cal.get(Calendar.MILLISECOND);
+			}));
+			proto.put("getUTCMilliseconds", makeMethod("getUTCMilliseconds", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+				cal.setTimeInMillis((long) t);
+				return (double) cal.get(Calendar.MILLISECOND);
+			}));
+			proto.put("getTimezoneOffset", makeMethod("getTimezoneOffset", 0, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				TimeZone tz = TimeZone.getDefault();
+				return (double) (-tz.getOffset((long) t) / 60000);
+			}));
+			proto.put("setTime", makeMethod("setTime", 1, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = args.length > 0 ? JSOps.toDouble(args[0]) : Double.NaN;
+				d.setTime(t);
+				return t;
+			}));
+			proto.put("setMilliseconds", makeMethod("setMilliseconds", 1, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance();
+				cal.setTimeInMillis((long) t);
+				if (args.length > 0) cal.set(Calendar.MILLISECOND, JSOps.toInt(args[0]));
+				double newT = (double) cal.getTimeInMillis();
+				d.setTime(newT);
+				return newT;
+			}));
+			proto.put("setUTCMilliseconds", makeMethod("setUTCMilliseconds", 1, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+				cal.setTimeInMillis((long) t);
+				if (args.length > 0) cal.set(Calendar.MILLISECOND, JSOps.toInt(args[0]));
+				double newT = (double) cal.getTimeInMillis();
+				d.setTime(newT);
+				return newT;
+			}));
+			proto.put("setSeconds", makeMethod("setSeconds", 2, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance();
+				cal.setTimeInMillis((long) t);
+				if (args.length > 0) cal.set(Calendar.SECOND, JSOps.toInt(args[0]));
+				if (args.length > 1) cal.set(Calendar.MILLISECOND, JSOps.toInt(args[1]));
+				double newT = (double) cal.getTimeInMillis();
+				d.setTime(newT);
+				return newT;
+			}));
+			proto.put("setUTCSeconds", makeMethod("setUTCSeconds", 2, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+				cal.setTimeInMillis((long) t);
+				if (args.length > 0) cal.set(Calendar.SECOND, JSOps.toInt(args[0]));
+				if (args.length > 1) cal.set(Calendar.MILLISECOND, JSOps.toInt(args[1]));
+				double newT = (double) cal.getTimeInMillis();
+				d.setTime(newT);
+				return newT;
+			}));
+			proto.put("setMinutes", makeMethod("setMinutes", 3, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance();
+				cal.setTimeInMillis((long) t);
+				if (args.length > 0) cal.set(Calendar.MINUTE, JSOps.toInt(args[0]));
+				if (args.length > 1) cal.set(Calendar.SECOND, JSOps.toInt(args[1]));
+				if (args.length > 2) cal.set(Calendar.MILLISECOND, JSOps.toInt(args[2]));
+				double newT = (double) cal.getTimeInMillis();
+				d.setTime(newT);
+				return newT;
+			}));
+			proto.put("setUTCMinutes", makeMethod("setUTCMinutes", 3, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+				cal.setTimeInMillis((long) t);
+				if (args.length > 0) cal.set(Calendar.MINUTE, JSOps.toInt(args[0]));
+				if (args.length > 1) cal.set(Calendar.SECOND, JSOps.toInt(args[1]));
+				if (args.length > 2) cal.set(Calendar.MILLISECOND, JSOps.toInt(args[2]));
+				double newT = (double) cal.getTimeInMillis();
+				d.setTime(newT);
+				return newT;
+			}));
+			proto.put("setHours", makeMethod("setHours", 4, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance();
+				cal.setTimeInMillis((long) t);
+				if (args.length > 0) cal.set(Calendar.HOUR_OF_DAY, JSOps.toInt(args[0]));
+				if (args.length > 1) cal.set(Calendar.MINUTE, JSOps.toInt(args[1]));
+				if (args.length > 2) cal.set(Calendar.SECOND, JSOps.toInt(args[2]));
+				if (args.length > 3) cal.set(Calendar.MILLISECOND, JSOps.toInt(args[3]));
+				double newT = (double) cal.getTimeInMillis();
+				d.setTime(newT);
+				return newT;
+			}));
+			proto.put("setUTCHours", makeMethod("setUTCHours", 4, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+				cal.setTimeInMillis((long) t);
+				if (args.length > 0) cal.set(Calendar.HOUR_OF_DAY, JSOps.toInt(args[0]));
+				if (args.length > 1) cal.set(Calendar.MINUTE, JSOps.toInt(args[1]));
+				if (args.length > 2) cal.set(Calendar.SECOND, JSOps.toInt(args[2]));
+				if (args.length > 3) cal.set(Calendar.MILLISECOND, JSOps.toInt(args[3]));
+				double newT = (double) cal.getTimeInMillis();
+				d.setTime(newT);
+				return newT;
+			}));
+			proto.put("setDate", makeMethod("setDate", 1, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance();
+				cal.setTimeInMillis((long) t);
+				if (args.length > 0) cal.set(Calendar.DAY_OF_MONTH, JSOps.toInt(args[0]));
+				double newT = (double) cal.getTimeInMillis();
+				d.setTime(newT);
+				return newT;
+			}));
+			proto.put("setUTCDate", makeMethod("setUTCDate", 1, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+				cal.setTimeInMillis((long) t);
+				if (args.length > 0) cal.set(Calendar.DAY_OF_MONTH, JSOps.toInt(args[0]));
+				double newT = (double) cal.getTimeInMillis();
+				d.setTime(newT);
+				return newT;
+			}));
+			proto.put("setMonth", makeMethod("setMonth", 2, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance();
+				cal.setTimeInMillis((long) t);
+				if (args.length > 0) cal.set(Calendar.MONTH, JSOps.toInt(args[0]));
+				if (args.length > 1) cal.set(Calendar.DAY_OF_MONTH, JSOps.toInt(args[1]));
+				double newT = (double) cal.getTimeInMillis();
+				d.setTime(newT);
+				return newT;
+			}));
+			proto.put("setUTCMonth", makeMethod("setUTCMonth", 2, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				if (Double.isNaN(t)) return Double.NaN;
+				Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+				cal.setTimeInMillis((long) t);
+				if (args.length > 0) cal.set(Calendar.MONTH, JSOps.toInt(args[0]));
+				if (args.length > 1) cal.set(Calendar.DAY_OF_MONTH, JSOps.toInt(args[1]));
+				double newT = (double) cal.getTimeInMillis();
+				d.setTime(newT);
+				return newT;
+			}));
+			proto.put("setFullYear", makeMethod("setFullYear", 3, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				Calendar cal = Calendar.getInstance();
+				if (!Double.isNaN(t)) cal.setTimeInMillis((long) t);
+				if (args.length > 0) cal.set(Calendar.YEAR, JSOps.toInt(args[0]));
+				if (args.length > 1) cal.set(Calendar.MONTH, JSOps.toInt(args[1]));
+				if (args.length > 2) cal.set(Calendar.DAY_OF_MONTH, JSOps.toInt(args[2]));
+				double newT = (double) cal.getTimeInMillis();
+				d.setTime(newT);
+				return newT;
+			}));
+			proto.put("setUTCFullYear", makeMethod("setUTCFullYear", 3, (cx, thisObj, args) -> {
+				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
+				double t = d.getTime();
+				Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+				if (!Double.isNaN(t)) cal.setTimeInMillis((long) t);
+				if (args.length > 0) cal.set(Calendar.YEAR, JSOps.toInt(args[0]));
+				if (args.length > 1) cal.set(Calendar.MONTH, JSOps.toInt(args[1]));
+				if (args.length > 2) cal.set(Calendar.DAY_OF_MONTH, JSOps.toInt(args[2]));
+				double newT = (double) cal.getTimeInMillis();
+				d.setTime(newT);
+				return newT;
 			}));
 			return proto;
 		}
@@ -2357,9 +2741,9 @@ public class JSContext {
 					int                min   = args.length > 4 ? JSOps.toInt(args[4]) : 0;
 					int                sec   = args.length > 5 ? JSOps.toInt(args[5]) : 0;
 					int                ms    = args.length > 6 ? JSOps.toInt(args[6]) : 0;
-					java.util.Calendar cal   = java.util.Calendar.getInstance();
+					Calendar           cal   = Calendar.getInstance();
 					cal.set(year < 100 ? 1900 + year : year, month, day, hour, min, sec);
-					cal.set(java.util.Calendar.MILLISECOND, ms);
+					cal.set(Calendar.MILLISECOND, ms);
 					time = (double) cal.getTimeInMillis();
 				}
 				if (thisObj == null || thisObj == JSUndefined.INSTANCE || thisObj instanceof JSContext.JSGlobalThis) {
@@ -2371,7 +2755,35 @@ public class JSContext {
 				}
 				return new JSDate(time, proto);
 			});
+			proto.put("constructor", ctor);
 			ctor.put("now", makeMethod("now", 0, (cx, thisObj, args) -> (double) System.currentTimeMillis()));
+			ctor.put("parse", makeMethod("parse", 1, (cx, thisObj, args) -> {
+				if (args.length == 0) return Double.NaN;
+				String s = JSOps.toStr(args[0]);
+				try {
+					return (double) Instant.parse(s).toEpochMilli();
+				} catch (Exception ignored) {
+					try {
+						return (double) java.util.Date.parse(s);
+					} catch (Exception e) {
+						return Double.NaN;
+					}
+				}
+			}));
+			ctor.put("UTC", makeMethod("UTC", 7, (cx, thisObj, args) -> {
+				if (args.length == 0) return Double.NaN;
+				int year = JSOps.toInt(args[0]);
+				int month = args.length > 1 ? JSOps.toInt(args[1]) : 0;
+				int day = args.length > 2 ? JSOps.toInt(args[2]) : 1;
+				int hour = args.length > 3 ? JSOps.toInt(args[3]) : 0;
+				int min = args.length > 4 ? JSOps.toInt(args[4]) : 0;
+				int sec = args.length > 5 ? JSOps.toInt(args[5]) : 0;
+				int ms = args.length > 6 ? JSOps.toInt(args[6]) : 0;
+				Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+				cal.set(year < 100 ? 1900 + year : year, month, day, hour, min, sec);
+				cal.set(Calendar.MILLISECOND, ms);
+				return (double) cal.getTimeInMillis();
+			}));
 			return ctor;
 		}
 	}

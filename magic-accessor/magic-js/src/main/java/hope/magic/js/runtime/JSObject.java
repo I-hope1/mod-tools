@@ -368,19 +368,22 @@ public class JSObject {
 	public void putDouble(int propId, double value) {
 		int offset = shape.getOffset(propId);
 		if (offset >= 0) {
-			byte slotType = shape.getSlotType(offset);
-			if ((slotType & JSShape.FLAG_ACCESSOR) != 0) {
-				PropertyAccessor acc = (PropertyAccessor) getRawObjectSlot(offset);
-				acc.callSetter(null, this, value);
-				return;
+			Object currentRaw = isDoubleSlot(offset) ? null : getRawObjectSlot(offset);
+			if (currentRaw == DELETED) {
+				shape = shape.updatePropertyType(offset, JSShape.TYPE_DOUBLE);
+			} else {
+				byte slotType = shape.getSlotType(offset);
+				if ((slotType & JSShape.FLAG_ACCESSOR) != 0) {
+					PropertyAccessor acc = (PropertyAccessor) currentRaw;
+					acc.callSetter(null, this, value);
+					return;
+				}
+				if ((slotType & JSShape.FLAG_NOT_WRITABLE) != 0) {
+					return;
+				}
 			}
-			if ((slotType & JSShape.FLAG_NOT_WRITABLE) != 0) {
-				return;
-			}
-			if (offset < 8) {
-				setDoubleSlot(offset, value);
-				return;
-			}
+			setDoubleSlot(offset, value);
+			return;
 		} else if (prototype != null && prototype.handlePrototypePut(propId, this, value)) {
 			return;
 		}
@@ -464,14 +467,20 @@ public class JSObject {
 
 		int offset = shape.getOffset(propId);
 		if (offset >= 0) {
-			byte slotType = shape.getSlotType(offset);
-			if ((slotType & JSShape.FLAG_ACCESSOR) != 0) {
-				PropertyAccessor acc = (PropertyAccessor) getRawObjectSlot(offset);
-				acc.callSetter(null, this, value);
-				return;
-			}
-			if ((slotType & JSShape.FLAG_NOT_WRITABLE) != 0) {
-				return; // 只读属性，写入静默忽略
+			Object currentRaw = isDoubleSlot(offset) ? null : getRawObjectSlot(offset);
+			if (currentRaw == DELETED) {
+				byte newType = (value instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
+				shape = shape.updatePropertyType(offset, newType);
+			} else {
+				byte slotType = shape.getSlotType(offset);
+				if ((slotType & JSShape.FLAG_ACCESSOR) != 0) {
+					PropertyAccessor acc = (PropertyAccessor) currentRaw;
+					acc.callSetter(null, this, value);
+					return;
+				}
+				if ((slotType & JSShape.FLAG_NOT_WRITABLE) != 0) {
+					return; // 只读属性，写入静默忽略
+				}
 			}
 			setSlot(offset, value);
 			return;

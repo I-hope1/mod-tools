@@ -2614,8 +2614,8 @@ public class JSLinker {
 			}
 		}
 		return "%Array.prototype%".equals(intrinsicDefaultProto)
-				? JSContext.LazyArray.ARRAY_PROTOTYPE
-				: JSContext.LazyObject.OBJECT_PROTOTYPE;
+		 ? JSContext.LazyArray.ARRAY_PROTOTYPE
+		 : JSContext.LazyObject.OBJECT_PROTOTYPE;
 	}
 
 	public static Object newGeneric(Object ctor, Object[] args) throws Throwable {
@@ -2646,14 +2646,14 @@ public class JSLinker {
 
 		if (ctor == JSContext.LazyDate.DATE) {
 			JSContext currentCx = JSContext.current();
-			JSObject proto = getPrototypeFromConstructor(currentCx, newTarget, "%Date.prototype%");
+			JSObject  proto     = getPrototypeFromConstructor(currentCx, newTarget, "%Date.prototype%");
 			return ((JSFunction) ctor).call(currentCx, new JSContext.JSDate(0, proto != null ? proto : JSContext.LazyDate.DATE_PROTOTYPE), args);
 		}
 
 		if (ctor == JSContext.LazyArray.ARRAY || ctor instanceof JSContext.JSArrayConstructor) {
 			JSContext currentCx = JSContext.current();
-			JSObject proto = getPrototypeFromConstructor(currentCx, newTarget, "%Array.prototype%");
-			Object res = ((JSFunction) ctor).call(currentCx, null, args);
+			JSObject  proto     = getPrototypeFromConstructor(currentCx, newTarget, "%Array.prototype%");
+			Object    res       = ((JSFunction) ctor).call(currentCx, null, args);
 			if (res instanceof JSObject jo) {
 				jo.setPrototype(proto);
 				return jo;
@@ -2663,8 +2663,8 @@ public class JSLinker {
 
 		if (ctor instanceof JSFunction) {
 			JSContext currentCx = JSContext.current();
-			JSObject proto = getPrototypeFromConstructor(currentCx, newTarget, "%Object.prototype%");
-			JSObject newObj = (proto != null) ? new JSObject(proto) : new JSObject();
+			JSObject  proto     = getPrototypeFromConstructor(currentCx, newTarget, "%Object.prototype%");
+			JSObject  newObj    = (proto != null) ? new JSObject(proto) : new JSObject();
 			if (ctor instanceof JSObject ctorObj && ctorObj.realm != null) {
 				newObj.realm = ctorObj.realm;
 			} else if (newTarget instanceof JSObject ntObj && ntObj.realm != null) {
@@ -3160,10 +3160,11 @@ public class JSLinker {
 		return target != null && target.getClass() == expected;
 	}
 
+	@SuppressWarnings("RedundantIfStatement")
 	public static boolean isExactShape(JSShape expected, Object target) {
-		return target instanceof JSObject && ((JSObject) target).shape == expected;
+		if (target instanceof JSObject && ((JSObject) target).shape == expected) return true;
+		return false;
 	}
-
 	public static Object getJSObjSlot(int slot, Object target) {
 		return ((JSObject) target).getSlot(slot);
 	}
@@ -4021,33 +4022,33 @@ public class JSLinker {
 		return UNSAFE.getObject(target, offset);
 	}
 
+	// instanceof XXX xx 模式匹配的字节码会多一些
 	public static void putIntDirect(long offset, Object target, Object val) {
-		UNSAFE.putInt(target, offset, val instanceof Number n ? n.intValue() : JSOps.toInt(val));
+		UNSAFE.putInt(target, offset, val instanceof Number  ? ((Number)val).intValue() : JSOps.toInt(val));
 	}
 
 	public static void putDoubleDirect(long offset, Object target, Object val) {
-		UNSAFE.putDouble(target, offset, val instanceof Number n ? n.doubleValue() : JSOps.toDouble(val));
+		UNSAFE.putDouble(target, offset, val instanceof Number ? ((Number)val).doubleValue() : JSOps.toDouble(val));
 	}
 
 	public static void putLongDirect(long offset, Object target, Object val) {
-		UNSAFE.putLong(target, offset, val instanceof Number n ? n.longValue() : JSOps.toLong(val));
+		UNSAFE.putLong(target, offset, val instanceof Number ? ((Number)val).longValue() : JSOps.toLong(val));
 	}
 
 	public static void putFloatDirect(long offset, Object target, Object val) {
-		UNSAFE.putFloat(target, offset, val instanceof Number n ? n.floatValue() : (float) JSOps.toDouble(val));
+		UNSAFE.putFloat(target, offset, val instanceof Number ? ((Number)val).floatValue() : (float) JSOps.toDouble(val));
 	}
 
 	public static void putShortDirect(long offset, Object target, Object val) {
-		UNSAFE.putShort(target, offset, val instanceof Number n ? n.shortValue() : (short) JSOps.toInt(val));
+		UNSAFE.putShort(target, offset, val instanceof Number ? ((Number)val).shortValue() : (short) JSOps.toInt(val));
 	}
 
 	public static void putByteDirect(long offset, Object target, Object val) {
-		UNSAFE.putByte(target, offset, val instanceof Number n ? n.byteValue() : (byte) JSOps.toInt(val));
+		UNSAFE.putByte(target, offset, val instanceof Number ? ((Number)val).byteValue() : (byte) JSOps.toInt(val));
 	}
 
 	public static void putCharDirect(long offset, Object target, Object val) {
-		char c = tc(val);
-		UNSAFE.putChar(target, offset, c);
+		UNSAFE.putChar(target, offset, tc(val));
 	}
 
 	public static void putBooleanDirect(long offset, Object target, Object val) {

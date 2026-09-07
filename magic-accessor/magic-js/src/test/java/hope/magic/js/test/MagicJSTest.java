@@ -737,22 +737,25 @@ public class MagicJSTest {
 	public void testOffsetMaskDispatchAttributionSafety() throws Throwable {
 		// 验证：聚合掩码分发（Offset-Class Mask Dispatch）必须严格校验 Shape 归属，
 		// 防止由于位掩码匹配导致读取了无关异构对象的脏槽位。
-		String propName = "propTarget_" + System.nanoTime();
-		int targetPropId = SymbolTable.id(propName);
+		String propName     = "propTarget_" + System.nanoTime();
+		int    targetPropId = SymbolTable.id(propName);
 
 		// 1. 构造 5 个 Shape，使得 "propTarget" 位于 slot 0
-		JSShape[] shapes = new JSShape[5];
-		int[] offsets = new int[5];
-		for (int i = 0; i < 5; i++) {
+		int       n       = 5;
+		JSShape[] shapes  = new JSShape[n];
+		int[]     offsets = new int[n];
+		byte[]    types   = new byte[n];
+		for (int i = 0; i < n; i++) {
 			JSShape s = JSShape.ROOT.addProperty(targetPropId, JSShape.TYPE_DOUBLE);
 			for (int j = 0; j < i; j++) {
 				s = s.addProperty("dummy_" + i + "_" + j, JSShape.TYPE_DOUBLE);
 			}
 			shapes[i] = s;
 			offsets[i] = 0;
+			types[i] = JSShape.TYPE_DOUBLE;
 		}
 
-		JSLinker.PolySnapshot snap = new JSLinker.PolySnapshot(shapes, offsets, targetPropId);
+		JSLinker.PolySnapshot snap = new JSLinker.PolySnapshot(shapes, offsets, types, targetPropId);
 		MethodHandle fallback = MethodHandles.dropArguments(
 		 MethodHandles.constant(double.class, Double.NaN), 0, Object.class
 		);
@@ -767,8 +770,8 @@ public class MagicJSTest {
 		Assertions.assertEquals(42.0, validRes, 0.0001);
 
 		// 3. 构造一个异构对象，其 slot 0 存放的是 otherPropId
-		int otherPropId = SymbolTable.id("otherProp_" + System.nanoTime());
-		JSShape alienShape = JSShape.ROOT.addProperty(otherPropId, JSShape.TYPE_DOUBLE);
+		int     otherPropId = SymbolTable.id("otherProp_" + System.nanoTime());
+		JSShape alienShape  = JSShape.ROOT.addProperty(otherPropId, JSShape.TYPE_DOUBLE);
 
 		Assertions.assertFalse(alienShape.hasPropertyAt(targetPropId, 0));
 		Assertions.assertTrue(alienShape.hasPropertyAt(otherPropId, 0));
@@ -787,10 +790,10 @@ public class MagicJSTest {
 		// 验证：在多态演进期（1 -> 2 -> 4 态扩张），CallSite 能够顺利触发 Relink，
 		// 动态扩充 snapshotPoly 并在扁平跳转表/掩码分发中接纳新 Shape，而不是早熟固化或死死抛异常
 		String propName = "expansionProp_" + System.nanoTime();
-		int propId = SymbolTable.id(propName);
+		int    propId   = SymbolTable.id(propName);
 
 		MethodType type = MethodType.methodType(double.class, Object.class);
-		CallSite site = JSLinker.bootstrapGetPropDouble(MethodHandles.lookup(), "getPropDouble", type, propName);
+		CallSite   site = JSLinker.bootstrapGetPropDouble(MethodHandles.lookup(), "getPropDouble", type, propName);
 
 		// 构造 4 个异槽对象（val 位于 offset 0, 1, 2, 3）
 		JSObject[] objs = new JSObject[4];
@@ -995,8 +998,8 @@ public class MagicJSTest {
 		Assertions.assertEquals(-1.0, ((Number) cx.eval("-4 >> 2")).doubleValue());
 
 		Assertions.assertEquals(0.0, ((Number) cx.eval("Infinity | 0")).doubleValue());
-		Assertions.assertEquals(1661992960.0, ((Number)cx.eval("1e20 | 0")).doubleValue());
-		Assertions.assertEquals(-1661992960.0, ((Number)cx.eval("-1e20 | 0")).doubleValue());
+		Assertions.assertEquals(1661992960.0, ((Number) cx.eval("1e20 | 0")).doubleValue());
+		Assertions.assertEquals(-1661992960.0, ((Number) cx.eval("-1e20 | 0")).doubleValue());
 
 
 		// 零填充右移 (>>>) 与无符号 32 位溢出转换
@@ -1125,10 +1128,10 @@ public class MagicJSTest {
 		Assertions.assertEquals(55.0, ((Number) r3).doubleValue());
 
 
-		var magicScript_1 = JSCompiler.compile(generateGradientCode(1));
-		var magicScript_2 = JSCompiler.compile(generateGradientCode(2));
-		var magicScript_4 = JSCompiler.compile(generateGradientCode(4));
-		var magicScript_8 = JSCompiler.compile(generateGradientCode(8));
+		var magicScript_1  = JSCompiler.compile(generateGradientCode(1));
+		var magicScript_2  = JSCompiler.compile(generateGradientCode(2));
+		var magicScript_4  = JSCompiler.compile(generateGradientCode(4));
+		var magicScript_8  = JSCompiler.compile(generateGradientCode(8));
 		var magicScript_64 = JSCompiler.compile(generateGradientCode(64));
 
 		// System.out.println(generateGradientCode(64));
@@ -1322,7 +1325,7 @@ public class MagicJSTest {
 		Assertions.assertEquals(14.0, ((Number) r10).doubleValue());
 
 		// 11. Direct adapter call via MagicJIT.getFunctionAdapter
-		JSFunction fn = (JSFunction) cx.eval("(a, b) => a * b + 10;");
+		JSFunction                           fn       = (JSFunction) cx.eval("(a, b) => a * b + 10;");
 		java.util.function.IntBinaryOperator directOp = (java.util.function.IntBinaryOperator) MagicJIT.getFunctionAdapter(java.util.function.IntBinaryOperator.class, fn);
 		Assertions.assertNotNull(directOp);
 		Assertions.assertEquals(52, directOp.applyAsInt(6, 7));
@@ -2562,16 +2565,16 @@ public class MagicJSTest {
 
 		// 6. TimSort 稳定性验证
 		Assertions.assertEquals("a,c,b,d", cx.eval(
-			"var list = [{k: 1, v: 'a'}, {k: 2, v: 'b'}, {k: 1, v: 'c'}, {k: 2, v: 'd'}];\n" +
-			"list.sort((x, y) => x.k - y.k);\n" +
-			"list.map(i => i.v).join(',');"
+		 "var list = [{k: 1, v: 'a'}, {k: 2, v: 'b'}, {k: 1, v: 'c'}, {k: 2, v: 'd'}];\n" +
+		 "list.sort((x, y) => x.k - y.k);\n" +
+		 "list.map(i => i.v).join(',');"
 		));
 
 		// 7. 类数组通用排序
 		Assertions.assertEquals("10,20,30", cx.eval(
-			"var o = { length: 3, 0: 30, 1: 10, 2: 20 };\n" +
-			"Array.prototype.sort.call(o, (a, b) => a - b);\n" +
-			"[o[0], o[1], o[2]].join(',');"
+		 "var o = { length: 3, 0: 30, 1: 10, 2: 20 };\n" +
+		 "Array.prototype.sort.call(o, (a, b) => a - b);\n" +
+		 "[o[0], o[1], o[2]].join(',');"
 		));
 	}
 
@@ -2615,19 +2618,20 @@ public class MagicJSTest {
 
 		// 9. 链式管道计算 (filter -> map -> reduce)
 		Assertions.assertEquals(90.0, ((Number) cx.eval(
-			"[1, 2, 3, 4, 5]\n" +
-			"    .filter(x => x % 2 === 1)\n" +
-			"    .map(x => x * 10)\n" +
-			"    .reduce((acc, x) => acc + x, 0);"
+		 """
+			[1, 2, 3, 4, 5]
+			    .filter(x => x % 2 === 1)
+			    .map(x => x * 10)
+			    .reduce((acc, x) => acc + x, 0);"""
 		)).doubleValue());
 	}
 
 	@Test
 	public void testStaticPrototypeShapeBatchConstruction() {
 		// 验证内置原型与构造函数采用静态批量终态烘焙，不污染用户 Shape ID
-		int beforeUserId = JSShape.getNextUserId();
-		JSContext cx = new JSContext();
-		int afterUserId = JSShape.getNextUserId();
+		int       beforeUserId = JSShape.getNextUserId();
+		JSContext cx           = new JSContext();
+		int       afterUserId  = JSShape.getNextUserId();
 		Assertions.assertEquals(beforeUserId, afterUserId, "创建 JSContext 及内置原型不得消耗用户 Shape ID");
 
 		JSObject proto = (JSObject) cx.eval("Array.prototype;");
@@ -2649,13 +2653,15 @@ public class MagicJSTest {
 	public void testOffsetMaskDispatchResilientWhenMaskOverflow() throws Throwable {
 		// 验证当 Shape 的 ID >= 64 导致 mask == 0L 时，
 		// buildFlatPolySwitchDouble 依然通过 isMatchPropAt 正常进行聚合槽位分发，绝不返回 null
-		String propName = "targetVal_" + System.nanoTime();
-		int targetPropId = SymbolTable.id(propName);
+		String propName     = "targetVal_" + System.nanoTime();
+		int    targetPropId = SymbolTable.id(propName);
 
+		int n = 8;
 		// 构造多个不同 offset 的 Shape 集合
-		JSShape[] shapes = new JSShape[8];
-		int[] offsets = new int[8];
-		for (int i = 0; i < 8; i++) {
+		JSShape[] shapes  = new JSShape[n];
+		int[]     offsets = new int[n];
+		byte[]    types   = new byte[n];
+		for (int i = 0; i < n; i++) {
 			JSShape s = JSShape.ROOT;
 			for (int p = 0; p < (i % 4); p++) {
 				s = s.addProperty("dummy_" + i + "_" + p, JSShape.TYPE_DOUBLE);
@@ -2663,9 +2669,10 @@ public class MagicJSTest {
 			s = s.addProperty(targetPropId, JSShape.TYPE_DOUBLE);
 			shapes[i] = s;
 			offsets[i] = i % 4;
+			types[i] = JSShape.TYPE_DOUBLE;
 		}
 
-		JSLinker.PolySnapshot snap = new JSLinker.PolySnapshot(shapes, offsets, targetPropId);
+		JSLinker.PolySnapshot snap = new JSLinker.PolySnapshot(shapes, offsets, types, targetPropId);
 		MethodHandle fallback = MethodHandles.dropArguments(
 		 MethodHandles.constant(double.class, -1.0), 0, Object.class
 		);
@@ -2674,7 +2681,7 @@ public class MagicJSTest {
 		Assertions.assertNotNull(switchMH);
 
 		// 验证每个 shape 的对象通过 switchMH 读取槽位均正确
-		for (int i = 0; i < 8; i++) {
+		for (int i = 0; i < n; i++) {
 			JSObject obj = new JSObject();
 			obj.shape = shapes[i];
 			int off = offsets[i];
@@ -2695,27 +2702,27 @@ public class MagicJSTest {
 	public void testLargeArityAndHoistedVarInLoop() {
 		JSContext cx = new JSContext();
 		Object res = cx.eval("""
-			var x = Array(
-			  0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-			  10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
-			  20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-			  30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
-			  40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
-			  50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
-			  60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
-			  70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
-			  80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
-			  90, 91, 92, 93, 94, 95, 96, 97, 98, 99
-			);
-
-			for (var i = 0; i < 100; i++) {
-			  var result = true;
-			  if (x[i] !== i) {
-			    result = false;
-			  }
-			}
-			result;
-			""");
+		 var x = Array(
+		   0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+		   10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+		   20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+		   30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+		   40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+		   50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
+		   60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
+		   70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+		   80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+		   90, 91, 92, 93, 94, 95, 96, 97, 98, 99
+		 );
+		 
+		 for (var i = 0; i < 100; i++) {
+		   var result = true;
+		   if (x[i] !== i) {
+		     result = false;
+		   }
+		 }
+		 result;
+		 """);
 		Assertions.assertEquals(Boolean.TRUE, res);
 	}
 }

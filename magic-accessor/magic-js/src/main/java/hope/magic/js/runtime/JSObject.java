@@ -37,9 +37,10 @@ public class JSObject {
 		}
 	}
 
-	public JSShape shape = JSShape.ROOT;
-	public long    doubleFieldMask/*  = 0L */; // 记录哪些 offset 槽位存储的是 double (低 64 位)
-	public long[]  overflowDoubleMask;
+	public JSShape   shape = JSShape.ROOT;
+	public JSContext realm;
+	public long      doubleFieldMask/*  = 0L */; // 记录哪些 offset 槽位存储的是 double (低 64 位)
+	public long[]    overflowDoubleMask;
 
 	public boolean isDoubleSlot(int offset) {
 		if (offset < 64) {
@@ -543,6 +544,26 @@ public class JSObject {
 		return has(symId);
 	}
 
+	public boolean has(JSSymbol sym) {
+		return sym != null && has(sym.getKey());
+	}
+
+	public Object get(JSSymbol sym) {
+		return sym != null ? get(sym.getKey()) : JSUndefined.INSTANCE;
+	}
+
+	public void put(JSSymbol sym, Object value) {
+		if (sym != null) put(sym.getKey(), value);
+	}
+
+	public boolean hasOwnProperty(JSSymbol sym) {
+		return sym != null && hasOwnProperty(sym.getKey());
+	}
+
+	public void delete(JSSymbol sym) {
+		if (sym != null) delete(sym.getKey());
+	}
+
 	public boolean hasOwnProperty(String key) {
 		int symId = SymbolTable.lookupId(key);
 		if (symId == SymbolTable.NO_SYMBOL) return false;
@@ -586,7 +607,7 @@ public class JSObject {
 			if (shape.isEnumerable(i) && (isDoubleSlot(i) || getRawObjectSlot(i) != DELETED)) {
 				int    keyId = shape.getKeyId(i);
 				String name  = SymbolTable.name(keyId);
-				if (name != null) activeKeys.add(name);
+				if (name != null && !JSSymbol.isSymbolKey(name)) activeKeys.add(name);
 			}
 		}
 		return activeKeys;
@@ -603,10 +624,30 @@ public class JSObject {
 			if (isDoubleSlot(i) || getRawObjectSlot(i) != DELETED) {
 				int    keyId = shape.getKeyId(i);
 				String name  = SymbolTable.name(keyId);
-				if (name != null) allKeys.add(name);
+				if (name != null && !JSSymbol.isSymbolKey(name)) allKeys.add(name);
 			}
 		}
 		return allKeys;
+	}
+
+	public List<JSSymbol> getOwnPropertySymbols() {
+		int count = shape.propertyCount;
+		if (count == 0) {
+			return Collections.emptyList();
+		}
+
+		List<JSSymbol> symbols = new ArrayList<>();
+		for (int i = 0; i < count; i++) {
+			if (isDoubleSlot(i) || getRawObjectSlot(i) != DELETED) {
+				int    keyId = shape.getKeyId(i);
+				String name  = SymbolTable.name(keyId);
+				if (JSSymbol.isSymbolKey(name)) {
+					JSSymbol sym = JSSymbol.fromKey(name);
+					if (sym != null) symbols.add(sym);
+				}
+			}
+		}
+		return symbols;
 	}
 
 	public Map<String, Object> getProperties() {
@@ -621,7 +662,7 @@ public class JSObject {
 			if (isDoubleSlot(i)) {
 				int    keyId = shape.getKeyId(i);
 				String name  = SymbolTable.name(keyId);
-				if (name != null) {
+				if (name != null && !JSSymbol.isSymbolKey(name)) {
 					map.put(name, getBoxedDouble(i));
 				}
 			} else {
@@ -629,7 +670,7 @@ public class JSObject {
 				if (raw != DELETED) {
 					int    keyId = shape.getKeyId(i);
 					String name  = SymbolTable.name(keyId);
-					if (name != null) {
+					if (name != null && !JSSymbol.isSymbolKey(name)) {
 						if (shape.isAccessor(i) && raw instanceof PropertyAccessor acc) {
 							map.put(name, acc.callGetter(null, this));
 						} else {

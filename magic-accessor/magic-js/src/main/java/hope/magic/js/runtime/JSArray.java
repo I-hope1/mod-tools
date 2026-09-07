@@ -775,6 +775,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	//region 静态工具方法
 
 	public static String toPropertyKey(Object key) {
+		if (key instanceof JSSymbol sym) return sym.getKey();
 		if (key instanceof String s) return s;
 		if (key instanceof Integer i) return i.toString();
 		if (key instanceof Long l) return l.toString();
@@ -792,7 +793,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	}
 
 	public static Long parseIndex(String key) {
-		if (key == null || key.isEmpty()) return null;
+		if (key == null || key.isEmpty() || JSSymbol.isSymbolKey(key)) return null;
 		int len = key.length();
 		if (len > 10) return null;
 		char first = key.charAt(0);

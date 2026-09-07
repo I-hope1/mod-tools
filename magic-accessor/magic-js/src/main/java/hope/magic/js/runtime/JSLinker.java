@@ -1105,40 +1105,43 @@ public class JSLinker {
 
 	//region Fallback 与 Inline Cache 实现
 
-	/** 双重守卫：Shape 相同且 Key 相同（先做引用比较 ==，失败再做 equals） */
+	/** 双重守卫：Shape 相同且 Key 相同（先做引用比较 ==，失败再做 equals，同时支持 JSSymbol） */
 	@SuppressWarnings("EqualsReplaceableByObjectsCall")
 	public static boolean isExactShapeAndKey(JSShape expectedShape, String expectedKey, Object target, Object key) {
 		return target instanceof JSObject jsObj
 		       && jsObj.shape == expectedShape
-		       && (key == expectedKey || (key != null && key.equals(expectedKey)));
+		       && (key == expectedKey || (key != null && (key.equals(expectedKey) || (key instanceof JSSymbol sym && sym.getKey().equals(expectedKey)))));
 	}
 
 	/** 动态对象索引读取的通用 Fallback 入口 */
 	public static Object getIndexDynamicFallback(ChainedCallSite site, Object target, Object index) throws Throwable {
 		if (target instanceof JSContext.JSGlobalThis globalThis) {
-			return globalThis.get(JSOps.toStr(index));
+			return globalThis.get(toPropertyKey(index));
 		}
-		if (target instanceof JSObject jsObj && index instanceof String strKey) {
-			JSShape s      = jsObj.shape;
-			int     offset = s.getOffset(strKey);
+		if (target instanceof JSObject jsObj) {
+			String strKey = (index instanceof JSSymbol sym) ? sym.getKey() : (index instanceof String s ? s : null);
+			if (strKey != null) {
+				JSShape s      = jsObj.shape;
+				int     offset = s.getOffset(strKey);
 
-			// 只有当属性命中且缓存深度 < 3 时挂载 Keyed IC 单态/多态分支
-			if (offset >= 0 && site.getChainDepth() < 3) {
-				MethodHandle test = LOOKUP.findStatic(
-				 JSLinker.class,
-				 "isExactShapeAndKey",
-				 MethodType.methodType(boolean.class, JSShape.class, String.class, Object.class, Object.class)
-				).bindTo(s).bindTo(strKey);
+				// 只有当属性命中且缓存深度 < 3 时挂载 Keyed IC 单态/多态分支
+				if (offset >= 0 && site.getChainDepth() < 3) {
+					MethodHandle test = LOOKUP.findStatic(
+					 JSLinker.class,
+					 "isExactShapeAndKey",
+					 MethodType.methodType(boolean.class, JSShape.class, String.class, Object.class, Object.class)
+					).bindTo(s).bindTo(strKey);
 
-				// 构造极速直读 Handle：(target, key) -> target.getSlot(offset)
-				MethodHandle getter = offset < 8
-				 ? MH_GET_SLOT_OBJECT[offset]
-				 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, offset);
-				// 丢弃第 1 个参数 key，适配签名 (Object, Object) -> Object
-				MethodHandle directTarget = MethodHandles.dropArguments(getter, 1, Object.class);
+					// 构造极速直读 Handle：(target, key) -> target.getSlot(offset)
+					MethodHandle getter = offset < 8
+					 ? MH_GET_SLOT_OBJECT[offset]
+					 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, offset);
+					// 丢弃第 1 个参数 key，适配签名 (Object, Object) -> Object
+					MethodHandle directTarget = MethodHandles.dropArguments(getter, 1, Object.class);
 
-				site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
-				return jsObj.getSlot(offset);
+					site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
+					return jsObj.getSlot(offset);
+				}
 			}
 		}
 		// 降级走原有的全量查找
@@ -1392,6 +1395,13 @@ public class JSLinker {
 					}
 				}
 			}
+		}
+
+		if (target instanceof JSSymbol sym) {
+			if ("description".equals(propName)) {
+				return sym.getDescription() != null ? sym.getDescription() : JSUndefined.INSTANCE;
+			}
+			return JSContext.LazySymbol.SYMBOL_PROTOTYPE.get(propName, sym);
 		}
 
 		if (target instanceof JSObject jsObj) {
@@ -2570,7 +2580,49 @@ public class JSLinker {
 		}
 	}
 
+	public static JSObject getPrototypeFromConstructor(JSContext cx, Object constructor, String intrinsicDefaultProto) {
+		if (constructor instanceof JSObject ctorObj) {
+			Object proto = ctorObj.get("prototype");
+			if (proto instanceof JSObject protoObj) {
+				return protoObj;
+			}
+			JSContext realm = ctorObj.realm;
+			if (realm == null) realm = cx;
+			if (realm != null) {
+				if ("%Array.prototype%".equals(intrinsicDefaultProto)) {
+					Object arrayCtor = realm.get("Array");
+					if (arrayCtor instanceof JSObject ac) {
+						Object p = ac.get("prototype");
+						if (p instanceof JSObject po) return po;
+					}
+					return JSContext.LazyArray.ARRAY_PROTOTYPE;
+				} else if ("%Function.prototype%".equals(intrinsicDefaultProto)) {
+					Object fnCtor = realm.get("Function");
+					if (fnCtor instanceof JSObject fc) {
+						Object p = fc.get("prototype");
+						if (p instanceof JSObject po) return po;
+					}
+					return JSContext.LazyFunction.FUNCTION_PROTOTYPE;
+				} else {
+					Object objCtor = realm.get("Object");
+					if (objCtor instanceof JSObject oc) {
+						Object p = oc.get("prototype");
+						if (p instanceof JSObject po) return po;
+					}
+					return JSContext.LazyObject.OBJECT_PROTOTYPE;
+				}
+			}
+		}
+		return "%Array.prototype%".equals(intrinsicDefaultProto)
+				? JSContext.LazyArray.ARRAY_PROTOTYPE
+				: JSContext.LazyObject.OBJECT_PROTOTYPE;
+	}
+
 	public static Object newGeneric(Object ctor, Object[] args) throws Throwable {
+		return newGeneric(ctor, args, ctor);
+	}
+
+	public static Object newGeneric(Object ctor, Object[] args, Object newTarget) throws Throwable {
 		if (ctor instanceof Class<?> clazz) {
 			Constructor<?> c = MethodResolver.findConstructor(clazz, args.length);
 			if (c != null) {
@@ -2588,16 +2640,43 @@ public class JSLinker {
 			throw JSContext.makeTypeError(bm.getMethodName() + " is not a constructor");
 		}
 
+		if (ctor == JSContext.LazySymbol.SYMBOL) {
+			throw JSContext.makeTypeError("Symbol is not a constructor");
+		}
+
 		if (ctor == JSContext.LazyDate.DATE) {
-			return ((JSFunction) ctor).call(null, new JSContext.JSDate(0, JSContext.LazyDate.DATE_PROTOTYPE), args);
+			JSContext currentCx = JSContext.current();
+			JSObject proto = getPrototypeFromConstructor(currentCx, newTarget, "%Date.prototype%");
+			return ((JSFunction) ctor).call(currentCx, new JSContext.JSDate(0, proto != null ? proto : JSContext.LazyDate.DATE_PROTOTYPE), args);
+		}
+
+		if (ctor == JSContext.LazyArray.ARRAY || ctor instanceof JSContext.JSArrayConstructor) {
+			JSContext currentCx = JSContext.current();
+			JSObject proto = getPrototypeFromConstructor(currentCx, newTarget, "%Array.prototype%");
+			Object res = ((JSFunction) ctor).call(currentCx, null, args);
+			if (res instanceof JSObject jo) {
+				jo.setPrototype(proto);
+				return jo;
+			}
+			return res;
 		}
 
 		if (ctor instanceof JSFunction) {
-			Object    proto     = (ctor instanceof JSObject jsObj) ? jsObj.get("prototype") : JSUndefined.INSTANCE;
-			JSObject  newObj    = (proto instanceof JSObject sp) ? new JSObject(sp) : new JSObject();
 			JSContext currentCx = JSContext.current();
-			Object    res       = ((JSFunction) ctor).call(currentCx, newObj, args);
+			JSObject proto = getPrototypeFromConstructor(currentCx, newTarget, "%Object.prototype%");
+			JSObject newObj = (proto != null) ? new JSObject(proto) : new JSObject();
+			if (ctor instanceof JSObject ctorObj && ctorObj.realm != null) {
+				newObj.realm = ctorObj.realm;
+			} else if (newTarget instanceof JSObject ntObj && ntObj.realm != null) {
+				newObj.realm = ntObj.realm;
+			} else {
+				newObj.realm = currentCx;
+			}
+			Object res = ((JSFunction) ctor).call(currentCx, newObj, args);
 			if (res instanceof JSBridgedObject || res instanceof JSObject || (res != null && res != JSUndefined.INSTANCE && !(res instanceof Number || res instanceof Boolean || res instanceof String || res instanceof Character))) {
+				if (res instanceof JSObject jo && jo.realm == null) {
+					jo.realm = newObj.realm;
+				}
 				return res;
 			}
 			return newObj;
@@ -2614,6 +2693,9 @@ public class JSLinker {
 		try {
 			func.setPrototype(JSContext.LazyFunction.FUNCTION_PROTOTYPE);
 		} catch (Throwable ignored) { }
+		if (func.realm == null) {
+			func.realm = JSContext.current();
+		}
 		func.put("name", name != null ? name : "");
 		func.put("length", length);
 		JSObject proto = new JSObject();

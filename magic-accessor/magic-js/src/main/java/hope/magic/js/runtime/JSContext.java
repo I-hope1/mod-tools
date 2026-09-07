@@ -9,6 +9,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 public class JSContext {
 	private static final ConcurrentHashMap<String, Integer> GLOBAL_SLOT_REGISTRY = new ConcurrentHashMap<>();
@@ -291,6 +292,8 @@ public class JSContext {
 	public static final int SLOT_WINDOW          = getGlobalSlot("window");
 	public static final int SLOT_GLOBAL          = getGlobalSlot("global");
 	public static final int SLOT_DOLLAR_262      = getGlobalSlot("$262");
+	public static final int SLOT_SYMBOL          = getGlobalSlot("Symbol");
+	public static volatile Consumer<JSContext> realmCreatedListener;
 
 	public static class JSBuiltinMethod extends JSObject implements JSFunction {
 		private static final List<String> BUILTIN_METHOD_PROPS = List.of("name", "length");
@@ -642,7 +645,7 @@ public class JSContext {
 			JSObject proto = new JSObject(shape, null);
 			proto.put("hasOwnProperty", makeMethod("hasOwnProperty", 1, (cx, thisObj, args) -> {
 				if (args.length == 0) return Boolean.FALSE;
-				String key = JSOps.toStr(args[0]);
+				String key = JSArray.toPropertyKey(args[0]);
 				if (thisObj instanceof JSObject jsObj) {
 					return jsObj.hasOwnProperty(key);
 				}
@@ -663,6 +666,8 @@ public class JSContext {
 					tag = "Date";
 				} else if (thisObj instanceof JSRegExp) {
 					tag = "RegExp";
+				} else if (thisObj instanceof JSSymbol) {
+					tag = "Symbol";
 				} else {
 					tag = "Object";
 				}
@@ -672,7 +677,7 @@ public class JSContext {
 			proto.put("valueOf", makeMethod("valueOf", 0, (cx, thisObj, args) -> thisObj));
 			proto.put("propertyIsEnumerable", makeMethod("propertyIsEnumerable", 1, (cx, thisObj, args) -> {
 				if (args.length == 0 || !(thisObj instanceof JSObject jsObj)) return Boolean.FALSE;
-				String key = JSOps.toStr(args[0]);
+				String key = JSArray.toPropertyKey(args[0]);
 				if (thisObj instanceof JSGlobalThis globalThis) {
 					if (globalThis.deletedGlobals.contains(key)) return Boolean.FALSE;
 					int symId = SymbolTable.lookupId(key);
@@ -829,6 +834,29 @@ public class JSContext {
 							res.put(k, d);
 						}
 					}
+					for (JSSymbol sym : jsObj.getOwnPropertySymbols()) {
+						Object d = getOwnPropertyDescriptorCore(cx, target, sym);
+						if (d != JSUndefined.INSTANCE) {
+							res.put(sym.getKey(), d);
+						}
+					}
+				}
+				return res;
+			});
+
+			ctor.put("getOwnPropertySymbols", (JSFunction) (cx, thisObj, args) -> {
+				if (args.length == 0 || args[0] == null || args[0] == JSUndefined.INSTANCE) {
+					throw new RuntimeException("TypeError: Cannot convert undefined or null to object");
+				}
+				Object target = args[0];
+				JSObject jsObj = (target instanceof JSBridgedObject bridged)
+				 ? bridged.getJSObject()
+				 : (target instanceof JSObject obj ? obj : null);
+				JSArray res = new JSArray();
+				if (jsObj != null) {
+					for (JSSymbol sym : jsObj.getOwnPropertySymbols()) {
+						res.push(sym);
+					}
 				}
 				return res;
 			});
@@ -873,7 +901,7 @@ public class JSContext {
 			JSFunction getter = (getVal instanceof JSFunction fn) ? fn : null;
 			JSFunction setter = (setVal instanceof JSFunction fn) ? fn : null;
 
-			String key    = JSOps.toStr(propKey);
+			String key    = JSArray.toPropertyKey(propKey);
 			int    propId = SymbolTable.id(key);
 
 			int     offset = jsObj.shape.getOffset(propId);
@@ -1054,7 +1082,7 @@ public class JSContext {
 			 : (target instanceof JSObject obj ? obj : null);
 			if (jsObj == null) return JSUndefined.INSTANCE;
 
-			String key    = JSOps.toStr(propKey);
+			String key    = JSArray.toPropertyKey(propKey);
 			int    propId = SymbolTable.id(key);
 
 			if (jsObj instanceof JSGlobalThis globalThis) {
@@ -1188,6 +1216,58 @@ public class JSContext {
 				Object thisArg = args.length > 2 ? args[2] : JSUndefined.INSTANCE;
 
 				JSArray res = new JSArray();
+				Object usingIterator = JSUndefined.INSTANCE;
+				if (items instanceof JSObject jo) {
+					usingIterator = jo.get(JSSymbol.ITERATOR);
+				}
+				if (usingIterator != JSUndefined.INSTANCE && usingIterator != null) {
+					if (!(usingIterator instanceof JSFunction itFn)) {
+						throw makeTypeError("Result of the Symbol.iterator method is not a function");
+					}
+					Object iterator;
+					try {
+						iterator = itFn.call(cx, items, JSFunction.EMPTY_ARGS);
+					} catch (Throwable t) {
+						if (t instanceof RuntimeException re) throw re;
+						throw new RuntimeException(t);
+					}
+					if (iterator == null || !(iterator instanceof JSObject itObj)) {
+						throw makeTypeError("Iterator result is not an object");
+					}
+					Object nextProp = itObj.get("next");
+					if (!(nextProp instanceof JSFunction nextFn)) {
+						throw makeTypeError("iterator.next is not a function");
+					}
+					long k = 0;
+					while (true) {
+						Object nextResult;
+						try {
+							nextResult = nextFn.call(cx, iterator, JSFunction.EMPTY_ARGS);
+						} catch (Throwable t) {
+							if (t instanceof RuntimeException re) throw re;
+							throw new RuntimeException(t);
+						}
+						if (nextResult == null || !(nextResult instanceof JSObject nextObj)) {
+							throw makeTypeError("Iterator next result is not an object");
+						}
+						Object done = nextObj.get("done");
+						if (JSOps.isTruthy(done)) {
+							break;
+						}
+						Object val = nextObj.get("value");
+						if (mapFn != null) {
+							try {
+								val = mapFn.call2(cx, thisArg, val, (double) k);
+							} catch (Throwable t) {
+								if (t instanceof RuntimeException re) throw re;
+								throw new RuntimeException(t);
+							}
+						}
+						res.push(val);
+						k++;
+					}
+					return res;
+				}
 				if (items instanceof Iterable<?> it) {
 					long idx = 0;
 					for (Object item : it) {
@@ -1824,6 +1904,13 @@ public class JSContext {
 				}
 				return "[object Array]";
 			}));
+
+			JSObject valuesFn = makeMethod("values", 0, (cx, thisObj, args) -> {
+				Object O = toObject(thisObj);
+				return new JSArrayIterator(O);
+			});
+			proto.put("values", valuesFn);
+			proto.put(JSSymbol.ITERATOR.getKey(), valuesFn);
 		}
 
 		private static Object fastDenseReduce(JSContext cx, JSArray jsArr, JSFunction callback, Object[] args)
@@ -2031,6 +2118,34 @@ public class JSContext {
 						target.push(val);
 					}
 				}
+			}
+		}
+
+		public static class JSArrayIterator extends JSObject {
+			private final Object target;
+			private final long length;
+			private long index = 0;
+			private boolean done = false;
+
+			public JSArrayIterator(Object target) {
+				super(LazyObject.OBJECT_PROTOTYPE);
+				this.target = target;
+				this.length = toLength(target);
+				put("next", makeMethod("next", 0, (cx, thisObj, args) -> {
+					JSObject res = new JSObject();
+					if (index >= length || done) {
+						done = true;
+						res.put("value", JSUndefined.INSTANCE);
+						res.put("done", Boolean.TRUE);
+					} else {
+						Object val = getProperty(target, index);
+						index++;
+						res.put("value", val);
+						res.put("done", Boolean.FALSE);
+					}
+					return res;
+				}));
+				put(JSSymbol.ITERATOR.getKey(), makeMethod("[Symbol.iterator]", 0, (cx, thisObj, args) -> this));
 			}
 		}
 	}
@@ -2280,13 +2395,77 @@ public class JSContext {
 					constructArgs = JSFunction.EMPTY_ARGS;
 				}
 				try {
-					return JSLinker.newGeneric(target, constructArgs);
+					return JSLinker.newGeneric(target, constructArgs, newTarget);
 				} catch (Throwable t) {
 					if (t instanceof RuntimeException re) throw re;
 					throw new RuntimeException(t);
 				}
 			}));
 			return reflect;
+		}
+	}
+
+	public static class LazySymbol {
+		public static final JSObject SYMBOL_PROTOTYPE = createSymbolPrototype();
+		public static final JSObject SYMBOL           = createSymbolConstructor(SYMBOL_PROTOTYPE);
+
+		private static final Map<String, JSSymbol> SYMBOL_REGISTRY = new ConcurrentHashMap<>();
+
+		private static JSObject createSymbolPrototype() {
+			JSObject proto = new JSObject(LazyObject.OBJECT_PROTOTYPE);
+			proto.put("constructor", LazyObject.OBJECT);
+			proto.put("toString", makeMethod("toString", 0, (cx, thisObj, args) -> {
+				if (thisObj instanceof JSSymbol sym) return sym.toString();
+				throw makeTypeError("Symbol.prototype.toString requires that 'this' be a Symbol");
+			}));
+			proto.put("valueOf", makeMethod("valueOf", 0, (cx, thisObj, args) -> {
+				if (thisObj instanceof JSSymbol sym) return sym;
+				throw makeTypeError("Symbol.prototype.valueOf requires that 'this' be a Symbol");
+			}));
+			proto.put(JSSymbol.TO_STRING_TAG.getKey(), "Symbol");
+			proto.put(JSSymbol.TO_PRIMITIVE.getKey(), makeMethod("[Symbol.toPrimitive]", 1, (cx, thisObj, args) -> {
+				if (thisObj instanceof JSSymbol sym) return sym;
+				throw makeTypeError("Symbol.prototype[Symbol.toPrimitive] requires that 'this' be a Symbol");
+			}));
+			return proto;
+		}
+
+		private static JSObject createSymbolConstructor(JSObject proto) {
+			JSBuiltinConstructor ctor = new JSBuiltinConstructor("Symbol", 0, proto, (cx, thisObj, args) -> {
+				String desc = (args.length > 0 && args[0] != JSUndefined.INSTANCE && args[0] != null) ? JSOps.toStr(args[0]) : null;
+				return new JSSymbol(desc);
+			});
+			proto.put("constructor", ctor);
+
+			ctor.put("iterator", JSSymbol.ITERATOR);
+			ctor.put("asyncIterator", JSSymbol.ASYNC_ITERATOR);
+			ctor.put("toStringTag", JSSymbol.TO_STRING_TAG);
+			ctor.put("hasInstance", JSSymbol.HAS_INSTANCE);
+			ctor.put("isConcatSpreadable", JSSymbol.IS_CONCAT_SPREADABLE);
+			ctor.put("species", JSSymbol.SPECIES);
+			ctor.put("toPrimitive", JSSymbol.TO_PRIMITIVE);
+			ctor.put("unscopables", JSSymbol.UNSCOPABLES);
+			ctor.put("match", JSSymbol.MATCH);
+			ctor.put("replace", JSSymbol.REPLACE);
+			ctor.put("search", JSSymbol.SEARCH);
+			ctor.put("split", JSSymbol.SPLIT);
+
+			ctor.put("for", makeMethod("for", 1, (cx, thisObj, args) -> {
+				String keyStr = (args.length > 0 && args[0] != JSUndefined.INSTANCE && args[0] != null) ? JSOps.toStr(args[0]) : "undefined";
+				return SYMBOL_REGISTRY.computeIfAbsent(keyStr, JSSymbol::new);
+			}));
+
+			ctor.put("keyFor", makeMethod("keyFor", 1, (cx, thisObj, args) -> {
+				if (args.length == 0 || !(args[0] instanceof JSSymbol sym)) {
+					throw makeTypeError("Symbol.keyFor requires that argument be a symbol");
+				}
+				for (Map.Entry<String, JSSymbol> entry : SYMBOL_REGISTRY.entrySet()) {
+					if (entry.getValue() == sym) return entry.getKey();
+				}
+				return JSUndefined.INSTANCE;
+			}));
+
+			return ctor;
 		}
 	}
 
@@ -2880,7 +3059,7 @@ public class JSContext {
 
 	public static class LazyFunction {
 		public static final JSObject FUNCTION_PROTOTYPE = createFunctionPrototype();
-		public static final JSObject FUNCTION           = createFunctionConstructor(FUNCTION_PROTOTYPE);
+		public static final JSObject FUNCTION           = createFunctionConstructor(null);
 
 		private static JSObject createFunctionPrototype() {
 			JSObject proto = new JSObject(LazyObject.OBJECT_PROTOTYPE);
@@ -2930,19 +3109,26 @@ public class JSContext {
 			return proto;
 		}
 
-		private static JSObject createFunctionConstructor(JSObject proto) {
-			return new JSBuiltinConstructor("Function", 1, proto, (cx, thisObj, args) -> {
-				StringBuilder sb = new StringBuilder("function anonymous(");
+		public static JSObject createFunctionConstructor(JSContext realm) {
+			JSBuiltinConstructor ctor = new JSBuiltinConstructor("Function", 1, FUNCTION_PROTOTYPE, (cx, thisObj, args) -> {
+				StringBuilder sb = new StringBuilder("(function anonymous(");
 				for (int i = 0; i < args.length - 1; i++) {
 					if (i > 0) sb.append(", ");
 					sb.append(JSOps.toStr(args[i]));
 				}
 				sb.append(") {\n");
 				if (args.length > 0) sb.append(JSOps.toStr(args[args.length - 1]));
-				sb.append("\n}");
+				sb.append("\n})");
 				JSScript script = JSCompiler.compile(sb.toString());
-				return script.run(cx);
+				JSContext evalCx = (realm != null) ? realm : (cx != null ? cx : JSContext.current());
+				Object fn = script.run(evalCx);
+				if (fn instanceof JSObject jo) {
+					jo.realm = evalCx;
+				}
+				return fn;
 			});
+			ctor.realm = realm;
+			return ctor;
 		}
 	}
 
@@ -3065,7 +3251,7 @@ public class JSContext {
 
 		private static final Set<String> BUILTIN_GLOBALS = Set.of(
 			"NaN", "Infinity", "undefined",
-			"Object", "Function", "Array", "String", "Boolean", "Number",
+			"Object", "Function", "Array", "String", "Boolean", "Number", "Symbol",
 			"Date", "RegExp", "Error", "EvalError", "RangeError", "ReferenceError",
 			"SyntaxError", "TypeError", "URIError", "Math",
 			"Promise", "Proxy", "Reflect",
@@ -3344,6 +3530,9 @@ public class JSContext {
 			}));
 			put("createRealm", makeMethod("createRealm", 0, (c, thisObj, args) -> {
 				JSContext realmCtx = new JSContext();
+				if (realmCreatedListener != null) {
+					realmCreatedListener.accept(realmCtx);
+				}
 				return realmCtx.get("$262");
 			}));
 			put("drainMicrotasks", makeMethod("drainMicrotasks", 0, (c, thisObj, args) -> {
@@ -3413,7 +3602,7 @@ public class JSContext {
 		} else if (slot == SLOT_STRING) {
 			val = LazyPrimitiveConstructors.STRING;
 		} else if (slot == SLOT_FUNCTION) {
-			val = LazyFunction.FUNCTION;
+			val = LazyFunction.createFunctionConstructor(this);
 		} else if (slot == SLOT_PROXY) {
 			val = LazyProxy.PROXY;
 		} else if (slot == SLOT_REFLECT) {
@@ -3428,6 +3617,8 @@ public class JSContext {
 			val = getGlobalThis();
 		} else if (slot == SLOT_DOLLAR_262) {
 			val = new Dollar262(this);
+		} else if (slot == SLOT_SYMBOL) {
+			val = LazySymbol.SYMBOL;
 		}
 
 		if (val != null) {

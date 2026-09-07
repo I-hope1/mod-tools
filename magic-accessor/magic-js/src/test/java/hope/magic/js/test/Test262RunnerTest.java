@@ -34,6 +34,8 @@ public class Test262RunnerTest {
 	 * Installs the standard TC39 Test262 assert harness into the JSContext.
 	 */
 	public static void installTest262Harness(JSContext cx) {
+		JSContext.realmCreatedListener = Test262RunnerTest::installTest262Harness;
+
 		// Test262Error class / constructor
 		cx.set("Test262Error", (JSFunction) (ctx, thisObj, args) -> {
 			String msg = args.length > 0 && args[0] != null ? JSOps.toStr(args[0]) : "Test262Error";
@@ -1337,6 +1339,81 @@ public class Test262RunnerTest {
 				  enumerable: false,
 				  configurable: true,
 				});
+			""");
+		}
+	}
+
+	@Nested
+	@DisplayName("TC39 Test262: built-ins/Array")
+	class BuiltinArrayTest {
+
+		@Test
+		@DisplayName("test262: sec-array-len - Default [[Prototype]] value derived from realm of the NewTarget")
+		public void testArrayLenRealmPrototype() {
+			runTest262("""
+				/*---
+				esid: sec-array-len
+				description: Default [[Prototype]] value derived from realm of the NewTarget.
+				info: |
+				  Array ( len )
+
+				  ...
+				  3. If NewTarget is undefined, let newTarget be the active function object; else let newTarget be NewTarget.
+				  4. Let proto be ? GetPrototypeFromConstructor(newTarget, "%Array.prototype%").
+				  5. Let array be ! ArrayCreate(0, proto).
+				  ...
+				  9. Return array.
+
+				  GetPrototypeFromConstructor ( constructor, intrinsicDefaultProto )
+
+				  ...
+				  3. Let proto be ? Get(constructor, "prototype").
+				  4. If Type(proto) is not Object, then
+				    a. Let realm be ? GetFunctionRealm(constructor).
+				    b. Set proto to realm's intrinsic object named intrinsicDefaultProto.
+				  5. Return proto.
+				features: [cross-realm, Reflect, Symbol]
+				---*/
+
+				var other = $262.createRealm().global;
+				var newTarget = new other.Function();
+				var arr;
+
+				newTarget.prototype = undefined;
+				arr = Reflect.construct(Array, [1], newTarget);
+				assert.sameValue(Object.getPrototypeOf(arr), other.Array.prototype);
+
+				newTarget.prototype = null;
+				arr = Reflect.construct(Array, [1], newTarget);
+				assert.sameValue(Object.getPrototypeOf(arr), other.Array.prototype);
+
+				newTarget.prototype = true;
+				arr = Reflect.construct(Array, [1], newTarget);
+				assert.sameValue(Object.getPrototypeOf(arr), other.Array.prototype);
+
+				newTarget.prototype = '';
+				arr = Reflect.construct(Array, [1], newTarget);
+				assert.sameValue(Object.getPrototypeOf(arr), other.Array.prototype);
+
+				newTarget.prototype = Symbol();
+				arr = Reflect.construct(Array, [1], newTarget);
+				assert.sameValue(Object.getPrototypeOf(arr), other.Array.prototype);
+
+				newTarget.prototype = 0;
+				arr = Reflect.construct(Array, [1], newTarget);
+				assert.sameValue(Object.getPrototypeOf(arr), other.Array.prototype);
+			""");
+		}
+
+		@Test
+		@DisplayName("test262: sec-array.from - Error advancing iterator via Symbol.iterator")
+		public void testArrayFromIteratorError() {
+			runTest262("""
+				var items = {};
+				items[Symbol.iterator] = function() {
+				  return { next: function() { throw new Test262Error(); } };
+				};
+				assert.throws(Test262Error, function() { Array.from(items); });
 			""");
 		}
 	}

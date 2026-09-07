@@ -8,6 +8,9 @@ public class JSOps {
 	public static final long UINT32_MASK   = 0xFFFFFFFFL;
 
 	public static Object add(Object a, Object b) {
+		if (a instanceof JSSymbol || b instanceof JSSymbol) {
+			throw JSContext.makeTypeError("Cannot convert a Symbol value to a string / number");
+		}
 		if (a instanceof Double && b instanceof Double) return (Double) a + (Double) b;
 		if (a instanceof Integer && b instanceof Integer) {
 			long res = (long) (Integer) a + (long) (Integer) b;
@@ -233,6 +236,7 @@ public class JSOps {
 		if (b == null || b == JSUndefined.INSTANCE) return false;
 		if (a instanceof Boolean) a = ((Boolean) a) ? 1.0 : 0.0;
 		if (b instanceof Boolean) b = ((Boolean) b) ? 1.0 : 0.0;
+		if (a instanceof JSSymbol || b instanceof JSSymbol) return a == b;
 
 		if (a instanceof Number && b instanceof Number) {
 			return ((Number) a).doubleValue() == ((Number) b).doubleValue();
@@ -497,6 +501,7 @@ public class JSOps {
 	}
 
 	public static double toDoubleSlow(Object val) {
+		if (val instanceof JSSymbol) throw JSContext.makeTypeError("Cannot convert a Symbol value to a number");
 		if (val instanceof Number n) return n.doubleValue();
 		if (val == null) return 0.0;
 		if (val == JSUndefined.INSTANCE) return Double.NaN;
@@ -596,6 +601,7 @@ public class JSOps {
 	public static String toStrSlow(Object val) {
 		if (val == null) return "null";
 		if (val == JSUndefined.INSTANCE) return "undefined";
+		if (val instanceof JSSymbol sym) return sym.toString();
 		if (val instanceof Boolean b) {
 			return b ? "true" : "false";
 		}
@@ -783,6 +789,7 @@ public class JSOps {
 		if (val instanceof Boolean) return "boolean";
 		if (val instanceof Number) return "number";
 		if (val instanceof CharSequence) return "string";
+		if (val instanceof JSSymbol) return "symbol";
 		if (val instanceof JSFunction) return "function";
 		if (val instanceof java.lang.reflect.Executable || val instanceof java.lang.invoke.MethodHandle) return "function";
 		return "object";

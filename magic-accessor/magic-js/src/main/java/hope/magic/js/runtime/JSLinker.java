@@ -755,7 +755,7 @@ public class JSLinker {
 	//region Multi-Shape Guard Stubs (同偏移多态坍缩快速守卫)
 
 	public static boolean isMatchMask(long expectedMask, Object target) {
-		return target instanceof JSObject jsObj && (int)(jsObj.shape.mask & expectedMask) != 0;
+		return target instanceof JSObject jsObj && (int) (jsObj.shape.mask & expectedMask) != 0;
 	}
 
 	/**
@@ -3122,45 +3122,64 @@ public class JSLinker {
 	public static void setSlot6Double(JSObject target, double val) { target.prim6 = Double.doubleToRawLongBits(val); }
 	public static void setSlot7Double(JSObject target, double val) { target.prim7 = Double.doubleToRawLongBits(val); }
 
+
+	private static Object boxDoubleBits(long bits) {
+		return Double.longBitsToDouble(bits); // Double.valueOf(Double.longBitsToDouble(bits))
+	}
 	public static Object getSlot0Object(JSObject obj) {
-		if ((int)(obj.doubleFieldMask & 1L) != 0) return Double.longBitsToDouble(obj.prim0);
-		Object val = obj.obj0;
-		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
+		if (((int) obj.doubleFieldMask & 1) != 0) return boxDoubleBits(obj.prim0);
+		Object val;
+		if ((val = obj.obj0) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		return val;
 	}
+
 	public static Object getSlot1Object(JSObject obj) {
-		if ((int)(obj.doubleFieldMask & 2L) != 0) return Double.longBitsToDouble(obj.prim1);
-		Object val = obj.obj1;
-		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
+		if (((int) obj.doubleFieldMask & 2) != 0) return boxDoubleBits(obj.prim1);
+		Object val;
+		if ((val = obj.obj1) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		return val;
 	}
+
 	public static Object getSlot2Object(JSObject obj) {
-		if ((int)(obj.doubleFieldMask & 4L) != 0) return Double.longBitsToDouble(obj.prim2);
-		Object val = obj.obj2;
-		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
+		if (((int) obj.doubleFieldMask & 4) != 0) return boxDoubleBits(obj.prim2);
+		Object val;
+		if ((val = obj.obj2) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		return val;
 	}
+
 	public static Object getSlot3Object(JSObject obj) {
-		if ((int)(obj.doubleFieldMask & 8L) != 0) return Double.longBitsToDouble(obj.prim3);
-		Object val = obj.obj3;
-		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
+		if (((int) obj.doubleFieldMask & 8) != 0) return boxDoubleBits(obj.prim3);
+		Object val;
+		if ((val = obj.obj3) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		return val;
 	}
+
 	public static Object getSlot4Object(JSObject obj) {
-		if ((int)(obj.doubleFieldMask & 16L) != 0) return Double.longBitsToDouble(obj.prim4);
-		Object val = obj.obj4;
-		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
+		if (((int) obj.doubleFieldMask & 16) != 0) return boxDoubleBits(obj.prim4);
+		Object val;
+		if ((val = obj.obj4) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		return val;
 	}
+
 	public static Object getSlot5Object(JSObject obj) {
-		if ((int)(obj.doubleFieldMask & 32L) != 0) return Double.longBitsToDouble(obj.prim5);
-		Object val = obj.obj5;
-		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
+		if (((int) obj.doubleFieldMask & 32) != 0) return boxDoubleBits(obj.prim5);
+		Object val;
+		if ((val = obj.obj5) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		return val;
 	}
+
 	public static Object getSlot6Object(JSObject obj) {
-		if ((int)(obj.doubleFieldMask & 64L) != 0) return Double.longBitsToDouble(obj.prim6);
-		Object val = obj.obj6;
-		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
+		if (((int) obj.doubleFieldMask & 64) != 0) return boxDoubleBits(obj.prim6);
+		Object val;
+		if ((val = obj.obj6) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		return val;
 	}
+
 	public static Object getSlot7Object(JSObject obj) {
-		if ((int)(obj.doubleFieldMask & 128L) != 0) return Double.longBitsToDouble(obj.prim7);
-		Object val = obj.obj7;
-		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
+		if (((int) obj.doubleFieldMask & 128) != 0) return boxDoubleBits(obj.prim7);
+		Object val;
+		if ((val = obj.obj7) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		return val;
 	}
 
 	public static void setSlot0Object(JSObject target, Object val) {
@@ -3267,13 +3286,17 @@ public class JSLinker {
 	public static double getJSObjSlotAsDouble(int slot, Object target) {
 		JSObject obj = (JSObject) target;
 		if (obj.isDoubleSlot(slot)) {
-			return (long) obj.getDoubleSlot(slot);
+			return obj.getDoubleSlot(slot);
 		}
-		return JSOps.toLong(obj.getSlot(slot));
+		return JSOps.toDouble(obj.getSlot(slot));
 	}
 
 	public static long getJSObjSlotAsLong(int slot, Object target) {
-		return JSOps.toLong(((JSObject) target).getSlot(slot));
+		JSObject obj = (JSObject) target;
+		if (obj.isDoubleSlot(slot)) {
+			return (long) obj.getDoubleSlot(slot);
+		}
+		return JSOps.toLong(obj.getSlot(slot));
 	}
 
 	public static int getPropIntFallback(ChainedCallSite site, Object target, String propName) {
@@ -3471,14 +3494,16 @@ public class JSLinker {
 	}
 
 	public static int getIntDirectPrim(long offset, Object target) { return UNSAFE.getInt(target, offset); }
-	public static int getDoubleAsIntPrim(long offset, Object target) { return (int) UNSAFE.getDouble(target, offset); }
+	public static int getDoubleAsIntPrim(long offset,
+	                                     Object target) { return JSOps.toInt(UNSAFE.getDouble(target, offset)); }
 	public static int getLongAsIntPrim(long offset, Object target) { return (int) UNSAFE.getLong(target, offset); }
 	public static int getFloatAsIntPrim(long offset, Object target) { return (int) UNSAFE.getFloat(target, offset); }
 	public static int getShortAsIntPrim(long offset, Object target) { return UNSAFE.getShort(target, offset); }
 	public static int getByteAsIntPrim(long offset, Object target) { return UNSAFE.getByte(target, offset); }
 	public static int getCharAsIntPrim(long offset, Object target) { return UNSAFE.getChar(target, offset); }
+	// 在字节码层面就是 1 个字节（0x00 或 0x01）
 	public static int getBooleanAsIntPrim(long offset,
-	                                      Object target) { return UNSAFE.getBoolean(target, offset) ? 1 : 0; }
+	                                      Object target) { return UNSAFE.getByte(target, offset); }
 	public static int getObjectAsIntPrim(long offset,
 	                                     Object target) { return JSOps.toInt(UNSAFE.getObject(target, offset)); }
 
@@ -3494,8 +3519,9 @@ public class JSLinker {
 	                                         Object target) { return (double) UNSAFE.getByte(target, offset); }
 	public static double getCharAsDoublePrim(long offset,
 	                                         Object target) { return (double) UNSAFE.getChar(target, offset); }
+	// 在字节码层面就是 1 个字节（0x00 或 0x01）
 	public static double getBooleanAsDoublePrim(long offset,
-	                                            Object target) { return UNSAFE.getBoolean(target, offset) ? 1.0 : 0.0; }
+	                                            Object target) { return (double) UNSAFE.getByte(target, offset); }
 	public static double getObjectAsDoublePrim(long offset,
 	                                           Object target) { return JSOps.toDouble(UNSAFE.getObject(target, offset)); }
 
@@ -3506,8 +3532,9 @@ public class JSLinker {
 	public static long getShortAsLongPrim(long offset, Object target) { return (long) UNSAFE.getShort(target, offset); }
 	public static long getByteAsLongPrim(long offset, Object target) { return (long) UNSAFE.getByte(target, offset); }
 	public static long getCharAsLongPrim(long offset, Object target) { return (long) UNSAFE.getChar(target, offset); }
+	// 在字节码层面就是 1 个字节（0x00 或 0x01）
 	public static long getBooleanAsLongPrim(long offset,
-	                                        Object target) { return UNSAFE.getBoolean(target, offset) ? 1L : 0L; }
+	                                        Object target) { return (long) UNSAFE.getByte(target, offset); }
 	public static long getObjectAsLongPrim(long offset,
 	                                       Object target) { return JSOps.toLong(UNSAFE.getObject(target, offset)); }
 

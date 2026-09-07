@@ -754,6 +754,72 @@ public class Test262RunnerTest {
 		}
 
 		@Test
+		@DisplayName("test262: S15.4.5.2_A3_T2 - Array length set with Number object wrapper and automatic deletion")
+		public void testArrayLengthSetNumberObject() {
+			runTest262("""
+				/*---
+				info: |
+				    If the length property is changed, every property whose name
+				    is an array index whose value is not smaller than the new length is automatically deleted
+				es5id: 15.4.5.2_A3_T2
+				description: >
+				    If new length greater than the name of every property whose name
+				    is an array index
+				---*/
+
+				var x = [];
+				x[1] = 1;
+				x[3] = 3;
+				x[5] = 5;
+				x.length = 4;
+				assert.sameValue(x.length, 4, 'The value of x.length is expected to be 4');
+				assert.sameValue(x[5], undefined, 'The value of x[5] is expected to equal undefined');
+				assert.sameValue(x[3], 3, 'The value of x[3] is expected to be 3');
+
+				x.length = new Number(6);
+				assert.sameValue(x[5], undefined, 'The value of x[5] is expected to equal undefined');
+
+				x.length = 0;
+				assert.sameValue(x[0], undefined, 'The value of x[0] is expected to equal undefined');
+
+				x.length = 1;
+				assert.sameValue(x[1], undefined, 'The value of x[1] is expected to equal undefined');
+			""");
+		}
+
+		@Test
+		@DisplayName("test262: S15.4_A1.1_T6 - Array index vs property key with boolean primitive and Boolean object")
+		public void testArrayBooleanObjectPropertyKey() {
+			runTest262("""
+				/*---
+				info: |
+				    A property name P (in the form of a string value) is an array index
+				    if and only if ToString(ToUint32(P)) is equal to P and ToUint32(P) is not equal to 2^32 - 1
+				es5id: 15.4_A1.1_T6
+				description: Checking for boolean primitive and Boolean object
+				---*/
+
+				var x = [];
+
+				x[true] = 1;
+				assert.sameValue(x[1], undefined, 'The value of x[1] is expected to equal undefined');
+				assert.sameValue(x["true"], 1, 'The value of x["true"] is expected to be 1');
+
+				x[new Boolean(true)] = 1;
+				assert.sameValue(x[1], undefined, 'The value of x[1] is expected to equal undefined');
+				assert.sameValue(x["true"], 1, 'The value of x["true"] is expected to be 1');
+
+				x[false] = 0;
+				assert.sameValue(x[0], undefined, 'The value of x[0] is expected to equal undefined');
+				assert.sameValue(x["false"], 0, 'The value of x["false"] is expected to be 0');
+
+				x[new Boolean(false)] = 0;
+				assert.sameValue(x[0], undefined, 'The value of x[0] is expected to equal undefined');
+				assert.sameValue(x["false"], 0, 'The value of x["false"] is expected to be 0');
+			""");
+		}
+
+		@Test
 		@DisplayName("test262: S22.1.3.18 - Array.prototype.reduce & reduceRight")
 		public void testArrayPrototypeReduce() {
 			runTest262("""

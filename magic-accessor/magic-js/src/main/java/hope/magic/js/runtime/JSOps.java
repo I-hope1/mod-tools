@@ -14,6 +14,14 @@ public class JSOps {
 			if (res >= Integer.MIN_VALUE && res <= Integer.MAX_VALUE) return (int) res;
 			return (double) res;
 		}
+		if (a instanceof JSObject || b instanceof JSObject) {
+			Object p1 = (a instanceof JSObject) ? toPrimitive(a, false) : a;
+			Object p2 = (b instanceof JSObject) ? toPrimitive(b, false) : b;
+			if (p1 instanceof String || p2 instanceof String) {
+				return toStr(p1) + toStr(p2);
+			}
+			return toDouble(p1) + toDouble(p2);
+		}
 		if (a instanceof String || b instanceof String) {
 			return toStr(a) + toStr(b);
 		}
@@ -43,10 +51,16 @@ public class JSOps {
 	}
 
 	public static String add(String a, Object b) {
+		if (b instanceof JSObject) {
+			return a + toStr(toPrimitive(b, false));
+		}
 		return a + toStr(b);
 	}
 
 	public static String add(Object a, String b) {
+		if (a instanceof JSObject) {
+			return toStr(toPrimitive(a, false)) + b;
+		}
 		return toStr(a) + b;
 	}
 
@@ -228,6 +242,12 @@ public class JSOps {
 		}
 		if (a instanceof Number && b instanceof String) {
 			return ((Number) a).doubleValue() == toDouble(b);
+		}
+		if (a instanceof JSObject && (b instanceof Number || b instanceof String)) {
+			return isEq(toPrimitive(a, false), b);
+		}
+		if ((a instanceof Number || a instanceof String) && b instanceof JSObject) {
+			return isEq(a, toPrimitive(b, false));
 		}
 		if (a instanceof String || b instanceof String) {
 			return Objects.equals(a.toString(), b.toString());
@@ -490,6 +510,10 @@ public class JSOps {
 				return Double.NaN;
 			}
 		}
+		if (val instanceof JSObject jo) {
+			Object prim = toPrimitive(jo, false);
+			return toDouble(prim);
+		}
 		return Double.NaN;
 	}
 
@@ -568,6 +592,9 @@ public class JSOps {
 	public static String toStrSlow(Object val) {
 		if (val == null) return "null";
 		if (val == JSUndefined.INSTANCE) return "undefined";
+		if (val instanceof Boolean b) {
+			return b ? "true" : "false";
+		}
 		if (val instanceof Double d) {
 			if (d == d.longValue() && !Double.isInfinite(d) && !Double.isNaN(d)) {
 				return String.valueOf(d.longValue());
@@ -578,7 +605,53 @@ public class JSOps {
 				return String.valueOf(f.longValue());
 			}
 		}
+		if (val instanceof JSObject jo) {
+			Object prim = toPrimitive(jo, true);
+			return toStr(prim);
+		}
 		return String.valueOf(val);
+	}
+
+	public static Object toPrimitive(Object val, boolean preferString) {
+		if (!(val instanceof JSObject jo)) return val;
+		if (jo instanceof JSContext.JSDate && !preferString) {
+			preferString = true;
+		}
+		String first = preferString ? "toString" : "valueOf";
+		String second = preferString ? "valueOf" : "toString";
+
+		JSContext cx = JSContext.CURRENT.get();
+
+		Object m1 = jo.get(first);
+		if (m1 instanceof JSFunction fn) {
+			try {
+				Object res = fn.call0(cx, jo);
+				if (!(res instanceof JSObject)) return res;
+			} catch (RuntimeException re) {
+				throw re;
+			} catch (Throwable t) {
+				throw new RuntimeException(t);
+			}
+		}
+
+		Object m2 = jo.get(second);
+		if (m2 instanceof JSFunction fn) {
+			try {
+				Object res = fn.call0(cx, jo);
+				if (!(res instanceof JSObject)) return res;
+			} catch (RuntimeException re) {
+				throw re;
+			} catch (Throwable t) {
+				throw new RuntimeException(t);
+			}
+		}
+
+		if (jo.has("[[PrimitiveValue]]")) {
+			Object prim = jo.get("[[PrimitiveValue]]");
+			return preferString ? toStr(prim) : prim;
+		}
+
+		throw new RuntimeException("TypeError: Cannot convert object to primitive value");
 	}
 
 	public static java.util.Iterator<?> toIterator(Object target) {

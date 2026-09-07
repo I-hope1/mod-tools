@@ -150,11 +150,8 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	}
 
 	public void setLength(Object value) {
-		if (value instanceof Number num) {
-			setLength(num.doubleValue());
-			return;
-		}
-		throw new IllegalArgumentException("RangeError: Invalid array length: " + value);
+		double d = JSOps.toDouble(value);
+		setLength(d);
 	}
 
 	//endregion

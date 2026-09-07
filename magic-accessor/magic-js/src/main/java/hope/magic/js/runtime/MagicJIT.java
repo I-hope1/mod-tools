@@ -334,15 +334,15 @@ public class MagicJIT implements Opcodes {
 		long offset = LinkerHelper.getFieldOffset(field);
 		Class<?> fType = field.getType();
 		MethodHandle mh;
-		if (fType == int.class) mh = JSLinker.FieldMH.GET_INT;
-		else if (fType == double.class) mh = JSLinker.FieldMH.GET_DOUBLE;
-		else if (fType == long.class) mh = JSLinker.FieldMH.GET_LONG;
-		else if (fType == float.class) mh = JSLinker.FieldMH.GET_FLOAT;
-		else if (fType == short.class) mh = JSLinker.FieldMH.GET_SHORT;
-		else if (fType == byte.class) mh = JSLinker.FieldMH.GET_BYTE;
-		else if (fType == char.class) mh = JSLinker.FieldMH.GET_CHAR;
-		else if (fType == boolean.class) mh = JSLinker.FieldMH.GET_BOOLEAN;
-		else mh = JSLinker.FieldMH.GET_OBJECT;
+		if (fType == int.class) mh = FieldMH.GET_INT;
+		else if (fType == double.class) mh = FieldMH.GET_DOUBLE;
+		else if (fType == long.class) mh = FieldMH.GET_LONG;
+		else if (fType == float.class) mh = FieldMH.GET_FLOAT;
+		else if (fType == short.class) mh = FieldMH.GET_SHORT;
+		else if (fType == byte.class) mh = FieldMH.GET_BYTE;
+		else if (fType == char.class) mh = FieldMH.GET_CHAR;
+		else if (fType == boolean.class) mh = FieldMH.GET_BOOLEAN;
+		else mh = FieldMH.GET_OBJECT;
 		return MethodHandles.insertArguments(mh, 0, offset);
 	}
 
@@ -362,15 +362,15 @@ public class MagicJIT implements Opcodes {
 		long offset = LinkerHelper.getFieldOffset(field);
 		Class<?> fType = field.getType();
 		MethodHandle mh;
-		if (fType == int.class) mh = JSLinker.FieldMH.PUT_INT;
-		else if (fType == double.class) mh = JSLinker.FieldMH.PUT_DOUBLE;
-		else if (fType == long.class) mh = JSLinker.FieldMH.PUT_LONG;
-		else if (fType == float.class) mh = JSLinker.FieldMH.PUT_FLOAT;
-		else if (fType == short.class) mh = JSLinker.FieldMH.PUT_SHORT;
-		else if (fType == byte.class) mh = JSLinker.FieldMH.PUT_BYTE;
-		else if (fType == char.class) mh = JSLinker.FieldMH.PUT_CHAR;
-		else if (fType == boolean.class) mh = JSLinker.FieldMH.PUT_BOOLEAN;
-		else mh = JSLinker.FieldMH.PUT_OBJECT;
+		if (fType == int.class) mh = FieldMH.PUT_INT;
+		else if (fType == double.class) mh = FieldMH.PUT_DOUBLE;
+		else if (fType == long.class) mh = FieldMH.PUT_LONG;
+		else if (fType == float.class) mh = FieldMH.PUT_FLOAT;
+		else if (fType == short.class) mh = FieldMH.PUT_SHORT;
+		else if (fType == byte.class) mh = FieldMH.PUT_BYTE;
+		else if (fType == char.class) mh = FieldMH.PUT_CHAR;
+		else if (fType == boolean.class) mh = FieldMH.PUT_BOOLEAN;
+		else mh = FieldMH.PUT_OBJECT;
 		return MethodHandles.insertArguments(mh, 0, offset);
 	}
 
@@ -639,8 +639,15 @@ public class MagicJIT implements Opcodes {
 				slot += (paramTypes[i] == long.class || paramTypes[i] == double.class) ? 2 : 1;
 			}
 			mv.visitMethodInsn(INVOKEINTERFACE, "hope/magic/js/runtime/JSFunction", "call3", "(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true);
+		} else if (paramTypes.length == 4) {
+			int slot = 1;
+			for (int i = 0; i < 4; i++) {
+				emitLoadAndBox(mv, paramTypes[i], slot);
+				slot += (paramTypes[i] == long.class || paramTypes[i] == double.class) ? 2 : 1;
+			}
+			mv.visitMethodInsn(INVOKEINTERFACE, "hope/magic/js/runtime/JSFunction", "call4", "(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true);
 		} else {
-			// >3 参数：构建 Object[] args
+			// >4 参数：构建 Object[] args
 			pushInt(mv, paramTypes.length);
 			mv.visitTypeInsn(ANEWARRAY, "java/lang/Object");
 
@@ -669,19 +676,122 @@ public class MagicJIT implements Opcodes {
 		MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, methodName, methodDesc, null, getExceptionNames(sam));
 		mv.visitCode();
 
+		if (isPrimitiveSAM(paramTypes, retType)) {
+			// Primitive 特化直调 (Zero-Allocation, 无装箱)
+			emitPrimitiveSAMMethodCall(mv, className, paramTypes, retType);
+		} else {
+			// 1. 获取 fn
+			mv.visitVarInsn(ALOAD, 0);
+			mv.visitFieldInsn(GETFIELD, className, "fn", "Lhope/magic/js/runtime/JSFunction;");
+
+			// 2. 参数压栈: cx, thisObj
+			mv.visitInsn(ACONST_NULL); // cx
+			mv.visitInsn(ACONST_NULL); // thisObj
+
+			// 3. Zero-Allocation 特化直调 (call0, call1, call2, call3, call4)
+			emitOptimizedJSFunctionCall(mv, paramTypes, retType);
+		}
+
+		mv.visitMaxs(0, 0);
+		mv.visitEnd();
+	}
+
+	private static boolean isPrimitiveSAM(Class<?>[] paramTypes, Class<?> retType) {
+		if (paramTypes.length > 4) return false;
+		if (paramTypes.length == 0 && retType == void.class) return false;
+		if (!retType.isPrimitive()) return false;
+		for (Class<?> pt : paramTypes) {
+			if (!pt.isPrimitive()) return false;
+		}
+		return true;
+	}
+
+	private static void emitPrimitiveSAMMethodCall(MethodVisitor mv, String className, Class<?>[] paramTypes, Class<?> retType) {
 		// 1. 获取 fn
 		mv.visitVarInsn(ALOAD, 0);
 		mv.visitFieldInsn(GETFIELD, className, "fn", "Lhope/magic/js/runtime/JSFunction;");
 
-		// 2. 参数压栈: cx, thisObj
-		mv.visitInsn(ACONST_NULL); // cx
-		mv.visitInsn(ACONST_NULL); // thisObj
+		// 2. 参数压栈: cx (null)
+		mv.visitInsn(ACONST_NULL);
 
-		// 3. Zero-Allocation 特化直调 (call0, call1, call2, call3)
-		emitOptimizedJSFunctionCall(mv, paramTypes, retType);
+		// 3. 逐个将 primitive 参数加载并转为 double
+		int slot = 1;
+		for (Class<?> pt : paramTypes) {
+			emitLoadPrimitiveAsDouble(mv, pt, slot);
+			slot += (pt == long.class || pt == double.class) ? 2 : 1;
+		}
 
-		mv.visitMaxs(0, 0);
-		mv.visitEnd();
+		// 4. 调用 JSFunction.call{arity}Double
+		int arity = paramTypes.length;
+		String callName = "call" + arity + "Double";
+		String callDesc = getPrimCallDesc(arity);
+		mv.visitMethodInsn(INVOKEINTERFACE, "hope/magic/js/runtime/JSFunction", callName, callDesc, true);
+
+		// 5. 将返回的 double 转为 retType 并返回
+		emitPrimitiveReturn(mv, retType);
+	}
+
+	private static String getPrimCallDesc(int arity) {
+		return switch (arity) {
+			case 0 -> "(Lhope/magic/js/runtime/JSContext;)D";
+			case 1 -> "(Lhope/magic/js/runtime/JSContext;D)D";
+			case 2 -> "(Lhope/magic/js/runtime/JSContext;DD)D";
+			case 3 -> "(Lhope/magic/js/runtime/JSContext;DDD)D";
+			case 4 -> "(Lhope/magic/js/runtime/JSContext;DDDD)D";
+			default -> throw new IllegalArgumentException("Unsupported primitive arity: " + arity);
+		};
+	}
+
+	private static void emitLoadPrimitiveAsDouble(MethodVisitor mv, Class<?> pt, int slot) {
+		if (pt == double.class) {
+			mv.visitVarInsn(DLOAD, slot);
+		} else if (pt == float.class) {
+			mv.visitVarInsn(FLOAD, slot);
+			mv.visitInsn(F2D);
+		} else if (pt == long.class) {
+			mv.visitVarInsn(LLOAD, slot);
+			mv.visitInsn(L2D);
+		} else if (pt == int.class || pt == short.class || pt == byte.class || pt == char.class || pt == boolean.class) {
+			mv.visitVarInsn(ILOAD, slot);
+			mv.visitInsn(I2D);
+		} else {
+			throw new IllegalArgumentException("Not a primitive type: " + pt);
+		}
+	}
+
+	private static void emitPrimitiveReturn(MethodVisitor mv, Class<?> retType) {
+		if (retType == void.class) {
+			mv.visitInsn(POP2);
+			mv.visitInsn(RETURN);
+		} else if (retType == double.class) {
+			mv.visitInsn(DRETURN);
+		} else if (retType == float.class) {
+			mv.visitInsn(D2F);
+			mv.visitInsn(FRETURN);
+		} else if (retType == long.class) {
+			mv.visitInsn(D2L);
+			mv.visitInsn(LRETURN);
+		} else if (retType == int.class) {
+			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toInt", "(D)I", false);
+			mv.visitInsn(IRETURN);
+		} else if (retType == short.class) {
+			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toInt", "(D)I", false);
+			mv.visitInsn(I2S);
+			mv.visitInsn(IRETURN);
+		} else if (retType == byte.class) {
+			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toInt", "(D)I", false);
+			mv.visitInsn(I2B);
+			mv.visitInsn(IRETURN);
+		} else if (retType == char.class) {
+			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toInt", "(D)I", false);
+			mv.visitInsn(I2C);
+			mv.visitInsn(IRETURN);
+		} else if (retType == boolean.class) {
+			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toBoolean", "(D)Z", false);
+			mv.visitInsn(IRETURN);
+		} else {
+			throw new IllegalArgumentException("Not a primitive return type: " + retType);
+		}
 	}
 
 	private static Constructor<?> createObjectAdapterConstructor(Class<?> targetType) {

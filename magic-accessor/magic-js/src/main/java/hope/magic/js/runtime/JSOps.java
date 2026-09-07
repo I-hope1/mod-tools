@@ -578,6 +578,10 @@ public class JSOps {
 		return '\0';
 	}
 
+	public static boolean toBoolean(double d) {
+		return d != 0.0 && !Double.isNaN(d);
+	}
+
 	public static boolean toBoolean(Object val) {
 		if (val instanceof Boolean b) return b;
 		return isTruthy(val);

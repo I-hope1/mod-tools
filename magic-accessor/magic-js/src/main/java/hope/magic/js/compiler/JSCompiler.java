@@ -2777,6 +2777,7 @@ public class JSCompiler {
 			case 1 -> "(L" + IN_JSContext + ";D)D";
 			case 2 -> "(L" + IN_JSContext + ";DD)D";
 			case 3 -> "(L" + IN_JSContext + ";DDD)D";
+			case 4 -> "(L" + IN_JSContext + ";DDDD)D";
 			default -> throw new IllegalArgumentException("Unsupported arity: " + arity);
 		};
 	}
@@ -3069,13 +3070,13 @@ public class JSCompiler {
 			asyncMv.visitMaxs(0, 0);
 			asyncMv.visitEnd();
 		} else {
-			boolean useCallMethod   = hasArguments || paramCount > 3;
+			boolean useCallMethod   = hasArguments || paramCount > 4;
 			String targetMethodName = !useCallMethod ? "call" + paramCount : "call";
 			String targetMethodDesc = !useCallMethod
 			 ? "(L" + IN_JSContext + ";Ljava/lang/Object;" + "Ljava/lang/Object;".repeat(paramCount) + ")Ljava/lang/Object;"
 			 : "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;";
 
-			boolean isNumFunc = !hasArguments && isNumericFunction(body, params, functionName) && paramCount <= 3;
+			boolean isNumFunc = !hasArguments && isNumericFunction(body, params, functionName) && paramCount <= 4;
 
 			if (isNumFunc) {
 				String primMethodName = "call" + paramCount + "Double";
@@ -3194,8 +3195,8 @@ public class JSCompiler {
 
 			if (hasArguments) {
 				generateCallBridges(cw, funcClassName);
-			} else if (paramCount <= 3) {
-				// 当 paramCount <= 3 时，补充通用的 call(cx, thisObj, args[]) 桥接转发器
+			} else if (paramCount <= 4) {
+				// 当 paramCount <= 4 时，补充通用的 call(cx, thisObj, args[]) 桥接转发器
 				MethodVisitor bridgeMv = cw.visitMethod(
 				 Opcodes.ACC_PUBLIC,
 				 "call",
@@ -3300,6 +3301,35 @@ public class JSCompiler {
 		c3Mv.visitInsn(Opcodes.ARETURN);
 		c3Mv.visitMaxs(0, 0);
 		c3Mv.visitEnd();
+
+		// call4(cx, thisObj, a0, a1, a2, a3)
+		MethodVisitor c4Mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "call4", "(L" + IN_JSContext + ";Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+		c4Mv.visitCode();
+		c4Mv.visitVarInsn(Opcodes.ALOAD, 0);
+		c4Mv.visitVarInsn(Opcodes.ALOAD, 1);
+		c4Mv.visitVarInsn(Opcodes.ALOAD, 2);
+		pushInt(c4Mv, 4);
+		c4Mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+		c4Mv.visitInsn(Opcodes.DUP);
+		c4Mv.visitInsn(Opcodes.ICONST_0);
+		c4Mv.visitVarInsn(Opcodes.ALOAD, 3);
+		c4Mv.visitInsn(Opcodes.AASTORE);
+		c4Mv.visitInsn(Opcodes.DUP);
+		c4Mv.visitInsn(Opcodes.ICONST_1);
+		c4Mv.visitVarInsn(Opcodes.ALOAD, 4);
+		c4Mv.visitInsn(Opcodes.AASTORE);
+		c4Mv.visitInsn(Opcodes.DUP);
+		c4Mv.visitInsn(Opcodes.ICONST_2);
+		c4Mv.visitVarInsn(Opcodes.ALOAD, 5);
+		c4Mv.visitInsn(Opcodes.AASTORE);
+		c4Mv.visitInsn(Opcodes.DUP);
+		pushInt(c4Mv, 3);
+		c4Mv.visitVarInsn(Opcodes.ALOAD, 6);
+		c4Mv.visitInsn(Opcodes.AASTORE);
+		c4Mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, funcClassName, "call", "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+		c4Mv.visitInsn(Opcodes.ARETURN);
+		c4Mv.visitMaxs(0, 0);
+		c4Mv.visitEnd();
 	}
 
 	private static void ensureContext(MethodVisitor mv, String funcClassName) {

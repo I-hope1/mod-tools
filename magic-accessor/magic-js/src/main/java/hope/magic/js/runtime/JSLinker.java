@@ -11,7 +11,7 @@ import java.util.regex.Matcher;
 
 import static hope.magic.js.runtime.SlotMH.*;
 
-@SuppressWarnings({"unused", "unchecked", "rawtypes"})
+@SuppressWarnings({"unused", "unchecked", "rawtypes", "RedundantCast"})
 public class JSLinker {
 	static final Unsafe               UNSAFE = Magic.unsafe;
 	static final MethodHandles.Lookup LOOKUP = Magic.lookup;
@@ -72,7 +72,7 @@ public class JSLinker {
 		}
 	}
 
-	private static MethodHandle findMH(Class<?> clazz, String name, MethodType type) {
+	static MethodHandle findStaticMH(Class<?> clazz, String name, MethodType type) {
 		try {
 			return LOOKUP.findStatic(clazz, name, type);
 		} catch (Throwable e) {
@@ -80,246 +80,12 @@ public class JSLinker {
 		}
 	}
 
-	private static MethodHandle findVirtualMH(Class<?> clazz, String name, MethodType type) {
+	static MethodHandle findVirtualMH(Class<?> clazz, String name, MethodType type) {
 		try {
 			return LOOKUP.findVirtual(clazz, name, type);
 		} catch (Throwable e) {
 			throw new ExceptionInInitializerError(e);
 		}
-	}
-	//endregion
-
-	//region Nestmate Lazy Holders (按领域按需懒加载)
-
-	public static final class PropMH {
-		public static final MethodHandle
-		 GET_GENERIC            = findMH(JSLinker.class, "getPropGeneric", MethodType.methodType(Object.class, Object.class, String.class)),
-		 GET_FALLBACK           = findMH(JSLinker.class, "getPropFallback", MethodType.methodType(Object.class, ChainedCallSite.class, Object.class, String.class)),
-		 GET_MEGAMORPHIC        = findMH(JSLinker.class, "getPropMegamorphic", MethodType.methodType(Object.class, ChainedCallSite.class, Object.class, String.class)),
-		 GET_INT_GENERIC        = findMH(JSLinker.class, "getPropIntGeneric", MethodType.methodType(int.class, Object.class, String.class)),
-		 GET_INT_FALLBACK       = findMH(JSLinker.class, "getPropIntFallback", MethodType.methodType(int.class, ChainedCallSite.class, Object.class, String.class)),
-		 GET_INT_MEGAMORPHIC    = findMH(JSLinker.class, "getPropIntMegamorphic", MethodType.methodType(int.class, ChainedCallSite.class, Object.class, String.class)),
-		 GET_DOUBLE_GENERIC     = findMH(JSLinker.class, "getPropDoubleGeneric", MethodType.methodType(double.class, Object.class, String.class)),
-		 GET_DOUBLE_FALLBACK    = findMH(JSLinker.class, "getPropDoubleFallback", MethodType.methodType(double.class, ChainedCallSite.class, Object.class, String.class)),
-		 GET_DOUBLE_MEGAMORPHIC = findMH(JSLinker.class, "getPropDoubleMegamorphic", MethodType.methodType(double.class, ChainedCallSite.class, Object.class, String.class)),
-		 GET_DOUBLE_SLOT        = findMH(JSLinker.class, "getJSObjDoubleSlot", MethodType.methodType(double.class, int.class, Object.class)),
-		 GET_LONG_GENERIC       = findMH(JSLinker.class, "getPropLongGeneric", MethodType.methodType(long.class, Object.class, String.class)),
-		 GET_LONG_FALLBACK      = findMH(JSLinker.class, "getPropLongFallback", MethodType.methodType(long.class, ChainedCallSite.class, Object.class, String.class)),
-		 GET_LONG_MEGAMORPHIC   = findMH(JSLinker.class, "getPropLongMegamorphic", MethodType.methodType(long.class, ChainedCallSite.class, Object.class, String.class)),
-		 SET_GENERIC            = findMH(JSLinker.class, "setPropGeneric", MethodType.methodType(void.class, Object.class, Object.class, String.class)),
-		 SET_FALLBACK           = findMH(JSLinker.class, "setPropFallback", MethodType.methodType(void.class, ChainedCallSite.class, Object.class, Object.class, String.class)),
-		 SET_MEGAMORPHIC        = findMH(JSLinker.class, "setPropMegamorphic", MethodType.methodType(void.class, ChainedCallSite.class, Object.class, Object.class, String.class)),
-		 SET_DOUBLE_GENERIC     = findMH(JSLinker.class, "setPropDoubleGeneric", MethodType.methodType(void.class, Object.class, double.class, String.class)),
-		 SET_DOUBLE_FALLBACK    = findMH(JSLinker.class, "setPropDoubleFallback", MethodType.methodType(void.class, ChainedCallSite.class, Object.class, double.class, String.class)),
-		 SET_DOUBLE_MEGAMORPHIC = findMH(JSLinker.class, "setPropDoubleMegamorphic", MethodType.methodType(void.class, ChainedCallSite.class, Object.class, double.class, String.class));
-	}
-
-	public static final class InvokeMH {
-		public static final MethodHandle
-		 INVOKE_GENERIC  = findMH(JSLinker.class, "invokeGeneric", MethodType.methodType(Object.class, Object.class, Object[].class, String.class)),
-		 INVOKE_FALLBACK = findMH(JSLinker.class, "invokeFallback", MethodType.methodType(Object.class, ChainedCallSite.class, Object.class, Object[].class, String.class)),
-		 NEW_GENERIC     = findMH(JSLinker.class, "newGeneric", MethodType.methodType(Object.class, Object.class, Object[].class)),
-		 NEW_FALLBACK    = findMH(JSLinker.class, "newFallback", MethodType.methodType(Object.class, ChainedCallSite.class, Object.class, Object[].class));
-	}
-
-	public static final class NewMH {
-		public static final MethodHandle
-		 NEW_JS_FUNC0 = findMH(JSLinker.class, "newJSFunction0", MethodType.methodType(Object.class, JSFunction.class, JSObject.class)),
-		 NEW_JS_FUNC1 = findMH(JSLinker.class, "newJSFunction1", MethodType.methodType(Object.class, JSFunction.class, Object.class, JSObject.class)),
-		 NEW_JS_FUNC2 = findMH(JSLinker.class, "newJSFunction2", MethodType.methodType(Object.class, JSFunction.class, Object.class, Object.class, JSObject.class)),
-		 NEW_JS_FUNC3 = findMH(JSLinker.class, "newJSFunction3", MethodType.methodType(Object.class, JSFunction.class, Object.class, Object.class, Object.class, JSObject.class)),
-		 NEW_JS_FUNC4 = findMH(JSLinker.class, "newJSFunction4", MethodType.methodType(Object.class, JSFunction.class, Object.class, Object.class, Object.class, Object.class, JSObject.class));
-	}
-
-	public static final class JSFuncMH {
-		public static final MethodHandle
-		 CALL  = findVirtualMH(JSFunction.class, "call", MethodType.methodType(Object.class, JSContext.class, Object.class, Object[].class)),
-		 CALL0 = findVirtualMH(JSFunction.class, "call0", MethodType.methodType(Object.class, JSContext.class, Object.class)),
-		 CALL1 = findVirtualMH(JSFunction.class, "call1", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class)),
-		 CALL2 = findVirtualMH(JSFunction.class, "call2", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class)),
-		 CALL3 = findVirtualMH(JSFunction.class, "call3", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class, Object.class)),
-		 CALL4 = findVirtualMH(JSFunction.class, "call4", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class, Object.class, Object.class));
-	}
-
-	public static final class OpMH {
-		private static final MethodType
-		 BIN_TYPE = MethodType.methodType(Object.class, Object.class, Object.class),
-		 BIN_DD_D = MethodType.methodType(double.class, double.class, double.class),
-		 BIN_II_I = MethodType.methodType(int.class, int.class, int.class),
-		 BIN_ID_D = MethodType.methodType(double.class, int.class, double.class),
-		 BIN_DI_D = MethodType.methodType(double.class, double.class, int.class);
-
-		private static final MethodType
-		 BIN_OD_O = MethodType.methodType(Object.class, Object.class, double.class),
-		 BIN_DO_O = MethodType.methodType(Object.class, double.class, Object.class),
-		 BIN_OI_O = MethodType.methodType(Object.class, Object.class, int.class),
-		 BIN_IO_O = MethodType.methodType(Object.class, int.class, Object.class);
-
-		private static final MethodType
-		 BIN_SS_S = MethodType.methodType(String.class, String.class, String.class),
-		 BIN_SO_S = MethodType.methodType(String.class, String.class, Object.class),
-		 BIN_OS_S = MethodType.methodType(String.class, Object.class, String.class);
-
-		// Generic (Object, Object) -> Object
-		public static final MethodHandle
-		 ADD       = findMH(JSOps.class, "add", BIN_TYPE),
-		 SUB       = findMH(JSOps.class, "sub", BIN_TYPE),
-		 MUL       = findMH(JSOps.class, "mul", BIN_TYPE),
-		 DIV       = findMH(JSOps.class, "div", BIN_TYPE),
-		 MOD       = findMH(JSOps.class, "mod", BIN_TYPE),
-		 EQ        = findMH(JSOps.class, "eq", BIN_TYPE),
-		 STRICT_EQ = findMH(JSOps.class, "strictEq", BIN_TYPE),
-		 NE        = findMH(JSOps.class, "ne", BIN_TYPE),
-		 STRICT_NE = findMH(JSOps.class, "strictNe", BIN_TYPE),
-		 LT        = findMH(JSOps.class, "lt", BIN_TYPE),
-		 LTE       = findMH(JSOps.class, "lte", BIN_TYPE),
-		 GT        = findMH(JSOps.class, "gt", BIN_TYPE),
-		 GTE       = findMH(JSOps.class, "gte", BIN_TYPE),
-		 AND       = findMH(JSOps.class, "and", BIN_TYPE),
-		 OR        = findMH(JSOps.class, "or", BIN_TYPE),
-		 BIT_AND   = findMH(JSOps.class, "bitAnd", BIN_TYPE),
-		 BIT_OR    = findMH(JSOps.class, "bitOr", BIN_TYPE),
-		 BIT_XOR   = findMH(JSOps.class, "bitXor", BIN_TYPE),
-		 SHL       = findMH(JSOps.class, "shl", BIN_TYPE),
-		 SHR       = findMH(JSOps.class, "shr", BIN_TYPE),
-		 USHR      = findMH(JSOps.class, "ushr", BIN_TYPE);
-
-		// Primitive & Specialized ADD
-		public static final MethodHandle
-		 ADD_DD_D = findMH(JSOps.class, "add", BIN_DD_D),
-		 ADD_II_I = findMH(JSOps.class, "add", BIN_II_I),
-		 ADD_ID_D = findMH(JSOps.class, "add", BIN_ID_D),
-		 ADD_DI_D = findMH(JSOps.class, "add", BIN_DI_D),
-		 ADD_OD_O = findMH(JSOps.class, "add", BIN_OD_O),
-		 ADD_DO_O = findMH(JSOps.class, "add", BIN_DO_O),
-		 ADD_OI_O = findMH(JSOps.class, "add", BIN_OI_O),
-		 ADD_IO_O = findMH(JSOps.class, "add", BIN_IO_O),
-		 ADD_SS_S = findMH(JSOps.class, "add", BIN_SS_S),
-		 ADD_SO_S = findMH(JSOps.class, "add", BIN_SO_S),
-		 ADD_OS_S = findMH(JSOps.class, "add", BIN_OS_S);
-
-		// Primitive SUB
-		public static final MethodHandle
-		 SUB_DD_D = findMH(JSOps.class, "sub", BIN_DD_D),
-		 SUB_II_I = findMH(JSOps.class, "sub", BIN_II_I),
-		 SUB_ID_D = findMH(JSOps.class, "sub", BIN_ID_D),
-		 SUB_DI_D = findMH(JSOps.class, "sub", BIN_DI_D),
-		 SUB_OD_D = findMH(JSOps.class, "sub", MethodType.methodType(double.class, Object.class, double.class)),
-		 SUB_DO_D = findMH(JSOps.class, "sub", MethodType.methodType(double.class, double.class, Object.class));
-
-		// Primitive MUL
-		public static final MethodHandle
-		 MUL_DD_D = findMH(JSOps.class, "mul", BIN_DD_D),
-		 MUL_II_I = findMH(JSOps.class, "mul", BIN_II_I),
-		 MUL_ID_D = findMH(JSOps.class, "mul", BIN_ID_D),
-		 MUL_DI_D = findMH(JSOps.class, "mul", BIN_DI_D),
-		 MUL_OD_D = findMH(JSOps.class, "mul", MethodType.methodType(double.class, Object.class, double.class)),
-		 MUL_DO_D = findMH(JSOps.class, "mul", MethodType.methodType(double.class, double.class, Object.class));
-
-		// Primitive DIV
-		public static final MethodHandle
-		 DIV_DD_D = findMH(JSOps.class, "div", BIN_DD_D),
-		 DIV_II_D = findMH(JSOps.class, "div", MethodType.methodType(double.class, int.class, int.class)),
-		 DIV_ID_D = findMH(JSOps.class, "div", BIN_ID_D),
-		 DIV_DI_D = findMH(JSOps.class, "div", BIN_DI_D),
-		 DIV_OD_D = findMH(JSOps.class, "div", MethodType.methodType(double.class, Object.class, double.class)),
-		 DIV_DO_D = findMH(JSOps.class, "div", MethodType.methodType(double.class, double.class, Object.class));
-
-		// Primitive MOD
-		public static final MethodHandle
-		 MOD_DD_D = findMH(JSOps.class, "mod", BIN_DD_D),
-		 MOD_II_I = findMH(JSOps.class, "mod", BIN_II_I),
-		 MOD_ID_D = findMH(JSOps.class, "mod", BIN_ID_D),
-		 MOD_DI_D = findMH(JSOps.class, "mod", BIN_DI_D),
-		 MOD_OD_D = findMH(JSOps.class, "mod", MethodType.methodType(double.class, Object.class, double.class)),
-		 MOD_DO_D = findMH(JSOps.class, "mod", MethodType.methodType(double.class, double.class, Object.class));
-
-		// Equality Specializations with Primitive
-		public static final MethodHandle
-		 EQ_OI_Z = findMH(JSOps.class, "isEqInt", MethodType.methodType(boolean.class, Object.class, int.class)),
-		 EQ_OD_Z = findMH(JSOps.class, "isEqDouble", MethodType.methodType(boolean.class, Object.class, double.class)),
-		 EQ_OB_Z = findMH(JSOps.class, "isEqBool", MethodType.methodType(boolean.class, Object.class, boolean.class)),
-		 EQ_OS_Z = findMH(JSOps.class, "isEqString", MethodType.methodType(boolean.class, Object.class, String.class));
-
-		public static final MethodHandle
-		 STRICT_EQ_OI_Z = findMH(JSOps.class, "isStrictEqInt", MethodType.methodType(boolean.class, Object.class, int.class)),
-		 STRICT_EQ_OD_Z = findMH(JSOps.class, "isStrictEqDouble", MethodType.methodType(boolean.class, Object.class, double.class)),
-		 STRICT_EQ_OB_Z = findMH(JSOps.class, "isStrictEqBool", MethodType.methodType(boolean.class, Object.class, boolean.class)),
-		 STRICT_EQ_OS_Z = findMH(JSOps.class, "isStrictEqString", MethodType.methodType(boolean.class, Object.class, String.class));
-	}
-
-	public static final class IndexMH {
-		public static final MethodHandle
-		 GET          = findMH(JSLinker.class, "getIndex", MethodType.methodType(Object.class, Object.class, Object.class)),
-		 SET          = findMH(JSLinker.class, "setIndex", MethodType.methodType(void.class, Object.class, Object.class, Object.class)),
-		 GET_FALLBACK = findMH(JSLinker.class, "getIndexDynamicFallback", MethodType.methodType(Object.class, ChainedCallSite.class, Object.class, Object.class));
-	}
-
-	public static final class FieldMH {
-		private static final MethodType GET_DIR_TYPE = MethodType.methodType(Object.class, long.class, Object.class);
-
-		public static final MethodHandle
-		 GET_INT     = findMH(JSLinker.class, "getIntDirect", GET_DIR_TYPE),
-		 GET_DOUBLE  = findMH(JSLinker.class, "getDoubleDirect", GET_DIR_TYPE),
-		 GET_LONG    = findMH(JSLinker.class, "getLongDirect", GET_DIR_TYPE),
-		 GET_FLOAT   = findMH(JSLinker.class, "getFloatDirect", GET_DIR_TYPE),
-		 GET_SHORT   = findMH(JSLinker.class, "getShortDirect", GET_DIR_TYPE),
-		 GET_BYTE    = findMH(JSLinker.class, "getByteDirect", GET_DIR_TYPE),
-		 GET_CHAR    = findMH(JSLinker.class, "getCharDirect", GET_DIR_TYPE),
-		 GET_BOOLEAN = findMH(JSLinker.class, "getBooleanDirect", GET_DIR_TYPE),
-		 GET_OBJECT  = findMH(JSLinker.class, "getObjectDirect", GET_DIR_TYPE);
-
-		private static final MethodType PUT_DIR_TYPE = MethodType.methodType(void.class, long.class, Object.class, Object.class);
-
-		public static final MethodHandle
-		 PUT_INT     = findMH(JSLinker.class, "putIntDirect", PUT_DIR_TYPE),
-		 PUT_DOUBLE  = findMH(JSLinker.class, "putDoubleDirect", PUT_DIR_TYPE),
-		 PUT_LONG    = findMH(JSLinker.class, "putLongDirect", PUT_DIR_TYPE),
-		 PUT_FLOAT   = findMH(JSLinker.class, "putFloatDirect", PUT_DIR_TYPE),
-		 PUT_SHORT   = findMH(JSLinker.class, "putShortDirect", PUT_DIR_TYPE),
-		 PUT_BYTE    = findMH(JSLinker.class, "putByteDirect", PUT_DIR_TYPE),
-		 PUT_CHAR    = findMH(JSLinker.class, "putCharDirect", PUT_DIR_TYPE),
-		 PUT_BOOLEAN = findMH(JSLinker.class, "putBooleanDirect", PUT_DIR_TYPE),
-		 PUT_OBJECT  = findMH(JSLinker.class, "putObjectDirect", PUT_DIR_TYPE);
-
-		private static final MethodType PRIM_INT_TYPE = MethodType.methodType(int.class, long.class, Object.class);
-
-		public static final MethodHandle
-		 GET_INT_PRIM       = findMH(JSLinker.class, "getIntDirectPrim", PRIM_INT_TYPE),
-		 GET_DOUBLE_AS_INT  = findMH(JSLinker.class, "getDoubleAsIntPrim", PRIM_INT_TYPE),
-		 GET_LONG_AS_INT    = findMH(JSLinker.class, "getLongAsIntPrim", PRIM_INT_TYPE),
-		 GET_FLOAT_AS_INT   = findMH(JSLinker.class, "getFloatAsIntPrim", PRIM_INT_TYPE),
-		 GET_SHORT_AS_INT   = findMH(JSLinker.class, "getShortAsIntPrim", PRIM_INT_TYPE),
-		 GET_BYTE_AS_INT    = findMH(JSLinker.class, "getByteAsIntPrim", PRIM_INT_TYPE),
-		 GET_CHAR_AS_INT    = findMH(JSLinker.class, "getCharAsIntPrim", PRIM_INT_TYPE),
-		 GET_BOOLEAN_AS_INT = findMH(JSLinker.class, "getBooleanAsIntPrim", PRIM_INT_TYPE),
-		 GET_OBJECT_AS_INT  = findMH(JSLinker.class, "getObjectAsIntPrim", PRIM_INT_TYPE);
-
-		private static final MethodType PRIM_DOUBLE_TYPE = MethodType.methodType(double.class, long.class, Object.class);
-
-		public static final MethodHandle
-		 GET_DOUBLE_PRIM       = findMH(JSLinker.class, "getDoubleDirectPrim", PRIM_DOUBLE_TYPE),
-		 GET_INT_AS_DOUBLE     = findMH(JSLinker.class, "getIntAsDoublePrim", PRIM_DOUBLE_TYPE),
-		 GET_LONG_AS_DOUBLE    = findMH(JSLinker.class, "getLongAsDoublePrim", PRIM_DOUBLE_TYPE),
-		 GET_FLOAT_AS_DOUBLE   = findMH(JSLinker.class, "getFloatAsDoublePrim", PRIM_DOUBLE_TYPE),
-		 GET_SHORT_AS_DOUBLE   = findMH(JSLinker.class, "getShortAsDoublePrim", PRIM_DOUBLE_TYPE),
-		 GET_BYTE_AS_DOUBLE    = findMH(JSLinker.class, "getByteAsDoublePrim", PRIM_DOUBLE_TYPE),
-		 GET_CHAR_AS_DOUBLE    = findMH(JSLinker.class, "getCharAsDoublePrim", PRIM_DOUBLE_TYPE),
-		 GET_BOOLEAN_AS_DOUBLE = findMH(JSLinker.class, "getBooleanAsDoublePrim", PRIM_DOUBLE_TYPE),
-		 GET_OBJECT_AS_DOUBLE  = findMH(JSLinker.class, "getObjectAsDoublePrim", PRIM_DOUBLE_TYPE);
-
-		private static final MethodType PRIM_LONG_TYPE = MethodType.methodType(long.class, long.class, Object.class);
-
-		public static final MethodHandle
-		 GET_LONG_PRIM       = findMH(JSLinker.class, "getLongDirectPrim", PRIM_LONG_TYPE),
-		 GET_INT_AS_LONG     = findMH(JSLinker.class, "getIntAsLongPrim", PRIM_LONG_TYPE),
-		 GET_DOUBLE_AS_LONG  = findMH(JSLinker.class, "getDoubleAsLongPrim", PRIM_LONG_TYPE),
-		 GET_FLOAT_AS_LONG   = findMH(JSLinker.class, "getFloatAsLongPrim", PRIM_LONG_TYPE),
-		 GET_SHORT_AS_LONG   = findMH(JSLinker.class, "getShortAsLongPrim", PRIM_LONG_TYPE),
-		 GET_BYTE_AS_LONG    = findMH(JSLinker.class, "getByteAsLongPrim", PRIM_LONG_TYPE),
-		 GET_CHAR_AS_LONG    = findMH(JSLinker.class, "getCharAsLongPrim", PRIM_LONG_TYPE),
-		 GET_BOOLEAN_AS_LONG = findMH(JSLinker.class, "getBooleanAsLongPrim", PRIM_LONG_TYPE),
-		 GET_OBJECT_AS_LONG  = findMH(JSLinker.class, "getObjectAsLongPrim", PRIM_LONG_TYPE);
 	}
 	//endregion
 
@@ -836,7 +602,7 @@ public class JSLinker {
 	 */
 	private static MethodHandle buildShapeIdSelector(int minId, int span) {
 		return MethodHandles.insertArguments(
-		 findMH(JSLinker.class, "shapeIdSelector", MethodType.methodType(int.class, int.class, int.class, Object.class)),
+		 findStaticMH(JSLinker.class, "shapeIdSelector", MethodType.methodType(int.class, int.class, int.class, Object.class)),
 		 0, minId, span
 		);
 	}
@@ -989,7 +755,7 @@ public class JSLinker {
 	//region Multi-Shape Guard Stubs (同偏移多态坍缩快速守卫)
 
 	public static boolean isMatchMask(long expectedMask, Object target) {
-		return target instanceof JSObject jsObj && (jsObj.shape.mask & expectedMask) != 0L;
+		return target instanceof JSObject jsObj && (int)(jsObj.shape.mask & expectedMask) != 0;
 	}
 
 	/**
@@ -1020,7 +786,6 @@ public class JSLinker {
 		boolean allHaveMask  = true;
 		for (JSShape s : shapes) {
 			if (s.mask == 0L) {
-				allHaveMask = false;
 				break;
 			}
 			combinedMask |= s.mask;
@@ -1030,7 +795,7 @@ public class JSLinker {
 			return MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, commonOff);
 		}
 
-		return findMH(JSLinker.class, "isShapeN", MethodType.methodType(boolean.class, JSShape[].class, Object.class)).bindTo(shapes.toArray(new JSShape[0]));
+		return findStaticMH(JSLinker.class, "isShapeN", MethodType.methodType(boolean.class, JSShape[].class, Object.class)).bindTo(shapes.toArray(new JSShape[0]));
 	}
 
 	public static boolean isShapeNSetterDouble(JSShape[] shapes, Object target, double val) {
@@ -1047,7 +812,7 @@ public class JSLinker {
 		int n = shapes.size();
 		if (n == 1) return MH_IS_EXACT_SHAPE_SETTER_DOUBLE.bindTo(shapes.get(0));
 		// Setter 严格沿用精确 Shape 比较，禁止松散位掩码，杜绝类型混淆与原始槽脏写
-		return findMH(JSLinker.class, "isShapeNSetterDouble", MethodType.methodType(boolean.class, JSShape[].class, Object.class, double.class)).bindTo(shapes.toArray(new JSShape[0]));
+		return findStaticMH(JSLinker.class, "isShapeNSetterDouble", MethodType.methodType(boolean.class, JSShape[].class, Object.class, double.class)).bindTo(shapes.toArray(new JSShape[0]));
 	}
 
 	public static boolean isShapeNSetterObject(JSShape[] shapes, Object target, Object val) {
@@ -1064,7 +829,7 @@ public class JSLinker {
 		int n = shapes.size();
 		if (n == 1) return MH_IS_EXACT_SHAPE_SETTER_OBJECT.bindTo(shapes.get(0));
 		// Setter 严格沿用精确 Shape 比较，禁止松散位掩码
-		return findMH(JSLinker.class, "isShapeNSetterObject", MethodType.methodType(boolean.class, JSShape[].class, Object.class, Object.class)).bindTo(shapes.toArray(new JSShape[0]));
+		return findStaticMH(JSLinker.class, "isShapeNSetterObject", MethodType.methodType(boolean.class, JSShape[].class, Object.class, Object.class)).bindTo(shapes.toArray(new JSShape[0]));
 	}
 
 	/**
@@ -3358,42 +3123,42 @@ public class JSLinker {
 	public static void setSlot7Double(JSObject target, double val) { target.prim7 = Double.doubleToRawLongBits(val); }
 
 	public static Object getSlot0Object(JSObject obj) {
-		if ((obj.doubleFieldMask & 1L) != 0L) return Double.longBitsToDouble(obj.prim0);
+		if ((int)(obj.doubleFieldMask & 1L) != 0) return Double.longBitsToDouble(obj.prim0);
 		Object val = obj.obj0;
 		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
 	public static Object getSlot1Object(JSObject obj) {
-		if ((obj.doubleFieldMask & 2L) != 0L) return Double.longBitsToDouble(obj.prim1);
+		if ((int)(obj.doubleFieldMask & 2L) != 0) return Double.longBitsToDouble(obj.prim1);
 		Object val = obj.obj1;
 		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
 	public static Object getSlot2Object(JSObject obj) {
-		if ((obj.doubleFieldMask & 4L) != 0L) return Double.longBitsToDouble(obj.prim2);
+		if ((int)(obj.doubleFieldMask & 4L) != 0) return Double.longBitsToDouble(obj.prim2);
 		Object val = obj.obj2;
 		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
 	public static Object getSlot3Object(JSObject obj) {
-		if ((obj.doubleFieldMask & 8L) != 0L) return Double.longBitsToDouble(obj.prim3);
+		if ((int)(obj.doubleFieldMask & 8L) != 0) return Double.longBitsToDouble(obj.prim3);
 		Object val = obj.obj3;
 		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
 	public static Object getSlot4Object(JSObject obj) {
-		if ((obj.doubleFieldMask & 16L) != 0L) return Double.longBitsToDouble(obj.prim4);
+		if ((int)(obj.doubleFieldMask & 16L) != 0) return Double.longBitsToDouble(obj.prim4);
 		Object val = obj.obj4;
 		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
 	public static Object getSlot5Object(JSObject obj) {
-		if ((obj.doubleFieldMask & 32L) != 0L) return Double.longBitsToDouble(obj.prim5);
+		if ((int)(obj.doubleFieldMask & 32L) != 0) return Double.longBitsToDouble(obj.prim5);
 		Object val = obj.obj5;
 		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
 	public static Object getSlot6Object(JSObject obj) {
-		if ((obj.doubleFieldMask & 64L) != 0L) return Double.longBitsToDouble(obj.prim6);
+		if ((int)(obj.doubleFieldMask & 64L) != 0) return Double.longBitsToDouble(obj.prim6);
 		Object val = obj.obj6;
 		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
 	public static Object getSlot7Object(JSObject obj) {
-		if ((obj.doubleFieldMask & 128L) != 0L) return Double.longBitsToDouble(obj.prim7);
+		if ((int)(obj.doubleFieldMask & 128L) != 0) return Double.longBitsToDouble(obj.prim7);
 		Object val = obj.obj7;
 		return val == JSObject.DELETED ? JSUndefined.INSTANCE : val;
 	}
@@ -3838,10 +3603,12 @@ public class JSLinker {
 				String searchStr = JSOps.toStr(regArg);
 				int    idx       = str.indexOf(searchStr);
 				if (idx < 0) return str;
+
+				String substring = str.substring(idx + searchStr.length());
 				if (repArg instanceof JSFunction func) {
 					Object[] funcArgs = new Object[]{searchStr, (double) idx, str};
 					String   replStr  = JSOps.toStr(func.call(null, null, funcArgs));
-					return str.substring(0, idx) + replStr + str.substring(idx + searchStr.length());
+					return str.substring(0, idx) + replStr + substring;
 				} else {
 					String repStr = JSOps.toStr(repArg);
 					if (repStr.contains("$")) {
@@ -3849,7 +3616,7 @@ public class JSLinker {
 						 .replace("$&", searchStr)
 						 .replace("\0", "$");
 					}
-					return str.substring(0, idx) + repStr + str.substring(idx + searchStr.length());
+					return str.substring(0, idx) + repStr + substring;
 				}
 			}
 		}

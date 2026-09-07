@@ -49,6 +49,11 @@ public class MagicJSTest {
 			int multiply(int a, int b);
 		}
 
+		@FunctionalInterface
+		public interface PrimQuadFunction {
+			double compute(int a, double b, long c, float d);
+		}
+
 		public boolean callbackExecuted = false;
 		public void runCallback(Runnable r) {
 			callbackExecuted = true;
@@ -61,6 +66,43 @@ public class MagicJSTest {
 
 		public int computeBinary(java.util.function.IntBinaryOperator op, int a, int b) {
 			return op.applyAsInt(a, b);
+		}
+
+		public boolean testIntPred(java.util.function.IntPredicate pred, int val) {
+			return pred.test(val);
+		}
+
+		public double testDoubleOp(java.util.function.DoubleBinaryOperator op, double a, double b) {
+			return op.applyAsDouble(a, b);
+		}
+
+		public int testIntUnary(java.util.function.IntUnaryOperator op, int a) {
+			return op.applyAsInt(a);
+		}
+
+		public double testDoubleSupplier(java.util.function.DoubleSupplier s) {
+			return s.getAsDouble();
+		}
+
+		public int testIntSupplier(java.util.function.IntSupplier s) {
+			return s.getAsInt();
+		}
+
+		public boolean testBooleanSupplier(java.util.function.BooleanSupplier s) {
+			return s.getAsBoolean();
+		}
+
+		public long testLongBinary(java.util.function.LongBinaryOperator op, long a, long b) {
+			return op.applyAsLong(a, b);
+		}
+
+		public int consumerVal = 0;
+		public void testIntConsumer(java.util.function.IntConsumer c, int val) {
+			c.accept(val);
+		}
+
+		public double testQuad(PrimQuadFunction q, int a, double b, long c, float d) {
+			return q.compute(a, b, c, d);
 		}
 
 		public int executeCalc(CustomCalculator calc, int a, int b) {
@@ -1227,6 +1269,63 @@ public class MagicJSTest {
 		 	target.computeBinary((x, y) => x * y + 5, 4, 5);
 		 """);
 		Assertions.assertEquals(25.0, ((Number) r6).doubleValue());
+	}
+
+	@Test
+	public void testPrimitiveSAMAdapters() {
+		JSContext       cx     = new JSContext();
+		TargetJavaClass target = new TargetJavaClass(100, "hello");
+		cx.set("target", target);
+
+		// 1. IntBinaryOperator
+		Object r1 = cx.eval("target.computeBinary((x, y) => x * y + 5, 4, 5);");
+		Assertions.assertEquals(25.0, ((Number) r1).doubleValue());
+
+		// 2. IntPredicate
+		Object r2True = cx.eval("target.testIntPred(x => x > 10, 15);");
+		Assertions.assertEquals(Boolean.TRUE, r2True);
+		Object r2False = cx.eval("target.testIntPred(x => x > 10, 5);");
+		Assertions.assertEquals(Boolean.FALSE, r2False);
+
+		// 3. DoubleBinaryOperator
+		Object r3 = cx.eval("target.testDoubleOp((a, b) => a * b + 0.5, 2.5, 4.0);");
+		Assertions.assertEquals(10.5, ((Number) r3).doubleValue());
+
+		// 4. IntUnaryOperator
+		Object r4 = cx.eval("target.testIntUnary(x => x * 3, 7);");
+		Assertions.assertEquals(21.0, ((Number) r4).doubleValue());
+
+		// 5. DoubleSupplier
+		Object r5 = cx.eval("target.testDoubleSupplier(() => 3.14159);");
+		Assertions.assertEquals(3.14159, ((Number) r5).doubleValue(), 1e-6);
+
+		// 6. IntSupplier
+		Object r6 = cx.eval("target.testIntSupplier(() => 42);");
+		Assertions.assertEquals(42.0, ((Number) r6).doubleValue());
+
+		// 7. BooleanSupplier
+		Object r7True = cx.eval("target.testBooleanSupplier(() => true);");
+		Assertions.assertEquals(Boolean.TRUE, r7True);
+		Object r7False = cx.eval("target.testBooleanSupplier(() => false);");
+		Assertions.assertEquals(Boolean.FALSE, r7False);
+
+		// 8. LongBinaryOperator
+		Object r8 = cx.eval("target.testLongBinary((a, b) => a + b, 10000000000, 20000000000);");
+		Assertions.assertEquals(30000000000.0, ((Number) r8).doubleValue());
+
+		// 9. IntConsumer (void return)
+		cx.eval("target.testIntConsumer(x => { target.consumerVal = x; }, 99);");
+		Assertions.assertEquals(99, target.consumerVal);
+
+		// 10. PrimQuadFunction (4-args: int, double, long, float -> double)
+		Object r10 = cx.eval("target.testQuad((a, b, c, d) => a + b + c + d, 1, 2.5, 10, 0.5);");
+		Assertions.assertEquals(14.0, ((Number) r10).doubleValue());
+
+		// 11. Direct adapter call via MagicJIT.getFunctionAdapter
+		JSFunction fn = (JSFunction) cx.eval("(a, b) => a * b + 10;");
+		java.util.function.IntBinaryOperator directOp = (java.util.function.IntBinaryOperator) MagicJIT.getFunctionAdapter(java.util.function.IntBinaryOperator.class, fn);
+		Assertions.assertNotNull(directOp);
+		Assertions.assertEquals(52, directOp.applyAsInt(6, 7));
 	}
 
 	@Test

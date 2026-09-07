@@ -43,23 +43,12 @@ public class Test262RunnerTest {
 		cx.set("RangeError", (JSFunction) (ctx, thisObj, args) -> new JSObject());
 		cx.set("Error", (JSFunction) (ctx, thisObj, args) -> new JSObject());
 
-		// Standard assert function
-		JSFunction assertFn = (ctx, thisObj, args) -> {
-			if (args.length == 0) throw new AssertionError("assert() requires at least 1 argument");
-			boolean condition = JSOps.isTruthy(args[0]);
-			if (!condition) {
-				String msg = args.length > 1 && args[1] != null ? JSOps.toStr(args[1]) : "Expected truthy value, but got " + args[0];
-				throw new AssertionError("Test262 assert failed: " + msg);
-			}
-			return JSUndefined.INSTANCE;
-		};
+		cx.set("isSameValue", (JSFunction) (ctx, thisObj, args) -> isSameValue(
+				args.length > 0 ? args[0] : JSUndefined.INSTANCE,
+				args.length > 1 ? args[1] : JSUndefined.INSTANCE
+		));
 
-		JSObject assertObj = new JSObject() {
-			@Override
-			public Object get(String key) {
-				return super.get(key);
-			}
-		};
+		AssertFunction assertObj = new AssertFunction();
 
 		// assert.sameValue(actual, expected, message)
 		assertObj.put("sameValue", (JSFunction) (ctx, thisObj, args) -> {
@@ -112,6 +101,160 @@ public class Test262RunnerTest {
 
 		// Expose assert and assert.*
 		cx.set("assert", assertObj);
+
+		cx.eval("""
+			var __isArray = Array.isArray;
+			var __defineProperty = Object.defineProperty;
+			var __getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+			var __getOwnPropertyNames = Object.getOwnPropertyNames;
+			var __join = Function.prototype.call.bind(Array.prototype.join);
+			var __push = Function.prototype.call.bind(Array.prototype.push);
+			var __hasOwnProperty = Function.prototype.call.bind(Object.prototype.hasOwnProperty);
+			var __propertyIsEnumerable = Function.prototype.call.bind(Object.prototype.propertyIsEnumerable);
+			var nonIndexNumericPropertyName = Math.pow(2, 32) - 1;
+
+			function verifyProperty(obj, name, desc, options) {
+			  assert(
+			    arguments.length > 2,
+			    'verifyProperty should receive at least 3 arguments: obj, name, and descriptor'
+			  );
+			  var label = options && options.label || String(name);
+			  var originalDesc = __getOwnPropertyDescriptor(obj, name);
+			  if (desc === undefined) {
+			    assert.sameValue(
+			      originalDesc,
+			      undefined,
+			      label + " descriptor should be undefined"
+			    );
+			    return true;
+			  }
+			  assert(__hasOwnProperty(obj, name), label + " should be an own property");
+			  assert.notSameValue(
+			    desc,
+			    null,
+			    "The desc argument should be an object or undefined, null"
+			  );
+			  assert.sameValue(
+			    typeof desc,
+			    "object",
+			    "The desc argument should be an object or undefined, " + String(desc)
+			  );
+			  var names = __getOwnPropertyNames(desc);
+			  for (var i = 0; i < names.length; i++) {
+			    assert(
+			      names[i] === "value" ||
+			        names[i] === "writable" ||
+			        names[i] === "enumerable" ||
+			        names[i] === "configurable" ||
+			        names[i] === "get" ||
+			        names[i] === "set",
+			      "Invalid descriptor field: " + names[i]
+			    );
+			  }
+			  var failures = [];
+			  if (__hasOwnProperty(desc, 'value')) {
+			    if (!isSameValue(desc.value, originalDesc.value)) {
+			      __push(failures, label + " descriptor value should be " + String(desc.value));
+			    }
+			    if (!isSameValue(desc.value, obj[name])) {
+			      __push(failures, label + " value should be " + String(desc.value));
+			    }
+			  }
+			  if (__hasOwnProperty(desc, 'enumerable') && desc.enumerable !== undefined) {
+			    if (desc.enumerable !== originalDesc.enumerable ||
+			        desc.enumerable !== isEnumerable(obj, name)) {
+			      __push(failures, label + " descriptor should " + (desc.enumerable ? '' : 'not ') + "be enumerable");
+			    }
+			  }
+			  if (__hasOwnProperty(desc, 'writable') && desc.writable !== undefined) {
+			    if (desc.writable !== originalDesc.writable ||
+			        desc.writable !== isWritable(obj, name)) {
+			      __push(failures, label + " descriptor should " + (desc.writable ? '' : 'not ') + "be writable");
+			    }
+			  }
+			  if (__hasOwnProperty(desc, 'configurable') && desc.configurable !== undefined) {
+			    if (desc.configurable !== originalDesc.configurable ||
+			        desc.configurable !== isConfigurable(obj, name)) {
+			      __push(failures, label + " descriptor should " + (desc.configurable ? '' : 'not ') + "be configurable");
+			    }
+			  }
+			  if (failures.length) {
+			    assert(false, __join(failures, '; '));
+			  }
+			  if (options && options.restore) {
+			    __defineProperty(obj, name, originalDesc);
+			  }
+			  return true;
+			}
+
+			function isConfigurable(obj, name) {
+			  try {
+			    delete obj[name];
+			  } catch (e) {
+			    if (!(e instanceof TypeError)) {
+			      throw new Test262Error("Expected TypeError, got " + e);
+			    }
+			  }
+			  return !__hasOwnProperty(obj, name);
+			}
+
+			function isEnumerable(obj, name) {
+			  var stringCheck = false;
+			  if (typeof name === "string") {
+			    for (var x in obj) {
+			      if (x === name) {
+			        stringCheck = true;
+			        break;
+			      }
+			    }
+			  } else {
+			    stringCheck = true;
+			  }
+			  return stringCheck && __hasOwnProperty(obj, name) && __propertyIsEnumerable(obj, name);
+			}
+
+			function isWritable(obj, name, verifyProp, value) {
+			  var unlikelyValue = __isArray(obj) && name === "length" ?
+			    nonIndexNumericPropertyName :
+			    "unlikelyValue";
+			  var newValue = value || unlikelyValue;
+			  var hadValue = __hasOwnProperty(obj, name);
+			  var oldValue = obj[name];
+			  var writeSucceeded;
+			  if (arguments.length < 4 && newValue === oldValue) {
+			    newValue = newValue + "2";
+			  }
+			  try {
+			    obj[name] = newValue;
+			  } catch (e) {
+			    if (!(e instanceof TypeError)) {
+			      throw new Test262Error("Expected TypeError, got " + e);
+			    }
+			  }
+			  writeSucceeded = isSameValue(obj[verifyProp || name], newValue);
+			  if (writeSucceeded) {
+			    if (hadValue) {
+			      obj[name] = oldValue;
+			    } else {
+			      delete obj[name];
+			    }
+			  }
+			  return writeSucceeded;
+			}
+		""");
+	}
+
+	public static class AssertFunction extends JSObject implements JSFunction {
+		@Override
+		public Object call(JSContext ctx, Object thisObj, Object[] args) {
+			if (args.length == 0) throw new AssertionError("assert() requires at least 1 argument");
+			boolean condition = JSOps.isTruthy(args[0]);
+			if (!condition) {
+				String msg = args.length > 1 && args[1] != null ? JSOps.toStr(args[1]) : "Expected truthy value, but got " + args[0];
+				throw new AssertionError("Test262 assert failed: " + msg);
+			}
+			return JSUndefined.INSTANCE;
+		}
 	}
 
 	/**
@@ -1054,6 +1197,74 @@ public class Test262RunnerTest {
 					.map(function(x) { return x * 10; })
 					.reduce(function(acc, x) { return acc + x; }, 0);
 				assert.sameValue(chainResult, 90, "filter -> map -> reduce chaining: 10 + 30 + 50 = 90");
+			""");
+		}
+	}
+
+	@Nested
+	@DisplayName("TC39 Test262: language/expressions/object")
+	class LanguageExpressionsObject {
+
+		@Test
+		@DisplayName("test262: get-prop-desc - Property descriptor of 'get' accessor methods")
+		public void testObjectLiteralGetterPropertyDescriptor() {
+			runTest262("""
+				/*---
+				esid: sec-object-initializer-runtime-semantics-evaluation
+				es6id: 12.2.6.8
+				description: Property descriptor of "get" accessor methods
+				---*/
+				var obj = { get m() { return 1234; } };
+				var desc = Object.getOwnPropertyDescriptor(obj, 'm');
+
+				verifyProperty(obj, 'm', {
+				  enumerable: true,
+				  configurable: true
+				});
+
+				assert.sameValue(desc.value, undefined, 'The value of `desc.value` is `undefined`');
+				assert.sameValue(desc.set, undefined, 'The value of `desc.set` is `undefined`');
+				assert.sameValue(
+				  typeof desc.get,
+				  'function',
+				  'The value of `typeof desc.get` is "function"'
+				);
+				assert.sameValue(desc.get(), 1234, '`desc.get()` returns `1234`');
+			""");
+		}
+
+		@Test
+		@DisplayName("test262: set-prop-desc - Property descriptor of 'set' accessor methods")
+		public void testObjectLiteralSetterPropertyDescriptor() {
+			runTest262("""
+				/*---
+				esid: sec-object-initializer-runtime-semantics-evaluation
+				es6id: 12.2.6.8
+				description: Property descriptor of "set" accessor methods
+				---*/
+				var stringSet;
+				var obj = {
+				  set m(param) {
+				    stringSet = param;
+				  }
+				};
+				var desc = Object.getOwnPropertyDescriptor(obj, 'm');
+
+				verifyProperty(obj, 'm', {
+				  enumerable: true,
+				  configurable: true
+				});
+
+				assert.sameValue(desc.value, undefined, 'The value of `desc.value` is `undefined`');
+				assert.sameValue(desc.get, undefined, 'The value of `desc.get` is `undefined`');
+				assert.sameValue(
+				  typeof desc.set,
+				  'function',
+				  'The value of `typeof desc.set` is "function"'
+				);
+
+				desc.set(1234);
+				assert.sameValue(stringSet, 1234, 'The value of `stringSet` is `1234`');
 			""");
 		}
 	}

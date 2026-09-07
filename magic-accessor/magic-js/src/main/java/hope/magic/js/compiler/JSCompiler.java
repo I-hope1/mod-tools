@@ -975,7 +975,18 @@ public class JSCompiler {
 	}
 
 	private static void compileVarDecl(Node.VarDecl varDecl, CompileContext ctx, boolean needResult) {
-		MethodVisitor mv   = ctx.mv;
+		MethodVisitor mv = ctx.mv;
+		if (!ctx.isFunction) {
+			if (varDecl.init != null) {
+				int slot = JSContext.getGlobalSlot(varDecl.name);
+				mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+				pushInt(mv, slot);
+				compileNode(varDecl.init, ctx, true);
+				mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "setSlot", "(ILjava/lang/Object;)V", false);
+			}
+			if (needResult) visitUndefined(mv);
+			return;
+		}
 		VarType       type = preInferVarType(varDecl, ctx);
 		LocalVar      var  = ctx.declareLocal(varDecl.name, type);
 		if (varDecl.init != null) {
@@ -3114,6 +3125,7 @@ public class JSCompiler {
 
 	private static void hoistVariables(Node root, CompileContext ctx) {
 		if (root == null || ctx == null) return;
+		if (!ctx.isFunction) return;
 		List<Node.VarDecl> varDecls = new ArrayList<>();
 		collectVarDecls(root, varDecls);
 		MethodVisitor mv = ctx.mv;

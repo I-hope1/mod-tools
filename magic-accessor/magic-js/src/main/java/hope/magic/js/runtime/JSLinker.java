@@ -666,32 +666,38 @@ public class JSLinker {
 
 	// ── 偏移类聚合位掩码辅助函数 (Offset-Class Mask Dispatch Helpers) ──────────
 
-	private static MethodHandle tryBuildOffsetMaskDispatchDouble(JSShape[] shapes, int[] offsets, int n, int propId, MethodHandle fallback) {
-		if (propId < 0) return null; // 缺少 propId 时无法进行严格属性归属验证，安全回落
-		Map<Integer, Long> offsetMaskMap = new LinkedHashMap<>();
+	private static int[] collectDistinctOffsets(int[] offsets, int n) {
+		int[] distinctOffsets = new int[8];
+		int count = 0;
 		for (int i = 0; i < n; i++) {
 			int off = offsets[i];
-			JSShape s = shapes[i];
-			offsetMaskMap.compute(off, (k, prevMask) -> {
-				if (prevMask == null) return s.mask;
-				if (prevMask == 0L || s.mask == 0L) return 0L;
-				return prevMask | s.mask;
-			});
+			boolean found = false;
+			for (int j = 0; j < count; j++) {
+				if (distinctOffsets[j] == off) {
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				if (count >= 8) return null; // offset 种类过多时回落
+				distinctOffsets[count++] = off;
+			}
 		}
+		return Arrays.copyOf(distinctOffsets, count);
+	}
 
-		if (offsetMaskMap.size() > 8) return null; // offset 种类过多时回落
+	private static MethodHandle tryBuildOffsetMaskDispatchDouble(JSShape[] shapes, int[] offsets, int n, int propId, MethodHandle fallback) {
+		if (propId < 0) return null;
+		int[] distinctOffsets = collectDistinctOffsets(offsets, n);
+		if (distinctOffsets == null) return null;
 
 		MethodHandle chain = fallback;
-		List<Map.Entry<Integer, Long>> entries = new ArrayList<>(offsetMaskMap.entrySet());
-		for (int i = entries.size() - 1; i >= 0; i--) {
-			int off = entries.get(i).getKey();
-			long mask = entries.get(i).getValue();
+		for (int i = distinctOffsets.length - 1; i >= 0; i--) {
+			int off = distinctOffsets[i];
 			MethodHandle fastGetter = off < 8
 			 ? MH_GET_SLOT_DOUBLE[off]
 			 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE, 0, off);
-			MethodHandle test = (mask != 0L)
-			 ? MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, mask, propId, off)
-			 : MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, off);
+			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, off);
 			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
 		}
 		return chain;
@@ -699,30 +705,16 @@ public class JSLinker {
 
 	private static MethodHandle tryBuildOffsetMaskDispatchObject(JSShape[] shapes, int[] offsets, int n, int propId, MethodHandle fallback) {
 		if (propId < 0) return null;
-		Map<Integer, Long> offsetMaskMap = new LinkedHashMap<>();
-		for (int i = 0; i < n; i++) {
-			int off = offsets[i];
-			JSShape s = shapes[i];
-			offsetMaskMap.compute(off, (k, prevMask) -> {
-				if (prevMask == null) return s.mask;
-				if (prevMask == 0L || s.mask == 0L) return 0L;
-				return prevMask | s.mask;
-			});
-		}
-
-		if (offsetMaskMap.size() > 8) return null;
+		int[] distinctOffsets = collectDistinctOffsets(offsets, n);
+		if (distinctOffsets == null) return null;
 
 		MethodHandle chain = fallback;
-		List<Map.Entry<Integer, Long>> entries = new ArrayList<>(offsetMaskMap.entrySet());
-		for (int i = entries.size() - 1; i >= 0; i--) {
-			int off = entries.get(i).getKey();
-			long mask = entries.get(i).getValue();
+		for (int i = distinctOffsets.length - 1; i >= 0; i--) {
+			int off = distinctOffsets[i];
 			MethodHandle fastGetter = off < 8
 			 ? MH_GET_SLOT_OBJECT[off]
 			 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, off);
-			MethodHandle test = (mask != 0L)
-			 ? MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, mask, propId, off)
-			 : MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, off);
+			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, off);
 			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
 		}
 		return chain;
@@ -730,28 +722,14 @@ public class JSLinker {
 
 	private static MethodHandle tryBuildOffsetMaskDispatchInt(JSShape[] shapes, int[] offsets, int n, int propId, MethodHandle fallback) {
 		if (propId < 0) return null;
-		Map<Integer, Long> offsetMaskMap = new LinkedHashMap<>();
-		for (int i = 0; i < n; i++) {
-			int off = offsets[i];
-			JSShape s = shapes[i];
-			offsetMaskMap.compute(off, (k, prevMask) -> {
-				if (prevMask == null) return s.mask;
-				if (prevMask == 0L || s.mask == 0L) return 0L;
-				return prevMask | s.mask;
-			});
-		}
-
-		if (offsetMaskMap.size() > 8) return null;
+		int[] distinctOffsets = collectDistinctOffsets(offsets, n);
+		if (distinctOffsets == null) return null;
 
 		MethodHandle chain = fallback;
-		List<Map.Entry<Integer, Long>> entries = new ArrayList<>(offsetMaskMap.entrySet());
-		for (int i = entries.size() - 1; i >= 0; i--) {
-			int off = entries.get(i).getKey();
-			long mask = entries.get(i).getValue();
+		for (int i = distinctOffsets.length - 1; i >= 0; i--) {
+			int off = distinctOffsets[i];
 			MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_INT, 0, off);
-			MethodHandle test = (mask != 0L)
-			 ? MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, mask, propId, off)
-			 : MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, off);
+			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, off);
 			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
 		}
 		return chain;
@@ -759,28 +737,14 @@ public class JSLinker {
 
 	private static MethodHandle tryBuildOffsetMaskDispatchLong(JSShape[] shapes, int[] offsets, int n, int propId, MethodHandle fallback) {
 		if (propId < 0) return null;
-		Map<Integer, Long> offsetMaskMap = new LinkedHashMap<>();
-		for (int i = 0; i < n; i++) {
-			int off = offsets[i];
-			JSShape s = shapes[i];
-			offsetMaskMap.compute(off, (k, prevMask) -> {
-				if (prevMask == null) return s.mask;
-				if (prevMask == 0L || s.mask == 0L) return 0L;
-				return prevMask | s.mask;
-			});
-		}
-
-		if (offsetMaskMap.size() > 8) return null;
+		int[] distinctOffsets = collectDistinctOffsets(offsets, n);
+		if (distinctOffsets == null) return null;
 
 		MethodHandle chain = fallback;
-		List<Map.Entry<Integer, Long>> entries = new ArrayList<>(offsetMaskMap.entrySet());
-		for (int i = entries.size() - 1; i >= 0; i--) {
-			int off = entries.get(i).getKey();
-			long mask = entries.get(i).getValue();
+		for (int i = distinctOffsets.length - 1; i >= 0; i--) {
+			int off = distinctOffsets[i];
 			MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_LONG, 0, off);
-			MethodHandle test = (mask != 0L)
-			 ? MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, mask, propId, off)
-			 : MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, off);
+			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, off);
 			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
 		}
 		return chain;
@@ -1090,10 +1054,6 @@ public class JSLinker {
 				break;
 			}
 			combinedMask |= s.mask;
-		}
-
-		if (allHaveMask && combinedMask != 0L && propId >= 0 && commonOff >= 0) {
-			return MethodHandles.insertArguments(MH_IS_MATCH_MASK_AND_PROP, 0, combinedMask, propId, commonOff);
 		}
 
 		if (propId >= 0 && commonOff >= 0) {

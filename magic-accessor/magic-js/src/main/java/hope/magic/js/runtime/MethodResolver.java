@@ -16,6 +16,94 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class MethodResolver {
 
+	static final int COST_INCOMPATIBLE = 1_000_000;
+	public static Method findBestMatchingMethod(Class<?> clazz, String methodName, Object[] args) {
+		List<Method> candidates = findCandidateMethods(clazz, methodName);
+		if (candidates.isEmpty()) return null;
+
+		// Phase 1: 固定参数匹配 (Fixed-Arity)
+		Method       bestMethod = null;
+		int          minCost    = COST_INCOMPATIBLE;
+		List<Method> applicable = new ArrayList<>();
+
+		for (Method m : candidates) {
+			if (m.getParameterCount() != args.length) continue;
+			Class<?>[] params    = m.getParameterTypes();
+			int        totalCost = 0;
+			boolean    ok        = true;
+			for (int i = 0; i < args.length; i++) {
+				int c = JSLinker.computeConversionCost(args[i], params[i]);
+				if (c >= COST_INCOMPATIBLE) {
+					ok = false;
+					break;
+				}
+				totalCost += c;
+			}
+			if (ok) {
+				applicable.add(m);
+				if (totalCost < minCost) {
+					minCost = totalCost;
+					bestMethod = m;
+				}
+			}
+		}
+
+		if (!applicable.isEmpty()) {
+			// 在低成本候选方法中应用 JLS Pairwise Specificity
+			List<Method> bestCandidates = new ArrayList<>();
+			for (Method m : applicable) {
+				Class<?>[] params = m.getParameterTypes();
+				int        cost   = 0;
+				for (int i = 0; i < args.length; i++) cost += JSLinker.computeConversionCost(args[i], params[i]);
+				if (cost == minCost) bestCandidates.add(m);
+			}
+			if (bestCandidates.size() == 1) return bestCandidates.get(0);
+			// 挑选最具体的方法
+			Method mostSpecific = bestCandidates.get(0);
+			for (int i = 1; i < bestCandidates.size(); i++) {
+				Method curr = bestCandidates.get(i);
+				if (JSLinker.isMoreSpecific(curr, mostSpecific)) {
+					mostSpecific = curr;
+				}
+			}
+			return mostSpecific;
+		}
+
+		// Phase 2: 可变参数匹配 (Varargs)
+		for (Method m : candidates) {
+			if (!m.isVarArgs()) continue;
+			int paramCount = m.getParameterCount();
+			if (args.length < paramCount - 1) continue;
+			Class<?>[] params         = m.getParameterTypes();
+			Class<?>   varargElemType = params[paramCount - 1].getComponentType();
+			boolean    ok             = true;
+			int        totalCost      = 1000; // Varargs 惩罚项
+			for (int i = 0; i < paramCount - 1; i++) {
+				int c = JSLinker.computeConversionCost(args[i], params[i]);
+				if (c >= COST_INCOMPATIBLE) {
+					ok = false;
+					break;
+				}
+				totalCost += c;
+			}
+			if (ok) {
+				for (int i = paramCount - 1; i < args.length; i++) {
+					int c = JSLinker.computeConversionCost(args[i], varargElemType);
+					if (c >= COST_INCOMPATIBLE) {
+						ok = false;
+						break;
+					}
+					totalCost += c;
+				}
+			}
+			if (ok && totalCost < minCost) {
+				minCost = totalCost;
+				bestMethod = m;
+			}
+		}
+
+		return bestMethod;
+	}
 	public static final class MethodKey {
 		public final Class<?> clazz;
 		public final String name;

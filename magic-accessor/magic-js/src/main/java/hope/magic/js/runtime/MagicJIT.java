@@ -436,7 +436,7 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
-	private static Field getDeclaredFieldRecursive(Class<?> clazz, String fieldName) {
+	public static Field getDeclaredFieldRecursive(Class<?> clazz, String fieldName) {
 		Class<?> cur = clazz;
 		while (cur != null && cur != Object.class) {
 				// if (LinkerHelper.FAST_OFFSET && jdk.internal.misc.Unsafe.getUnsafe().objectFieldOffset(clazz, fieldName) > 0)

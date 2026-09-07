@@ -39,9 +39,6 @@ public class Test262RunnerTest {
 			String msg = args.length > 0 && args[0] != null ? JSOps.toStr(args[0]) : "Test262Error";
 			throw new AssertionError("Test262Error: " + msg);
 		});
-		cx.set("TypeError", (JSFunction) (ctx, thisObj, args) -> new JSObject());
-		cx.set("RangeError", (JSFunction) (ctx, thisObj, args) -> new JSObject());
-		cx.set("Error", (JSFunction) (ctx, thisObj, args) -> new JSObject());
 
 		cx.set("isSameValue", (JSFunction) (ctx, thisObj, args) -> isSameValue(
 				args.length > 0 ? args[0] : JSUndefined.INSTANCE,
@@ -1318,6 +1315,26 @@ public class Test262RunnerTest {
 				verifyProperty(Date.prototype, "toGMTString", {
 				  enumerable: false,
 				  writable: true,
+				  configurable: true,
+				});
+			""");
+		}
+
+		@Test
+		@DisplayName("test262: sec-array-constructor - Property descriptor of Array on global")
+		public void testArrayConstructorDescriptor() {
+			runTest262("""
+				/*---
+				esid: sec-array-constructor
+				description: >
+				  Property descriptor of Array
+				includes: [propertyHelper.js]
+				---*/
+
+				verifyProperty(this, 'Array', {
+				  value: Array,
+				  writable: true,
+				  enumerable: false,
 				  configurable: true,
 				});
 			""");

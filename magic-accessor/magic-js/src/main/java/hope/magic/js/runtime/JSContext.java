@@ -287,6 +287,9 @@ public class JSContext {
 	public static final int SLOT_PROMISE         = getGlobalSlot("Promise");
 	public static final int SLOT_QUEUE_MICROTASK = getGlobalSlot("queueMicrotask");
 	public static final int SLOT_GLOBAL_THIS     = getGlobalSlot("globalThis");
+	public static final int SLOT_THIS            = getGlobalSlot("this");
+	public static final int SLOT_WINDOW          = getGlobalSlot("window");
+	public static final int SLOT_GLOBAL          = getGlobalSlot("global");
 	public static final int SLOT_DOLLAR_262      = getGlobalSlot("$262");
 
 	public static class JSBuiltinMethod extends JSObject implements JSFunction {
@@ -669,8 +672,20 @@ public class JSContext {
 			proto.put("valueOf", makeMethod("valueOf", 0, (cx, thisObj, args) -> thisObj));
 			proto.put("propertyIsEnumerable", makeMethod("propertyIsEnumerable", 1, (cx, thisObj, args) -> {
 				if (args.length == 0 || !(thisObj instanceof JSObject jsObj)) return Boolean.FALSE;
-				String key   = JSOps.toStr(args[0]);
-				int    symId = SymbolTable.lookupId(key);
+				String key = JSOps.toStr(args[0]);
+				if (thisObj instanceof JSGlobalThis globalThis) {
+					if (globalThis.deletedGlobals.contains(key)) return Boolean.FALSE;
+					int symId = SymbolTable.lookupId(key);
+					if (symId != SymbolTable.NO_SYMBOL) {
+						int offset = jsObj.shape.getOffset(symId);
+						if (offset >= 0 && (jsObj.isDoubleSlot(offset) || jsObj.getRawObjectSlot(offset) != JSObject.DELETED)) {
+							return jsObj.shape.isEnumerable(offset) ? Boolean.TRUE : Boolean.FALSE;
+						}
+					}
+					if (globalThis.isBuiltinGlobal(key)) return Boolean.FALSE;
+					return globalThis.hasOwnProperty(key) ? Boolean.TRUE : Boolean.FALSE;
+				}
+				int symId = SymbolTable.lookupId(key);
 				if (symId == SymbolTable.NO_SYMBOL) return Boolean.FALSE;
 				int offset = jsObj.shape.getOffset(symId);
 				if (offset < 0 || (!jsObj.isDoubleSlot(offset) && jsObj.getRawObjectSlot(offset) == JSObject.DELETED)) {
@@ -864,6 +879,29 @@ public class JSContext {
 			int     offset = jsObj.shape.getOffset(propId);
 			boolean exists = offset >= 0 && (jsObj.isDoubleSlot(offset) || jsObj.getRawObjectSlot(offset) != JSObject.DELETED);
 
+			if (jsObj instanceof JSGlobalThis globalThis) {
+				globalThis.deletedGlobals.remove(key);
+				if (!exists && globalThis.hasOwnProperty(key)) {
+					Object  curVal    = globalThis.get(key);
+					boolean isBuiltin = globalThis.isBuiltinGlobal(key);
+					boolean nonConfig = isBuiltin && globalThis.isNonConfigurable(key);
+					byte    type      = (curVal instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
+					if (nonConfig) {
+						type |= (JSShape.FLAG_NOT_WRITABLE | JSShape.FLAG_NOT_ENUMERABLE | JSShape.FLAG_NOT_CONFIGURABLE);
+					} else if (isBuiltin) {
+						type |= JSShape.FLAG_NOT_ENUMERABLE;
+					}
+					jsObj.shape = jsObj.shape.addProperty(propId, type);
+					offset = jsObj.shape.getOffset(propId);
+					if ((type & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE) {
+						jsObj.setDoubleSlot(offset, JSOps.toDouble(curVal));
+					} else {
+						jsObj.setSlot(offset, curVal);
+					}
+					exists = true;
+				}
+			}
+
 			if (!exists) {
 				int targetOffset;
 				if (hasGet || hasSet) {
@@ -998,6 +1036,12 @@ public class JSContext {
 				}
 			}
 
+			if (jsObj instanceof JSGlobalThis globalThis) {
+				if (hasValue) {
+					cx.set(key, desc.get("value"));
+				}
+			}
+
 			return target;
 		}
 
@@ -1012,6 +1056,42 @@ public class JSContext {
 
 			String key    = JSOps.toStr(propKey);
 			int    propId = SymbolTable.id(key);
+
+			if (jsObj instanceof JSGlobalThis globalThis) {
+				if (globalThis.deletedGlobals.contains(key)) {
+					return JSUndefined.INSTANCE;
+				}
+				int offset = jsObj.shape.getOffset(propId);
+				if (offset >= 0 && (jsObj.isDoubleSlot(offset) || jsObj.getRawObjectSlot(offset) != JSObject.DELETED)) {
+					JSObject desc = new JSObject();
+					if (jsObj.shape.isAccessor(offset)) {
+						PropertyAccessor acc = (PropertyAccessor) jsObj.getRawObjectSlot(offset);
+						desc.put("get", acc != null && acc.getter != null ? acc.getter : JSUndefined.INSTANCE);
+						desc.put("set", acc != null && acc.setter != null ? acc.setter : JSUndefined.INSTANCE);
+						desc.put("enumerable", jsObj.shape.isEnumerable(offset));
+						desc.put("configurable", jsObj.shape.isConfigurable(offset));
+					} else {
+						desc.put("value", jsObj.getSlot(offset));
+						desc.put("writable", jsObj.shape.isWritable(offset));
+						desc.put("enumerable", jsObj.shape.isEnumerable(offset));
+						desc.put("configurable", jsObj.shape.isConfigurable(offset));
+					}
+					return desc;
+				}
+				if (globalThis.hasOwnProperty(key)) {
+					Object  val       = globalThis.get(key);
+					boolean isBuiltin = globalThis.isBuiltinGlobal(key);
+					boolean nonConfig = isBuiltin && globalThis.isNonConfigurable(key);
+					JSObject desc     = new JSObject();
+					desc.put("value", val);
+					desc.put("writable", !nonConfig);
+					desc.put("enumerable", !isBuiltin);
+					desc.put("configurable", !nonConfig);
+					return desc;
+				}
+				return JSUndefined.INSTANCE;
+			}
+
 			int    offset = jsObj.shape.getOffset(propId);
 			if (offset < 0 || (!jsObj.isDoubleSlot(offset) && jsObj.getRawObjectSlot(offset) == JSObject.DELETED)) {
 				return JSUndefined.INSTANCE;
@@ -2981,25 +3061,248 @@ public class JSContext {
 
 	public static class JSGlobalThis extends JSObject {
 		private final JSContext cx;
+		public final Set<String> deletedGlobals = new HashSet<>();
+
+		private static final Set<String> BUILTIN_GLOBALS = Set.of(
+			"NaN", "Infinity", "undefined",
+			"Object", "Function", "Array", "String", "Boolean", "Number",
+			"Date", "RegExp", "Error", "EvalError", "RangeError", "ReferenceError",
+			"SyntaxError", "TypeError", "URIError", "Math",
+			"Promise", "Proxy", "Reflect",
+			"console", "print", "queueMicrotask",
+			"globalThis", "window", "global",
+			"Packages", "Java", "java", "javax", "importClass", "JSOps", "$262"
+		);
+
+		public boolean isBuiltinGlobal(String name) {
+			return BUILTIN_GLOBALS.contains(name);
+		}
+
+		public boolean isNonConfigurable(String key) {
+			return "NaN".equals(key) || "Infinity".equals(key) || "undefined".equals(key);
+		}
 
 		public JSGlobalThis(JSContext cx) {
 			super(LazyObject.OBJECT_PROTOTYPE);
 			this.cx = cx;
-			put("globalThis", this);
-			put("window", this);
-			put("global", this);
 		}
 
 		@Override
 		public Object get(String name) {
-			Object val = cx.get(name);
+			return get(name, this);
+		}
+
+		@Override
+		public Object get(int propId) {
+			return get(propId, this);
+		}
+
+		@Override
+		public Object get(int propId, Object receiver) {
+			String name = SymbolTable.name(propId);
+			if (name != null) {
+				return get(name, receiver);
+			}
+			return super.get(propId, receiver);
+		}
+
+		@Override
+		public Object get(String key, Object receiver) {
+			if (deletedGlobals.contains(key)) return JSUndefined.INSTANCE;
+			int symId = SymbolTable.lookupId(key);
+			if (symId != SymbolTable.NO_SYMBOL) {
+				int offset = shape.getOffset(symId);
+				if (offset >= 0) {
+					if (isDoubleSlot(offset)) return getBoxedDouble(offset);
+					Object val = getRawObjectSlot(offset);
+					if (val != DELETED) {
+						if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
+							PropertyAccessor acc = (PropertyAccessor) val;
+							return acc.callGetter(cx, receiver);
+						}
+						return val;
+					}
+				}
+			}
+			Object val = cx.get(key);
 			if (val != JSUndefined.INSTANCE) return val;
-			return super.get(name);
+			return super.get(key, receiver);
 		}
 
 		@Override
 		public void put(String name, Object value) {
+			deletedGlobals.remove(name);
+			int symId = SymbolTable.id(name);
+			int offset = shape.getOffset(symId);
+			if (offset >= 0) {
+				if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
+					PropertyAccessor acc = (PropertyAccessor) getRawObjectSlot(offset);
+					if (acc != null && acc.setter != null) {
+						acc.callSetter(cx, this, value);
+						return;
+					}
+					return;
+				}
+				if (!shape.isWritable(offset)) {
+					return;
+				}
+				if ((shape.getSlotType(offset) & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE && (value instanceof Number)) {
+					setDoubleSlot(offset, JSOps.toDouble(value));
+				} else {
+					setSlot(offset, value);
+				}
+			}
 			cx.set(name, value);
+		}
+
+		@Override
+		public void put(int propId, Object value) {
+			String name = SymbolTable.name(propId);
+			if (name != null) {
+				put(name, value);
+			} else {
+				super.put(propId, value);
+			}
+		}
+
+		@Override
+		public void putDouble(int propId, double value) {
+			put(propId, (Double) value);
+		}
+
+		@Override
+		public void putDouble(String key, double value) {
+			put(key, (Double) value);
+		}
+
+		@Override
+		public void delete(String key) {
+			if (isNonConfigurable(key)) return;
+			int symId = SymbolTable.lookupId(key);
+			if (symId != SymbolTable.NO_SYMBOL) {
+				int offset = shape.getOffset(symId);
+				if (offset >= 0 && !shape.isConfigurable(offset)) {
+					return;
+				}
+				super.delete(symId);
+			}
+			deletedGlobals.add(key);
+			cx.set(key, JSUndefined.INSTANCE);
+			int slot = GLOBAL_SLOT_REGISTRY.getOrDefault(key, -1);
+			if (slot >= 0) {
+				cx.setSlot(slot, JSUndefined.INSTANCE);
+			}
+			cx.getGlobals().remove(key);
+		}
+
+		@Override
+		public void delete(int propId) {
+			String name = SymbolTable.name(propId);
+			if (name != null) {
+				delete(name);
+			} else {
+				super.delete(propId);
+			}
+		}
+
+		@Override
+		public boolean hasOwnProperty(String key) {
+			if (deletedGlobals.contains(key)) return false;
+			int symId = SymbolTable.lookupId(key);
+			if (symId != SymbolTable.NO_SYMBOL) {
+				int offset = shape.getOffset(symId);
+				if (offset >= 0) {
+					if (isDoubleSlot(offset)) return true;
+					return getRawObjectSlot(offset) != DELETED;
+				}
+			}
+			if (isBuiltinGlobal(key)) return true;
+			synchronized (cx.getGlobals()) {
+				if (cx.getGlobals().containsKey(key)) {
+					return cx.getGlobals().get(key) != JSUndefined.INSTANCE;
+				}
+			}
+			int slot = GLOBAL_SLOT_REGISTRY.getOrDefault(key, -1);
+			if (slot >= 0) {
+				Object[] slots = cx.globalSlots;
+				if (slot < slots.length && slots[slot] != null && slots[slot] != JSUndefined.INSTANCE) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		@Override
+		public boolean hasOwnProperty(int propId) {
+			String name = SymbolTable.name(propId);
+			if (name != null) return hasOwnProperty(name);
+			return super.hasOwnProperty(propId);
+		}
+
+		@Override
+		public boolean has(String key) {
+			if (hasOwnProperty(key)) return true;
+			return super.has(key);
+		}
+
+		@Override
+		public boolean has(int propId) {
+			String name = SymbolTable.name(propId);
+			if (name != null && hasOwnProperty(name)) return true;
+			return super.has(propId);
+		}
+
+		@Override
+		public Set<String> keys() {
+			Set<String> activeKeys = new LinkedHashSet<>();
+			int count = shape.propertyCount;
+			for (int i = 0; i < count; i++) {
+				if (shape.isEnumerable(i) && (isDoubleSlot(i) || getRawObjectSlot(i) != DELETED)) {
+					int keyId = shape.getKeyId(i);
+					String name = SymbolTable.name(keyId);
+					if (name != null && !deletedGlobals.contains(name)) {
+						activeKeys.add(name);
+					}
+				}
+			}
+			synchronized (cx.getGlobals()) {
+				for (Map.Entry<String, Object> entry : cx.getGlobals().entrySet()) {
+					String k = entry.getKey();
+					if (!deletedGlobals.contains(k) && !isBuiltinGlobal(k) && entry.getValue() != JSUndefined.INSTANCE) {
+						activeKeys.add(k);
+					}
+				}
+			}
+			return activeKeys;
+		}
+
+		@Override
+		public Set<String> getOwnPropertyNames() {
+			Set<String> allKeys = new LinkedHashSet<>();
+			int count = shape.propertyCount;
+			for (int i = 0; i < count; i++) {
+				if (isDoubleSlot(i) || getRawObjectSlot(i) != DELETED) {
+					int keyId = shape.getKeyId(i);
+					String name = SymbolTable.name(keyId);
+					if (name != null && !deletedGlobals.contains(name)) {
+						allKeys.add(name);
+					}
+				}
+			}
+			for (String builtin : BUILTIN_GLOBALS) {
+				if (!deletedGlobals.contains(builtin)) {
+					allKeys.add(builtin);
+				}
+			}
+			synchronized (cx.getGlobals()) {
+				for (Map.Entry<String, Object> entry : cx.getGlobals().entrySet()) {
+					String k = entry.getKey();
+					if (!deletedGlobals.contains(k) && entry.getValue() != JSUndefined.INSTANCE) {
+						allKeys.add(k);
+					}
+				}
+			}
+			return allKeys;
 		}
 	}
 
@@ -3121,7 +3424,7 @@ public class JSContext {
 			val = LazyBuiltins.PROMISE;
 		} else if (slot == SLOT_QUEUE_MICROTASK) {
 			val = LazyBuiltins.QUEUE_MICROTASK;
-		} else if (slot == SLOT_GLOBAL_THIS) {
+		} else if (slot == SLOT_GLOBAL_THIS || slot == SLOT_THIS || slot == SLOT_WINDOW || slot == SLOT_GLOBAL) {
 			val = getGlobalThis();
 		} else if (slot == SLOT_DOLLAR_262) {
 			val = new Dollar262(this);

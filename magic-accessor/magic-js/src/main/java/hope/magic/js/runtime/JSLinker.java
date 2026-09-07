@@ -1115,6 +1115,9 @@ public class JSLinker {
 
 	/** 动态对象索引读取的通用 Fallback 入口 */
 	public static Object getIndexDynamicFallback(ChainedCallSite site, Object target, Object index) throws Throwable {
+		if (target instanceof JSContext.JSGlobalThis globalThis) {
+			return globalThis.get(JSOps.toStr(index));
+		}
 		if (target instanceof JSObject jsObj && index instanceof String strKey) {
 			JSShape s      = jsObj.shape;
 			int     offset = s.getOffset(strKey);
@@ -1573,6 +1576,9 @@ public class JSLinker {
 		}
 
 		if (target instanceof JSObject jsObj) {
+			if (target instanceof JSContext.JSGlobalThis globalThis) {
+				return globalThis.get(propName);
+			}
 			JSShape shape  = jsObj.shape;
 			int     propId = site.getPropId();
 			int     offset = (propId >= 0) ? shape.getOffset(propId) : shape.getOffset(propName);
@@ -1689,6 +1695,10 @@ public class JSLinker {
 		if (target instanceof JSObject jsObj) {
 			if (target instanceof JSArray jsArr) {
 				jsArr.put(propName, value);
+				return;
+			}
+			if (target instanceof JSContext.JSGlobalThis globalThis) {
+				globalThis.put(propName, value);
 				return;
 			}
 			JSShape shape  = jsObj.shape;
@@ -1859,6 +1869,10 @@ public class JSLinker {
 		if (target instanceof JSObject jsObj) {
 			if (target instanceof JSArray jsArr) {
 				jsArr.put(propName, value);
+				return;
+			}
+			if (target instanceof JSContext.JSGlobalThis globalThis) {
+				globalThis.put(propName, value);
 				return;
 			}
 			JSShape shape  = jsObj.shape;
@@ -3304,6 +3318,9 @@ public class JSLinker {
 		if (target == null || target == JSUndefined.INSTANCE) return 0;
 
 		if (target instanceof JSObject jsObj) {
+			if (target instanceof JSContext.JSGlobalThis globalThis) {
+				return JSOps.toInt(globalThis.get(propName));
+			}
 			JSShape shape  = jsObj.shape;
 			int     propId = site.getPropId();
 			int     offset = (propId >= 0) ? shape.getOffset(propId) : shape.getOffset(propName);
@@ -3359,6 +3376,9 @@ public class JSLinker {
 
 		// JSObject Fast路径：Shape 守护 + In-Object 裸双精度槽直读
 		if (target instanceof JSObject jsObj) {
+			if (target instanceof JSContext.JSGlobalThis globalThis) {
+				return JSOps.toDouble(globalThis.get(propName));
+			}
 			JSShape shape  = jsObj.shape;
 			int     propId = site.getPropId();
 			int     offset = (propId >= 0) ? shape.getOffset(propId) : shape.getOffset(propName);
@@ -3444,6 +3464,9 @@ public class JSLinker {
 		if (target == null || target == JSUndefined.INSTANCE) return 0L;
 
 		if (target instanceof JSObject jsObj) {
+			if (target instanceof JSContext.JSGlobalThis globalThis) {
+				return JSOps.toLong(globalThis.get(propName));
+			}
 			JSShape shape  = jsObj.shape;
 			int     propId = site.getPropId();
 			int     offset = (propId >= 0) ? shape.getOffset(propId) : shape.getOffset(propName);

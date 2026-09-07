@@ -2526,18 +2526,24 @@ public class MagicJSTest {
 	@Test
 	public void testStaticPrototypeShapeBatchConstruction() {
 		// 验证内置原型与构造函数采用静态批量终态烘焙，不污染用户 Shape ID
+		int beforeUserId = JSShape.getNextUserId();
 		JSContext cx = new JSContext();
+		int afterUserId = JSShape.getNextUserId();
+		Assertions.assertEquals(beforeUserId, afterUserId, "创建 JSContext 及内置原型不得消耗用户 Shape ID");
+
 		JSObject proto = (JSObject) cx.eval("Array.prototype;");
 		Assertions.assertNotNull(proto);
 		Assertions.assertTrue(proto.shape.isBuiltin, "Array.prototype 必须标记为内置 Shape");
 		Assertions.assertTrue(proto.shape.id < 0, "Array.prototype 的 Shape ID 必须使用负数隔离命名空间");
 		Assertions.assertEquals(0L, proto.shape.mask, "内置 Shape 的位掩码必须恒为 0L，不挤占 0..63 位掩码空间");
 
-		// 验证冷启动后，用户 Shape 依然可以从 1 开始分配，完整享有 1..63 掩码空间
+		// 验证用户 Shape 依然使用正数分配，与内置隔离
 		JSObject userObj = (JSObject) cx.eval("({ a: 1, b: 2 });");
 		Assertions.assertFalse(userObj.shape.isBuiltin, "用户对象不得标记为内置");
 		Assertions.assertTrue(userObj.shape.id > 0, "用户对象的 Shape ID 必须为正数");
-		Assertions.assertTrue(userObj.shape.mask != 0L, "用户对象的 Shape 必须享有有效的位掩码");
+		if (userObj.shape.id < JSShape.BITMASK_MAX_SHAPES) {
+			Assertions.assertTrue(userObj.shape.mask != 0L, "用户对象的 Shape 在 0..63 空间内必须享有有效的位掩码");
+		}
 	}
 
 	@Test
@@ -2584,6 +2590,34 @@ public class MagicJSTest {
 		alien.setDoubleSlot(0, 999.0);
 		double alienRes = (double) switchMH.invokeExact((Object) alien);
 		Assertions.assertEquals(-1.0, alienRes, 0.0001);
+	}
+
+	@Test
+	public void testLargeArityAndHoistedVarInLoop() {
+		JSContext cx = new JSContext();
+		Object res = cx.eval("""
+			var x = Array(
+			  0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+			  10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+			  20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+			  30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+			  40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+			  50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
+			  60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
+			  70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+			  80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+			  90, 91, 92, 93, 94, 95, 96, 97, 98, 99
+			);
+
+			for (var i = 0; i < 100; i++) {
+			  var result = true;
+			  if (x[i] !== i) {
+			    result = false;
+			  }
+			}
+			result;
+			""");
+		Assertions.assertEquals(Boolean.TRUE, res);
 	}
 }
 

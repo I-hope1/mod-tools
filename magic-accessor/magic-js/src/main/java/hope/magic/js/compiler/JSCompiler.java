@@ -136,6 +136,8 @@ public class JSCompiler {
 		mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
 		mv.visitMethodInsn(Opcodes.INVOKESPECIAL, className, "__initGlobals__", "(L" + IN_JSContext + ";)V", false);
 
+		hoistVariables(program, ctx);
+
 		// 遍历顶层语句
 		boolean hasReturned = false;
 		for (int i = 0; i < program.body.size(); i++) {
@@ -253,6 +255,10 @@ public class JSCompiler {
 		}
 
 		LocalVar declareLocal(String name, VarType type) {
+			LocalVar existing = locals.get(name);
+			if (existing != null) {
+				return existing;
+			}
 			int slot = nextLocalSlot;
 			nextLocalSlot += (type == VarType.LONG || type == VarType.DOUBLE ? 2 : 1);
 			LocalVar var = new LocalVar(slot, type);
@@ -972,20 +978,22 @@ public class JSCompiler {
 		MethodVisitor mv   = ctx.mv;
 		VarType       type = preInferVarType(varDecl, ctx);
 		LocalVar      var  = ctx.declareLocal(varDecl.name, type);
-		if (var.isInt()) {
-			if (varDecl.init != null) { compileNodeAsInt(varDecl.init, ctx); } else mv.visitInsn(Opcodes.ICONST_0);
-			mv.visitVarInsn(Opcodes.ISTORE, var.slot);
-		} else if (var.isLong()) {
-			if (varDecl.init != null) { compileNodeAsLong(varDecl.init, ctx); } else mv.visitInsn(Opcodes.LCONST_0);
-			mv.visitVarInsn(Opcodes.LSTORE, var.slot);
-		} else if (var.isDouble()) {
-			if (varDecl.init != null) { compileNodeAsDouble(varDecl.init, ctx); } else mv.visitInsn(Opcodes.DCONST_0);
-			mv.visitVarInsn(Opcodes.DSTORE, var.slot);
-		} else {
-			if (varDecl.init != null) { compileNode(varDecl.init, ctx, true); } else visitUndefined(mv);
-			mv.visitVarInsn(Opcodes.ASTORE, var.slot);
+		if (varDecl.init != null) {
+			if (var.isInt()) {
+				compileNodeAsInt(varDecl.init, ctx);
+				mv.visitVarInsn(Opcodes.ISTORE, var.slot);
+			} else if (var.isLong()) {
+				compileNodeAsLong(varDecl.init, ctx);
+				mv.visitVarInsn(Opcodes.LSTORE, var.slot);
+			} else if (var.isDouble()) {
+				compileNodeAsDouble(varDecl.init, ctx);
+				mv.visitVarInsn(Opcodes.DSTORE, var.slot);
+			} else {
+				compileNode(varDecl.init, ctx, true);
+				mv.visitVarInsn(Opcodes.ASTORE, var.slot);
+			}
+			syncGlobalVar(mv, ctx, var, varDecl.name);
 		}
-		syncGlobalVar(mv, ctx, var, varDecl.name);
 		if (needResult) visitUndefined(mv);
 	}
 
@@ -2827,6 +2835,8 @@ public class JSCompiler {
 				asyncMv.visitVarInsn(Opcodes.ASTORE, argVar.slot);
 			}
 
+			// 局部变量预先分配与提升
+			hoistVariables(fakeProg, ctx);
 			// 嵌套函数局部作用域与提升 (Nested Function Hoisting)
 			hoistNestedFunctions(fakeProg, ctx);
 
@@ -2872,6 +2882,8 @@ public class JSCompiler {
 					primCtx.declareLocal(params.get(i), VarType.DOUBLE);
 				}
 
+				// 局部变量预先分配与提升
+				hoistVariables(fakeProgPrim, primCtx);
 				// 嵌套函数局部作用域与提升
 				hoistNestedFunctions(fakeProgPrim, primCtx);
 
@@ -2945,6 +2957,8 @@ public class JSCompiler {
 					}
 				}
 
+				// 局部变量预先分配与提升
+				hoistVariables(fakeProg, ctx);
 				// 嵌套函数局部作用域与提升 (Nested Function Hoisting)
 				hoistNestedFunctions(fakeProg, ctx);
 
@@ -3096,6 +3110,33 @@ public class JSCompiler {
 		mv.visitLabel(lUndef);
 		visitUndefined(mv);
 		mv.visitLabel(lEnd);
+	}
+
+	private static void hoistVariables(Node root, CompileContext ctx) {
+		if (root == null || ctx == null) return;
+		List<Node.VarDecl> varDecls = new ArrayList<>();
+		collectVarDecls(root, varDecls);
+		MethodVisitor mv = ctx.mv;
+		for (Node.VarDecl decl : varDecls) {
+			if (ctx.getLocal(decl.name) == null) {
+				VarType type = preInferVarType(decl, ctx);
+				LocalVar var = ctx.declareLocal(decl.name, type);
+				if (var.isInt()) {
+					mv.visitInsn(Opcodes.ICONST_0);
+					mv.visitVarInsn(Opcodes.ISTORE, var.slot);
+				} else if (var.isLong()) {
+					mv.visitInsn(Opcodes.LCONST_0);
+					mv.visitVarInsn(Opcodes.LSTORE, var.slot);
+				} else if (var.isDouble()) {
+					mv.visitInsn(Opcodes.DCONST_0);
+					mv.visitVarInsn(Opcodes.DSTORE, var.slot);
+				} else {
+					visitUndefined(mv);
+					mv.visitVarInsn(Opcodes.ASTORE, var.slot);
+				}
+				syncGlobalVar(mv, ctx, var, decl.name);
+			}
+		}
 	}
 
 	private static void hoistNestedFunctions(Node.Program prog, CompileContext ctx) {

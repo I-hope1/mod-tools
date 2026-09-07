@@ -2674,7 +2674,7 @@ public class JSLinker {
 			} else {
 				directMh = JSFuncMH.CALL;
 				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null, JSUndefined.INSTANCE);
-				directMh = directMh.asSpreader(Object[].class, arity);
+				directMh = directMh.asCollector(1, Object[].class, arity);
 			}
 
 			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
@@ -2715,7 +2715,7 @@ public class JSLinker {
 			} else {
 				directMh = JSFuncMH.CALL;
 				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null);
-				directMh = directMh.asSpreader(Object[].class, arity - 1);
+				directMh = directMh.asCollector(2, Object[].class, arity - 1);
 			}
 
 			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());

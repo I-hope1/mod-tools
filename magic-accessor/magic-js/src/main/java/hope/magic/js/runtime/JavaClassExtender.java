@@ -628,36 +628,43 @@ public final class JavaClassExtender {
 		mv.visitEnd();
 	}
 
-	private static void generateOverriddenMethod(ClassWriter cw, String subInternal, String superInternal, Method m,
-	                                             long maskShift, boolean isInterface) {
-		String     name       = m.getName();
-		String     desc       = Type.getMethodDescriptor(m);
+	private static void generateOverriddenMethod(ClassWriter cw, String subInternal, String superInternal, Method m, long maskShift, boolean isInterface) {
+		String name = m.getName();
+		String desc = Type.getMethodDescriptor(m);
 		Class<?>[] paramTypes = m.getParameterTypes();
-		Class<?>   retType    = m.getReturnType();
-		boolean    isAbstract = Modifier.isAbstract(m.getModifiers());
+		Class<?> retType = m.getReturnType();
+		boolean isAbstract = Modifier.isAbstract(m.getModifiers());
 
 		MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, name, desc, null, null);
 		mv.visitCode();
 
-		Label callJsLabel   = new Label();
+		Label callJsLabel = new Label();
 		Label fallbackLabel = new Label();
+		Label superLabel = new Label();
 
-		// 1. 掩码快速短路 (若 maskShift < 64 且非抽象)
-		if (maskShift < 64 && !isAbstract) {
-			mv.visitVarInsn(ALOAD, 0);
-			mv.visitFieldInsn(GETFIELD, subInternal, "__magic_override_mask", "J");
-			mv.visitLdcInsn(1L << maskShift);
-			mv.visitInsn(LAND);
-			mv.visitInsn(LCONST_0);
-			mv.visitInsn(LCMP);
-			mv.visitJumpInsn(IFNE, callJsLabel);
-
-			// 未覆写：快速直通父类原生实现
-			emitSuperCall(mv, superInternal, m, paramTypes, retType, isInterface);
+		// 1. 掩码快速短路 (若非抽象方法)
+		if (!isAbstract) {
+			if (maskShift < 32) {
+				// 低 32 位优化: L2I -> IAND -> IFEQ (直接跳转到 superLabel)
+				mv.visitVarInsn(ALOAD, 0);
+				mv.visitFieldInsn(GETFIELD, subInternal, "__magic_override_mask", "J");
+				mv.visitInsn(L2I);
+				MagicJIT.pushInt(mv, 1 << (int) maskShift);
+				mv.visitInsn(IAND);
+				mv.visitJumpInsn(IFEQ, superLabel);
+			} else if (maskShift < 64) {
+				// 高 32 位: LAND -> LCONST_0 -> LCMP -> IFEQ
+				mv.visitVarInsn(ALOAD, 0);
+				mv.visitFieldInsn(GETFIELD, subInternal, "__magic_override_mask", "J");
+				mv.visitLdcInsn(1L << maskShift);
+				mv.visitInsn(LAND);
+				mv.visitInsn(LCONST_0);
+				mv.visitInsn(LCMP);
+				mv.visitJumpInsn(IFEQ, superLabel);
+			}
 		}
 
-		// 2. 慢路径：调用 JSFunction
-		mv.visitLabel(callJsLabel);
+		// 2. 获取并调用 JSFunction
 		mv.visitVarInsn(ALOAD, 0);
 		mv.visitFieldInsn(GETFIELD, subInternal, "__magic_jsObj", "Lhope/magic/js/runtime/JSObject;");
 		MagicJIT.pushInt(mv, SymbolTable.id(name));
@@ -667,16 +674,18 @@ public final class JavaClassExtender {
 		mv.visitTypeInsn(INSTANCEOF, "hope/magic/js/runtime/JSFunction");
 		mv.visitJumpInsn(IFEQ, fallbackLabel);
 
-		// 特化调用 JSFunction (call0 ~ call4 / call)
+		// 特化调用 call0 ~ call4 / call
 		emitJSFunctionCall(mv, paramTypes);
 
 		// 返回值规范化强转
 		emitCastReturn(mv, retType);
 
-		// 3. Fallback: 属性不是 JSFunction
+		// 3. Fallback 与 Super 共享路径
 		mv.visitLabel(fallbackLabel);
-		mv.visitInsn(POP); // 弹出 member
+		mv.visitInsn(POP); // 弹出不是 JSFunction 的 member
+
 		if (!isAbstract) {
+			mv.visitLabel(superLabel);
 			emitSuperCall(mv, superInternal, m, paramTypes, retType, isInterface);
 		} else {
 			mv.visitTypeInsn(NEW, "java/lang/UnsupportedOperationException");

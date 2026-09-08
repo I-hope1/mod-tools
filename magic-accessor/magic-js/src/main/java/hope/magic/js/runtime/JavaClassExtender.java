@@ -24,35 +24,35 @@ public final class JavaClassExtender {
 
 	public static final boolean DEBUG = false;
 
-	private static final AtomicLong ID_GEN = new AtomicLong(0);
-	public static final String IN_JSOps = "hope/magic/js/runtime/JSOps";
+	private static final AtomicLong ID_GEN   = new AtomicLong(0);
+	public static final  String     IN_JSOps = "hope/magic/js/runtime/JSOps";
 
 	public static class ClassInfo {
-		public final Class<?> targetClass;
-		public final Class<?> subClass;
-		public final Map<String, Long> methodMasks; // 方法名 -> 掩码位
-		public final List<Constructor<?>> constructors; // 原父类可见构造器列表
-		public final List<Constructor<?>> subConstructors; // 子类构造器列表
-		public final Constructor<?> noArgSubConstructor; // 快速无参构造器 (JSObject, long)
+		public final Class<?>                      targetClass;
+		public final Class<?>                      subClass;
+		public final Map<String, Long>             methodMasks; // 方法名 -> 掩码位
+		public final List<Constructor<?>>          constructors; // 原父类可见构造器列表
+		public final List<Constructor<?>>          subConstructors; // 子类构造器列表
+		public final Constructor<?>                noArgSubConstructor; // 快速无参构造器 (JSObject, long)
 		public final java.lang.invoke.MethodHandle noArgSubMh; // 快速无参构造器 MethodHandle
 
 		public ClassInfo(Class<?> targetClass, Class<?> subClass,
-						 Map<String, Long> methodMasks, List<Constructor<?>> constructors,
-						 List<Constructor<?>> subConstructors) {
+		                 Map<String, Long> methodMasks, List<Constructor<?>> constructors,
+		                 List<Constructor<?>> subConstructors) {
 			this.targetClass = targetClass;
 			this.subClass = subClass;
 			this.methodMasks = methodMasks;
 			this.constructors = constructors;
 			this.subConstructors = subConstructors;
-			Constructor<?> noArg = null;
-			java.lang.invoke.MethodHandle mh = null;
+			Constructor<?>                noArg = null;
+			java.lang.invoke.MethodHandle mh    = null;
 			for (Constructor<?> c : subConstructors) {
 				Class<?>[] pTypes = c.getParameterTypes();
 				if (pTypes.length == 2 && pTypes[0] == JSObject.class && pTypes[1] == long.class) {
 					noArg = c;
 					try {
 						mh = Magic.lookup.unreflectConstructor(c);
-					} catch (Throwable ignored) {}
+					} catch (Throwable ignored) { }
 					break;
 				}
 			}
@@ -99,22 +99,22 @@ public final class JavaClassExtender {
 		return null;
 	}
 
-	public record ClassMethodDef(String name, JSFunction fn, int kind) {}
+	public record ClassMethodDef(String name, JSFunction fn, int kind) { }
 
 	private static List<ClassMethodDef> parseMethodDefs(Object[] methodData) {
 		List<ClassMethodDef> list = new ArrayList<>();
 		if (methodData == null) return list;
 		if (methodData.length % 3 == 0) {
 			for (int i = 0; i < methodData.length; i += 3) {
-				String name = (String) methodData[i];
-				JSFunction fn = (JSFunction) methodData[i + 1];
-				int kind = (methodData[i + 2] instanceof Number n) ? n.intValue() : 0;
+				String     name = (String) methodData[i];
+				JSFunction fn   = (JSFunction) methodData[i + 1];
+				int        kind = (methodData[i + 2] instanceof Number n) ? n.intValue() : 0;
 				list.add(new ClassMethodDef(name, fn, kind));
 			}
 		} else if (methodData.length % 2 == 0) {
 			for (int i = 0; i < methodData.length; i += 2) {
-				String name = (String) methodData[i];
-				JSFunction fn = (JSFunction) methodData[i + 1];
+				String     name = (String) methodData[i];
+				JSFunction fn   = (JSFunction) methodData[i + 1];
 				list.add(new ClassMethodDef(name, fn, 0));
 			}
 		}
@@ -135,18 +135,18 @@ public final class JavaClassExtender {
 	}
 
 	public static JSFunction defineClass(
-			JSContext cx,
-			Object superClassObj,
-			String className,
-			Object[] methodPairs,
-			Object[] staticMethodPairs,
-			JSFunction ctorFn
+	 JSContext cx,
+	 Object superClassObj,
+	 String className,
+	 Object[] methodPairs,
+	 Object[] staticMethodPairs,
+	 JSFunction ctorFn
 	) {
-		List<ClassMethodDef> methods = parseMethodDefs(methodPairs);
+		List<ClassMethodDef> methods       = parseMethodDefs(methodPairs);
 		List<ClassMethodDef> staticMethods = parseMethodDefs(staticMethodPairs);
 
 		JSFunction resultCtor;
-		Class<?> javaSuperClass = getJavaSuperClass(superClassObj);
+		Class<?>   javaSuperClass = getJavaSuperClass(superClassObj);
 		if (javaSuperClass != null) {
 			JSFunction superJSClass = (superClassObj instanceof JSFunction sf) ? sf : null;
 			resultCtor = createClassConstructor(javaSuperClass, superJSClass, methods, ctorFn);
@@ -168,10 +168,10 @@ public final class JavaClassExtender {
 	}
 
 	private static JSFunction createJSClassConstructor(
-			JSContext cx,
-			JSFunction superCtor,
-			List<ClassMethodDef> methods,
-			JSFunction jsCtor
+	 JSContext cx,
+	 JSFunction superCtor,
+	 List<ClassMethodDef> methods,
+	 JSFunction jsCtor
 	) {
 		JSObject proto;
 		if (superCtor instanceof JSObject superCtorObj) {
@@ -209,10 +209,10 @@ public final class JavaClassExtender {
 	}
 
 	public static JSFunction createClassConstructor(
-			Class<?> javaSuperClass,
-			JSFunction superJSClass,
-			List<ClassMethodDef> methods,
-			JSFunction jsCtor
+	 Class<?> javaSuperClass,
+	 JSFunction superJSClass,
+	 List<ClassMethodDef> methods,
+	 JSFunction jsCtor
 	) {
 		ClassInfo info = getClassInfo(javaSuperClass);
 
@@ -254,7 +254,7 @@ public final class JavaClassExtender {
 
 		JSFunctionObject ctor = new JSFunctionObject((cx, thisObj, args) -> {
 			Object[] callArgs = args != null ? args : new Object[0];
-			Object instance;
+			Object   instance;
 			if (thisObj instanceof JSBridgedObject existing) {
 				instance = existing;
 			} else {
@@ -282,10 +282,10 @@ public final class JavaClassExtender {
 		return ctor;
 	}
 	public static JSFunction createClassConstructor(
-			Class<?> javaSuperClass,
-			JSFunction superJSClass,
-			Map<String, JSFunction> methods,
-			JSFunction jsCtor
+	 Class<?> javaSuperClass,
+	 JSFunction superJSClass,
+	 Map<String, JSFunction> methods,
+	 JSFunction jsCtor
 	) {
 		List<ClassMethodDef> list = new ArrayList<>();
 		if (methods != null) {
@@ -296,7 +296,8 @@ public final class JavaClassExtender {
 		return createClassConstructor(javaSuperClass, superJSClass, list, jsCtor);
 	}
 
-	public static JSFunction createClassConstructor(Class<?> superClass, Map<String, JSFunction> methods, JSFunction jsCtor) {
+	public static JSFunction createClassConstructor(Class<?> superClass, Map<String, JSFunction> methods,
+	                                                JSFunction jsCtor) {
 		return createClassConstructor(superClass, null, methods, jsCtor);
 	}
 
@@ -308,11 +309,11 @@ public final class JavaClassExtender {
 			return true;
 		}
 		if (targetType == int.class || targetType == Integer.class ||
-			targetType == long.class || targetType == Long.class ||
-			targetType == double.class || targetType == Double.class ||
-			targetType == float.class || targetType == Float.class ||
-			targetType == short.class || targetType == Short.class ||
-			targetType == byte.class || targetType == Byte.class) {
+		    targetType == long.class || targetType == Long.class ||
+		    targetType == double.class || targetType == Double.class ||
+		    targetType == float.class || targetType == Float.class ||
+		    targetType == short.class || targetType == Short.class ||
+		    targetType == byte.class || targetType == Byte.class) {
 			return arg instanceof Number;
 		}
 		if (targetType == boolean.class || targetType == Boolean.class) {
@@ -341,8 +342,8 @@ public final class JavaClassExtender {
 			}
 		}
 
-		Constructor<?> bestCtor = null;
-		Object[] castedArgs = null;
+		Constructor<?> bestCtor   = null;
+		Object[]       castedArgs = null;
 
 		// 1. 精确匹配参数个数
 		for (Constructor<?> c : info.subConstructors) {
@@ -351,7 +352,7 @@ public final class JavaClassExtender {
 
 			int superArgCount = pTypes.length - 2;
 			if (superArgCount == args.length) {
-				boolean match = true;
+				boolean  match    = true;
 				Object[] tempArgs = new Object[pTypes.length];
 				tempArgs[0] = jsObj;
 				tempArgs[1] = mask;
@@ -383,7 +384,7 @@ public final class JavaClassExtender {
 
 				int superArgCount = pTypes.length - 2;
 				if (superArgCount > 0 && superArgCount < args.length) {
-					boolean match = true;
+					boolean  match    = true;
 					Object[] tempArgs = new Object[pTypes.length];
 					tempArgs[0] = jsObj;
 					tempArgs[1] = mask;
@@ -435,16 +436,16 @@ public final class JavaClassExtender {
 			throw new IllegalArgumentException("Cannot extend final class: " + superClass.getName());
 		}
 
-		boolean isInterface = superClass.isInterface();
+		boolean  isInterface      = superClass.isInterface();
 		Class<?> actualSuperClass = isInterface ? Object.class : superClass;
-		String superInternal = Type.getInternalName(actualSuperClass);
+		String   superInternal    = Type.getInternalName(actualSuperClass);
 
-		String superPkg = superClass.getPackageName();
+		String  superPkg    = superClass.getPackageName();
 		boolean isSystemPkg = superPkg.startsWith("java.") || superPkg.startsWith("javax.") || superPkg.startsWith("jdk.") || superPkg.startsWith("sun.");
 
-		ClassLoader appLoader = JavaClassExtender.class.getClassLoader();
-		ClassLoader loader = superClass.getClassLoader();
-		boolean canSuperLoaderSeeJS = false;
+		ClassLoader appLoader           = JavaClassExtender.class.getClassLoader();
+		ClassLoader loader              = superClass.getClassLoader();
+		boolean     canSuperLoaderSeeJS = false;
 		if (loader != null) {
 			try {
 				loader.loadClass(JSBridgedObject.class.getName());
@@ -454,7 +455,7 @@ public final class JavaClassExtender {
 		}
 
 		ClassLoader targetLoader;
-		String pkg;
+		String      pkg;
 		if (!isSystemPkg && canSuperLoaderSeeJS && !superPkg.isEmpty()) {
 			targetLoader = loader;
 			pkg = superPkg.replace('.', '/') + "/";
@@ -510,8 +511,8 @@ public final class JavaClassExtender {
 		}
 
 		// 收集虚方法并分配掩码位
-		Map<String, Long> methodMasks = new HashMap<>();
-		long nextMaskShift = 0;
+		Map<String, Long> methodMasks   = new HashMap<>();
+		long              nextMaskShift = 0;
 
 		Map<String, Method> virtualMethods = new LinkedHashMap<>();
 		collectVirtualMethods(superClass, virtualMethods);
@@ -543,7 +544,7 @@ public final class JavaClassExtender {
 			}
 		}
 
-		Class<?> subClass = Magic.defineClass(targetLoader, bytes);
+		Class<?>             subClass        = Magic.defineClass(targetLoader, bytes);
 		List<Constructor<?>> subConstructors = Arrays.asList(subClass.getDeclaredConstructors());
 		for (Constructor<?> c : subConstructors) {
 			try {
@@ -561,7 +562,9 @@ public final class JavaClassExtender {
 			if (Modifier.isStatic(mod) || Modifier.isFinal(mod) || Modifier.isPrivate(mod)) continue;
 			if (m.getDeclaringClass() == Object.class) {
 				String name = m.getName();
-				if ("getClass".equals(name) || "wait".equals(name) || "notify".equals(name) || "notifyAll".equals(name)) continue;
+				if ("getClass".equals(name) || "wait".equals(name) || "notify".equals(name) || "notifyAll".equals(name)) {
+					continue;
+				}
 			}
 			String sig = m.getName() + Type.getMethodDescriptor(m);
 			methods.putIfAbsent(sig, m);
@@ -580,7 +583,8 @@ public final class JavaClassExtender {
 		}
 	}
 
-	private static void generateConstructor(ClassWriter cw, String subInternal, String superInternal, Class<?>[] paramTypes) {
+	private static void generateConstructor(ClassWriter cw, String subInternal, String superInternal,
+	                                        Class<?>[] paramTypes) {
 		// 签名: <init>(JSObject jsObj, long mask, P1, P2...)
 		List<Class<?>> allParams = new ArrayList<>();
 		allParams.add(JSObject.class);
@@ -624,17 +628,18 @@ public final class JavaClassExtender {
 		mv.visitEnd();
 	}
 
-	private static void generateOverriddenMethod(ClassWriter cw, String subInternal, String superInternal, Method m, long maskShift, boolean isInterface) {
-		String name = m.getName();
-		String desc = Type.getMethodDescriptor(m);
+	private static void generateOverriddenMethod(ClassWriter cw, String subInternal, String superInternal, Method m,
+	                                             long maskShift, boolean isInterface) {
+		String     name       = m.getName();
+		String     desc       = Type.getMethodDescriptor(m);
 		Class<?>[] paramTypes = m.getParameterTypes();
-		Class<?> retType = m.getReturnType();
-		boolean isAbstract = Modifier.isAbstract(m.getModifiers());
+		Class<?>   retType    = m.getReturnType();
+		boolean    isAbstract = Modifier.isAbstract(m.getModifiers());
 
 		MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, name, desc, null, null);
 		mv.visitCode();
 
-		Label callJsLabel = new Label();
+		Label callJsLabel   = new Label();
 		Label fallbackLabel = new Label();
 
 		// 1. 掩码快速短路 (若 maskShift < 64 且非抽象)
@@ -662,12 +667,8 @@ public final class JavaClassExtender {
 		mv.visitTypeInsn(INSTANCEOF, "hope/magic/js/runtime/JSFunction");
 		mv.visitJumpInsn(IFEQ, fallbackLabel);
 
-		// 调用 JSFunction.call(cx, thisObj, args)
-		mv.visitTypeInsn(CHECKCAST, "hope/magic/js/runtime/JSFunction");
-		mv.visitInsn(ACONST_NULL); // cx
-		mv.visitVarInsn(ALOAD, 0); // thisObj
-		emitPackArgs(mv, paramTypes);
-		mv.visitMethodInsn(INVOKEINTERFACE, "hope/magic/js/runtime/JSFunction", "call", "(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", true);
+		// 特化调用 JSFunction (call0 ~ call4 / call)
+		emitJSFunctionCall(mv, paramTypes);
 
 		// 返回值规范化强转
 		emitCastReturn(mv, retType);
@@ -689,12 +690,13 @@ public final class JavaClassExtender {
 		mv.visitEnd();
 	}
 
-	private static void generateSuperBridgeMethod(ClassWriter cw, String subInternal, String superInternal, Method m, boolean isInterface) {
-		String name = m.getName();
-		String bridgeName = "__magic_super_" + name;
-		String desc = Type.getMethodDescriptor(m);
+	private static void generateSuperBridgeMethod(ClassWriter cw, String subInternal, String superInternal, Method m,
+	                                              boolean isInterface) {
+		String     name       = m.getName();
+		String     bridgeName = "__magic_super_" + name;
+		String     desc       = Type.getMethodDescriptor(m);
 		Class<?>[] paramTypes = m.getParameterTypes();
-		Class<?> retType = m.getReturnType();
+		Class<?>   retType    = m.getReturnType();
 
 		MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, bridgeName, desc, null, null);
 		mv.visitCode();
@@ -703,7 +705,8 @@ public final class JavaClassExtender {
 		mv.visitEnd();
 	}
 
-	private static void emitSuperCall(MethodVisitor mv, String superInternal, Method m, Class<?>[] paramTypes, Class<?> retType, boolean isInterface) {
+	private static void emitSuperCall(MethodVisitor mv, String superInternal, Method m, Class<?>[] paramTypes,
+	                                  Class<?> retType, boolean isInterface) {
 		mv.visitVarInsn(ALOAD, 0);
 		int slot = 1;
 		for (Class<?> pt : paramTypes) {
@@ -712,7 +715,7 @@ public final class JavaClassExtender {
 			slot += t.getSize();
 		}
 		boolean isItf;
-		String targetInternal;
+		String  targetInternal;
 		if (isInterface) {
 			if (m.getDeclaringClass() == Object.class) {
 				targetInternal = "java/lang/Object";
@@ -788,6 +791,49 @@ public final class JavaClassExtender {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "castValue", "(Ljava/lang/Object;Ljava/lang/Class;)Ljava/lang/Object;", false);
 			mv.visitTypeInsn(CHECKCAST, Type.getInternalName(retType));
 			mv.visitInsn(ARETURN);
+		}
+	}
+
+	private static void emitJSFunctionCall(MethodVisitor mv, Class<?>[] paramTypes) {
+		mv.visitTypeInsn(CHECKCAST, "hope/magic/js/runtime/JSFunction");
+		mv.visitInsn(ACONST_NULL); // cx
+		mv.visitVarInsn(ALOAD, 0); // thisObj
+
+		int count = paramTypes.length;
+		if (count <= 4) {
+			// 0~4 参数特化: 直接装箱后压栈，零数组开销
+			int slot = 1;
+			for (Class<?> pt : paramTypes) {
+				Type t = Type.getType(pt);
+				mv.visitVarInsn(t.getOpcode(ILOAD), slot);
+				slot += t.getSize();
+				MagicJIT.boxPrimitive(mv, pt);
+			}
+
+			// 构造 descriptor: (Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;Ljava/lang/Object;...)Ljava/lang/Object;
+			StringBuilder desc = new StringBuilder("(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;");
+			for (int i = 0; i < count; i++) {
+				desc.append("Ljava/lang/Object;");
+			}
+			desc.append(")Ljava/lang/Object;");
+
+			mv.visitMethodInsn(
+			 INVOKEINTERFACE,
+			 "hope/magic/js/runtime/JSFunction",
+			 "call" + count,
+			 desc.toString(),
+			 true
+			);
+		} else {
+			// 5个参数及以上: 打包 Object[] 数组调用
+			emitPackArgs(mv, paramTypes);
+			mv.visitMethodInsn(
+			 INVOKEINTERFACE,
+			 "hope/magic/js/runtime/JSFunction",
+			 "call",
+			 "(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
+			 true
+			);
 		}
 	}
 }

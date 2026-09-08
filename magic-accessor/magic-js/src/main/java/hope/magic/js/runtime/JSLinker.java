@@ -1607,16 +1607,27 @@ public class JSLinker {
 
 				if (site.isOffsetEquivalent()) {
 					int          commonOff    = site.getCommonOffset();
+					byte         commonType   = site.getCommonType();
 					MethodHandle test         = buildMultiShapeGuard(site.getRecordedShapesArray(), site.getPropId(), commonOff);
+
 					MethodHandle directSlotGetter;
-					boolean      isDoubleSlot = (type & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE;
-					if (offset < 8) {
-						directSlotGetter = isDoubleSlot ? MH_GET_SLOT_DOUBLE_AS_OBJ[commonOff] : MH_GET_SLOT_PURE_OBJECT[commonOff];
+					if ((commonType & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE) {
+						// 全为 Double 槽位：直接读 double 并装箱
+						directSlotGetter = (commonOff < 8)
+						 ? MH_GET_SLOT_DOUBLE_AS_OBJ[commonOff]
+						 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE_AS_OBJ, 0, commonOff);
+					} else if ((commonType & JSShape.TYPE_MASK) == JSShape.TYPE_OBJECT) {
+						// 全为 Object 槽位：零掩码检查直接读引用
+						directSlotGetter = (commonOff < 8)
+						 ? MH_GET_SLOT_PURE_OBJECT[commonOff]
+						 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, commonOff);
 					} else {
-						directSlotGetter = isDoubleSlot
-						 ? MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE_AS_OBJ, 0, commonOff)
-						 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, commonOff); // 注：你也需要一个溢出槽的纯Object读
+						// 槽位类型存在混合 (既有 double 也有 object)：回退使用带 doubleFieldMask 动态判断的安全读
+						directSlotGetter = (commonOff < 8)
+						 ? MH_GET_SLOT_OBJECT[commonOff]
+						 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, commonOff);
 					}
+
 					MethodHandle fallbackTarget = getAdaptiveFallback(site);
 					site.setTarget(MethodHandles.guardWithTest(test, directSlotGetter.asType(site.type()), fallbackTarget.asType(site.type())));
 					return jsObj.getSlot(commonOff);
@@ -1629,9 +1640,15 @@ public class JSLinker {
 					site.installFlatPolyGuard(buildFlatPolySwitchObject(snap, fb));
 				} else {
 					MethodHandle test = MH_IS_EXACT_SHAPE.bindTo(shape);
-					MethodHandle directSlotGetter = offset < 8
-					 ? MH_GET_SLOT_OBJECT[offset]
-					 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, offset);
+					boolean isDoubleSlot = (type & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE;
+					MethodHandle directSlotGetter;
+					if (offset < 8) {
+						directSlotGetter = isDoubleSlot ? MH_GET_SLOT_DOUBLE_AS_OBJ[offset] : MH_GET_SLOT_PURE_OBJECT[offset];
+					} else {
+						directSlotGetter = isDoubleSlot
+						 ? MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE_AS_OBJ, 0, offset)
+						 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, offset);
+					}
 					site.installGuardOrSwitchMegamorphic(test, directSlotGetter);
 				}
 				return jsObj.getSlot(offset);
@@ -2478,7 +2495,7 @@ public class JSLinker {
 		return false;
 	}
 
-	/** @see JSOps#castValue(Object, Class)   */
+	/** @see JSOps#castValue(Object, Class) */
 	private static final ClassValue<MethodHandle> INTERFACE_FILTER_CACHE = new ClassValue<>() {
 		@Override
 		protected MethodHandle computeValue(Class<?> type) {

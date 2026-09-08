@@ -18,7 +18,7 @@ public final class JSShape {
 	private static final MethodHandles.Lookup LOOKUP = Magic.lookup;
 
 	private static final AtomicInteger BUILTIN_ID_GEN = new AtomicInteger(-1);
-	private static final AtomicInteger USER_ID_GEN    = new AtomicInteger(1);
+	private static final AtomicInteger USER_ID_GEN    = new AtomicInteger(0);
 	// 架构优化说明：
 	// 原 VAR_HANDLES (ConcurrentHashMap<String, VarHandle>) 与 casIC() 属于早期单内联缓存（Single-IC）
 	// 的动态原子 CAS 更新机制。当前引擎已全面进化为 ChainedCallSite 多态内联链与聚合槽位/掩码跳转表，
@@ -289,19 +289,14 @@ public final class JSShape {
 	}
 
 	/**
-	 * 哨兵编码值：低 3 位设为 0b111 (7)，高位全为 1 (0x7FFFFFFF)。
-	 * <p>
-	 * <b>数学不可达性证明：</b><br>
-	 * 任何合法属性迁移的 {@code type} 仅占用 2 位（{@link #TYPE_UNKNOWN}=0, {@link #TYPE_DOUBLE}=1,
-	 * {@link #TYPE_INT}=2, {@link #TYPE_OBJECT}=3，即 {@code 0b00 ~ 0b11}），
-	 * 其低 3 位的值必然 {@code <= 3 (0b011)}，第 2 位（权重 4）恒为 0。<br>
-	 * 而 {@code SENTINEL_ENCODED} 的低 3 位为 7（{@code 0b111}）。<br>
-	 * 因此对于任意非负 {@code propId} 和合法 {@code type}，{@code (propId << 3) | type} 严格不等于 {@code SENTINEL_ENCODED}。
+	 * 哨兵编码值：仅高 6 位为 1,其余为 0
+	 * propId限制为{@link SymbolTable#MAX_ID}，所以不可能达到SENTINEL_ENCODED.
 	 */
-	public static final int SENTINEL_ENCODED = 0x7FFFFFFF;
+	public static final int SENTINEL_ENCODED = 0x7C000000;
 
 	public static int encodeKey(int propId, byte type) {
 		assert (type >= 0 && (type & ~TRANSITION_TYPE_MASK) == 0) : "Invalid property type: " + type;
+		assert (type & FLAG_ACCESSOR) == 0 || (type & TYPE_MASK) == 0;
 		assert propId >= 0 : "Invalid propId: " + propId;
 		int encoded = (propId << TRANSITION_TYPE_SHIFT) | (type & TRANSITION_TYPE_MASK);
 		assert encoded != SENTINEL_ENCODED : "Mathematical impossibility violated: encoded collided with SENTINEL_ENCODED";
@@ -350,7 +345,6 @@ public final class JSShape {
 		return addPropertySlow(encoded, propId, type);
 	}
 
-	@SuppressWarnings("DuplicatedCode")
 	private synchronized JSShape addPropertySlow(int encoded, int propId, byte type) {
 		if (this.singleKey == encoded && this.singleTransition != null) {
 			return this.singleTransition;
@@ -359,6 +353,10 @@ public final class JSShape {
 		// 第一条生长分支：直接装入 singleTransition，避免 new IntObjectMap
 		if (this.singleTransition == null && this.multiTransitions == null) {
 			JSShape next = new JSShape(this, propId, type);
+			// hb(write transition, write key) ：同一线程 program order
+			// hb(write key, read key) ：volatile 语义（当读确实看到新值时）
+			// hb(read key, read transition) ：同一线程 program order
+			// 由传递性： hb(write transition, read transition)  严格成立。因此只要快速路径读到  singleKey  匹配，读到的  singleTransition  必定是完整初始化的非空值。
 			// 必须先写 singleTransition 后写 singleKey，利用 volatile 内存屏障保证其他线程读到 singleKey 时 transition 必定非空
 			this.singleTransition = next;
 			this.singleKey = encoded;

@@ -1,9 +1,5 @@
 package hope.magic.js.runtime;
 
-import hope.magic.runtime.Magic;
-import sun.misc.Unsafe;
-
-import java.lang.reflect.Field;
 import java.util.*;
 
 public class JSObject {
@@ -20,23 +16,6 @@ public class JSObject {
 	public static final int IN_OBJECT_SLOTS           = IN_OBJECT_FIELD_COUNT;
 	public static final int OVERFLOW_INITIAL_CAPACITY = 4;
 
-	public static final Unsafe UNSAFE             = Magic.unsafe;
-	public static final long[] PRIM_FIELD_OFFSETS = new long[IN_OBJECT_FIELD_COUNT];
-	public static final long[] OBJ_FIELD_OFFSETS  = new long[IN_OBJECT_FIELD_COUNT];
-
-	static {
-		try {
-			for (int i = 0; i < IN_OBJECT_FIELD_COUNT; i++) {
-				Field pField = JSObject.class.getDeclaredField("prim" + i);
-				Field oField = JSObject.class.getDeclaredField("obj" + i);
-				PRIM_FIELD_OFFSETS[i] = UNSAFE.objectFieldOffset(pField);
-				OBJ_FIELD_OFFSETS[i] = UNSAFE.objectFieldOffset(oField);
-			}
-		} catch (Exception e) {
-			throw new ExceptionInInitializerError(e);
-		}
-	}
-
 	public JSShape   shape = JSShape.ROOT;
 	public JSContext realm;
 	public long      doubleFieldMask/*  = 0L */; // 记录哪些 offset 槽位存储的是 double (低 64 位)
@@ -46,8 +25,8 @@ public class JSObject {
 		if (offset < 64) {
 			return (doubleFieldMask & (1L << offset)) != 0L;
 		}
-		int wordIdx = (offset >> 6) - 1;
-		long[] ofm = overflowDoubleMask;
+		int    wordIdx = (offset >> 6) - 1;
+		long[] ofm     = overflowDoubleMask;
 		return ofm != null && wordIdx < ofm.length && (ofm[wordIdx] & (1L << (offset & 63))) != 0L;
 	}
 
@@ -232,8 +211,8 @@ public class JSObject {
 		if (offset < 64) {
 			doubleFieldMask &= ~(1L << offset);
 		} else {
-			int wordIdx = (offset >> 6) - 1;
-			long[] ofm = overflowDoubleMask;
+			int    wordIdx = (offset >> 6) - 1;
+			long[] ofm     = overflowDoubleMask;
 			if (ofm != null && wordIdx < ofm.length) {
 				ofm[wordIdx] &= ~(1L << (offset & 63));
 			}
@@ -385,7 +364,9 @@ public class JSObject {
 			}
 			setDoubleSlot(offset, value);
 			return;
-		} else if (prototype != null && prototype.handlePrototypePut(propId, this, value)) {
+		}
+		JSObject proto = getPrototype();
+		if (proto != null && proto.handlePrototypePut(propId, this, value)) {
 			return;
 		}
 		putDoubleSlow(propId, value);
@@ -440,22 +421,22 @@ public class JSObject {
 	}
 
 	public void defineAccessor(String key, JSFunction getter, JSFunction setter, boolean enumerable) {
-		int propId = SymbolTable.id(key);
-		int offset = shape.getOffset(propId);
+		int     propId = SymbolTable.id(key);
+		int     offset = shape.getOffset(propId);
 		boolean exists = offset >= 0 && (isDoubleSlot(offset) || getRawObjectSlot(offset) != DELETED);
 		if (exists) {
 			byte currentType = shape.getSlotType(offset);
 			if ((currentType & JSShape.FLAG_ACCESSOR) != 0) {
-				PropertyAccessor current = (PropertyAccessor) getRawObjectSlot(offset);
-				JSFunction newGetter = getter != null ? getter : (current != null ? current.getter : null);
-				JSFunction newSetter = setter != null ? setter : (current != null ? current.setter : null);
+				PropertyAccessor current   = (PropertyAccessor) getRawObjectSlot(offset);
+				JSFunction       newGetter = getter != null ? getter : (current != null ? current.getter : null);
+				JSFunction       newSetter = setter != null ? setter : (current != null ? current.setter : null);
 				setSlot(offset, new PropertyAccessor(newGetter, newSetter));
 				return;
 			}
 		}
 		byte type = JSShape.FLAG_ACCESSOR;
 		if (!enumerable) type |= JSShape.FLAG_NOT_ENUMERABLE;
-		shape = shape.addProperty(propId, type);
+		shape = offset >= 0 ? shape.updatePropertyType(offset, type) : shape.addProperty(propId, type);
 		int newOffset = shape.getOffset(propId);
 		setSlot(newOffset, new PropertyAccessor(getter, setter));
 	}
@@ -470,7 +451,7 @@ public class JSObject {
 		if (offset >= 0) {
 			Object currentRaw = isDoubleSlot(offset) ? null : getRawObjectSlot(offset);
 			if (currentRaw == DELETED) {
-				byte newType = (value instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
+				byte newType = JSShape.TYPE_OBJECT; // 前面已知value不为Number
 				shape = shape.updatePropertyType(offset, newType);
 			} else {
 				byte slotType = shape.getSlotType(offset);

@@ -19,13 +19,14 @@ public final class SymbolTable {
 	// 且 ConcurrentHashMap 亦原生支持平滑动态扩容，既保障了冷启动脚本零浪费（仅占用极小堆空间），
 	// 又能无缝支持后续大型脚本符号表的大规模动态扩容。
 	public static final     int                                INITIAL_CAPACITY = 64;
-	private static final    ConcurrentHashMap<String, String>  TABLE      = new ConcurrentHashMap<>(INITIAL_CAPACITY);
-	private static final    ConcurrentHashMap<String, Integer> NAME_TO_ID = new ConcurrentHashMap<>(INITIAL_CAPACITY);
-	private static volatile String[]                           ID_TO_NAME = new String[INITIAL_CAPACITY];
-	private static final    AtomicInteger                      ID_GEN     = new AtomicInteger(0);
+	private static final    ConcurrentHashMap<String, String>  TABLE            = new ConcurrentHashMap<>(INITIAL_CAPACITY);
+	private static final    ConcurrentHashMap<String, Integer> NAME_TO_ID       = new ConcurrentHashMap<>(INITIAL_CAPACITY);
+	private static volatile String[]                           ID_TO_NAME       = new String[INITIAL_CAPACITY];
+	private static final    AtomicInteger                      ID_GEN           = new AtomicInteger(0);
 
 	// private static final VarHandle ID_ARR_VH = MethodHandles.arrayElementVarHandle(String[].class);
 
+	public static final int MAX_ID    = 1 << 24;
 	public static final int NO_SYMBOL = -1;
 
 	private SymbolTable() { }
@@ -43,7 +44,7 @@ public final class SymbolTable {
 
 	/** 只读安全查找：若符号未注册，返回 {@link #NO_SYMBOL} */
 	public static int lookupId(String name) {
-		if (name == null) return  NO_SYMBOL;
+		if (name == null) return NO_SYMBOL;
 		return NAME_TO_ID.getOrDefault(name, NO_SYMBOL);
 	}
 
@@ -64,10 +65,11 @@ public final class SymbolTable {
 		if (existingId != null) return existingId;
 		String sym   = symbol(name);
 		int    newId = ID_GEN.getAndIncrement();
+		assert newId < MAX_ID : "Symbol ID exceeds reserved range";
 		if (newId >= ID_TO_NAME.length) {
 			ID_TO_NAME = Arrays.copyOf(ID_TO_NAME, Math.max(ID_TO_NAME.length * 2, newId + 1));
 		}
-		ID_TO_NAME[newId]= sym;
+		ID_TO_NAME[newId] = sym;
 		NAME_TO_ID.put(sym, newId);
 		return newId;
 	}

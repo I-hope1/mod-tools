@@ -23,12 +23,14 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class MagicJIT implements Opcodes {
 
+	public static final String IN_JSOps = "hope/magic/js/runtime/JSOps";
+
 	private static final class InvokerKey {
 		final Class<?> clazz;
-		final String methodName;
-		final int arity;
-		final boolean isStatic;
-		final int hash;
+		final String   methodName;
+		final int      arity;
+		final boolean  isStatic;
+		final int      hash;
 
 		InvokerKey(Class<?> clazz, String methodName, int arity, boolean isStatic) {
 			this.clazz = clazz;
@@ -57,8 +59,8 @@ public class MagicJIT implements Opcodes {
 
 	private static final class CtorKey {
 		final Class<?> clazz;
-		final int arity;
-		final int hash;
+		final int      arity;
+		final int      hash;
 
 		CtorKey(Class<?> clazz, int arity) {
 			this.clazz = clazz;
@@ -81,8 +83,8 @@ public class MagicJIT implements Opcodes {
 
 	private static final class MemberKey {
 		final Class<?> clazz;
-		final String memberName;
-		final int hash;
+		final String   memberName;
+		final int      hash;
 
 		MemberKey(Class<?> clazz, String memberName) {
 			this.clazz = clazz;
@@ -137,7 +139,7 @@ public class MagicJIT implements Opcodes {
 	}
 
 	public static MagicInvoker getMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic) {
-		InvokerKey key = new InvokerKey(clazz, methodName, arity, isStatic);
+		InvokerKey   key    = new InvokerKey(clazz, methodName, arity, isStatic);
 		MagicInvoker cached = INVOKER_CACHE.get(key);
 		if (cached != null) return cached;
 		MagicInvoker invoker = createMethodInvoker(clazz, methodName, arity, isStatic);
@@ -146,7 +148,7 @@ public class MagicJIT implements Opcodes {
 	}
 
 	public static MagicConstructorInvoker getConstructorInvoker(Class<?> clazz, int arity) {
-		CtorKey key = new CtorKey(clazz, arity);
+		CtorKey                 key    = new CtorKey(clazz, arity);
 		MagicConstructorInvoker cached = CTOR_CACHE.get(key);
 		if (cached != null) return cached;
 		MagicConstructorInvoker invoker = createConstructorInvoker(clazz, arity);
@@ -289,11 +291,11 @@ public class MagicJIT implements Opcodes {
 		initMv.visitEnd();
 	}
 
-	private static final Map<MemberKey, MethodHandle>     GETTER_CACHE           = new ConcurrentHashMap<>();
-	private static final Map<MemberKey, MethodHandle>     SETTER_CACHE           = new ConcurrentHashMap<>();
+	private static final Map<MemberKey, MethodHandle> GETTER_CACHE = new ConcurrentHashMap<>();
+	private static final Map<MemberKey, MethodHandle> SETTER_CACHE = new ConcurrentHashMap<>();
 
 	public static MethodHandle getFieldGetterStub(Class<?> clazz, String fieldName) {
-		MemberKey key = new MemberKey(clazz, fieldName);
+		MemberKey    key    = new MemberKey(clazz, fieldName);
 		MethodHandle cached = GETTER_CACHE.get(key);
 		if (cached != null) return cached;
 		MethodHandle stub = createExactFieldGetterStub(clazz, fieldName);
@@ -302,7 +304,7 @@ public class MagicJIT implements Opcodes {
 	}
 
 	public static MethodHandle getFieldSetterStub(Class<?> clazz, String fieldName) {
-		MemberKey key = new MemberKey(clazz, fieldName);
+		MemberKey    key    = new MemberKey(clazz, fieldName);
 		MethodHandle cached = SETTER_CACHE.get(key);
 		if (cached != null) return cached;
 		MethodHandle stub = createExactFieldSetterStub(clazz, fieldName);
@@ -319,7 +321,7 @@ public class MagicJIT implements Opcodes {
 	private static final Map<Method, MethodHandle> EXACT_METHOD_CACHE = new ConcurrentHashMap<>();
 
 	public static MethodHandle createExactFieldGetterStub(Class<?> clazz, String fieldName) {
-		MemberKey key = new MemberKey(clazz, fieldName);
+		MemberKey    key    = new MemberKey(clazz, fieldName);
 		MethodHandle cached = GETTER_CACHE.get(key);
 		if (cached != null) return cached;
 		MethodHandle stub = generateExactFieldGetterStub(clazz, fieldName);
@@ -331,23 +333,29 @@ public class MagicJIT implements Opcodes {
 		Field field = getDeclaredFieldRecursive(clazz, fieldName);
 		if (field == null) return null;
 		field.setAccessible(true);
-		long offset = LinkerHelper.getFieldOffset(field);
-		Class<?> fType = field.getType();
+		long         offset = LinkerHelper.getFieldOffset(field);
+		Class<?>     fType  = field.getType();
 		MethodHandle mh;
-		if (fType == int.class) mh = FieldMH.GET_INT;
-		else if (fType == double.class) mh = FieldMH.GET_DOUBLE;
-		else if (fType == long.class) mh = FieldMH.GET_LONG;
-		else if (fType == float.class) mh = FieldMH.GET_FLOAT;
-		else if (fType == short.class) mh = FieldMH.GET_SHORT;
-		else if (fType == byte.class) mh = FieldMH.GET_BYTE;
-		else if (fType == char.class) mh = FieldMH.GET_CHAR;
-		else if (fType == boolean.class) mh = FieldMH.GET_BOOLEAN;
-		else mh = FieldMH.GET_OBJECT;
+		if (fType == int.class) { mh = FieldMH.GET_INT; } else if (fType == double.class) {
+			mh = FieldMH.GET_DOUBLE;
+		} else if (fType == long.class) {
+			mh = FieldMH.GET_LONG;
+		} else if (fType == float.class) {
+			mh = FieldMH.GET_FLOAT;
+		} else if (fType == short.class) {
+			mh = FieldMH.GET_SHORT;
+		} else if (fType == byte.class) {
+			mh = FieldMH.GET_BYTE;
+		} else if (fType == char.class) {
+			mh = FieldMH.GET_CHAR;
+		} else if (fType == boolean.class) {
+			mh = FieldMH.GET_BOOLEAN;
+		} else mh = FieldMH.GET_OBJECT;
 		return MethodHandles.insertArguments(mh, 0, offset);
 	}
 
 	public static MethodHandle createExactFieldSetterStub(Class<?> clazz, String fieldName) {
-		MemberKey key = new MemberKey(clazz, fieldName);
+		MemberKey    key    = new MemberKey(clazz, fieldName);
 		MethodHandle cached = SETTER_CACHE.get(key);
 		if (cached != null) return cached;
 		MethodHandle stub = generateExactFieldSetterStub(clazz, fieldName);
@@ -359,18 +367,24 @@ public class MagicJIT implements Opcodes {
 		Field field = getDeclaredFieldRecursive(clazz, fieldName);
 		if (field == null) return null;
 		field.setAccessible(true);
-		long offset = LinkerHelper.getFieldOffset(field);
-		Class<?> fType = field.getType();
+		long         offset = LinkerHelper.getFieldOffset(field);
+		Class<?>     fType  = field.getType();
 		MethodHandle mh;
-		if (fType == int.class) mh = FieldMH.PUT_INT;
-		else if (fType == double.class) mh = FieldMH.PUT_DOUBLE;
-		else if (fType == long.class) mh = FieldMH.PUT_LONG;
-		else if (fType == float.class) mh = FieldMH.PUT_FLOAT;
-		else if (fType == short.class) mh = FieldMH.PUT_SHORT;
-		else if (fType == byte.class) mh = FieldMH.PUT_BYTE;
-		else if (fType == char.class) mh = FieldMH.PUT_CHAR;
-		else if (fType == boolean.class) mh = FieldMH.PUT_BOOLEAN;
-		else mh = FieldMH.PUT_OBJECT;
+		if (fType == int.class) { mh = FieldMH.PUT_INT; } else if (fType == double.class) {
+			mh = FieldMH.PUT_DOUBLE;
+		} else if (fType == long.class) {
+			mh = FieldMH.PUT_LONG;
+		} else if (fType == float.class) {
+			mh = FieldMH.PUT_FLOAT;
+		} else if (fType == short.class) {
+			mh = FieldMH.PUT_SHORT;
+		} else if (fType == byte.class) {
+			mh = FieldMH.PUT_BYTE;
+		} else if (fType == char.class) {
+			mh = FieldMH.PUT_CHAR;
+		} else if (fType == boolean.class) {
+			mh = FieldMH.PUT_BOOLEAN;
+		} else mh = FieldMH.PUT_OBJECT;
 		return MethodHandles.insertArguments(mh, 0, offset);
 	}
 
@@ -439,7 +453,7 @@ public class MagicJIT implements Opcodes {
 	public static Field getDeclaredFieldRecursive(Class<?> clazz, String fieldName) {
 		Class<?> cur = clazz;
 		while (cur != null && cur != Object.class) {
-				// if (LinkerHelper.FAST_OFFSET && jdk.internal.misc.Unsafe.getUnsafe().objectFieldOffset(clazz, fieldName) > 0)
+			// if (LinkerHelper.FAST_OFFSET && jdk.internal.misc.Unsafe.getUnsafe().objectFieldOffset(clazz, fieldName) > 0)
 			for (Field field : cur.getDeclaredFields()) {
 				if (field.getName().equals(fieldName)) return field;
 			}
@@ -452,7 +466,7 @@ public class MagicJIT implements Opcodes {
 		return MethodResolver.findMethod(clazz, methodName, arity);
 	}
 
-	private static void pushInt(MethodVisitor mv, int val) {
+	public static void pushInt(MethodVisitor mv, int val) {
 		if (val >= -1 && val <= 5) {
 			mv.visitInsn(ICONST_0 + val);
 		} else if (val >= Byte.MIN_VALUE && val <= Byte.MAX_VALUE) {
@@ -466,52 +480,57 @@ public class MagicJIT implements Opcodes {
 
 	private static void emitArgumentCast(MethodVisitor mv, Class<?> pType) {
 		if (pType == int.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toInt", "(Ljava/lang/Object;)I", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
 		} else if (pType == long.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toLong", "(Ljava/lang/Object;)J", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toLong", "(Ljava/lang/Object;)J", false);
 		} else if (pType == double.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toDouble", "(Ljava/lang/Object;)D", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toDouble", "(Ljava/lang/Object;)D", false);
 		} else if (pType == float.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toFloat", "(Ljava/lang/Object;)F", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toFloat", "(Ljava/lang/Object;)F", false);
 		} else if (pType == boolean.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toBoolean", "(Ljava/lang/Object;)Z", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toBoolean", "(Ljava/lang/Object;)Z", false);
 		} else if (pType == short.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toShort", "(Ljava/lang/Object;)S", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toShort", "(Ljava/lang/Object;)S", false);
 		} else if (pType == byte.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toByte", "(Ljava/lang/Object;)B", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toByte", "(Ljava/lang/Object;)B", false);
 		} else if (pType == char.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toChar", "(Ljava/lang/Object;)C", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toChar", "(Ljava/lang/Object;)C", false);
 		} else if (pType == String.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toStr", "(Ljava/lang/Object;)Ljava/lang/String;", false);
-		} else if (pType.isInterface() && pType != hope.magic.js.runtime.JSFunction.class && pType != hope.magic.js.runtime.JSObject.class) {
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toStr", "(Ljava/lang/Object;)Ljava/lang/String;", false);
+		} else if (pType.isInterface() && pType != JSFunction.class && pType != JSObject.class) {
 			mv.visitLdcInsn(Type.getType(pType));
-			mv.visitInsn(SWAP);
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSLinker", "toInterface", "(Ljava/lang/Class;Ljava/lang/Object;)Ljava/lang/Object;", false);
+			// mv.visitInsn(SWAP);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "castValue", "(Ljava/lang/Object;Ljava/lang/Class;)Ljava/lang/Object;", false);
 			mv.visitTypeInsn(CHECKCAST, Type.getInternalName(pType));
 		} else if (pType != Object.class) {
 			mv.visitTypeInsn(CHECKCAST, Type.getInternalName(pType));
 		}
 	}
 
+	static void boxPrimitive(MethodVisitor mv, Class<?> pt) {
+		if (pt == int.class) {
+			mv.visitMethodInsn(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+		} else if (pt == double.class) {
+			mv.visitMethodInsn(INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+		} else if (pt == long.class) {
+			mv.visitMethodInsn(INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
+		} else if (pt == boolean.class) {
+			mv.visitMethodInsn(INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false);
+		} else if (pt == float.class) {
+			mv.visitMethodInsn(INVOKESTATIC, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false);
+		} else if (pt == byte.class) {
+			mv.visitMethodInsn(INVOKESTATIC, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false);
+		} else if (pt == short.class) {
+			mv.visitMethodInsn(INVOKESTATIC, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false);
+		} else if (pt == char.class) {
+			mv.visitMethodInsn(INVOKESTATIC, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false);
+		}
+	}
 	private static void emitReturnBox(MethodVisitor mv, Class<?> retType) {
 		if (retType == void.class) {
 			mv.visitFieldInsn(GETSTATIC, "hope/magic/js/runtime/JSUndefined", "INSTANCE", "Lhope/magic/js/runtime/JSUndefined;");
-		} else if (retType == int.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
-		} else if (retType == long.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
-		} else if (retType == double.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
-		} else if (retType == float.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false);
-		} else if (retType == boolean.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false);
-		} else if (retType == short.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false);
-		} else if (retType == byte.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false);
-		} else if (retType == char.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false);
+		} else {
+			boxPrimitive(mv, retType);
 		}
 	}
 
@@ -564,7 +583,7 @@ public class MagicJIT implements Opcodes {
 	}
 
 	private static Constructor<?> createFunctionAdapterConstructor(Class<?> targetType) {
-		Method sam = JSLinker.getSingleAbstractMethod(targetType);
+		Method sam = JSOps.getSingleAbstractMethod(targetType);
 		if (sam == null) return null;
 
 		try {
@@ -706,7 +725,8 @@ public class MagicJIT implements Opcodes {
 		return true;
 	}
 
-	private static void emitPrimitiveSAMMethodCall(MethodVisitor mv, String className, Class<?>[] paramTypes, Class<?> retType) {
+	private static void emitPrimitiveSAMMethodCall(MethodVisitor mv, String className, Class<?>[] paramTypes,
+	                                               Class<?> retType) {
 		// 1. 获取 fn
 		mv.visitVarInsn(ALOAD, 0);
 		mv.visitFieldInsn(GETFIELD, className, "fn", "Lhope/magic/js/runtime/JSFunction;");
@@ -722,7 +742,7 @@ public class MagicJIT implements Opcodes {
 		}
 
 		// 4. 调用 JSFunction.call{arity}Double
-		int arity = paramTypes.length;
+		int    arity    = paramTypes.length;
 		String callName = "call" + arity + "Double";
 		String callDesc = getPrimCallDesc(arity);
 		mv.visitMethodInsn(INVOKEINTERFACE, "hope/magic/js/runtime/JSFunction", callName, callDesc, true);
@@ -772,22 +792,22 @@ public class MagicJIT implements Opcodes {
 			mv.visitInsn(D2L);
 			mv.visitInsn(LRETURN);
 		} else if (retType == int.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toInt", "(D)I", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(D)I", false);
 			mv.visitInsn(IRETURN);
 		} else if (retType == short.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toInt", "(D)I", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(D)I", false);
 			mv.visitInsn(I2S);
 			mv.visitInsn(IRETURN);
 		} else if (retType == byte.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toInt", "(D)I", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(D)I", false);
 			mv.visitInsn(I2B);
 			mv.visitInsn(IRETURN);
 		} else if (retType == char.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toInt", "(D)I", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(D)I", false);
 			mv.visitInsn(I2C);
 			mv.visitInsn(IRETURN);
 		} else if (retType == boolean.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toBoolean", "(D)Z", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toBoolean", "(D)Z", false);
 			mv.visitInsn(IRETURN);
 		} else {
 			throw new IllegalArgumentException("Not a primitive return type: " + retType);
@@ -939,38 +959,38 @@ public class MagicJIT implements Opcodes {
 			mv.visitInsn(POP);
 			mv.visitInsn(RETURN);
 		} else if (retType == int.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toInt", "(Ljava/lang/Object;)I", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
 			mv.visitInsn(IRETURN);
 		} else if (retType == long.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toLong", "(Ljava/lang/Object;)J", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toLong", "(Ljava/lang/Object;)J", false);
 			mv.visitInsn(LRETURN);
 		} else if (retType == double.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toDouble", "(Ljava/lang/Object;)D", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toDouble", "(Ljava/lang/Object;)D", false);
 			mv.visitInsn(DRETURN);
 		} else if (retType == float.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toDouble", "(Ljava/lang/Object;)D", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toDouble", "(Ljava/lang/Object;)D", false);
 			mv.visitInsn(D2F);
 			mv.visitInsn(FRETURN);
 		} else if (retType == boolean.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "isTruthy", "(Ljava/lang/Object;)Z", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "isTruthy", "(Ljava/lang/Object;)Z", false);
 			mv.visitInsn(IRETURN);
 		} else if (retType == short.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toInt", "(Ljava/lang/Object;)I", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
 			mv.visitInsn(I2S);
 			mv.visitInsn(IRETURN);
 		} else if (retType == byte.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toInt", "(Ljava/lang/Object;)I", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
 			mv.visitInsn(I2B);
 			mv.visitInsn(IRETURN);
 		} else if (retType == char.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSLinker", "toChar", "(Ljava/lang/Object;)C", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toChar", "(Ljava/lang/Object;)C", false);
 			mv.visitInsn(IRETURN);
 		} else if (retType == String.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toStr", "(Ljava/lang/Object;)Ljava/lang/String;", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toStr", "(Ljava/lang/Object;)Ljava/lang/String;", false);
 			mv.visitInsn(ARETURN);
 		} else {
 			mv.visitLdcInsn(Type.getType(retType));
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSLinker", "castValue", "(Ljava/lang/Object;Ljava/lang/Class;)Ljava/lang/Object;", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "castValue", "(Ljava/lang/Object;Ljava/lang/Class;)Ljava/lang/Object;", false);
 			mv.visitTypeInsn(CHECKCAST, Type.getInternalName(retType));
 			mv.visitInsn(ARETURN);
 		}
@@ -1065,7 +1085,7 @@ public class MagicJIT implements Opcodes {
 			Object   result   = fn.call(null, null, safeArgs);
 			Class<?> retType  = method.getReturnType();
 			if (retType == void.class) return null;
-			return JSLinker.castValue(result, retType);
+			return JSOps.castValue(result, retType);
 		});
 	}
 
@@ -1087,17 +1107,17 @@ public class MagicJIT implements Opcodes {
 				Object   result   = fn.call(null, jsObj, safeArgs);
 				Class<?> retType  = method.getReturnType();
 				if (retType == void.class) return null;
-				return JSLinker.castValue(result, retType);
+				return JSOps.castValue(result, retType);
 			}
 			if (method.isDefault()) {
 				return java.lang.reflect.InvocationHandler.invokeDefault(proxy, method, methodArgs);
 			}
 			if (member != null && member != JSUndefined.INSTANCE) {
-				return JSLinker.castValue(member, method.getReturnType());
+				return JSOps.castValue(member, method.getReturnType());
 			}
 			Class<?> retType = method.getReturnType();
 			if (retType == void.class) return null;
-			return JSLinker.castValue(null, retType);
+			return JSOps.castValue(null, retType);
 		});
 	}
 	//endregion

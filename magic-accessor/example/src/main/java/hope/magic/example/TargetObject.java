@@ -1,7 +1,7 @@
 package hope.magic.example;
 
 public class TargetObject {
-	private int secretCode = 12345;
+	public int secretCode = 12345;
 	private String message = "Hello, Private Field!";
 
 	public TargetObject() {

@@ -1,5 +1,6 @@
 package hope.magic.js.runtime;
 
+import java.lang.reflect.*;
 import java.util.Objects;
 
 @SuppressWarnings("unused")
@@ -664,6 +665,11 @@ public class JSOps {
 		throw new RuntimeException("TypeError: Cannot convert object to primitive value");
 	}
 
+	/** MagicJIT是直接调用{@link #castValue(Object, Class)}  */
+	public static Object toInterface(Object val, Class<?> iface) {
+		return castValue(val, iface);
+	}
+
 	public static java.util.Iterator<?> toIterator(Object target) {
 		if (target == null || target == JSUndefined.INSTANCE) {
 			return java.util.Collections.emptyIterator();
@@ -815,6 +821,81 @@ public class JSOps {
 			return true;
 		}
 		return true;
+	}
+	public static Method getSingleAbstractMethod(Class<?> iface) {
+		if (!iface.isInterface()) return null;
+		Method sam = null;
+		for (Method m : iface.getMethods()) {
+			if (Modifier.isAbstract(m.getModifiers()) && !isObjectMethod(m)) {
+				if (sam != null && !isSameSignature(sam, m)) {
+					return null;
+				}
+				sam = m;
+			}
+		}
+		return sam;
+	}
+	private static boolean isObjectMethod(Method m) {
+		String     name   = m.getName();
+		Class<?>[] params = m.getParameterTypes();
+		if ("equals".equals(name) && params.length == 1 && params[0] == Object.class) return true;
+		if ("hashCode".equals(name) && params.length == 0) return true;
+		if ("toString".equals(name) && params.length == 0) return true;
+		return false;
+	}
+	private static boolean isSameSignature(Method m1, Method m2) {
+		if (!m1.getName().equals(m2.getName())) return false;
+		if (m1.getParameterCount() != m2.getParameterCount()) return false;
+		Class<?>[] p1 = m1.getParameterTypes();
+		Class<?>[] p2 = m2.getParameterTypes();
+		for (int i = 0; i < p1.length; i++) {
+			if (p1[i] != p2[i]) return false;
+		}
+		return true;
+	}
+	public static Object createInterfaceAdapter(Class<?> targetType, JSFunction fn) {
+		return MagicJIT.getFunctionAdapter(targetType, fn);
+	}
+	public static Object createInterfaceAdapter(Class<?> targetType, JSObject jsObj) {
+		return MagicJIT.getObjectAdapter(targetType, jsObj);
+	}
+	public static Object castValue(Object val, Class<?> targetType) {
+		if (val == null) return castNull(targetType);
+		if (targetType == Object.class || targetType.isInstance(val)) return val;
+		return castValueSlow(val, targetType);
+	}
+	public static Object castNull(Class<?> targetType) {
+		if (!targetType.isPrimitive()) return null;
+		if (targetType == int.class) return 0;
+		if (targetType == double.class) return 0.0;
+		if (targetType == boolean.class) return false;
+		if (targetType == long.class) return 0L;
+		if (targetType == float.class) return 0.0f;
+		if (targetType == short.class) return (short) 0;
+		if (targetType == byte.class) return (byte) 0;
+		if (targetType == char.class) return '\0';
+		return null;
+	}
+	public static Object castValueSlow(Object val, Class<?> targetType) {
+		if (targetType == void.class || targetType == Void.class) return null;
+		if (targetType == int.class || targetType == Integer.class) return toInt(val);
+		if (targetType == double.class || targetType == Double.class) return toDouble(val);
+		if (targetType == long.class || targetType == Long.class) return toLong(val);
+		if (targetType == boolean.class || targetType == Boolean.class) return toBoolean(val);
+		if (targetType == String.class || targetType == CharSequence.class) return toStr(val);
+		if (targetType == float.class || targetType == Float.class) return toFloat(val);
+		if (targetType == short.class || targetType == Short.class) return toShort(val);
+		if (targetType == byte.class || targetType == Byte.class) return toByte(val);
+		if (targetType == char.class || targetType == Character.class) return toChar(val);
+		if (targetType.isInterface()) {
+			if (val instanceof JSFunction fn && getSingleAbstractMethod(targetType) != null) {
+				return createInterfaceAdapter(targetType, fn);
+			}
+			if (val instanceof JSObject jsObj) {
+				return createInterfaceAdapter(targetType, jsObj);
+			}
+		}
+		return val;
 	}
 
 	public static class JSException extends RuntimeException {

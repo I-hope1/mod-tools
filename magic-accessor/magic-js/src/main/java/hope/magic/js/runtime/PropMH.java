@@ -13,7 +13,6 @@ public final class PropMH {
 	 GET_DOUBLE_GENERIC     = JSLinker.findStaticMH(JSLinker.class, "getPropDoubleGeneric", MethodType.methodType(double.class, Object.class, String.class)),
 	 GET_DOUBLE_FALLBACK    = JSLinker.findStaticMH(JSLinker.class, "getPropDoubleFallback", MethodType.methodType(double.class, ChainedCallSite.class, Object.class, String.class)),
 	 GET_DOUBLE_MEGAMORPHIC = JSLinker.findStaticMH(JSLinker.class, "getPropDoubleMegamorphic", MethodType.methodType(double.class, ChainedCallSite.class, Object.class, String.class)),
-	 GET_DOUBLE_SLOT        = JSLinker.findStaticMH(JSLinker.class, "getJSObjDoubleSlot", MethodType.methodType(double.class, int.class, Object.class)),
 	 GET_LONG_GENERIC       = JSLinker.findStaticMH(JSLinker.class, "getPropLongGeneric", MethodType.methodType(long.class, Object.class, String.class)),
 	 GET_LONG_FALLBACK      = JSLinker.findStaticMH(JSLinker.class, "getPropLongFallback", MethodType.methodType(long.class, ChainedCallSite.class, Object.class, String.class)),
 	 GET_LONG_MEGAMORPHIC   = JSLinker.findStaticMH(JSLinker.class, "getPropLongMegamorphic", MethodType.methodType(long.class, ChainedCallSite.class, Object.class, String.class)),

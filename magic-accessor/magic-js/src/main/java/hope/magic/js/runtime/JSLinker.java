@@ -13,8 +13,8 @@ import static hope.magic.js.runtime.SlotMH.*;
 
 @SuppressWarnings({"unused", "unchecked", "rawtypes", "RedundantCast"})
 public class JSLinker {
-	static final Unsafe               UNSAFE = Magic.unsafe;
-	static final MethodHandles.Lookup LOOKUP = Magic.lookup;
+	private static final Unsafe               UNSAFE = Magic.unsafe;
+	private static final MethodHandles.Lookup LOOKUP = Magic.lookup;
 
 	public enum InvocationStrategy {
 		MAGIC_ACCESSOR, // 基于 MagicAccessorImpl (MAGICIMPL) 的原生字节码 JIT 直调 (1.95ns)
@@ -57,7 +57,7 @@ public class JSLinker {
 			MH_TO_CHAR = LOOKUP.findStatic(JSOps.class, "toChar", MethodType.methodType(char.class, Object.class));
 			MH_TO_BOOLEAN = LOOKUP.findStatic(JSOps.class, "toBoolean", MethodType.methodType(boolean.class, Object.class));
 			MH_TO_STRING = LOOKUP.findStatic(JSOps.class, "toStr", MethodType.methodType(String.class, Object.class));
-			MH_TO_INTERFACE = LOOKUP.findStatic(JSLinker.class, "toInterface", MethodType.methodType(Object.class, Class.class, Object.class));
+			MH_TO_INTERFACE = LOOKUP.findStatic(JSOps.class, "castValue", MethodType.methodType(Object.class, Object.class, Class.class));
 			MH_IS_EXACT_CLASS = LOOKUP.findStatic(JSLinker.class, "isExactClass", MethodType.methodType(boolean.class, Class.class, Object.class));
 			MH_IS_EXACT_SHAPE = LOOKUP.findStatic(JSLinker.class, "isExactShape", MethodType.methodType(boolean.class, JSShape.class, Object.class));
 			MH_IS_SAME_OBJECT = LOOKUP.findStatic(JSLinker.class, "isSameObject", MethodType.methodType(boolean.class, Object.class, Object.class));
@@ -143,8 +143,8 @@ public class JSLinker {
 		int[]  offsets = snap.offsets();
 		byte[] types   = snap.types();
 
-		// 小规模多态 (n <= 4) 展开式级联 GWT (纯指针比较，零掩码与归属校验开销) ──
-		if (n <= 4) {
+		// 小规模多态 (n <= 2) 展开式级联 GWT (纯指针比较，零掩码与归属校验开销) ──
+		if (n <= 2) {
 			MethodHandle chain = fallback;
 			for (int i = n - 1; i >= 0; i--) {
 				int off = offsets[i];
@@ -222,8 +222,8 @@ public class JSLinker {
 		int[]  offsets = snap.offsets();
 		byte[] types   = snap.types();
 
-		// 小规模多态 (n <= 4) 展开式级联 GWT (纯指针比较，零掩码与归属校验开销) ──
-		if (n <= 4) {
+		// 小规模多态 (n <= 2) 展开式级联 GWT (纯指针比较，零掩码与归属校验开销) ──
+		if (n <= 2) {
 			MethodHandle chain = fallback;
 			for (int i = n - 1; i >= 0; i--) {
 				int off = offsets[i];
@@ -300,8 +300,8 @@ public class JSLinker {
 		int[]  offsets = snap.offsets();
 		byte[] types   = snap.types();
 
-		// 小规模多态 (n <= 4) 展开式级联 GWT (纯指针比较，零掩码与归属校验开销) ──
-		if (n <= 4) {
+		// 小规模多态 (n <= 2) 展开式级联 GWT (纯指针比较，零掩码与归属校验开销) ──
+		if (n <= 2) {
 			MethodHandle chain = fallback;
 			for (int i = n - 1; i >= 0; i--) {
 				int          off        = offsets[i];
@@ -376,8 +376,8 @@ public class JSLinker {
 		int[]  offsets = snap.offsets();
 		byte[] types   = snap.types();
 
-		// 小规模多态 (n <= 4) 展开式级联 GWT (纯指针比较，零掩码与归属校验开销) ──
-		if (n <= 4) {
+		// 小规模多态 (n <= 2) 展开式级联 GWT (纯指针比较，零掩码与归属校验开销) ──
+		if (n <= 2) {
 			MethodHandle chain = fallback;
 			for (int i = n - 1; i >= 0; i--) {
 				int          off        = offsets[i];
@@ -1192,10 +1192,6 @@ public class JSLinker {
 		return getIndex(target, index);
 	}
 
-	public static double getJSObjDoubleSlot(int slot, Object target) {
-		return ((JSObject) target).getDoubleSlot(slot);
-	}
-
 	public static Object getPropMegamorphic(ChainedCallSite site, Object target, String propName) {
 		if (target instanceof JSObject jsObj) {
 			JSShape s   = jsObj.shape;
@@ -1537,7 +1533,7 @@ public class JSLinker {
 			Field field = MagicJIT.getDeclaredFieldRecursive(targetClass, propName);
 			if (field == null) break l;
 			field.setAccessible(true);
-			setFieldDirect(target, field, value);
+			FastAccessor.setFieldDirect(target, field, value);
 			return;
 		} catch (Throwable ignored) {
 		}
@@ -1547,7 +1543,7 @@ public class JSLinker {
 			if (m.getName().equals("set" + capName) && m.getParameterCount() == 1) {
 				try {
 					m.setAccessible(true);
-					Object casted = castValue(value, m.getParameterTypes()[0]);
+					Object casted = JSOps.castValue(value, m.getParameterTypes()[0]);
 					m.invoke(target, casted);
 					return;
 				} catch (Throwable ignored) {
@@ -1561,43 +1557,6 @@ public class JSLinker {
 				jsObj.put(propName, value);
 			}
 		}
-	}
-
-	private static void setFieldDirect(Object target, Field field, Object value) throws IllegalAccessException {
-		Class<?> type = field.getType();
-		if (type == int.class) {
-			field.setInt(target, JSOps.toInt(value));
-		} else if (type == double.class) {
-			field.setDouble(target, JSOps.toDouble(value));
-		} else if (type == long.class) {
-			field.setLong(target, JSOps.toLong(value));
-		} else if (type == float.class) {
-			field.setFloat(target, (float) JSOps.toDouble(value));
-		} else if (type == short.class) {
-			field.setShort(target, (short) JSOps.toInt(value));
-		} else if (type == byte.class) {
-			field.setByte(target, (byte) JSOps.toInt(value));
-		} else if (type == char.class) {
-			char c = tc(value);
-			field.setChar(target, c);
-		} else if (type == boolean.class) {
-			field.setBoolean(target, JSOps.isTruthy(value));
-		} else {
-			field.set(target, value);
-		}
-	}
-	private static char tc(Object value) {
-		char c;
-		if (value instanceof Character ch) {
-			c = ch;
-		} else if (value instanceof Number num) {
-			c = (char) num.intValue();
-		} else if (value != null && !value.toString().isEmpty()) {
-			c = value.toString().charAt(0);
-		} else {
-			c = '\0';
-		}
-		return c;
 	}
 
 	public static Object getAccessorProp(int offset, Object target) {
@@ -1647,11 +1606,17 @@ public class JSLinker {
 				site.recordShape(shape, offset, type);
 
 				if (site.isOffsetEquivalent()) {
-					int          commonOff = site.getCommonOffset();
-					MethodHandle test      = buildMultiShapeGuard(site.getRecordedShapesArray(), site.getPropId(), commonOff);
-					MethodHandle directSlotGetter = (commonOff >= 0 && commonOff < 8)
-					 ? MH_GET_SLOT_OBJECT[commonOff]
-					 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, commonOff);
+					int          commonOff    = site.getCommonOffset();
+					MethodHandle test         = buildMultiShapeGuard(site.getRecordedShapesArray(), site.getPropId(), commonOff);
+					MethodHandle directSlotGetter;
+					boolean      isDoubleSlot = (type & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE;
+					if (offset < 8) {
+						directSlotGetter = isDoubleSlot ? MH_GET_SLOT_DOUBLE_AS_OBJ[commonOff] : MH_GET_SLOT_PURE_OBJECT[commonOff];
+					} else {
+						directSlotGetter = isDoubleSlot
+						 ? MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE_AS_OBJ, 0, commonOff)
+						 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, commonOff); // 注：你也需要一个溢出槽的纯Object读
+					}
 					MethodHandle fallbackTarget = getAdaptiveFallback(site);
 					site.setTarget(MethodHandles.guardWithTest(test, directSlotGetter.asType(site.type()), fallbackTarget.asType(site.type())));
 					return jsObj.getSlot(commonOff);
@@ -1914,7 +1879,7 @@ public class JSLinker {
 		Method setterMethod = MethodResolver.findSetterMethod(targetClass, propName);
 		if (setterMethod != null) {
 			try {
-				Object casted = castValue(value, setterMethod.getParameterTypes()[0]);
+				Object casted = JSOps.castValue(value, setterMethod.getParameterTypes()[0]);
 				setterMethod.invoke(target, casted);
 				return;
 			} catch (Throwable ignored) {
@@ -2053,52 +2018,6 @@ public class JSLinker {
 		return -1;
 	}
 
-	public static Method getSingleAbstractMethod(Class<?> iface) {
-		if (!iface.isInterface()) return null;
-		Method sam = null;
-		for (Method m : iface.getMethods()) {
-			if (Modifier.isAbstract(m.getModifiers()) && !isObjectMethod(m)) {
-				if (sam != null && !isSameSignature(sam, m)) {
-					return null;
-				}
-				sam = m;
-			}
-		}
-		return sam;
-	}
-
-	private static boolean isObjectMethod(Method m) {
-		String     name   = m.getName();
-		Class<?>[] params = m.getParameterTypes();
-		if ("equals".equals(name) && params.length == 1 && params[0] == Object.class) return true;
-		if ("hashCode".equals(name) && params.length == 0) return true;
-		if ("toString".equals(name) && params.length == 0) return true;
-		return false;
-	}
-
-	private static boolean isSameSignature(Method m1, Method m2) {
-		if (!m1.getName().equals(m2.getName())) return false;
-		if (m1.getParameterCount() != m2.getParameterCount()) return false;
-		Class<?>[] p1 = m1.getParameterTypes();
-		Class<?>[] p2 = m2.getParameterTypes();
-		for (int i = 0; i < p1.length; i++) {
-			if (p1[i] != p2[i]) return false;
-		}
-		return true;
-	}
-
-	public static Object createInterfaceAdapter(Class<?> targetType, JSFunction fn) {
-		return MagicJIT.getFunctionAdapter(targetType, fn);
-	}
-
-	public static Object createInterfaceAdapter(Class<?> targetType, JSObject jsObj) {
-		return MagicJIT.getObjectAdapter(targetType, jsObj);
-	}
-
-	public static Object toInterface(Class<?> targetType, Object val) {
-		return castValue(val, targetType);
-	}
-
 	private static int getInheritanceDistance(Class<?> from, Class<?> to) {
 		if (from == to) return 0;
 		if (to.isArray() && from.isArray()) {
@@ -2153,7 +2072,7 @@ public class JSLinker {
 		// 0. 接口适配 (SAM 函数式接口 / JSObject 动态代理)
 		if (targetType.isInterface()) {
 			if (arg instanceof JSFunction) {
-				if (getSingleAbstractMethod(targetType) != null) return 2;
+				if (JSOps.getSingleAbstractMethod(targetType) != null) return 2;
 				if (targetType == JSFunction.class) return 0;
 			}
 			if (arg instanceof JSObject) {
@@ -2272,7 +2191,7 @@ public class JSLinker {
 					Class<?>[] paramTypes = targetMethod.getParameterTypes();
 					Object[]   castedArgs = new Object[args.length];
 					for (int i = 0; i < args.length; i++) {
-						castedArgs[i] = castValue(args[i], paramTypes[i]);
+						castedArgs[i] = JSOps.castValue(args[i], paramTypes[i]);
 					}
 					MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(clazz, methodName, args.length, Modifier.isStatic(targetMethod.getModifiers()));
 					if (invoker != null) {
@@ -2345,7 +2264,7 @@ public class JSLinker {
 			Class<?>[] paramTypes = targetMethod.getParameterTypes();
 			Object[]   castedArgs = new Object[args.length];
 			for (int i = 0; i < args.length; i++) {
-				castedArgs[i] = castValue(args[i], paramTypes[i]);
+				castedArgs[i] = JSOps.castValue(args[i], paramTypes[i]);
 			}
 			MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(clazz, methodName, args.length, Modifier.isStatic(targetMethod.getModifiers()));
 			if (invoker != null) {
@@ -2559,10 +2478,11 @@ public class JSLinker {
 		return false;
 	}
 
+	/** @see JSOps#castValue(Object, Class)   */
 	private static final ClassValue<MethodHandle> INTERFACE_FILTER_CACHE = new ClassValue<>() {
 		@Override
 		protected MethodHandle computeValue(Class<?> type) {
-			return MethodHandles.insertArguments(MH_TO_INTERFACE, 0, type);
+			return MethodHandles.insertArguments(MH_TO_INTERFACE, 1, type);
 		}
 	};
 	public static MethodHandle getArgumentFilter(Class<?> targetType) {
@@ -2580,16 +2500,6 @@ public class JSLinker {
 		}
 		return null;
 	}
-
-	public static int toInt(Object val) { return JSOps.toInt(val); }
-	public static long toLong(Object val) { return JSOps.toLong(val); }
-	public static double toDoubleVal(Object val) { return JSOps.toDouble(val); }
-	public static float toFloat(Object val) { return JSOps.toFloat(val); }
-	public static short toShort(Object val) { return JSOps.toShort(val); }
-	public static byte toByte(Object val) { return JSOps.toByte(val); }
-	public static char toChar(Object val) { return JSOps.toChar(val); }
-	public static boolean toBoolean(Object val) { return JSOps.toBoolean(val); }
-	public static String toStringVal(Object val) { return JSOps.toStr(val); }
 
 	private static final class CtorKey {
 		final Class<?> clazz;
@@ -2692,7 +2602,7 @@ public class JSLinker {
 				Object[]   castedArgs = new Object[args.length];
 				Class<?>[] paramTypes = c.getParameterTypes();
 				for (int i = 0; i < args.length; i++) {
-					castedArgs[i] = castValue(args[i], paramTypes[i]);
+					castedArgs[i] = JSOps.castValue(args[i], paramTypes[i]);
 				}
 				return c.newInstance(castedArgs);
 			}
@@ -3219,22 +3129,6 @@ public class JSLinker {
 
 	//region 辅助方法与直接 MethodHandle 构建
 
-	public static Object getJSObjSlot(int slot, Object target) {
-		return ((JSObject) target).getSlot(slot);
-	}
-	public static Object getJSObjSlotDoubleAsObject(int slot, Object target) {
-		return ((JSObject) target).getDoubleSlot(slot);
-	}
-	public static void setJSObjSlot(int slot, Object target, Object val) {
-		((JSObject) target).setSlot(slot, val);
-	}
-	public static void setJSObjSlotDouble(int slot, Object target, double val) {
-		((JSObject) target).setDoubleSlot(slot, val);
-	}
-	public static void setJSObjSlotDoubleAsObject(int slot, Object target, Object val) {
-		((JSObject) target).setDoubleSlot(slot, JSOps.toDouble(val));
-	}
-
 	public static boolean isExactClass(Class<?> expected, Object target) {
 		return target != null && target.getClass() == expected;
 	}
@@ -3250,223 +3144,6 @@ public class JSLinker {
 		return target instanceof JSObject && ((JSObject) target).shape == expected;
 	}
 
-	// ----------------------------------------------------
-	// 针对 In-Object Top 8 槽位的单层扁平方法 (内联深度为 1，直接发射单条 vmovsd 汇编指令)
-	// ----------------------------------------------------
-	public static double getSlot0Double(JSObject target) { return Double.longBitsToDouble(target.prim0); }
-	public static double getSlot1Double(JSObject target) { return Double.longBitsToDouble(target.prim1); }
-	public static double getSlot2Double(JSObject target) { return Double.longBitsToDouble(target.prim2); }
-	public static double getSlot3Double(JSObject target) { return Double.longBitsToDouble(target.prim3); }
-	public static double getSlot4Double(JSObject target) { return Double.longBitsToDouble(target.prim4); }
-	public static double getSlot5Double(JSObject target) { return Double.longBitsToDouble(target.prim5); }
-	public static double getSlot6Double(JSObject target) { return Double.longBitsToDouble(target.prim6); }
-	public static double getSlot7Double(JSObject target) { return Double.longBitsToDouble(target.prim7); }
-
-	// 安全性说明：如果该槽位之前存的是 Object，
-	// 第一次变 Double 时走的是 setPropDoubleFallback -> jsObj.setDoubleSlot，
-	// 在 fallback 里已经执行了 setDoubleMask 和 obj0 = null。因此在缓存命中（Fast Path）的热路径上，
-	// 直接裸写 UNSAFE.putDouble 是完全安全的。
-	public static void setSlot0Double(JSObject target, double val) { target.prim0 = Double.doubleToRawLongBits(val); }
-	public static void setSlot1Double(JSObject target, double val) { target.prim1 = Double.doubleToRawLongBits(val); }
-	public static void setSlot2Double(JSObject target, double val) { target.prim2 = Double.doubleToRawLongBits(val); }
-	public static void setSlot3Double(JSObject target, double val) { target.prim3 = Double.doubleToRawLongBits(val); }
-	public static void setSlot4Double(JSObject target, double val) { target.prim4 = Double.doubleToRawLongBits(val); }
-	public static void setSlot5Double(JSObject target, double val) { target.prim5 = Double.doubleToRawLongBits(val); }
-	public static void setSlot6Double(JSObject target, double val) { target.prim6 = Double.doubleToRawLongBits(val); }
-	public static void setSlot7Double(JSObject target, double val) { target.prim7 = Double.doubleToRawLongBits(val); }
-
-
-	public static Object getSlot0PureObject(JSObject obj) {
-		Object val;
-		if ((val = obj.obj0) == JSObject.DELETED) return JSUndefined.INSTANCE;
-		return val;
-	}
-	public static Object getSlot1PureObject(JSObject obj) {
-		Object val;
-		if ((val = obj.obj1) == JSObject.DELETED) return JSUndefined.INSTANCE;
-		return val;
-	}
-	public static Object getSlot2PureObject(JSObject obj) {
-		Object val;
-		if ((val = obj.obj2) == JSObject.DELETED) return JSUndefined.INSTANCE;
-		return val;
-	}
-	public static Object getSlot3PureObject(JSObject obj) {
-		Object val;
-		if ((val = obj.obj3) == JSObject.DELETED) return JSUndefined.INSTANCE;
-		return val;
-	}
-	public static Object getSlot4PureObject(JSObject obj) {
-		Object val;
-		if ((val = obj.obj4) == JSObject.DELETED) return JSUndefined.INSTANCE;
-		return val;
-	}
-	public static Object getSlot5PureObject(JSObject obj) {
-		Object val;
-		if ((val = obj.obj5) == JSObject.DELETED) return JSUndefined.INSTANCE;
-		return val;
-	}
-	public static Object getSlot6PureObject(JSObject obj) {
-		Object val;
-		if ((val = obj.obj6) == JSObject.DELETED) return JSUndefined.INSTANCE;
-		return val;
-	}
-	public static Object getSlot7PureObject(JSObject obj) {
-		Object val;
-		if ((val = obj.obj7) == JSObject.DELETED) return JSUndefined.INSTANCE;
-		return val;
-	}
-
-	public static void setSlot0PureObject(JSObject obj, Object val) { obj.obj0 = val; }
-	public static void setSlot1PureObject(JSObject obj, Object val) { obj.obj1 = val; }
-	public static void setSlot2PureObject(JSObject obj, Object val) { obj.obj2 = val; }
-	public static void setSlot3PureObject(JSObject obj, Object val) { obj.obj3 = val; }
-	public static void setSlot4PureObject(JSObject obj, Object val) { obj.obj4 = val; }
-	public static void setSlot5PureObject(JSObject obj, Object val) { obj.obj5 = val; }
-	public static void setSlot6PureObject(JSObject obj, Object val) { obj.obj6 = val; }
-	public static void setSlot7PureObject(JSObject obj, Object val) { obj.obj7 = val; }
-
-	public static Object getSlot0DoubleAsObject(JSObject obj) {
-		return Double.longBitsToDouble(obj.prim0);
-	}
-	public static Object getSlot1DoubleAsObject(JSObject obj) {
-		return Double.longBitsToDouble(obj.prim1);
-	}
-	public static Object getSlot2DoubleAsObject(JSObject obj) {
-		return Double.longBitsToDouble(obj.prim2);
-	}
-	public static Object getSlot3DoubleAsObject(JSObject obj) {
-		return Double.longBitsToDouble(obj.prim3);
-	}
-	public static Object getSlot4DoubleAsObject(JSObject obj) {
-		return Double.longBitsToDouble(obj.prim4);
-	}
-	public static Object getSlot5DoubleAsObject(JSObject obj) {
-		return Double.longBitsToDouble(obj.prim5);
-	}
-	public static Object getSlot6DoubleAsObject(JSObject obj) {
-		return Double.longBitsToDouble(obj.prim6);
-	}
-	public static Object getSlot7DoubleAsObject(JSObject obj) {
-		return Double.longBitsToDouble(obj.prim7);
-	}
-	public static void setSlot0DoubleAsObject(JSObject target, Object val) {
-		target.prim0 = Double.doubleToRawLongBits(JSOps.toDouble(val));
-	}
-	public static void setSlot1DoubleAsObject(JSObject target, Object val) {
-		target.prim1 = Double.doubleToRawLongBits(JSOps.toDouble(val));
-	}
-	public static void setSlot2DoubleAsObject(JSObject target, Object val) {
-		target.prim2 = Double.doubleToRawLongBits(JSOps.toDouble(val));
-	}
-	public static void setSlot3DoubleAsObject(JSObject target, Object val) {
-		target.prim3 = Double.doubleToRawLongBits(JSOps.toDouble(val));
-	}
-	public static void setSlot4DoubleAsObject(JSObject target, Object val) {
-		target.prim4 = Double.doubleToRawLongBits(JSOps.toDouble(val));
-	}
-	public static void setSlot5DoubleAsObject(JSObject target, Object val) {
-		target.prim5 = Double.doubleToRawLongBits(JSOps.toDouble(val));
-	}
-	public static void setSlot6DoubleAsObject(JSObject target, Object val) {
-		target.prim6 = Double.doubleToRawLongBits(JSOps.toDouble(val));
-	}
-	public static void setSlot7DoubleAsObject(JSObject target, Object val) {
-		target.prim7 = Double.doubleToRawLongBits(JSOps.toDouble(val));
-	}
-
-
-	private static Object boxDoubleBits(long bits) {
-		return Double.longBitsToDouble(bits); // Double.valueOf(Double.longBitsToDouble(bits))
-	}
-	public static Object getSlot0Object(JSObject obj) {
-		if (((int) obj.doubleFieldMask & 1) != 0) return boxDoubleBits(obj.prim0);
-		Object val;
-		if ((val = obj.obj0) == JSObject.DELETED) return JSUndefined.INSTANCE;
-		return val;
-	}
-
-	public static Object getSlot1Object(JSObject obj) {
-		if (((int) obj.doubleFieldMask & 2) != 0) return boxDoubleBits(obj.prim1);
-		Object val;
-		if ((val = obj.obj1) == JSObject.DELETED) return JSUndefined.INSTANCE;
-		return val;
-	}
-
-	public static Object getSlot2Object(JSObject obj) {
-		if (((int) obj.doubleFieldMask & 4) != 0) return boxDoubleBits(obj.prim2);
-		Object val;
-		if ((val = obj.obj2) == JSObject.DELETED) return JSUndefined.INSTANCE;
-		return val;
-	}
-
-	public static Object getSlot3Object(JSObject obj) {
-		if (((int) obj.doubleFieldMask & 8) != 0) return boxDoubleBits(obj.prim3);
-		Object val;
-		if ((val = obj.obj3) == JSObject.DELETED) return JSUndefined.INSTANCE;
-		return val;
-	}
-
-	public static Object getSlot4Object(JSObject obj) {
-		if (((int) obj.doubleFieldMask & 16) != 0) return boxDoubleBits(obj.prim4);
-		Object val;
-		if ((val = obj.obj4) == JSObject.DELETED) return JSUndefined.INSTANCE;
-		return val;
-	}
-
-	public static Object getSlot5Object(JSObject obj) {
-		if (((int) obj.doubleFieldMask & 32) != 0) return boxDoubleBits(obj.prim5);
-		Object val;
-		if ((val = obj.obj5) == JSObject.DELETED) return JSUndefined.INSTANCE;
-		return val;
-	}
-
-	public static Object getSlot6Object(JSObject obj) {
-		if (((int) obj.doubleFieldMask & 64) != 0) return boxDoubleBits(obj.prim6);
-		Object val;
-		if ((val = obj.obj6) == JSObject.DELETED) return JSUndefined.INSTANCE;
-		return val;
-	}
-
-	public static Object getSlot7Object(JSObject obj) {
-		if (((int) obj.doubleFieldMask & 128) != 0) return boxDoubleBits(obj.prim7);
-		Object val;
-		if ((val = obj.obj7) == JSObject.DELETED) return JSUndefined.INSTANCE;
-		return val;
-	}
-
-	public static void setSlot0Object(JSObject target, Object val) {
-		target.doubleFieldMask &= ~1L;
-		target.obj0 = val;
-	}
-	public static void setSlot1Object(JSObject target, Object val) {
-		target.doubleFieldMask &= ~2L;
-		target.obj1 = val;
-	}
-	public static void setSlot2Object(JSObject target, Object val) {
-		target.doubleFieldMask &= ~4L;
-		target.obj2 = val;
-	}
-	public static void setSlot3Object(JSObject target, Object val) {
-		target.doubleFieldMask &= ~8L;
-		target.obj3 = val;
-	}
-	public static void setSlot4Object(JSObject target, Object val) {
-		target.doubleFieldMask &= ~16L;
-		target.obj4 = val;
-	}
-	public static void setSlot5Object(JSObject target, Object val) {
-		target.doubleFieldMask &= ~32L;
-		target.obj5 = val;
-	}
-	public static void setSlot6Object(JSObject target, Object val) {
-		target.doubleFieldMask &= ~64L;
-		target.obj6 = val;
-	}
-	public static void setSlot7Object(JSObject target, Object val) {
-		target.doubleFieldMask &= ~128L;
-		target.obj7 = val;
-	}
 
 	private static MethodHandle buildPrimFieldGetter(Class<?> targetClass, Field field, long offset,
 	                                                 Class<?> requestedPrim) {
@@ -3526,30 +3203,6 @@ public class JSLinker {
 			} else { mh = FieldMH.GET_OBJECT_AS_LONG; }
 		}
 		return MethodHandles.insertArguments(mh, 0, offset);
-	}
-
-	public static int getJSObjSlotAsInt(int slot, Object target) {
-		JSObject obj = (JSObject) target;
-		if (obj.isDoubleSlot(slot)) {
-			return (int) obj.getDoubleSlot(slot); // 单条机器指令直转，0 堆分配！
-		}
-		return JSOps.toInt(obj.getSlot(slot));
-	}
-
-	public static double getJSObjSlotAsDouble(int slot, Object target) {
-		JSObject obj = (JSObject) target;
-		if (obj.isDoubleSlot(slot)) {
-			return obj.getDoubleSlot(slot);
-		}
-		return JSOps.toDouble(obj.getSlot(slot));
-	}
-
-	public static long getJSObjSlotAsLong(int slot, Object target) {
-		JSObject obj = (JSObject) target;
-		if (obj.isDoubleSlot(slot)) {
-			return (long) obj.getDoubleSlot(slot);
-		}
-		return JSOps.toLong(obj.getSlot(slot));
 	}
 
 	public static int getPropIntFallback(ChainedCallSite site, Object target, String propName) {
@@ -3630,7 +3283,7 @@ public class JSLinker {
 				if (type == JSShape.TYPE_DOUBLE && offset < 8) {
 					directSlotGetter = MH_GET_SLOT_DOUBLE[offset];
 				} else {
-					directSlotGetter = MethodHandles.insertArguments(PropMH.GET_DOUBLE_SLOT, 0, offset);
+					directSlotGetter = MethodHandles.insertArguments(MH_GET_JS_DOUBLE_SLOT_DOUBLE, 0, offset);
 				}
 
 				// A. 同偏移多态坍缩 (Offset-Equivalent Polymorphism)
@@ -3640,7 +3293,7 @@ public class JSLinker {
 					MethodHandle test       = buildMultiShapeGuard(site.getRecordedShapesArray(), site.getPropId(), commonOff);
 					MethodHandle fastGetter = (commonType == JSShape.TYPE_DOUBLE && commonOff < 8)
 					 ? MH_GET_SLOT_DOUBLE[commonOff]
-					 : MethodHandles.insertArguments(PropMH.GET_DOUBLE_SLOT, 0, commonOff);
+					 : MethodHandles.insertArguments(MH_GET_JS_DOUBLE_SLOT_DOUBLE, 0, commonOff);
 
 					MethodHandle fallbackTarget = getAdaptiveFallback(site);
 					site.setTarget(MethodHandles.guardWithTest(test, fastGetter.asType(site.type()), fallbackTarget.asType(site.type())));
@@ -3754,51 +3407,6 @@ public class JSLinker {
 
 		return getPropLongGeneric(target, propName);
 	}
-
-	public static int getIntDirectPrim(long offset, Object target) { return UNSAFE.getInt(target, offset); }
-	public static int getDoubleAsIntPrim(long offset,
-	                                     Object target) { return JSOps.toInt(UNSAFE.getDouble(target, offset)); }
-	public static int getLongAsIntPrim(long offset, Object target) { return (int) UNSAFE.getLong(target, offset); }
-	public static int getFloatAsIntPrim(long offset, Object target) { return (int) UNSAFE.getFloat(target, offset); }
-	public static int getShortAsIntPrim(long offset, Object target) { return UNSAFE.getShort(target, offset); }
-	public static int getByteAsIntPrim(long offset, Object target) { return UNSAFE.getByte(target, offset); }
-	public static int getCharAsIntPrim(long offset, Object target) { return UNSAFE.getChar(target, offset); }
-	// 在字节码层面就是 1 个字节（0x00 或 0x01）
-	public static int getBooleanAsIntPrim(long offset,
-	                                      Object target) { return UNSAFE.getByte(target, offset); }
-	public static int getObjectAsIntPrim(long offset,
-	                                     Object target) { return JSOps.toInt(UNSAFE.getObject(target, offset)); }
-
-	public static double getDoubleDirectPrim(long offset, Object target) { return UNSAFE.getDouble(target, offset); }
-	public static double getIntAsDoublePrim(long offset, Object target) { return (double) UNSAFE.getInt(target, offset); }
-	public static double getLongAsDoublePrim(long offset,
-	                                         Object target) { return (double) UNSAFE.getLong(target, offset); }
-	public static double getFloatAsDoublePrim(long offset,
-	                                          Object target) { return (double) UNSAFE.getFloat(target, offset); }
-	public static double getShortAsDoublePrim(long offset,
-	                                          Object target) { return (double) UNSAFE.getShort(target, offset); }
-	public static double getByteAsDoublePrim(long offset,
-	                                         Object target) { return (double) UNSAFE.getByte(target, offset); }
-	public static double getCharAsDoublePrim(long offset,
-	                                         Object target) { return (double) UNSAFE.getChar(target, offset); }
-	// 在字节码层面就是 1 个字节（0x00 或 0x01）
-	public static double getBooleanAsDoublePrim(long offset,
-	                                            Object target) { return (double) UNSAFE.getByte(target, offset); }
-	public static double getObjectAsDoublePrim(long offset,
-	                                           Object target) { return JSOps.toDouble(UNSAFE.getObject(target, offset)); }
-
-	public static long getLongDirectPrim(long offset, Object target) { return UNSAFE.getLong(target, offset); }
-	public static long getIntAsLongPrim(long offset, Object target) { return (long) UNSAFE.getInt(target, offset); }
-	public static long getDoubleAsLongPrim(long offset, Object target) { return (long) UNSAFE.getDouble(target, offset); }
-	public static long getFloatAsLongPrim(long offset, Object target) { return (long) UNSAFE.getFloat(target, offset); }
-	public static long getShortAsLongPrim(long offset, Object target) { return (long) UNSAFE.getShort(target, offset); }
-	public static long getByteAsLongPrim(long offset, Object target) { return (long) UNSAFE.getByte(target, offset); }
-	public static long getCharAsLongPrim(long offset, Object target) { return (long) UNSAFE.getChar(target, offset); }
-	// 在字节码层面就是 1 个字节（0x00 或 0x01）
-	public static long getBooleanAsLongPrim(long offset,
-	                                        Object target) { return (long) UNSAFE.getByte(target, offset); }
-	public static long getObjectAsLongPrim(long offset,
-	                                       Object target) { return JSOps.toLong(UNSAFE.getObject(target, offset)); }
 
 	private static final class MethodKey {
 		final Class<?> clazz;
@@ -4059,47 +3667,6 @@ public class JSLinker {
 		return thisObj;
 	}
 
-	public static Object castValue(Object val, Class<?> targetType) {
-		if (val == null) return castNull(targetType);
-		if (targetType == Object.class || targetType.isInstance(val)) return val;
-		return castValueSlow(val, targetType);
-	}
-
-	public static Object castNull(Class<?> targetType) {
-		if (!targetType.isPrimitive()) return null;
-		if (targetType == int.class) return 0;
-		if (targetType == double.class) return 0.0;
-		if (targetType == boolean.class) return false;
-		if (targetType == long.class) return 0L;
-		if (targetType == float.class) return 0.0f;
-		if (targetType == short.class) return (short) 0;
-		if (targetType == byte.class) return (byte) 0;
-		if (targetType == char.class) return '\0';
-		return null;
-	}
-
-	public static Object castValueSlow(Object val, Class<?> targetType) {
-		if (targetType == void.class || targetType == Void.class) return null;
-		if (targetType == int.class || targetType == Integer.class) return JSOps.toInt(val);
-		if (targetType == double.class || targetType == Double.class) return JSOps.toDouble(val);
-		if (targetType == long.class || targetType == Long.class) return JSOps.toLong(val);
-		if (targetType == boolean.class || targetType == Boolean.class) return JSOps.toBoolean(val);
-		if (targetType == String.class || targetType == CharSequence.class) return JSOps.toStr(val);
-		if (targetType == float.class || targetType == Float.class) return JSOps.toFloat(val);
-		if (targetType == short.class || targetType == Short.class) return JSOps.toShort(val);
-		if (targetType == byte.class || targetType == Byte.class) return JSOps.toByte(val);
-		if (targetType == char.class || targetType == Character.class) return JSOps.toChar(val);
-		if (targetType.isInterface()) {
-			if (val instanceof JSFunction fn && getSingleAbstractMethod(targetType) != null) {
-				return createInterfaceAdapter(targetType, fn);
-			}
-			if (val instanceof JSObject jsObj) {
-				return createInterfaceAdapter(targetType, jsObj);
-			}
-		}
-		return val;
-	}
-
 	private static MethodHandle buildDirectFieldGetter(Class<?> clazz, Field field, long offset) {
 		Class<?>     type = field.getType();
 		MethodHandle mh;
@@ -4140,79 +3707,6 @@ public class JSLinker {
 			mh = FieldMH.PUT_BOOLEAN;
 		} else { mh = FieldMH.PUT_OBJECT; }
 		return MethodHandles.insertArguments(mh, 0, offset);
-	}
-
-	public static Object getIntDirect(long offset, Object target) {
-		return (double) UNSAFE.getInt(target, offset);
-	}
-
-	public static Object getDoubleDirect(long offset, Object target) {
-		return UNSAFE.getDouble(target, offset);
-	}
-
-	public static Object getLongDirect(long offset, Object target) {
-		return (double) UNSAFE.getLong(target, offset);
-	}
-
-	public static Object getFloatDirect(long offset, Object target) {
-		return (double) UNSAFE.getFloat(target, offset);
-	}
-
-	public static Object getShortDirect(long offset, Object target) {
-		return (double) UNSAFE.getShort(target, offset);
-	}
-
-	public static Object getByteDirect(long offset, Object target) {
-		return (double) UNSAFE.getByte(target, offset);
-	}
-
-	public static Object getCharDirect(long offset, Object target) {
-		return String.valueOf(UNSAFE.getChar(target, offset));
-	}
-
-	public static Object getBooleanDirect(long offset, Object target) {
-		return UNSAFE.getBoolean(target, offset);
-	}
-
-	public static Object getObjectDirect(long offset, Object target) {
-		return UNSAFE.getObject(target, offset);
-	}
-
-	// instanceof XXX xx 模式匹配的字节码会多一些
-	public static void putIntDirect(long offset, Object target, Object val) {
-		UNSAFE.putInt(target, offset, val instanceof Number ? ((Number) val).intValue() : JSOps.toInt(val));
-	}
-
-	public static void putDoubleDirect(long offset, Object target, Object val) {
-		UNSAFE.putDouble(target, offset, val instanceof Number ? ((Number) val).doubleValue() : JSOps.toDouble(val));
-	}
-
-	public static void putLongDirect(long offset, Object target, Object val) {
-		UNSAFE.putLong(target, offset, val instanceof Number ? ((Number) val).longValue() : JSOps.toLong(val));
-	}
-
-	public static void putFloatDirect(long offset, Object target, Object val) {
-		UNSAFE.putFloat(target, offset, val instanceof Number ? ((Number) val).floatValue() : (float) JSOps.toDouble(val));
-	}
-
-	public static void putShortDirect(long offset, Object target, Object val) {
-		UNSAFE.putShort(target, offset, val instanceof Number ? ((Number) val).shortValue() : (short) JSOps.toInt(val));
-	}
-
-	public static void putByteDirect(long offset, Object target, Object val) {
-		UNSAFE.putByte(target, offset, val instanceof Number ? ((Number) val).byteValue() : (byte) JSOps.toInt(val));
-	}
-
-	public static void putCharDirect(long offset, Object target, Object val) {
-		UNSAFE.putChar(target, offset, tc(val));
-	}
-
-	public static void putBooleanDirect(long offset, Object target, Object val) {
-		UNSAFE.putBoolean(target, offset, JSOps.isTruthy(val));
-	}
-
-	public static void putObjectDirect(long offset, Object target, Object val) {
-		UNSAFE.putObject(target, offset, val);
 	}
 
 	private static MethodHandle findStatic(String name, MethodType type) {

@@ -2,7 +2,7 @@ package hope.magic.example;
 
 import com.caoccao.javet.interop.*;
 import com.caoccao.javet.interop.converters.JavetProxyConverter;
-import com.caoccao.javet.values.*;
+import com.caoccao.javet.utils.JavetResourceUtils;
 import com.caoccao.javet.values.reference.IV8ValueFunction;
 import hope.magic.js.compiler.JSCompiler;
 import hope.magic.js.runtime.*;
@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit;
 @Fork(1)
 public class MagicJSBenchmark {
 
-	private TargetObject target;
+	private TestObject target;
 
 	// 1. MagicJS 编译脚本
 	private JSContext magicContext;
@@ -137,7 +137,7 @@ public class MagicJSBenchmark {
 		 total;
 		 """;
 
-		target = MagicAccessorSample.newTargetObject(98765, "Benchmark Object");
+		target = new TestObject(98765);
 
 		// ==================== 1. 初始化 MagicJS ====================
 		magicContext = new JSContext();
@@ -220,6 +220,12 @@ public class MagicJSBenchmark {
 				v8Runtime.getGlobalObject().delete("dynamicObj");
 				v8Runtime.getGlobalObject().delete("pool");
 
+				JavetResourceUtils.safeClose(v8FieldScript);
+				JavetResourceUtils.safeClose(v8MethodScript);
+				JavetResourceUtils.safeClose(v8LoopScript);
+				JavetResourceUtils.safeClose(v8ObjScript);
+				JavetResourceUtils.safeClose(v8PolyScript);
+
 				// 2. 通知 V8 执行一次内存整理
 				v8Runtime.lowMemoryNotification();
 			} catch (Throwable ignored) { }
@@ -232,12 +238,12 @@ public class MagicJSBenchmark {
 	//region 1. Java Direct 原生基准
 	@Benchmark
 	public int baseline_java_direct_field() {
-		return target.getSecretCode();
+		return target.secret;
 	}
 
 	@Benchmark
-	public int baseline_java_direct_method() {
-		return MagicAccessorSample.callMultiply(target, 6, 7);
+	public double baseline_java_direct_method() {
+		return target.multiply(6.0, 7.0);
 	}
 
 	@Benchmark
@@ -260,25 +266,25 @@ public class MagicJSBenchmark {
 
 	//region 2. 字段访问对比 (MagicJS vs V8 vs GraalJS vs Nashorn)
 	@Benchmark
-	public double magic_js_field_read() throws Throwable {
-		return magicFieldScript.runDouble(magicContext);
+	public int magic_js_field_read() throws Throwable {
+		return magicFieldScript.runInt(magicContext);
 	}
 
 	@Benchmark
-	public Object v8_js_field_read() throws Exception {
+	public int v8_js_field_read() throws Exception {
 		try (var result = v8FieldScript.call(null)) {
-        return result;
-    }
+			return result.asInt();
+		}
 	}
 
 	@Benchmark
-	public Object nashorn_js_field_read() throws Exception {
-		return nashornFieldScript.eval(nashornBindings);
+	public int nashorn_js_field_read() throws Exception {
+		return ((Number) nashornFieldScript.eval(nashornBindings)).intValue();
 	}
 
 	@Benchmark
-	public Object graal_js_field_read() {
-		return graalContext.eval(graalFieldScript);
+	public int graal_js_field_read() {
+		return graalContext.eval(graalFieldScript).asInt();
 	}
 	//endregion
 
@@ -289,20 +295,20 @@ public class MagicJSBenchmark {
 	}
 
 	@Benchmark
-	public Object v8_js_method_call() throws Exception {
+	public double v8_js_method_call() throws Exception {
 		try (var result = v8MethodScript.call(null)) {
-        return result;
-    }
+			return result.asDouble();
+		}
 	}
 
 	@Benchmark
-	public Object nashorn_js_method_call() throws Exception {
-		return nashornMethodScript.eval(nashornBindings);
+	public double nashorn_js_method_call() throws Exception {
+		return ((Number) nashornMethodScript.eval(nashornBindings)).doubleValue();
 	}
 
 	@Benchmark
-	public Object graal_js_method_call() {
-		return graalContext.eval(graalMethodScript);
+	public double graal_js_method_call() {
+		return graalContext.eval(graalMethodScript).asDouble();
 	}
 	//endregion
 
@@ -313,20 +319,20 @@ public class MagicJSBenchmark {
 	}
 
 	@Benchmark
-	public Object v8_js_prime_sum_1000() throws Exception {
+	public double v8_js_prime_sum_1000() throws Exception {
 		try (var result = v8LoopScript.call(null)) {
-			return result;
+			return result.asDouble();
 		}
 	}
 
 	@Benchmark
-	public Object nashorn_js_prime_sum_1000() throws Exception {
-		return nashornLoopScript.eval(nashornBindings);
+	public double nashorn_js_prime_sum_1000() throws Exception {
+		return ((Number) nashornLoopScript.eval(nashornBindings)).doubleValue();
 	}
 
 	@Benchmark
-	public Object graal_js_prime_sum_1000() {
-		return graalContext.eval(graalLoopScript);
+	public double graal_js_prime_sum_1000() {
+		return graalContext.eval(graalLoopScript).asDouble();
 	}
 	//endregion
 
@@ -337,20 +343,20 @@ public class MagicJSBenchmark {
 	}
 
 	@Benchmark
-	public Object v8_js_dynamic_obj_read() throws Exception {
+	public double v8_js_dynamic_obj_read() throws Exception {
 		try (var result = v8ObjScript.call(null)) {
-			return result;
+			return result.asDouble();
 		}
 	}
 
 	@Benchmark
-	public Object nashorn_js_dynamic_obj_read() throws Exception {
-		return nashornObjScript.eval(nashornBindings);
+	public double nashorn_js_dynamic_obj_read() throws Exception {
+		return ((Number) nashornObjScript.eval(nashornBindings)).doubleValue();
 	}
 
 	@Benchmark
-	public Object graal_js_dynamic_obj_read() {
-		return graalContext.eval(graalObjScript);
+	public double graal_js_dynamic_obj_read() {
+		return graalContext.eval(graalObjScript).asDouble();
 	}
 	//endregion
 
@@ -361,20 +367,29 @@ public class MagicJSBenchmark {
 	}
 
 	@Benchmark
-	public Object v8_js_poly() throws Exception {
+	public double v8_js_poly() throws Exception {
 		try (var result = v8PolyScript.call(null)) {
-			return result;
+			return result.asDouble();
 		}
 	}
 
 	@Benchmark
-	public Object nashorn_js_poly() throws Exception {
-		return nashornPolyScript.eval(nashornBindings);
+	public double nashorn_js_poly() throws Exception {
+		return ((Number) nashornPolyScript.eval(nashornBindings)).doubleValue();
 	}
 
 	@Benchmark
-	public Object graal_js_poly() {
-		return graalContext.eval(graalPolyScript);
+	public double graal_js_poly() {
+		return graalContext.eval(graalPolyScript).asDouble();
 	}
 	//endregion
+
+
+	public static class TestObject {
+		public int secret;
+		public double multiply(double x, double y) { return x * y; }
+		public TestObject(int secret) {
+			this.secret = secret;
+		}
+	}
 }

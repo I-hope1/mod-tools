@@ -25,6 +25,7 @@ public class AndroidLinker {
 		try {
 			// MethodHandleImpl(long artFieldOrMethod, int handleKind, MethodType type)
 			Class<?> mhImplClass = Class.forName("java.lang.invoke.MethodHandleImpl");
+			//noinspection JavaReflectionMemberAccess
 			ctor = mhImplClass.getDeclaredConstructor(long.class, int.class, MethodType.class);
 			ctor.setAccessible(true);
 		} catch (Throwable ignored) {

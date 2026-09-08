@@ -3,6 +3,7 @@ package hope.magic.js.runtime;
 import hope.magic.runtime.Magic;
 import org.objectweb.asm.*;
 
+import java.io.*;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -21,7 +22,10 @@ import static org.objectweb.asm.Opcodes.*;
  */
 public final class JavaClassExtender {
 
+	public static final boolean DEBUG = false;
+
 	private static final AtomicLong ID_GEN = new AtomicLong(0);
+	public static final String IN_JSOps = "hope/magic/js/runtime/JSOps";
 
 	public static class ClassInfo {
 		public final Class<?> targetClass;
@@ -357,7 +361,7 @@ public final class JavaClassExtender {
 						break;
 					}
 					try {
-						tempArgs[i + 2] = JSLinker.castValue(args[i], pTypes[i + 2]);
+						tempArgs[i + 2] = JSOps.castValue(args[i], pTypes[i + 2]);
 					} catch (Throwable t) {
 						match = false;
 						break;
@@ -389,7 +393,7 @@ public final class JavaClassExtender {
 							break;
 						}
 						try {
-							tempArgs[i + 2] = JSLinker.castValue(args[i], pTypes[i + 2]);
+							tempArgs[i + 2] = JSOps.castValue(args[i], pTypes[i + 2]);
 						} catch (Throwable t) {
 							match = false;
 							break;
@@ -529,6 +533,16 @@ public final class JavaClassExtender {
 		cw.visitEnd();
 		byte[] bytes = cw.toByteArray();
 
+		if (DEBUG) {
+			File file = new File("F:/classes/" + pkg);
+			file.mkdirs();
+			try (var stream = new FileOutputStream("F:/classes/" + subInternal + ".class")) {
+				stream.write(bytes);
+			} catch (IOException e) {
+				throw new RuntimeException(e);
+			}
+		}
+
 		Class<?> subClass = Magic.defineClass(targetLoader, bytes);
 		List<Constructor<?>> subConstructors = Arrays.asList(subClass.getDeclaredConstructors());
 		for (Constructor<?> c : subConstructors) {
@@ -641,7 +655,7 @@ public final class JavaClassExtender {
 		mv.visitLabel(callJsLabel);
 		mv.visitVarInsn(ALOAD, 0);
 		mv.visitFieldInsn(GETFIELD, subInternal, "__magic_jsObj", "Lhope/magic/js/runtime/JSObject;");
-		pushInt(mv, SymbolTable.id(name));
+		MagicJIT.pushInt(mv, SymbolTable.id(name));
 		mv.visitMethodInsn(INVOKEVIRTUAL, "hope/magic/js/runtime/JSObject", "get", "(I)Ljava/lang/Object;", false);
 
 		mv.visitInsn(DUP);
@@ -717,31 +731,20 @@ public final class JavaClassExtender {
 	}
 
 	private static void emitPackArgs(MethodVisitor mv, Class<?>[] paramTypes) {
-		pushInt(mv, paramTypes.length);
+		MagicJIT.pushInt(mv, paramTypes.length);
 		mv.visitTypeInsn(ANEWARRAY, "java/lang/Object");
 
 		int slot = 1;
 		for (int i = 0; i < paramTypes.length; i++) {
 			Class<?> pt = paramTypes[i];
 			mv.visitInsn(DUP);
-			pushInt(mv, i);
+			MagicJIT.pushInt(mv, i);
 			Type t = Type.getType(pt);
 			mv.visitVarInsn(t.getOpcode(ILOAD), slot);
 			slot += t.getSize();
-			boxPrimitive(mv, pt);
+			MagicJIT.boxPrimitive(mv, pt);
 			mv.visitInsn(AASTORE);
 		}
-	}
-
-	private static void boxPrimitive(MethodVisitor mv, Class<?> pt) {
-		if (pt == int.class) mv.visitMethodInsn(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
-		else if (pt == double.class) mv.visitMethodInsn(INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
-		else if (pt == long.class) mv.visitMethodInsn(INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
-		else if (pt == boolean.class) mv.visitMethodInsn(INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false);
-		else if (pt == float.class) mv.visitMethodInsn(INVOKESTATIC, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false);
-		else if (pt == byte.class) mv.visitMethodInsn(INVOKESTATIC, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false);
-		else if (pt == short.class) mv.visitMethodInsn(INVOKESTATIC, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false);
-		else if (pt == char.class) mv.visitMethodInsn(INVOKESTATIC, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false);
 	}
 
 	private static void emitCastReturn(MethodVisitor mv, Class<?> retType) {
@@ -749,54 +752,42 @@ public final class JavaClassExtender {
 			mv.visitInsn(POP);
 			mv.visitInsn(RETURN);
 		} else if (retType == boolean.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toBoolean", "(Ljava/lang/Object;)Z", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toBoolean", "(Ljava/lang/Object;)Z", false);
 			mv.visitInsn(IRETURN);
 		} else if (retType == int.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toInt", "(Ljava/lang/Object;)I", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
 			mv.visitInsn(IRETURN);
 		} else if (retType == double.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toDouble", "(Ljava/lang/Object;)D", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toDouble", "(Ljava/lang/Object;)D", false);
 			mv.visitInsn(DRETURN);
 		} else if (retType == long.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toLong", "(Ljava/lang/Object;)J", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toLong", "(Ljava/lang/Object;)J", false);
 			mv.visitInsn(LRETURN);
 		} else if (retType == float.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toDouble", "(Ljava/lang/Object;)D", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toDouble", "(Ljava/lang/Object;)D", false);
 			mv.visitInsn(D2F);
 			mv.visitInsn(FRETURN);
 		} else if (retType == short.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toInt", "(Ljava/lang/Object;)I", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
 			mv.visitInsn(I2S);
 			mv.visitInsn(IRETURN);
 		} else if (retType == byte.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toInt", "(Ljava/lang/Object;)I", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
 			mv.visitInsn(I2B);
 			mv.visitInsn(IRETURN);
 		} else if (retType == char.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toInt", "(Ljava/lang/Object;)I", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
 			mv.visitInsn(I2C);
 			mv.visitInsn(IRETURN);
 		} else if (retType == String.class) {
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSOps", "toStr", "(Ljava/lang/Object;)Ljava/lang/String;", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toStr", "(Ljava/lang/Object;)Ljava/lang/String;", false);
 			mv.visitInsn(ARETURN);
 		} else {
 			// 对象类型
 			mv.visitLdcInsn(Type.getType(retType));
-			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSLinker", "castValue", "(Ljava/lang/Object;Ljava/lang/Class;)Ljava/lang/Object;", false);
+			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "castValue", "(Ljava/lang/Object;Ljava/lang/Class;)Ljava/lang/Object;", false);
 			mv.visitTypeInsn(CHECKCAST, Type.getInternalName(retType));
 			mv.visitInsn(ARETURN);
-		}
-	}
-
-	private static void pushInt(MethodVisitor mv, int value) {
-		if (value >= -1 && value <= 5) {
-			mv.visitInsn(ICONST_0 + value);
-		} else if (value >= Byte.MIN_VALUE && value <= Byte.MAX_VALUE) {
-			mv.visitIntInsn(BIPUSH, value);
-		} else if (value >= Short.MIN_VALUE && value <= Short.MAX_VALUE) {
-			mv.visitIntInsn(SIPUSH, value);
-		} else {
-			mv.visitLdcInsn(value);
 		}
 	}
 }

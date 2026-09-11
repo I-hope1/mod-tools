@@ -72,9 +72,27 @@ public class ConstantFolder {
 			if (foldedCond instanceof Node.LiteralExpr lit) {
 				boolean truthy = JSOps.isTruthy(lit.value);
 				if (truthy) {
-					return unwrapBlock(foldedThen);
+					Node retained = unwrapBlock(foldedThen);
+					if (foldedElse != null) {
+						List<Node> deadVars = extractVarDecls(foldedElse);
+						if (!deadVars.isEmpty()) {
+							List<Node> stmts = new ArrayList<>();
+							stmts.add(retained);
+							stmts.addAll(deadVars);
+							return new Node.BlockStmt(stmts, ifStmt.line, ifStmt.column);
+						}
+					}
+					return retained;
 				} else {
-					return unwrapBlock(foldedElse != null ? foldedElse : new Node.BlockStmt(Collections.emptyList(), ifStmt.line, ifStmt.column));
+					Node retained = unwrapBlock(foldedElse != null ? foldedElse : new Node.BlockStmt(Collections.emptyList(), ifStmt.line, ifStmt.column));
+					List<Node> deadVars = extractVarDecls(foldedThen);
+					if (!deadVars.isEmpty()) {
+						List<Node> stmts = new ArrayList<>();
+						stmts.addAll(deadVars);
+						stmts.add(retained);
+						return new Node.BlockStmt(stmts, ifStmt.line, ifStmt.column);
+					}
+					return retained;
 				}
 			}
 			return new Node.IfStmt(foldedCond, foldedThen, foldedElse, ifStmt.line, ifStmt.column);
@@ -83,7 +101,8 @@ public class ConstantFolder {
 		if (node instanceof Node.WhileStmt whileStmt) {
 			Node foldedCond = foldNode(whileStmt.condition);
 			if (foldedCond instanceof Node.LiteralExpr lit && !JSOps.isTruthy(lit.value)) {
-				return new Node.BlockStmt(Collections.emptyList(), whileStmt.line, whileStmt.column);
+				List<Node> deadVars = extractVarDecls(whileStmt.body);
+				return new Node.BlockStmt(deadVars, whileStmt.line, whileStmt.column);
 			}
 			Node foldedBody = foldNode(whileStmt.body);
 			return new Node.WhileStmt(foldedCond, foldedBody, whileStmt.line, whileStmt.column);
@@ -96,11 +115,19 @@ public class ConstantFolder {
 			Node foldedBody   = foldNode(forStmt.body);
 
 			if (foldedCond instanceof Node.LiteralExpr lit && !JSOps.isTruthy(lit.value)) {
-				if (foldedInit instanceof Node.VarDecl || foldedInit instanceof Node.ExprStmt) {
-					return foldedInit;
+				List<Node> deadVars = extractVarDecls(foldedBody);
+				if (deadVars.isEmpty()) {
+					if (foldedInit instanceof Node.VarDecl || foldedInit instanceof Node.ExprStmt) {
+						return foldedInit;
+					}
+					return foldedInit != null ? new Node.ExprStmt(foldedInit, forStmt.line, forStmt.column)
+					 : new Node.BlockStmt(Collections.emptyList(), forStmt.line, forStmt.column);
+				} else {
+					List<Node> stmts = new ArrayList<>();
+					if (foldedInit != null) stmts.add(foldedInit);
+					stmts.addAll(deadVars);
+					return new Node.BlockStmt(stmts, forStmt.line, forStmt.column);
 				}
-				return foldedInit != null ? new Node.ExprStmt(foldedInit, forStmt.line, forStmt.column)
-				 : new Node.BlockStmt(Collections.emptyList(), forStmt.line, forStmt.column);
 			}
 			return new Node.ForStmt(foldedInit, foldedCond, foldedUpdate, foldedBody, forStmt.line, forStmt.column);
 		}
@@ -485,5 +512,49 @@ public class ConstantFolder {
 			return true;
 		}
 		return false;
+	}
+
+	private static List<Node> extractVarDecls(Node node) {
+		List<Node> out = new ArrayList<>();
+		collectDeadVarDecls(node, out);
+		return out;
+	}
+
+	private static void collectDeadVarDecls(Node node, List<Node> out) {
+		if (node == null) return;
+		if (node instanceof Node.FunctionDecl || node instanceof Node.FunctionExpr) {
+			return;
+		}
+		if (node instanceof Node.VarDecl vd) {
+			out.add(new Node.VarDecl(vd.name, null, vd.line, vd.column));
+			return;
+		}
+		if (node instanceof Node.Program prog) {
+			for (Node s : prog.body) collectDeadVarDecls(s, out);
+		} else if (node instanceof Node.BlockStmt block) {
+			for (Node s : block.statements) collectDeadVarDecls(s, out);
+		} else if (node instanceof Node.IfStmt ifStmt) {
+			collectDeadVarDecls(ifStmt.thenBranch, out);
+			collectDeadVarDecls(ifStmt.elseBranch, out);
+		} else if (node instanceof Node.WhileStmt whileStmt) {
+			collectDeadVarDecls(whileStmt.body, out);
+		} else if (node instanceof Node.DoWhileStmt doWhile) {
+			collectDeadVarDecls(doWhile.body, out);
+		} else if (node instanceof Node.ForStmt forStmt) {
+			collectDeadVarDecls(forStmt.init, out);
+			collectDeadVarDecls(forStmt.body, out);
+		} else if (node instanceof Node.ForInStmt forIn) {
+			collectDeadVarDecls(forIn.body, out);
+		} else if (node instanceof Node.ForOfStmt forOf) {
+			collectDeadVarDecls(forOf.body, out);
+		} else if (node instanceof Node.TryStmt tryStmt) {
+			collectDeadVarDecls(tryStmt.tryBlock, out);
+			collectDeadVarDecls(tryStmt.catchBlock, out);
+			collectDeadVarDecls(tryStmt.finallyBlock, out);
+		} else if (node instanceof Node.SwitchStmt switchStmt) {
+			for (Node.CaseClause c : switchStmt.cases) {
+				for (Node s : c.consequent) collectDeadVarDecls(s, out);
+			}
+		}
 	}
 }

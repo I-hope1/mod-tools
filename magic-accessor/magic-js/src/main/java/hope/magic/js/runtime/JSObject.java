@@ -95,6 +95,24 @@ public class JSObject {
 	//endregion
 	//region 槽位访问
 
+	/**
+	 * 获取指定槽位的原生双精度浮点数值。
+	 *
+	 * <p><b>【架构设计与 JIT 内联分析：为什么不模仿 JSShape.getOffset 拆分方法？】</b>
+	 * <ol>
+	 *   <li><b>O(1) tableswitch 跳转表 vs O(N) 线性搜索</b>：
+	 *       {@code JSShape.getOffset(int propId)} 本质是<b>键值搜索（Search）</b>，输入未知的 propId，
+	 *       必须逐一比较 k0, k1...；拆分为主方法（前 2 个）+ 冷分支是为了让主方法满足 C2 JIT 的 {@code MaxInlineSize <= 35} 字节预算。<br>
+	 *       而本方法入参为紧凑连续整数 {@code offset (0..7)}，javac 会将其编译为单个 O(1) 的 {@code tableswitch} 指令，
+	 *       底层直接映射为 CPU 间接跳转表，所有槽位耗时恒定。若拆成 {@code if (offset == 0) ... return getDoubleSlotRest()}，
+	 *       反倒退化为多层条件分支跳转与额外的栈帧调用，增加分支预测与指令开销。</li>
+	 *   <li><b>热路径（Indy IC）根本不走此方法</b>：
+	 *       在单态/多态热路径下，{@link JSLinker} 通过 {@link SlotMH#MH_GET_SLOT_DOUBLE} 直接链入
+	 *       {@link FastAccessor#getSlot0Double} ~ {@link FastAccessor#getSlot7Double} 等扁平单指令方法（仅 6 字节），
+	 *       直接由 C2 JIT 内联发射单条原生汇编指令（如 {@code vmovsd}），完全绕过此虚方法。<br>
+	 *       本方法仅用作巨态降级（Megamorphic Fallback）和动态反射的保底路径。</li>
+	 * </ol>
+	 */
 	public double getDoubleSlot(int offset) {
 		return switch (offset) {
 			case 0 -> Double.longBitsToDouble(prim0);
@@ -192,9 +210,19 @@ public class JSObject {
 		return (val == DELETED) ? JSUndefined.INSTANCE : val;
 	}
 
+	/**
+	 * 设置指定槽位的对象引用。
+	 *
+	 * <p>【性能优化说明】：
+	 * 仅当该槽位之前记录为 Double 属性时（由 {@link #isDoubleSlot(int)} 位掩码以单条指令快速检查），
+	 * 才需要执行 {@link #clearDoubleMask(int)} 以及将 {@code primX} 置 0 的 {@link #clearPrimSlot(int)}。
+	 * 从而让绝大多数普通对象属性的写入操作彻底免除多余的清零和掩码刷新开销。
+	 */
 	public void setSlot(int offset, Object value) {
-		if (doubleFieldMask != 0L) clearDoubleMask(offset);
-		clearPrimSlot(offset);
+		if (isDoubleSlot(offset)) {
+			clearDoubleMask(offset);
+			clearPrimSlot(offset);
+		}
 		switch (offset) {
 			case 0 -> obj0 = value;
 			case 1 -> obj1 = value;

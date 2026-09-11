@@ -13,7 +13,19 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class LinkerHelper {
 	public static final  boolean      IS_ANDROID              = isAndroid();
-	public static final  boolean      FAST_OFFSET             = !IS_ANDROID; // 是否使用 jdk的Unsafe 直接获取 offset
+	/**
+	 * 是否使用 {@link jdk.internal.misc.Unsafe} 极速获取字段偏移量。
+	 * <p>
+	 * <b>底层机制原理：</b>
+	 * 在 HotSpot JVM 底层实现（{@code unsafe.cpp} 的 {@code Unsafe_ObjectFieldOffset1}）中：
+	 * <ul>
+	 *   <li>直接在 native 层按字段名称检索 {@code InstanceKlass}，省去 Java 层反射构造 {@link Field} 对象的开销；</li>
+	 *   <li>对于实例字段：直接返回其在堆内对象实例中的内存偏移量；</li>
+	 *   <li>对于静态字段：返回的是静态字段在 {@code java.lang.Class} 镜像对象（Class Mirror）中的物理内存偏移量，
+	 *       与 {@link #getStaticFieldBase} 返回的 {@code Class} 基址对象完美协同，由 Unsafe 直接读写。</li>
+	 * </ul>
+	 */
+	public static final  boolean      FAST_OFFSET             = !IS_ANDROID;
 
 	static {
 		if (IS_ANDROID) {

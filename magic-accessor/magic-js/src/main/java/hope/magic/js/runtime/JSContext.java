@@ -3295,21 +3295,8 @@ public class JSContext {
 		@Override
 		public Object get(String key, Object receiver) {
 			if (deletedGlobals.contains(key)) return JSUndefined.INSTANCE;
-			int symId = SymbolTable.lookupId(key);
-			if (symId != SymbolTable.NO_SYMBOL) {
-				int offset = shape.getOffset(symId);
-				if (offset >= 0) {
-					if (isDoubleSlot(offset)) return getBoxedDouble(offset);
-					Object val = getRawObjectSlot(offset);
-					if (val != DELETED) {
-						if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
-							PropertyAccessor acc = (PropertyAccessor) val;
-							return acc.callGetter(cx, receiver);
-						}
-						return val;
-					}
-				}
-			}
+			Object ownVal = getOwn(key, receiver, cx);
+			if (ownVal != DELETED) return ownVal;
 			Object val = cx.get(key);
 			if (val != JSUndefined.INSTANCE) return val;
 			return super.get(key, receiver);

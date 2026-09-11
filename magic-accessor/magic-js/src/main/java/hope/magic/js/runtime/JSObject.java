@@ -4,13 +4,14 @@ import java.util.*;
 
 public class JSObject {
 	//region 初始化
-	/** 内部删除哨兵（Tombstone），专用于区分“属性不存在”与“属性值为 undefined” */
-	static final Object DELETED = new Object() {
+	/** 内部删除/未命中哨兵（Tombstone），专用于区分“属性不存在”与“属性值为 undefined” */
+	public static final Object DELETED = new Object() {
 		@Override
 		public String toString() {
 			return "<deleted>";
 		}
 	};
+	public static final Object NOT_FOUND = DELETED;
 
 	public static final int IN_OBJECT_FIELD_COUNT     = 8;
 	public static final int IN_OBJECT_SLOTS           = IN_OBJECT_FIELD_COUNT;
@@ -295,11 +296,19 @@ public class JSObject {
 
 	//endregion
 	//region 通用读 API (遇 DELETED 视为自身无属性，回退原型链)
-	public Object get(int propId) {
-		return get(propId, this);
+
+	/**
+	 * 读取当前对象自有的属性值（不溯源原型链）。
+	 *
+	 * @param propId 属性符号 ID
+	 * @param receiver this 接收者对象（供访问器 getter 调用）
+	 * @return 属性值；若对象自身不存在该属性（未定义或已标记为 DELETED），返回 {@link #DELETED}（即 {@link #NOT_FOUND}）
+	 */
+	public Object getOwn(int propId, Object receiver) {
+		return getOwn(propId, receiver, realm);
 	}
 
-	public Object get(int propId, Object receiver) {
+	public Object getOwn(int propId, Object receiver, JSContext cx) {
 		int offset = shape.getOffset(propId);
 		if (offset >= 0) {
 			if (isDoubleSlot(offset)) {
@@ -309,10 +318,33 @@ public class JSObject {
 			if (val != DELETED) {
 				if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
 					PropertyAccessor acc = (PropertyAccessor) val;
-					return acc.callGetter(null, receiver);
+					return acc.callGetter(cx, receiver);
 				}
 				return val; // 包括 null 与 JSUndefined.INSTANCE 均属于合法属性值
 			}
+		}
+		return DELETED;
+	}
+
+	public Object getOwn(String key, Object receiver) {
+		return getOwn(key, receiver, realm);
+	}
+
+	public Object getOwn(String key, Object receiver, JSContext cx) {
+		if (key == null) return DELETED;
+		int symId = SymbolTable.lookupId(key);
+		if (symId == SymbolTable.NO_SYMBOL) return DELETED;
+		return getOwn(symId, receiver, cx);
+	}
+
+	public Object get(int propId) {
+		return get(propId, this);
+	}
+
+	public Object get(int propId, Object receiver) {
+		Object val = getOwn(propId, receiver);
+		if (val != DELETED) {
+			return val;
 		}
 		return getSlow(propId, receiver);
 	}
@@ -560,12 +592,17 @@ public class JSObject {
 		return has(symId);
 	}
 
-	public boolean hasOwn(String key) {
-		int symId = SymbolTable.lookupId(key);
-		if (symId == SymbolTable.NO_SYMBOL) return false;
-		int offset = shape.getOffset(symId);
+	public boolean hasOwn(int propId) {
+		if (propId < 0) return false;
+		int offset = shape.getOffset(propId);
 		if (offset < 0) return false;
 		return isDoubleSlot(offset) || getRawObjectSlot(offset) != DELETED;
+	}
+
+	public boolean hasOwn(String key) {
+		if (key == null) return false;
+		int symId = SymbolTable.lookupId(key);
+		return symId != SymbolTable.NO_SYMBOL && hasOwn(symId);
 	}
 
 	public void setScopeVar(String key, Object value) {

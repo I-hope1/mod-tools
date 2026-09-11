@@ -226,22 +226,9 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			return sparseVal == NULL_SENTINEL ? null : sparseVal;
 		}
 		String key = JSLinker.fastIntToString((int) index);
-		int symId = SymbolTable.lookupId(key);
-		if (symId != SymbolTable.NO_SYMBOL) {
-			int offset = shape.getOffset(symId);
-			if (offset >= 0) {
-				if (isDoubleSlot(offset)) {
-					return getBoxedDouble(offset);
-				}
-				Object val = getRawObjectSlot(offset);
-				if (val != DELETED) {
-					if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
-						PropertyAccessor acc = (PropertyAccessor) val;
-						return acc.callGetter(null, this);
-					}
-					return val;
-				}
-			}
+		Object val = getOwn(key, this);
+		if (val != DELETED) {
+			return val;
 		}
 		JSObject proto = getPrototype();
 		if (proto != null) {
@@ -371,19 +358,9 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		if (propId == LENGTH_PROP_ID) {
 			return (double) length;
 		}
-		int offset = shape.getOffset(propId);
-		if (offset >= 0) {
-			if (isDoubleSlot(offset)) {
-				return getBoxedDouble(offset);
-			}
-			Object val = getRawObjectSlot(offset);
-			if (val != DELETED) {
-				if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
-					PropertyAccessor acc = (PropertyAccessor) val;
-					return acc.callGetter(null, receiver);
-				}
-				return val;
-			}
+		Object val = getOwn(propId, receiver);
+		if (val != DELETED) {
+			return val;
 		}
 		String name = SymbolTable.name(propId);
 		if (name != null) {
@@ -414,22 +391,9 @@ public class JSArray extends JSObject implements Iterable<Object> {
 				return getElementOwn(idx);
 			}
 		}
-		int symId = SymbolTable.lookupId(key);
-		if (symId != SymbolTable.NO_SYMBOL) {
-			int offset = shape.getOffset(symId);
-			if (offset >= 0) {
-				if (isDoubleSlot(offset)) {
-					return getBoxedDouble(offset);
-				}
-				Object val = getRawObjectSlot(offset);
-				if (val != DELETED) {
-					if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
-						PropertyAccessor acc = (PropertyAccessor) val;
-						return acc.callGetter(null, receiver);
-					}
-					return val;
-				}
-			}
+		Object val = getOwn(key, receiver);
+		if (val != DELETED) {
+			return val;
 		}
 		JSObject proto = getPrototype();
 		return proto != null ? proto.get(key, receiver) : JSUndefined.INSTANCE;

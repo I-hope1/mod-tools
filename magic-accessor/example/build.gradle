@@ -110,6 +110,7 @@ tasks.register('jmhJS', JavaExec) {
 			"-Dpolyglot.engine.WarnInterpreterOnly=true",
 			'-XX:+EnableJVMCI',
 			'-XX:+UseJVMCICompiler',
+//			'-Djmh.blackhole.autoDetect=false',
 	)
 
 	args = [

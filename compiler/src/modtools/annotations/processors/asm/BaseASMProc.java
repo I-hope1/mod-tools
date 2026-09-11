@@ -160,13 +160,22 @@ public abstract class BaseASMProc<T extends Element> extends BaseProcessor<T> {
 	}
 	public static void logClassFile(byte[] classBytes, String className) throws IOException {
 		if (OUTPUT_CLASS_FILE) {
-			try (OutputStream fileOutput = new FileOutputStream(targetFilePath(className))) {
-				fileOutput.write(classBytes);
+			try {
+				File file = new File(targetFilePath(className));
+				File parent = file.getParentFile();
+				if (parent != null && !parent.exists()) {
+					parent.mkdirs();
+				}
+				try (OutputStream fileOutput = new FileOutputStream(file)) {
+					fileOutput.write(classBytes);
+				}
+			} catch (Throwable ignored) {
 			}
 		}
 	}
 	public static String targetFilePath(String genClassName) {
-		return "F:/gen/" + genClassName + ".class";
+		String base = System.getProperty("modtools.gen.dir", "F:/gen");
+		return base + "/" + genClassName + ".class";
 	}
 	/** 用法: mMaker.QualIdent(classSymbol()) */
 	protected ClassSymbol classSymbol() {

@@ -23,7 +23,7 @@ import java.nio.file.*;
 import java.util.Arrays;
 
 public abstract class BaseAccessorProc extends AbstractProcessor {
-	public static final boolean DEBUG = true;
+	public static final boolean DEBUG = Boolean.getBoolean("magic.debug.dump");
 
 	public ProcessingEnvironment env;
 	public Context               context;
@@ -159,10 +159,24 @@ public abstract class BaseAccessorProc extends AbstractProcessor {
 	protected void writeClassBytes(JavaFileObject classfile, byte[] classBytes) throws IOException {
 		if (DEBUG) {
 			// Debugging code
-			try (OutputStream outputStream = new FileOutputStream("F:/classes/" + getClassNameFast(classBytes) + ".class")) {
-				outputStream.write(classBytes);
-			} catch (IOException e) {
-				messager.printMessage(Diagnostic.Kind.ERROR, "Failed to write debug class file: " + e.getMessage());
+			try {
+				String dumpDir = System.getProperty("magic.debug.dump.dir", "F:/classes");
+				File dir = new File(dumpDir);
+				if (!dir.exists()) {
+					dir.mkdirs();
+				}
+				String className = getClassNameFast(classBytes);
+				if (className != null) {
+					File targetFile = new File(dir, className + ".class");
+					File parent = targetFile.getParentFile();
+					if (parent != null && !parent.exists()) {
+						parent.mkdirs();
+					}
+					try (OutputStream outputStream = new FileOutputStream(targetFile)) {
+						outputStream.write(classBytes);
+					}
+				}
+			} catch (Throwable ignored) {
 			}
 		}
 		try (OutputStream outputStream = classfile.openOutputStream()) {

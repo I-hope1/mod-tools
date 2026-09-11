@@ -471,6 +471,23 @@ public class JSLexer {
 			return false;
 		}
 		if (last.type == TokenType.RBRACE) {
+			int depth = 0;
+			for (int i = tokens.size() - 1; i >= 0; i--) {
+				TokenType t = tokens.get(i).type;
+				if (t == TokenType.RBRACE) depth++;
+				else if (t == TokenType.LBRACE) {
+					depth--;
+					if (depth == 0) {
+						if (i > 0) {
+							TokenType before = tokens.get(i - 1).type;
+							if (isExpressionContextToken(before)) {
+								return false; // { ... } 为对象字面量表达式，后跟 / 为除法运算符
+							}
+						}
+						break;
+					}
+				}
+			}
 			return true;
 		}
 		return switch (last.type) {
@@ -479,6 +496,17 @@ public class JSLexer {
 			     RBRACKET,
 			     PLUS_PLUS, MINUS_MINUS -> false;
 			default -> true;
+		};
+	}
+
+	private static boolean isExpressionContextToken(TokenType t) {
+		return switch (t) {
+			case ASSIGN, PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, PERCENT_ASSIGN,
+			     BIT_AND_ASSIGN, BIT_OR_ASSIGN, BIT_XOR_ASSIGN, SHL_ASSIGN, SHR_ASSIGN, USHR_ASSIGN,
+			     COMMA, COLON, QUESTION, LPAREN, LBRACKET, RETURN, THROW, AWAIT,
+			     PLUS, MINUS, STAR, SLASH, PERCENT, BIT_AND, BIT_OR, BIT_XOR, BIT_NOT,
+			     EQ, EQ_EQ, NOT_EQ, NOT_EQ_EQ, LT, LTE, GT, GTE, AND, OR, NOT -> true;
+			default -> false;
 		};
 	}
 

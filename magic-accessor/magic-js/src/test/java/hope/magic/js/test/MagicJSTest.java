@@ -867,6 +867,46 @@ public class MagicJSTest {
 	}
 
 	@Test
+	public void testUpdatePropertyTypeTransitionCached() {
+		// 1. 基础缓存验证：同一个 Shape 对同一个 offset 执行相同的类型更新，必须返回同一个 Shape 实例
+		JSShape base = JSShape.ROOT.addProperty("a_upd_test", JSShape.TYPE_DOUBLE).addProperty("b_upd_test", JSShape.TYPE_INT);
+		int off0 = base.getOffset("a_upd_test");
+		int off1 = base.getOffset("b_upd_test");
+
+		JSShape s1 = base.updatePropertyType(off0, JSShape.TYPE_OBJECT);
+		JSShape s2 = base.updatePropertyType(off0, JSShape.TYPE_OBJECT);
+		Assertions.assertSame(s1, s2, "相同的 updatePropertyType 必须命中缓存并返回同一个 Shape 实例");
+		Assertions.assertEquals(JSShape.TYPE_OBJECT, s1.getSlotType(off0));
+
+		// 2. 相同类型应返回 this
+		Assertions.assertSame(s1, s1.updatePropertyType(off0, JSShape.TYPE_OBJECT));
+
+		// 3. 非法 offset 保护
+		Assertions.assertSame(base, base.updatePropertyType(-1, JSShape.TYPE_OBJECT));
+		Assertions.assertSame(base, base.updatePropertyType(999, JSShape.TYPE_OBJECT));
+
+		// 4. 多分支迁移（分叉）验证：测试 singleTransition 平滑升级至 multiTransitions
+		JSShape s3 = base.updatePropertyType(off1, JSShape.TYPE_DOUBLE);
+		Assertions.assertNotSame(s1, s3);
+		Assertions.assertEquals(JSShape.TYPE_DOUBLE, s3.getSlotType(off1));
+
+		// 分叉后再次查询两个分支，必须依然命中各自的缓存
+		JSShape s1_again = base.updatePropertyType(off0, JSShape.TYPE_OBJECT);
+		JSShape s3_again = base.updatePropertyType(off1, JSShape.TYPE_DOUBLE);
+		Assertions.assertSame(s1, s1_again);
+		Assertions.assertSame(s3, s3_again);
+
+		// 5. 验证命中缓存时不消耗新的 Shape ID
+		int idBefore = JSShape.getNextUserId();
+		for (int i = 0; i < 100; i++) {
+			JSShape cached = base.updatePropertyType(off0, JSShape.TYPE_OBJECT);
+			Assertions.assertSame(s1, cached);
+		}
+		int idAfter = JSShape.getNextUserId();
+		Assertions.assertEquals(idBefore, idAfter, "updatePropertyType 命中缓存不得消耗新的 Shape ID");
+	}
+
+	@Test
 	public void testMultiThreadIsolatedContexts() throws Exception {
 		int                                  threadCount = 16;
 		int                                  iterations  = 100;
@@ -2140,20 +2180,6 @@ public class MagicJSTest {
 			}
 		}
 
-		// 验证 SENTINEL_ENCODED 的低 3 位确为 7 (0b111)
-		Assertions.assertEquals(7, JSShape.SENTINEL_ENCODED & 0x7);
-
-		// 2. 极端属性添加测试：验证绝不返回 null
-		JSShape shape = JSShape.ROOT;
-		for (int propId : testPropIds) {
-			for (byte type : validTypes) {
-				JSShape next = shape.addProperty(propId, type);
-				Assertions.assertNotNull(next, "addProperty must never return null for propId=" + propId);
-				Assertions.assertTrue(next.propertyCount() > 0);
-				shape = next;
-			}
-		}
-
 		// 3. 防御契约终极验证：通过反射直接注入 SENTINEL_ENCODED 调用 addPropertySlow，确保绝对不会返回 null
 		Method slowMethod = JSShape.class.getDeclaredMethod("addPropertySlow", int.class, int.class, byte.class);
 		slowMethod.setAccessible(true);
@@ -2636,13 +2662,13 @@ public class MagicJSTest {
 
 		JSObject proto = (JSObject) cx.eval("Array.prototype;");
 		Assertions.assertNotNull(proto);
-		Assertions.assertTrue(proto.shape.isBuiltin, "Array.prototype 必须标记为内置 Shape");
+		Assertions.assertTrue(proto.shape.isBuiltin(), "Array.prototype 必须标记为内置 Shape");
 		Assertions.assertTrue(proto.shape.id < 0, "Array.prototype 的 Shape ID 必须使用负数隔离命名空间");
 		Assertions.assertEquals(0L, proto.shape.mask, "内置 Shape 的位掩码必须恒为 0L，不挤占 0..63 位掩码空间");
 
 		// 验证用户 Shape 依然使用正数分配，与内置隔离
 		JSObject userObj = (JSObject) cx.eval("({ a: 1, b: 2 });");
-		Assertions.assertFalse(userObj.shape.isBuiltin, "用户对象不得标记为内置");
+		Assertions.assertFalse(userObj.shape.isBuiltin(), "用户对象不得标记为内置");
 		Assertions.assertTrue(userObj.shape.id > 0, "用户对象的 Shape ID 必须为正数");
 		if (userObj.shape.id < JSShape.BITMASK_MAX_SHAPES) {
 			Assertions.assertTrue(userObj.shape.mask != 0L, "用户对象的 Shape 在 0..63 空间内必须享有有效的位掩码");

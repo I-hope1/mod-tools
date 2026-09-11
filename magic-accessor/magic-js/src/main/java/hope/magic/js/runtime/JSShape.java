@@ -54,10 +54,13 @@ public final class JSShape {
 	public static final JSShape ROOT = new JSShape(null, SymbolTable.NO_SYMBOL, TYPE_UNKNOWN, false);
 
 	public final  int     id;
-	public final  long    mask;            // 单指令位掩码 (1L << id，当 id < 64 时有效)
-	public final  boolean isBuiltin;
+	public final  long    mask;            // 单指令位掩码 (1L << id，当 0 <= id < 64 时有效)
 	public final  boolean hasAccessors;
 	public final  int     propertyCount;
+
+	public boolean isBuiltin() {
+		return id < 0;
+	}
 
 	// In-Shape 内联 0~3 键 (涵盖 90%+ 的小对象，0 额外数组堆分配)
 	public final int k0, k1, k2, k3;
@@ -73,14 +76,13 @@ public final class JSShape {
 	private volatile IntObjectMap<JSShape> multiTransitions = null;
 
 	private JSShape(JSShape parent, int propId, byte propType) {
-		this(parent, propId, propType, parent != null && parent.isBuiltin);
+		this(parent, propId, propType, parent != null && parent.isBuiltin());
 	}
 
 	private JSShape(JSShape parent, int propId, byte propType, boolean isBuiltin) {
-		this.isBuiltin = isBuiltin;
 		this.hasAccessors = (parent != null && parent.hasAccessors) || ((propType & FLAG_ACCESSOR) != 0);
 		this.id = isBuiltin ? BUILTIN_ID_GEN.getAndDecrement() : USER_ID_GEN.getAndIncrement();
-		this.mask = (!isBuiltin && this.id < BITMASK_MAX_SHAPES) ? (1L << this.id) : 0L;
+		this.mask = (this.id >= 0 && this.id < BITMASK_MAX_SHAPES) ? (1L << this.id) : 0L;
 		int count = (parent == null ? 0 : parent.propertyCount) + (propId >= 0 ? 1 : 0);
 		this.propertyCount = count;
 
@@ -160,7 +162,6 @@ public final class JSShape {
 	}
 
 	private JSShape(int[] propIds, byte[] types, boolean isBuiltin) {
-		this.isBuiltin = isBuiltin;
 		boolean hasAcc = false;
 		for (byte t : types) {
 			if ((t & FLAG_ACCESSOR) != 0) {
@@ -170,7 +171,7 @@ public final class JSShape {
 		}
 		this.hasAccessors = hasAcc;
 		this.id = isBuiltin ? BUILTIN_ID_GEN.getAndDecrement() : USER_ID_GEN.getAndIncrement();
-		this.mask = (!isBuiltin && this.id < BITMASK_MAX_SHAPES) ? (1L << this.id) : 0L;
+		this.mask = (this.id >= 0 && this.id < BITMASK_MAX_SHAPES) ? (1L << this.id) : 0L;
 		int count = propIds.length;
 		this.propertyCount = count;
 
@@ -277,6 +278,7 @@ public final class JSShape {
 	 * propId限制为{@link SymbolTable#MAX_ID}，所以不可能达到SENTINEL_ENCODED.
 	 */
 	public static final int SENTINEL_ENCODED = 0x7C000000;
+	public static final int UPDATE_TYPE_TAG  = 0x80000000;
 
 	public static int encodeKey(int propId, byte type) {
 		assert (type >= 0 && (type & ~TRANSITION_TYPE_MASK) == 0) : "Invalid property type: " + type;
@@ -285,6 +287,13 @@ public final class JSShape {
 		int encoded = (propId << TRANSITION_TYPE_SHIFT) | (type & TRANSITION_TYPE_MASK);
 		assert encoded != SENTINEL_ENCODED : "Mathematical impossibility violated: encoded collided with SENTINEL_ENCODED";
 		return encoded;
+	}
+
+	public static int encodeUpdateKey(int offset, byte newType) {
+		assert (newType >= 0 && (newType & ~TRANSITION_TYPE_MASK) == 0) : "Invalid property type: " + newType;
+		assert (newType & FLAG_ACCESSOR) == 0 || (newType & TYPE_MASK) == 0;
+		assert offset >= 0 : "Invalid offset: " + offset;
+		return UPDATE_TYPE_TAG | (offset << TRANSITION_TYPE_SHIFT) | (newType & TRANSITION_TYPE_MASK);
 	}
 
 	// 标志位方法
@@ -306,14 +315,56 @@ public final class JSShape {
 	}
 
 	public JSShape updatePropertyType(int offset, byte newType) {
-		if (getSlotType(offset) == newType) return this;
+		if (offset < 0 || offset >= propertyCount || getSlotType(offset) == newType) return this;
+		int encoded = encodeUpdateKey(offset, newType);
+		if (this.singleKey == encoded) {
+			JSShape trans = this.singleTransition;
+			if (trans != null) return trans;
+		}
+		return updatePropertyTypeSlow(encoded, offset, newType);
+	}
+
+	private synchronized JSShape updatePropertyTypeSlow(int encoded, int offset, byte newType) {
+		if (this.singleKey == encoded && this.singleTransition != null) {
+			return this.singleTransition;
+		}
+
+		if (this.multiTransitions != null) {
+			JSShape cached = this.multiTransitions.get(encoded);
+			if (cached != null) return cached;
+		}
+
+		// 第一条生长分支：直接装入 singleTransition，避免 new IntObjectMap
+		if (this.singleTransition == null && this.multiTransitions == null) {
+			JSShape next = createUpdatedShape(offset, newType);
+			this.singleTransition = next;
+			this.singleKey = encoded;
+			return next;
+		}
+
+		// 出现分叉（第二条以上分支）：冷创建多迁移哈希表
+		if (this.multiTransitions == null) {
+			IntObjectMap<JSShape> map = new IntObjectMap<>();
+			map.put(this.singleKey, this.singleTransition);
+			this.multiTransitions = map;
+		}
+
+		JSShape next = this.multiTransitions.get(encoded);
+		if (next == null) {
+			next = createUpdatedShape(offset, newType);
+			this.multiTransitions.put(encoded, next);
+		}
+		return next;
+	}
+
+	private JSShape createUpdatedShape(int offset, byte newType) {
 		int    n     = propertyCount;
 		int[]  keys  = getKeyIds();
 		byte[] types = new byte[n];
 		for (int i = 0; i < n; i++) {
 			types[i] = (i == offset) ? newType : getSlotType(i);
 		}
-		return new JSShape(keys, types, this.isBuiltin);
+		return new JSShape(keys, types, this.isBuiltin());
 	}
 
 	// 迁移树构建 (极简编码，快路径 < 28 字节，100% C2 内联)

@@ -194,6 +194,7 @@ public class JSObject {
 
 	public void setSlot(int offset, Object value) {
 		if (doubleFieldMask != 0L) clearDoubleMask(offset);
+		clearPrimSlot(offset);
 		switch (offset) {
 			case 0 -> obj0 = value;
 			case 1 -> obj1 = value;
@@ -361,6 +362,9 @@ public class JSObject {
 				if ((slotType & JSShape.FLAG_NOT_WRITABLE) != 0) {
 					return;
 				}
+				if (shape.getBaseType(offset) != JSShape.TYPE_DOUBLE) {
+					shape = shape.updatePropertyType(offset, JSShape.TYPE_DOUBLE);
+				}
 			}
 			setDoubleSlot(offset, value);
 			return;
@@ -463,6 +467,9 @@ public class JSObject {
 				if ((slotType & JSShape.FLAG_NOT_WRITABLE) != 0) {
 					return; // 只读属性，写入静默忽略
 				}
+				if (shape.getBaseType(offset) != JSShape.TYPE_OBJECT) {
+					shape = shape.updatePropertyType(offset, JSShape.TYPE_OBJECT);
+				}
 			}
 			setSlot(offset, value);
 			return;
@@ -523,6 +530,27 @@ public class JSObject {
 			return proto != null && proto.has(key);
 		}
 		return has(symId);
+	}
+
+	public boolean hasOwn(String key) {
+		int symId = SymbolTable.lookupId(key);
+		if (symId == SymbolTable.NO_SYMBOL) return false;
+		int offset = shape.getOffset(symId);
+		if (offset < 0) return false;
+		return isDoubleSlot(offset) || getRawObjectSlot(offset) != DELETED;
+	}
+
+	public void setScopeVar(String key, Object value) {
+		if (hasOwn(key)) {
+			put(key, value);
+			return;
+		}
+		JSObject proto = getPrototype();
+		if (proto != null && proto != JSContext.LazyObject.OBJECT_PROTOTYPE) {
+			proto.setScopeVar(key, value);
+		} else {
+			put(key, value);
+		}
 	}
 
 	public boolean has(JSSymbol sym) {

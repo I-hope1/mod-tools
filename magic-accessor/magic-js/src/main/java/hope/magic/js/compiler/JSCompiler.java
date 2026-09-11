@@ -244,7 +244,7 @@ public class JSCompiler {
 		boolean isPrimitive() { return type != VarType.OBJECT; }
 	}
 
-	private record TryCatchLabels(Label tryStart, Label tryEnd, Label catchHandler, Label afterTryCatch) { }
+	private record TryCatchLabels(Label tryStart, Label tryEnd, Label catchHandler, Label catchStart, Label catchEnd, Label finallyHandler, Label afterTryCatch) { }
 
 	private static class CompileContext {
 		final MethodVisitor                     mv;
@@ -253,6 +253,7 @@ public class JSCompiler {
 		final Map<String, LocalVar>             locals           = new LinkedHashMap<>();
 		final Map<String, VarType>              preInferredTypes = new LinkedHashMap<>();
 		final Map<Node.TryStmt, TryCatchLabels> tryCatchMap            = new IdentityHashMap<>();
+		final Deque<Node>                       activeFinallyBlocks    = new ArrayDeque<>();
 		final Set<String>                       capturedVars           = new HashSet<>();
 		final Set<String>                       uncapturedTopLevelVars = new LinkedHashSet<>();
 		int     nextLocalSlot       = 2; // Slot 0 is 'this', Slot 1 is 'cx' (JSContext)
@@ -262,6 +263,7 @@ public class JSCompiler {
 		String  functionName        = null;
 		boolean isDoubleSpecialized = false;
 		boolean isAsync             = false;
+		int     scopeSlot           = -1;
 
 		final Deque<Label> breakTargets    = new ArrayDeque<>();
 		final Deque<Label> continueTargets = new ArrayDeque<>();
@@ -356,7 +358,7 @@ public class JSCompiler {
 			VarType   left  = inferVarType(bin.left, ctx);
 			VarType   right = inferVarType(bin.right, ctx);
 			if (left == VarType.INT && right == VarType.INT) {
-				if (op == TokenType.SLASH) return VarType.DOUBLE;
+				if (op == TokenType.SLASH || op == TokenType.PLUS || op == TokenType.MINUS || op == TokenType.STAR) return VarType.DOUBLE;
 				return VarType.INT;
 			}
 			if (left == VarType.LONG && right == VarType.LONG && op != TokenType.SLASH) {
@@ -545,6 +547,36 @@ public class JSCompiler {
 
 	private record ScopeInfo(List<String> params, Node body) {}
 
+	private static Set<String> findCapturedVarsInFunction(List<String> params, Node.BlockStmt body) {
+		Set<String> declared = new HashSet<>();
+		if (params != null) declared.addAll(params);
+		List<Node.VarDecl> varDecls = new ArrayList<>();
+		collectVarDecls(body, varDecls);
+		for (Node.VarDecl d : varDecls) declared.add(d.name);
+		List<Node.FunctionDecl> funcDecls = new ArrayList<>();
+		collectFunctionDecls(new Node.Program(body.statements, body.line, body.column), funcDecls);
+		for (Node.FunctionDecl fd : funcDecls) declared.add(fd.name);
+		List<Node.ClassDecl> classDecls = new ArrayList<>();
+		collectClassDecls(new Node.Program(body.statements, body.line, body.column), classDecls);
+		for (Node.ClassDecl cd : classDecls) if (cd.name != null) declared.add(cd.name);
+
+		Set<String> captured = new HashSet<>();
+		boolean[] hasEval = new boolean[1];
+		List<ScopeInfo> nestedScopes = new ArrayList<>();
+		findNestedScopesAndEval(body, nestedScopes, hasEval);
+
+		if (hasEval[0]) {
+			captured.addAll(declared);
+			return captured;
+		}
+
+		for (ScopeInfo scope : nestedScopes) {
+			collectScopeCapturedIdentifiers(scope.body, scope.params, captured);
+		}
+		captured.retainAll(declared);
+		return captured;
+	}
+
 	private static void collectCapturedVars(Node root, Set<String> capturedVars) {
 		if (root == null) return;
 		boolean[] hasEval = new boolean[1];
@@ -556,6 +588,11 @@ public class JSCompiler {
 			collectVarDecls(root, allDecls);
 			for (Node.VarDecl d : allDecls) {
 				capturedVars.add(d.name);
+			}
+			List<Node.ClassDecl> allClassDecls = new ArrayList<>();
+			collectClassDecls(root, allClassDecls);
+			for (Node.ClassDecl cd : allClassDecls) {
+				if (cd.name != null) capturedVars.add(cd.name);
 			}
 			return;
 		}
@@ -601,6 +638,12 @@ public class JSCompiler {
 		List<Node.VarDecl> localDecls = new ArrayList<>();
 		collectVarDecls(scope, localDecls);
 		for (Node.VarDecl d : localDecls) innerLocals.add(d.name);
+		List<Node.FunctionDecl> funcDecls = new ArrayList<>();
+		collectFunctionDecls(scope, funcDecls);
+		for (Node.FunctionDecl fd : funcDecls) innerLocals.add(fd.name);
+		List<Node.ClassDecl> classDecls = new ArrayList<>();
+		collectClassDecls(scope, classDecls);
+		for (Node.ClassDecl cd : classDecls) if (cd.name != null) innerLocals.add(cd.name);
 
 		Set<String> allIdents = new HashSet<>();
 		collectReferencedIdentifiers(scope, allIdents);
@@ -806,21 +849,39 @@ public class JSCompiler {
 		}
 	}
 
+	private static void collectClassDecls(Node node, List<Node.ClassDecl> out) {
+		if (node == null) return;
+		if (node instanceof Node.ClassDecl decl) {
+			out.add(decl);
+		} else {
+			forEachChildStmt(node, s -> collectClassDecls(s, out));
+		}
+	}
+
 	private static void registerTryCatchBlocks(Node node, MethodVisitor mv,
 	                                           Map<Node.TryStmt, TryCatchLabels> tryCatchMap) {
 		if (node == null) return;
 		if (node instanceof Node.TryStmt tryStmt) {
-			Label tryStart      = new Label();
-			Label tryEnd        = new Label();
-			Label catchHandler  = new Label();
-			Label afterTryCatch = new Label();
-			tryCatchMap.put(tryStmt, new TryCatchLabels(tryStart, tryEnd, catchHandler, afterTryCatch));
-			if (tryStmt.catchBlock != null) {
-				mv.visitTryCatchBlock(tryStart, tryEnd, catchHandler, "java/lang/Throwable");
-			}
+			Label tryStart       = new Label();
+			Label tryEnd         = new Label();
+			Label catchHandler   = new Label();
+			Label catchStart     = new Label();
+			Label catchEnd       = new Label();
+			Label finallyHandler = new Label();
+			Label afterTryCatch  = new Label();
+			tryCatchMap.put(tryStmt, new TryCatchLabels(tryStart, tryEnd, catchHandler, catchStart, catchEnd, finallyHandler, afterTryCatch));
 			registerTryCatchBlocks(tryStmt.tryBlock, mv, tryCatchMap);
 			if (tryStmt.catchBlock != null) registerTryCatchBlocks(tryStmt.catchBlock, mv, tryCatchMap);
 			if (tryStmt.finallyBlock != null) registerTryCatchBlocks(tryStmt.finallyBlock, mv, tryCatchMap);
+
+			if (tryStmt.catchBlock != null) {
+				mv.visitTryCatchBlock(tryStart, tryEnd, catchHandler, "java/lang/Throwable");
+				if (tryStmt.finallyBlock != null) {
+					mv.visitTryCatchBlock(catchStart, catchEnd, finallyHandler, "java/lang/Throwable");
+				}
+			} else if (tryStmt.finallyBlock != null) {
+				mv.visitTryCatchBlock(tryStart, tryEnd, finallyHandler, "java/lang/Throwable");
+			}
 		} else {
 			forEachChildStmt(node, s -> registerTryCatchBlocks(s, mv, tryCatchMap));
 		}
@@ -1008,11 +1069,46 @@ public class JSCompiler {
 		mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "getSlot", "(I)Ljava/lang/Object;", false);
 	}
 
+	private static void loadCurrentScope(CompileContext ctx) {
+		MethodVisitor mv = ctx.mv;
+		if (ctx.scopeSlot >= 0) {
+			mv.visitVarInsn(Opcodes.ALOAD, ctx.scopeSlot);
+		} else if (ctx.isFunction) {
+			mv.visitVarInsn(Opcodes.ALOAD, 0); // this
+			mv.visitFieldInsn(Opcodes.GETFIELD, ctx.className, "scope", "L" + IN_JSObject + ";");
+		} else {
+			mv.visitInsn(Opcodes.ACONST_NULL);
+		}
+	}
+
+	private static void loadIdentifier(CompileContext ctx, String name) {
+		MethodVisitor mv = ctx.mv;
+		if (ctx.isFunction) {
+			loadCurrentScope(ctx);
+			mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+			mv.visitLdcInsn(name);
+			pushInt(mv, JSContext.getGlobalSlot(name));
+			mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSLinker, "getScopeOrGlobal", "(L" + IN_JSObject + ";L" + IN_JSContext + ";Ljava/lang/String;I)Ljava/lang/Object;", false);
+		} else {
+			loadGlobal(mv, name);
+		}
+	}
+
+	private static void instantiateFunction(CompileContext ctx, String funcClass) {
+		MethodVisitor mv = ctx.mv;
+		mv.visitTypeInsn(Opcodes.NEW, funcClass);
+		mv.visitInsn(Opcodes.DUP);
+		mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+		loadCurrentScope(ctx);
+		mv.visitMethodInsn(Opcodes.INVOKESPECIAL, funcClass, "<init>", "(L" + IN_JSContext + ";L" + IN_JSObject + ";)V", false);
+	}
+
 	private static void instantiateFunction(MethodVisitor mv, String funcClass) {
 		mv.visitTypeInsn(Opcodes.NEW, funcClass);
 		mv.visitInsn(Opcodes.DUP);
 		mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
-		mv.visitMethodInsn(Opcodes.INVOKESPECIAL, funcClass, "<init>", "(L" + IN_JSContext + ";)V", false);
+		mv.visitInsn(Opcodes.ACONST_NULL);
+		mv.visitMethodInsn(Opcodes.INVOKESPECIAL, funcClass, "<init>", "(L" + IN_JSContext + ";L" + IN_JSObject + ";)V", false);
 	}
 
 	private static void compileNode(Node node, CompileContext ctx, boolean needResult) {
@@ -1183,13 +1279,20 @@ public class JSCompiler {
 
 	private static void compileVarDecl(Node.VarDecl varDecl, CompileContext ctx, boolean needResult) {
 		MethodVisitor mv = ctx.mv;
-		if (!ctx.isFunction && ctx.capturedVars.contains(varDecl.name)) {
+		if (ctx.capturedVars.contains(varDecl.name)) {
 			if (varDecl.init != null) {
-				int slot = JSContext.getGlobalSlot(varDecl.name);
-				mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
-				pushInt(mv, slot);
-				compileNode(varDecl.init, ctx, true);
-				mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "setSlot", "(ILjava/lang/Object;)V", false);
+				if (ctx.isFunction && ctx.scopeSlot >= 0) {
+					mv.visitVarInsn(Opcodes.ALOAD, ctx.scopeSlot);
+					mv.visitLdcInsn(varDecl.name);
+					compileNode(varDecl.init, ctx, true);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "put", "(Ljava/lang/String;Ljava/lang/Object;)V", false);
+				} else if (!ctx.isFunction) {
+					int slot = JSContext.getGlobalSlot(varDecl.name);
+					mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+					pushInt(mv, slot);
+					compileNode(varDecl.init, ctx, true);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "setSlot", "(ILjava/lang/Object;)V", false);
+				}
 			}
 			if (needResult) visitUndefined(mv);
 			return;
@@ -1377,27 +1480,36 @@ public class JSCompiler {
 	}
 
 	private static void compileTry(Node.TryStmt tryStmt, CompileContext ctx) {
-		MethodVisitor  mv            = ctx.mv;
-		TryCatchLabels labels        = ctx.tryCatchMap.get(tryStmt);
-		Label          tryStart      = labels != null ? labels.tryStart() : new Label();
-		Label          tryEnd        = labels != null ? labels.tryEnd() : new Label();
-		Label          catchHandler  = labels != null ? labels.catchHandler() : new Label();
-		Label          afterTryCatch = labels != null ? labels.afterTryCatch() : new Label();
+		MethodVisitor  mv             = ctx.mv;
+		TryCatchLabels labels         = ctx.tryCatchMap.get(tryStmt);
+		Label          tryStart       = labels != null ? labels.tryStart() : new Label();
+		Label          tryEnd         = labels != null ? labels.tryEnd() : new Label();
+		Label          catchHandler   = labels != null ? labels.catchHandler() : new Label();
+		Label          catchStart     = labels != null ? labels.catchStart() : new Label();
+		Label          catchEnd       = labels != null ? labels.catchEnd() : new Label();
+		Label          finallyHandler = labels != null ? labels.finallyHandler() : new Label();
+		Label          afterTryCatch  = labels != null ? labels.afterTryCatch() : new Label();
 
 		boolean hasCatch   = tryStmt.catchBlock != null;
 		boolean hasFinally = tryStmt.finallyBlock != null;
+
+		if (hasFinally) {
+			ctx.activeFinallyBlocks.push(tryStmt.finallyBlock);
+		}
 
 		mv.visitLabel(tryStart);
 		compileNode(tryStmt.tryBlock, ctx, false);
 		mv.visitLabel(tryEnd);
 
 		if (hasFinally) {
+			ctx.activeFinallyBlocks.pop();
 			compileNode(tryStmt.finallyBlock, ctx, false);
 		}
 		mv.visitJumpInsn(Opcodes.GOTO, afterTryCatch);
 
 		if (hasCatch) {
 			mv.visitLabel(catchHandler);
+			mv.visitLabel(catchStart);
 			mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "unwrapException", "(Ljava/lang/Throwable;)Ljava/lang/Object;", false);
 			LocalVar catchVar = null;
 			if (tryStmt.catchParam != null) {
@@ -1411,10 +1523,29 @@ public class JSCompiler {
 			} else {
 				mv.visitInsn(Opcodes.POP);
 			}
+
+			if (hasFinally) {
+				ctx.activeFinallyBlocks.push(tryStmt.finallyBlock);
+			}
 			compileNode(tryStmt.catchBlock, ctx, false);
+			if (hasFinally) {
+				ctx.activeFinallyBlocks.pop();
+			}
+			mv.visitLabel(catchEnd);
+
 			if (hasFinally) {
 				compileNode(tryStmt.finallyBlock, ctx, false);
 			}
+			mv.visitJumpInsn(Opcodes.GOTO, afterTryCatch);
+		}
+
+		if (hasFinally) {
+			mv.visitLabel(finallyHandler);
+			int exSlot = ctx.allocTempSlot();
+			mv.visitVarInsn(Opcodes.ASTORE, exSlot);
+			compileNode(tryStmt.finallyBlock, ctx, false);
+			mv.visitVarInsn(Opcodes.ALOAD, exSlot);
+			mv.visitInsn(Opcodes.ATHROW);
 		}
 
 		mv.visitLabel(afterTryCatch);
@@ -1467,21 +1598,70 @@ public class JSCompiler {
 
 	private static void compileReturn(Node.ReturnStmt returnStmt, CompileContext ctx) {
 		MethodVisitor mv = ctx.mv;
+		if (ctx.activeFinallyBlocks.isEmpty()) {
+			if (ctx.isDoubleSpecialized) {
+				if (returnStmt.value != null) {
+					compileNodeAsDouble(returnStmt.value, ctx);
+				} else {
+					mv.visitLdcInsn(0.0);
+				}
+				mv.visitInsn(Opcodes.DRETURN);
+				return;
+			}
+			if (returnStmt.value != null) {
+				compileNode(returnStmt.value, ctx, true);
+			} else {
+				visitUndefined(mv);
+			}
+			mv.visitInsn(Opcodes.ARETURN);
+			return;
+		}
+
+		List<Node> fins = new ArrayList<>(ctx.activeFinallyBlocks);
 		if (ctx.isDoubleSpecialized) {
 			if (returnStmt.value != null) {
 				compileNodeAsDouble(returnStmt.value, ctx);
 			} else {
 				mv.visitLdcInsn(0.0);
 			}
+			int retSlot = ctx.allocTempSlot();
+			ctx.allocTempSlot(); // double uses 2 slots
+			mv.visitVarInsn(Opcodes.DSTORE, retSlot);
+			for (int i = 0; i < fins.size(); i++) {
+				Node fin = fins.get(i);
+				Deque<Node> saved = new ArrayDeque<>(ctx.activeFinallyBlocks);
+				ctx.activeFinallyBlocks.clear();
+				for (int j = i + 1; j < fins.size(); j++) {
+					ctx.activeFinallyBlocks.addLast(fins.get(j));
+				}
+				compileNode(fin, ctx, false);
+				ctx.activeFinallyBlocks.clear();
+				ctx.activeFinallyBlocks.addAll(saved);
+			}
+			mv.visitVarInsn(Opcodes.DLOAD, retSlot);
 			mv.visitInsn(Opcodes.DRETURN);
-			return;
-		}
-		if (returnStmt.value != null) {
-			compileNode(returnStmt.value, ctx, true);
 		} else {
-			visitUndefined(mv);
+			if (returnStmt.value != null) {
+				compileNode(returnStmt.value, ctx, true);
+			} else {
+				visitUndefined(mv);
+			}
+			int retSlot = ctx.allocTempSlot();
+			mv.visitVarInsn(Opcodes.ASTORE, retSlot);
+			for (int i = 0; i < fins.size(); i++) {
+				Node fin = fins.get(i);
+				Deque<Node> saved = new ArrayDeque<>(ctx.activeFinallyBlocks);
+				ctx.activeFinallyBlocks.clear();
+				for (int j = i + 1; j < fins.size(); j++) {
+					ctx.activeFinallyBlocks.addLast(fins.get(j));
+				}
+				compileNode(fin, ctx, false);
+				ctx.activeFinallyBlocks.clear();
+				ctx.activeFinallyBlocks.addAll(saved);
+			}
+			mv.visitVarInsn(Opcodes.ALOAD, retSlot);
+			mv.visitInsn(Opcodes.ARETURN);
 		}
-		mv.visitInsn(Opcodes.ARETURN);
 	}
 
 	private static void compileLiteral(Node.LiteralExpr lit, MethodVisitor mv) {
@@ -1520,8 +1700,7 @@ public class JSCompiler {
 				mv.visitVarInsn(Opcodes.ALOAD, var.slot);
 			}
 		} else {
-			// 全局变量查找槽位化：通过全局槽位索引直读 (O(1) 数组寻址)
-			loadGlobal(mv, name);
+			loadIdentifier(ctx, name);
 		}
 	}
 
@@ -1566,7 +1745,7 @@ public class JSCompiler {
 				}
 			}
 		} else {
-			loadGlobal(mv, ident.name);
+			loadIdentifier(ctx, ident.name);
 			if (targetType == VarType.INT) {
 				mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
 			} else if (targetType == VarType.LONG) {
@@ -1754,19 +1933,40 @@ public class JSCompiler {
 				storeAndResult(mv, var, needResult, ctx, name);
 			} else {
 				int slot = JSContext.getGlobalSlot(name);
-				mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
-				pushInt(mv, slot);
-				if (assign.op == TokenType.ASSIGN) {
-					compileNode(assign.value, ctx, true);
+				if (ctx.isFunction) {
+					int resSlot = ctx.allocTempSlot();
+					if (assign.op == TokenType.ASSIGN) {
+						compileNode(assign.value, ctx, true);
+					} else {
+						loadIdentifier(ctx, name);
+						compileNode(assign.value, ctx, true);
+						mv.visitInvokeDynamicInsn("op", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", BSM_BINARY_OP, opStr);
+					}
+					mv.visitVarInsn(Opcodes.ASTORE, resSlot);
+					loadCurrentScope(ctx);
+					mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+					mv.visitLdcInsn(name);
+					pushInt(mv, slot);
+					mv.visitVarInsn(Opcodes.ALOAD, resSlot);
+					mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSLinker, "setScopeOrGlobal", "(L" + IN_JSObject + ";L" + IN_JSContext + ";Ljava/lang/String;ILjava/lang/Object;)V", false);
+					if (needResult) {
+						mv.visitVarInsn(Opcodes.ALOAD, resSlot);
+					}
 				} else {
-					loadGlobal(mv, name);
-					compileNode(assign.value, ctx, true);
-					mv.visitInvokeDynamicInsn("op", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", BSM_BINARY_OP, opStr);
+					mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+					pushInt(mv, slot);
+					if (assign.op == TokenType.ASSIGN) {
+						compileNode(assign.value, ctx, true);
+					} else {
+						loadGlobal(mv, name);
+						compileNode(assign.value, ctx, true);
+						mv.visitInvokeDynamicInsn("op", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", BSM_BINARY_OP, opStr);
+					}
+					if (needResult) {
+						mv.visitInsn(Opcodes.DUP_X2);
+					}
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "setSlot", "(ILjava/lang/Object;)V", false);
 				}
-				if (needResult) {
-					mv.visitInsn(Opcodes.DUP_X2);
-				}
-				mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "setSlot", "(ILjava/lang/Object;)V", false);
 			}
 			return;
 		}
@@ -2172,9 +2372,13 @@ public class JSCompiler {
 			int newValSlot = ctx.allocTempSlot();
 			int slot       = JSContext.getGlobalSlot(name);
 
-			mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
-			pushInt(mv, slot);
-			mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "getSlot", "(I)Ljava/lang/Object;", false);
+			if (ctx.isFunction) {
+				loadIdentifier(ctx, name);
+			} else {
+				mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+				pushInt(mv, slot);
+				mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "getSlot", "(I)Ljava/lang/Object;", false);
+			}
 			mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toDouble", "(Ljava/lang/Object;)D", false);
 
 			if (!un.isPrefix && needResult) {
@@ -2194,10 +2398,19 @@ public class JSCompiler {
 
 			int writeSlot = ctx.allocTempSlot();
 			mv.visitVarInsn(Opcodes.ASTORE, writeSlot);
-			mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
-			pushInt(mv, slot);
-			mv.visitVarInsn(Opcodes.ALOAD, writeSlot);
-			mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "setSlot", "(ILjava/lang/Object;)V", false);
+			if (ctx.isFunction) {
+				loadCurrentScope(ctx);
+				mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+				mv.visitLdcInsn(name);
+				pushInt(mv, slot);
+				mv.visitVarInsn(Opcodes.ALOAD, writeSlot);
+				mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSLinker, "setScopeOrGlobal", "(L" + IN_JSObject + ";L" + IN_JSContext + ";Ljava/lang/String;ILjava/lang/Object;)V", false);
+			} else {
+				mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
+				pushInt(mv, slot);
+				mv.visitVarInsn(Opcodes.ALOAD, writeSlot);
+				mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "setSlot", "(ILjava/lang/Object;)V", false);
+			}
 
 			if (needResult) {
 				mv.visitVarInsn(Opcodes.ALOAD, un.isPrefix ? newValSlot : oldValSlot);
@@ -2380,7 +2593,7 @@ public class JSCompiler {
 			if (var != null) {
 				compileNode(ident, ctx, true);
 			} else {
-				loadGlobal(mv, ident.name);
+				loadIdentifier(ctx, ident.name);
 			}
 		} else {
 			compileNode(typeOf.expr, ctx, true);
@@ -2630,7 +2843,7 @@ public class JSCompiler {
 	private static void compileFunctionExpr(Node.FunctionExpr funcExpr, CompileContext ctx, boolean needResult) {
 		String funcClass = generateFunctionClass(funcExpr.name, funcExpr.params, funcExpr.body, funcExpr.isAsync);
 		if (needResult) {
-			instantiateFunction(ctx.mv, funcClass);
+			instantiateFunction(ctx, funcClass);
 		}
 	}
 
@@ -2643,13 +2856,19 @@ public class JSCompiler {
 			}
 			return;
 		}
+		if (ctx.capturedVars.contains(funcDecl.name) && ctx.scopeSlot >= 0) {
+			if (needResult) {
+				visitUndefined(mv);
+			}
+			return;
+		}
 		LocalVar var = ctx.getLocal(funcDecl.name);
 		if (var == null) {
 			String funcClass = generateFunctionClass(funcDecl.name, funcDecl.params, funcDecl.body, funcDecl.isAsync);
 			int    slot      = JSContext.getGlobalSlot(funcDecl.name);
 			mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
 			pushInt(mv, slot);
-			instantiateFunction(mv, funcClass);
+			instantiateFunction(ctx, funcClass);
 			mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSContext, "setSlot", "(ILjava/lang/Object;)V", false);
 		}
 		if (needResult) {
@@ -2691,7 +2910,7 @@ public class JSCompiler {
 			mv.visitInsn(Opcodes.DUP);
 			pushInt(mv, i * 3 + 1);
 			String mClass = generateFunctionClass(m.name, m.params, m.body, m.isAsync);
-			instantiateFunction(mv, mClass);
+			instantiateFunction(ctx, mClass);
 			mv.visitInsn(Opcodes.AASTORE);
 
 			mv.visitInsn(Opcodes.DUP);
@@ -2715,7 +2934,7 @@ public class JSCompiler {
 			mv.visitInsn(Opcodes.DUP);
 			pushInt(mv, i * 3 + 1);
 			String smClass = generateFunctionClass(sm.name, sm.params, sm.body, sm.isAsync);
-			instantiateFunction(mv, smClass);
+			instantiateFunction(ctx, smClass);
 			mv.visitInsn(Opcodes.AASTORE);
 
 			mv.visitInsn(Opcodes.DUP);
@@ -2728,7 +2947,7 @@ public class JSCompiler {
 		// 6. constructor JSFunction (or null)
 		if (classDecl.constructor != null) {
 			String ctorClass = generateFunctionClass("constructor", classDecl.constructor.params, classDecl.constructor.body, false);
-			instantiateFunction(mv, ctorClass);
+			instantiateFunction(ctx, ctorClass);
 		} else {
 			mv.visitInsn(Opcodes.ACONST_NULL);
 		}
@@ -2758,11 +2977,25 @@ public class JSCompiler {
 					mv.visitVarInsn(Opcodes.ALOAD, temp.slot);
 				}
 			} else {
-				LocalVar var = ctx.declareLocal(classDecl.name, VarType.OBJECT);
-				if (needResult) {
-					mv.visitInsn(Opcodes.DUP);
+				if (ctx.capturedVars.contains(classDecl.name) && ctx.scopeSlot >= 0) {
+					LocalVar temp = ctx.declareLocal("__temp_class_" + classDecl.name, VarType.OBJECT);
+					mv.visitVarInsn(Opcodes.ASTORE, temp.slot);
+
+					mv.visitVarInsn(Opcodes.ALOAD, ctx.scopeSlot);
+					mv.visitLdcInsn(classDecl.name);
+					mv.visitVarInsn(Opcodes.ALOAD, temp.slot);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "put", "(Ljava/lang/String;Ljava/lang/Object;)V", false);
+
+					if (needResult) {
+						mv.visitVarInsn(Opcodes.ALOAD, temp.slot);
+					}
+				} else {
+					LocalVar var = ctx.declareLocal(classDecl.name, VarType.OBJECT);
+					if (needResult) {
+						mv.visitInsn(Opcodes.DUP);
+					}
+					mv.visitVarInsn(Opcodes.ASTORE, var.slot);
 				}
-				mv.visitVarInsn(Opcodes.ASTORE, var.slot);
 			}
 		} else {
 			if (!needResult) {
@@ -2958,25 +3191,41 @@ public class JSCompiler {
 
 		// public JSContext cx;
 		cw.visitField(Opcodes.ACC_PUBLIC, "cx", "L" + IN_JSContext + ";", null, null).visitEnd();
+		// public JSObject scope;
+		cw.visitField(Opcodes.ACC_PUBLIC, "scope", "L" + IN_JSObject + ";", null, null).visitEnd();
+
+		// <init>(JSContext cx, JSObject scope)
+		MethodVisitor initCxScopeMv = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "(L" + IN_JSContext + ";L" + IN_JSObject + ";)V", null, null);
+		initCxScopeMv.visitCode();
+		initCxScopeMv.visitVarInsn(Opcodes.ALOAD, 0);
+		initCxScopeMv.visitMethodInsn(Opcodes.INVOKESPECIAL, IN_JSObject, "<init>", "()V", false);
+		initCxScopeMv.visitVarInsn(Opcodes.ALOAD, 0);
+		initCxScopeMv.visitVarInsn(Opcodes.ALOAD, 1);
+		initCxScopeMv.visitFieldInsn(Opcodes.PUTFIELD, funcClassName, "cx", "L" + IN_JSContext + ";");
+		initCxScopeMv.visitVarInsn(Opcodes.ALOAD, 0);
+		initCxScopeMv.visitVarInsn(Opcodes.ALOAD, 2);
+		initCxScopeMv.visitFieldInsn(Opcodes.PUTFIELD, funcClassName, "scope", "L" + IN_JSObject + ";");
+
+		initCxScopeMv.visitVarInsn(Opcodes.ALOAD, 0);
+		if (functionName != null) {
+			initCxScopeMv.visitLdcInsn(functionName);
+		} else {
+			initCxScopeMv.visitInsn(Opcodes.ACONST_NULL);
+		}
+		pushInt(initCxScopeMv, params.size());
+		initCxScopeMv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSLinker, "initUserFunction", "(L" + IN_JSObject + ";Ljava/lang/String;I)V", false);
+
+		initCxScopeMv.visitInsn(Opcodes.RETURN);
+		initCxScopeMv.visitMaxs(3, 3);
+		initCxScopeMv.visitEnd();
 
 		// <init>(JSContext cx)
 		MethodVisitor initCxMv = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "(L" + IN_JSContext + ";)V", null, null);
 		initCxMv.visitCode();
 		initCxMv.visitVarInsn(Opcodes.ALOAD, 0);
-		initCxMv.visitMethodInsn(Opcodes.INVOKESPECIAL, IN_JSObject, "<init>", "()V", false);
-		initCxMv.visitVarInsn(Opcodes.ALOAD, 0);
 		initCxMv.visitVarInsn(Opcodes.ALOAD, 1);
-		initCxMv.visitFieldInsn(Opcodes.PUTFIELD, funcClassName, "cx", "L" + IN_JSContext + ";");
-
-		initCxMv.visitVarInsn(Opcodes.ALOAD, 0);
-		if (functionName != null) {
-			initCxMv.visitLdcInsn(functionName);
-		} else {
-			initCxMv.visitInsn(Opcodes.ACONST_NULL);
-		}
-		pushInt(initCxMv, params.size());
-		initCxMv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSLinker, "initUserFunction", "(L" + IN_JSObject + ";Ljava/lang/String;I)V", false);
-
+		initCxMv.visitInsn(Opcodes.ACONST_NULL);
+		initCxMv.visitMethodInsn(Opcodes.INVOKESPECIAL, funcClassName, "<init>", "(L" + IN_JSContext + ";L" + IN_JSObject + ";)V", false);
 		initCxMv.visitInsn(Opcodes.RETURN);
 		initCxMv.visitMaxs(3, 2);
 		initCxMv.visitEnd();
@@ -2986,13 +3235,15 @@ public class JSCompiler {
 		initMv.visitCode();
 		initMv.visitVarInsn(Opcodes.ALOAD, 0);
 		initMv.visitInsn(Opcodes.ACONST_NULL);
-		initMv.visitMethodInsn(Opcodes.INVOKESPECIAL, funcClassName, "<init>", "(L" + IN_JSContext + ";)V", false);
+		initMv.visitInsn(Opcodes.ACONST_NULL);
+		initMv.visitMethodInsn(Opcodes.INVOKESPECIAL, funcClassName, "<init>", "(L" + IN_JSContext + ";L" + IN_JSObject + ";)V", false);
 		initMv.visitInsn(Opcodes.RETURN);
-		initMv.visitMaxs(2, 1);
+		initMv.visitMaxs(3, 1);
 		initMv.visitEnd();
 
 		boolean hasArguments = usesArguments(body) && !params.contains("arguments");
 		int    paramCount       = params.size();
+		Set<String> thisFuncCaptured = findCapturedVarsInFunction(params, body);
 
 		if (isAsync) {
 			// 1. call(cx, thisObj, args) -> JSLinker.runAsync(this, cx, thisObj, args)
@@ -3040,11 +3291,28 @@ public class JSCompiler {
 			ctx.isAsync = true;
 			ctx.locals.put("this", new LocalVar(2, VarType.OBJECT));
 
+			ctx.capturedVars.clear();
+			ctx.capturedVars.addAll(thisFuncCaptured);
 			ctx.nextLocalSlot = 4; // slot 0=this, 1=cx, 2=thisObj, 3=args
+			if (!thisFuncCaptured.isEmpty()) {
+				ctx.scopeSlot = ctx.allocTempSlot();
+				asyncMv.visitVarInsn(Opcodes.ALOAD, 0); // this
+				asyncMv.visitFieldInsn(Opcodes.GETFIELD, funcClassName, "scope", "L" + IN_JSObject + ";");
+				asyncMv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSLinker, "createScope", "(L" + IN_JSObject + ";)L" + IN_JSObject + ";", false);
+				asyncMv.visitVarInsn(Opcodes.ASTORE, ctx.scopeSlot);
+			}
 			for (int i = 0; i < params.size(); i++) {
-				LocalVar var = ctx.declareLocal(params.get(i), VarType.OBJECT);
-				loadArgSafe(asyncMv, 3, i);
-				asyncMv.visitVarInsn(Opcodes.ASTORE, var.slot);
+				String p = params.get(i);
+				if (thisFuncCaptured.contains(p)) {
+					asyncMv.visitVarInsn(Opcodes.ALOAD, ctx.scopeSlot);
+					asyncMv.visitLdcInsn(p);
+					loadArgSafe(asyncMv, 3, i);
+					asyncMv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "put", "(Ljava/lang/String;Ljava/lang/Object;)V", false);
+				} else {
+					LocalVar var = ctx.declareLocal(p, VarType.OBJECT);
+					loadArgSafe(asyncMv, 3, i);
+					asyncMv.visitVarInsn(Opcodes.ASTORE, var.slot);
+				}
 			}
 			if (hasArguments) {
 				LocalVar argVar = ctx.declareLocal("arguments", VarType.OBJECT);
@@ -3076,7 +3344,7 @@ public class JSCompiler {
 			 ? "(L" + IN_JSContext + ";Ljava/lang/Object;" + "Ljava/lang/Object;".repeat(paramCount) + ")Ljava/lang/Object;"
 			 : "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;";
 
-			boolean isNumFunc = !hasArguments && isNumericFunction(body, params, functionName) && paramCount <= 4;
+			boolean isNumFunc = !hasArguments && thisFuncCaptured.isEmpty() && isNumericFunction(body, params, functionName) && paramCount <= 4;
 
 			if (isNumFunc) {
 				String primMethodName = "call" + paramCount + "Double";
@@ -3153,19 +3421,50 @@ public class JSCompiler {
 				ctx.isFunction = true;
 				ctx.locals.put("this", new LocalVar(2, VarType.OBJECT));
 
+				ctx.capturedVars.clear();
+				ctx.capturedVars.addAll(thisFuncCaptured);
+
 				if (!useCallMethod) {
-					// 参数直接绑定到 JVM 局部变量槽位 (slot 0=this, 1=cx, 2=thisObj, 3=a0, 4=a1, 5=a2)
-					ctx.nextLocalSlot = 3;
+					ctx.nextLocalSlot = 3 + paramCount;
+					if (!thisFuncCaptured.isEmpty()) {
+						ctx.scopeSlot = ctx.allocTempSlot();
+						callMv.visitVarInsn(Opcodes.ALOAD, 0); // this
+						callMv.visitFieldInsn(Opcodes.GETFIELD, funcClassName, "scope", "L" + IN_JSObject + ";");
+						callMv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSLinker, "createScope", "(L" + IN_JSObject + ";)L" + IN_JSObject + ";", false);
+						callMv.visitVarInsn(Opcodes.ASTORE, ctx.scopeSlot);
+					}
 					for (int i = 0; i < paramCount; i++) {
-						ctx.declareLocal(params.get(i), VarType.OBJECT);
+						String p = params.get(i);
+						if (thisFuncCaptured.contains(p)) {
+							callMv.visitVarInsn(Opcodes.ALOAD, ctx.scopeSlot);
+							callMv.visitLdcInsn(p);
+							callMv.visitVarInsn(Opcodes.ALOAD, 3 + i);
+							callMv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "put", "(Ljava/lang/String;Ljava/lang/Object;)V", false);
+						} else {
+							ctx.locals.put(p, new LocalVar(3 + i, VarType.OBJECT));
+						}
 					}
 				} else {
 					ctx.nextLocalSlot = 4; // slot 0=this, 1=cx, 2=thisObj, 3=args
-					// Bind parameters
+					if (!thisFuncCaptured.isEmpty()) {
+						ctx.scopeSlot = ctx.allocTempSlot();
+						callMv.visitVarInsn(Opcodes.ALOAD, 0); // this
+						callMv.visitFieldInsn(Opcodes.GETFIELD, funcClassName, "scope", "L" + IN_JSObject + ";");
+						callMv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSLinker, "createScope", "(L" + IN_JSObject + ";)L" + IN_JSObject + ";", false);
+						callMv.visitVarInsn(Opcodes.ASTORE, ctx.scopeSlot);
+					}
 					for (int i = 0; i < params.size(); i++) {
-						LocalVar var = ctx.declareLocal(params.get(i), VarType.OBJECT);
-						loadArgSafe(callMv, 3, i);
-						callMv.visitVarInsn(Opcodes.ASTORE, var.slot);
+						String p = params.get(i);
+						if (thisFuncCaptured.contains(p)) {
+							callMv.visitVarInsn(Opcodes.ALOAD, ctx.scopeSlot);
+							callMv.visitLdcInsn(p);
+							loadArgSafe(callMv, 3, i);
+							callMv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "put", "(Ljava/lang/String;Ljava/lang/Object;)V", false);
+						} else {
+							LocalVar var = ctx.declareLocal(p, VarType.OBJECT);
+							loadArgSafe(callMv, 3, i);
+							callMv.visitVarInsn(Opcodes.ASTORE, var.slot);
+						}
 					}
 					if (hasArguments) {
 						LocalVar argVar = ctx.declareLocal("arguments", VarType.OBJECT);
@@ -3366,7 +3665,13 @@ public class JSCompiler {
 		collectVarDecls(root, varDecls);
 		MethodVisitor mv = ctx.mv;
 		for (Node.VarDecl decl : varDecls) {
-			if (!ctx.isFunction && ctx.capturedVars.contains(decl.name)) {
+			if (ctx.capturedVars.contains(decl.name)) {
+				if (ctx.isFunction && ctx.scopeSlot >= 0) {
+					mv.visitVarInsn(Opcodes.ALOAD, ctx.scopeSlot);
+					mv.visitLdcInsn(decl.name);
+					visitUndefined(mv);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "put", "(Ljava/lang/String;Ljava/lang/Object;)V", false);
+				}
 				continue;
 			}
 			if (ctx.getLocal(decl.name) == null) {
@@ -3396,16 +3701,23 @@ public class JSCompiler {
 		List<Node.FunctionDecl> nestedFuncs = new ArrayList<>();
 		collectFunctionDecls(prog, nestedFuncs);
 		for (Node.FunctionDecl fd : nestedFuncs) {
-			if (ctx.getLocal(fd.name) == null) {
+			if (!ctx.capturedVars.contains(fd.name) && ctx.getLocal(fd.name) == null) {
 				ctx.declareLocal(fd.name, VarType.OBJECT);
 			}
 		}
 		for (Node.FunctionDecl fd : nestedFuncs) {
-			LocalVar var = ctx.getLocal(fd.name);
-			if (var != null) {
-				String childFuncClass = generateFunctionClass(fd.name, fd.params, fd.body, fd.isAsync);
-				instantiateFunction(ctx.mv, childFuncClass);
-				ctx.mv.visitVarInsn(Opcodes.ASTORE, var.slot);
+			String childFuncClass = generateFunctionClass(fd.name, fd.params, fd.body, fd.isAsync);
+			if (ctx.isFunction && ctx.capturedVars.contains(fd.name) && ctx.scopeSlot >= 0) {
+				ctx.mv.visitVarInsn(Opcodes.ALOAD, ctx.scopeSlot);
+				ctx.mv.visitLdcInsn(fd.name);
+				instantiateFunction(ctx, childFuncClass);
+				ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "put", "(Ljava/lang/String;Ljava/lang/Object;)V", false);
+			} else {
+				LocalVar var = ctx.getLocal(fd.name);
+				if (var != null) {
+					instantiateFunction(ctx, childFuncClass);
+					ctx.mv.visitVarInsn(Opcodes.ASTORE, var.slot);
+				}
 			}
 		}
 	}

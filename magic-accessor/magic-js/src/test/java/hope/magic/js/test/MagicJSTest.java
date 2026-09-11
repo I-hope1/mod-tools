@@ -2171,7 +2171,7 @@ public class MagicJSTest {
 		for (int propId : testPropIds) {
 			for (byte type : validTypes) {
 				int encoded = JSShape.encodeKey(propId, type);
-				// 契约 1: 绝对不能等于哨兵值 0x7FFFFFFF
+				// 契约 1: 绝对不能等于哨兵值 0x7C000000
 				Assertions.assertNotEquals(JSShape.SENTINEL_ENCODED, encoded,
 				 () -> "Collision detected! propId=" + propId + ", type=" + type);
 				// 契约 2: 低 3 位的值必然在 [0, 3] 区间，第 2 位 (权重 4) 恒等于 0

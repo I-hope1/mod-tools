@@ -1754,6 +1754,19 @@ public class JSLinker {
 					site.installGuardOrSwitchMegamorphic(test, MH_SET_NOOP_PROP.asType(site.type()));
 					return;
 				}
+
+				byte currentBaseType = (byte) (type & JSShape.TYPE_MASK);
+				byte newBaseType = (value instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
+				if (currentBaseType != newBaseType) {
+					jsObj.shape = shape.updatePropertyType(offset, newBaseType);
+					if (newBaseType == JSShape.TYPE_DOUBLE) {
+						jsObj.setDoubleSlot(offset, JSOps.toDouble(value));
+					} else {
+						jsObj.setSlot(offset, value);
+					}
+					return;
+				}
+
 				site.recordShape(shape, offset, type);
 
 				boolean isDouble = (type & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE && (value instanceof Number);
@@ -1942,6 +1955,14 @@ public class JSLinker {
 					site.installGuardOrSwitchMegamorphic(test, MH_SET_NOOP_PROP.asType(site.type()));
 					return;
 				}
+
+				byte currentBaseType = (byte) (type & JSShape.TYPE_MASK);
+				if (currentBaseType != JSShape.TYPE_DOUBLE) {
+					jsObj.shape = shape.updatePropertyType(offset, JSShape.TYPE_DOUBLE);
+					jsObj.setDoubleSlot(offset, value);
+					return;
+				}
+
 				site.recordShape(shape, offset, JSShape.TYPE_DOUBLE);
 
 				if (site.isOffsetEquivalent()) {
@@ -2695,6 +2716,25 @@ public class JSLinker {
 
 	public static JSContext.JSArguments createArguments(JSFunction callee, Object[] args) {
 		return new JSContext.JSArguments(callee, args);
+	}
+
+	public static JSObject createScope(JSObject parentScope) {
+		return new JSObject(parentScope);
+	}
+
+	public static Object getScopeOrGlobal(JSObject scope, JSContext cx, String name, int slot) {
+		if (scope != null && scope.has(name)) {
+			return scope.get(name);
+		}
+		return cx.getSlot(slot);
+	}
+
+	public static void setScopeOrGlobal(JSObject scope, JSContext cx, String name, int slot, Object value) {
+		if (scope != null && scope.has(name)) {
+			scope.setScopeVar(name, value);
+		} else {
+			cx.setSlot(slot, value);
+		}
 	}
 
 	@FunctionalInterface

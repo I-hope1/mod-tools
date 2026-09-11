@@ -65,7 +65,7 @@ public final class SymbolTable {
 		if (existingId != null) return existingId;
 		String sym   = symbol(name);
 		int    newId = ID_GEN.getAndIncrement();
-		assert newId < MAX_ID : "Symbol ID exceeds reserved range";
+		if (newId >= MAX_ID) throw new IllegalStateException("Symbol ID exceeds reserved range");
 		if (newId >= ID_TO_NAME.length) {
 			ID_TO_NAME = Arrays.copyOf(ID_TO_NAME, Math.max(ID_TO_NAME.length * 2, newId + 1));
 		}

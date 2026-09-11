@@ -274,8 +274,9 @@ public final class JSShape {
 	}
 
 	/**
-	 * 哨兵编码值：仅高 6 位为 1,其余为 0
-	 * propId限制为{@link SymbolTable#MAX_ID}，所以不可能达到SENTINEL_ENCODED.
+	 * 哨兵编码值：次高 5 位为 1 (Bits 30..26)，其余位为 0。
+	 * propId 限制为 {@link SymbolTable#MAX_ID} (1 << 24)，最大合法 encoded (0x3FFFFFFF) 严格小于 SENTINEL_ENCODED (0x7C000000)，
+	 * 保证该值在数学和架构上绝对不可达，专用于通过冷分支膨胀字节码阻断 C2 JIT 内联。
 	 */
 	public static final int SENTINEL_ENCODED = 0x7C000000;
 	public static final int UPDATE_TYPE_TAG  = 0x80000000;

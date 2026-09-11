@@ -1,8 +1,5 @@
 package hope.magic.js.runtime;
 
-import hope.magic.runtime.Magic;
-
-import java.lang.invoke.MethodHandles;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -15,8 +12,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 4. 支持物理 Offset 直通，配合 Unsafe 达成 1 指令寻址。
  */
 public final class JSShape {
-	private static final MethodHandles.Lookup LOOKUP = Magic.lookup;
-
 	private static final AtomicInteger BUILTIN_ID_GEN = new AtomicInteger(-1);
 	private static final AtomicInteger USER_ID_GEN    = new AtomicInteger(0);
 	// 架构优化说明：
@@ -26,17 +21,11 @@ public final class JSShape {
 	// 此处废弃并移除无用的 VAR_HANDLES 缓存与 casIC 方法，消除死代码并减轻静态类加载开销。
 
 	// 语义化控制常量
-	public static final int  SHAPE_ID_SHIFT              = 32;
-	public static final long OFFSET_MASK                 = 0xFFFFFFFFL;
 	public static final int  BITMASK_MAX_SHAPES          = 64;
 	public static final int  PRECOMPUTED_SHAPES_CAPACITY = 65536;
 	public static final int  INLINE_PROPERTY_CAPACITY    = 4;
 	public static final int  TRANSITION_TYPE_SHIFT       = 6;
 	public static final int  TRANSITION_TYPE_MASK        = 0x3F;
-
-	public static long packIC(int shapeId, int offset) {
-		return ((long) shapeId << SHAPE_ID_SHIFT) | (offset & OFFSET_MASK);
-	}
 
 	public static final byte TYPE_UNKNOWN = 0;
 	public static final byte TYPE_DOUBLE  = 1;
@@ -49,9 +38,10 @@ public final class JSShape {
 	public static final byte FLAG_NOT_CONFIGURABLE = 1 << 5; // 0x20: 不可配置 (configurable: false)
 	public static final byte TYPE_MASK             = 0x03;   // 基础类型掩码
 
-	public static volatile JSShape[]   PRECOMPUTED_SHAPES = new JSShape[PRECOMPUTED_SHAPES_CAPACITY];
-	private static final AtomicInteger PRECOMPUTED_ID     = new AtomicInteger(0);
+	public static volatile JSShape[]     PRECOMPUTED_SHAPES = new JSShape[PRECOMPUTED_SHAPES_CAPACITY];
+	private static final   AtomicInteger PRECOMPUTED_ID     = new AtomicInteger(0);
 
+	/** 返回预计算的Shape数组索引 */
 	public static synchronized int registerPrecomputedShape(JSShape shape) {
 		int id = PRECOMPUTED_ID.getAndIncrement();
 		if (id >= PRECOMPUTED_SHAPES.length) {
@@ -63,13 +53,11 @@ public final class JSShape {
 
 	public static final JSShape ROOT = new JSShape(null, SymbolTable.NO_SYMBOL, TYPE_UNKNOWN, false);
 
-	public final int     id;
-	public final long    mask;            // 单指令位掩码 (1L << id，当 id < 64 时有效)
-	public final boolean isBuiltin;
-	public final boolean hasAccessors;
-	public final int     propertyCount;
-	public final int     propertyId;      // 本次迁移引入的属性 ID
-	public final byte    propertyType;   // 本次迁移引入的类型
+	public final  int     id;
+	public final  long    mask;            // 单指令位掩码 (1L << id，当 id < 64 时有效)
+	public final  boolean isBuiltin;
+	public final  boolean hasAccessors;
+	public final  int     propertyCount;
 
 	// In-Shape 内联 0~3 键 (涵盖 90%+ 的小对象，0 额外数组堆分配)
 	public final int k0, k1, k2, k3;
@@ -93,8 +81,6 @@ public final class JSShape {
 		this.hasAccessors = (parent != null && parent.hasAccessors) || ((propType & FLAG_ACCESSOR) != 0);
 		this.id = isBuiltin ? BUILTIN_ID_GEN.getAndDecrement() : USER_ID_GEN.getAndIncrement();
 		this.mask = (!isBuiltin && this.id < BITMASK_MAX_SHAPES) ? (1L << this.id) : 0L;
-		this.propertyId = propId;
-		this.propertyType = propType;
 		int count = (parent == null ? 0 : parent.propertyCount) + (propId >= 0 ? 1 : 0);
 		this.propertyCount = count;
 
@@ -150,20 +136,20 @@ public final class JSShape {
 	}
 
 	public static JSShape createStaticPrototypeShape(JSShape parentProtoShape, List<String> propNames) {
-		int n = propNames.size();
-		int[] propIds = new int[n];
-		byte[] types  = new byte[n];
+		int    n       = propNames.size();
+		int[]  propIds = new int[n];
+		byte[] types   = new byte[n];
 
 		for (int i = 0; i < n; i++) {
 			propIds[i] = SymbolTable.symbolId(propNames.get(i));
-			types[i]   = (byte) (TYPE_OBJECT | FLAG_NOT_ENUMERABLE);
+			types[i] = (byte) (TYPE_OBJECT | FLAG_NOT_ENUMERABLE);
 		}
 
 		return new JSShape(propIds, types, true);
 	}
 
 	public static JSShape createStaticPrototypeShape(List<String> propNames, byte[] types) {
-		int n = propNames.size();
+		int   n       = propNames.size();
 		int[] propIds = new int[n];
 
 		for (int i = 0; i < n; i++) {
@@ -187,8 +173,6 @@ public final class JSShape {
 		this.mask = (!isBuiltin && this.id < BITMASK_MAX_SHAPES) ? (1L << this.id) : 0L;
 		int count = propIds.length;
 		this.propertyCount = count;
-		this.propertyId = count > 0 ? propIds[count - 1] : SymbolTable.NO_SYMBOL;
-		this.propertyType = count > 0 ? types[count - 1] : TYPE_UNKNOWN;
 
 		this.k0 = count > 0 ? propIds[0] : -1;
 		this.t0 = count > 0 ? types[0] : 0;
@@ -203,9 +187,9 @@ public final class JSShape {
 			this.overflowKeys = null;
 			this.overflowTypes = null;
 		} else {
-			int overflowLen = count - INLINE_PROPERTY_CAPACITY;
-			int[] ofKeys = new int[overflowLen];
-			byte[] ofTypes = new byte[overflowLen];
+			int    overflowLen = count - INLINE_PROPERTY_CAPACITY;
+			int[]  ofKeys      = new int[overflowLen];
+			byte[] ofTypes     = new byte[overflowLen];
 			System.arraycopy(propIds, INLINE_PROPERTY_CAPACITY, ofKeys, 0, overflowLen);
 			System.arraycopy(types, INLINE_PROPERTY_CAPACITY, ofTypes, 0, overflowLen);
 			this.overflowKeys = ofKeys;
@@ -264,8 +248,8 @@ public final class JSShape {
 	}
 
 	private byte getOverflowSlotType(int offset) {
-		int ofIdx = offset - INLINE_PROPERTY_CAPACITY;
-		byte[] of = this.overflowTypes;
+		int    ofIdx = offset - INLINE_PROPERTY_CAPACITY;
+		byte[] of    = this.overflowTypes;
 		return (of != null && ofIdx >= 0 && ofIdx < of.length) ? of[ofIdx] : TYPE_UNKNOWN;
 	}
 
@@ -283,8 +267,8 @@ public final class JSShape {
 	}
 
 	private int getOverflowPropertyId(int offset) {
-		int ofIdx = offset - INLINE_PROPERTY_CAPACITY;
-		int[] of = this.overflowKeys;
+		int   ofIdx = offset - INLINE_PROPERTY_CAPACITY;
+		int[] of    = this.overflowKeys;
 		return (of != null && ofIdx >= 0 && ofIdx < of.length) ? of[ofIdx] : SymbolTable.NO_SYMBOL;
 	}
 
@@ -323,8 +307,8 @@ public final class JSShape {
 
 	public JSShape updatePropertyType(int offset, byte newType) {
 		if (getSlotType(offset) == newType) return this;
-		int n = propertyCount;
-		int[] keys = getKeyIds();
+		int    n     = propertyCount;
+		int[]  keys  = getKeyIds();
 		byte[] types = new byte[n];
 		for (int i = 0; i < n; i++) {
 			types[i] = (i == offset) ? newType : getSlotType(i);
@@ -408,14 +392,14 @@ public final class JSShape {
 		return propertyCount;
 	}
 
-	/** @see #getPropertyId(int)  */
+	/** @see #getPropertyId(int) */
 	public int getKeyId(int index) {
 		return getPropertyId(index);
 	}
 
-	/** 不使用table switch，减少字节码体积  */
+	/** 不使用table switch，减少字节码体积 */
 	public int[] getKeyIds() {
-		int n = propertyCount;
+		int   n   = propertyCount;
 		int[] all = new int[n];
 		if (n > 0) all[0] = k0;
 		if (n > 1) all[1] = k1;
@@ -427,7 +411,7 @@ public final class JSShape {
 		return all;
 	}
 
-
+	/** 返回Shape中所有属性的名称集合 */
 	public Set<String> keys() {
 		Set<String> set = new LinkedHashSet<>(propertyCount);
 		for (int id : getKeyIds()) {

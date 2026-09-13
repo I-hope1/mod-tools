@@ -126,4 +126,48 @@ public class ClassValueUnloadTest {
 
 		Assertions.assertTrue(collected, "ClassLoader and Class must be completely garbage-collected, proving no global ConcurrentHashMap leaks!");
 	}
+
+	private WeakReference<ClassLoader> exerciseScriptCompileAndRun(WeakReference<Class<?>>[] classRefHolder) throws Throwable {
+		hope.magic.js.runtime.JSScript script = hope.magic.js.compiler.JSCompiler.compile(
+			"""
+			function outer(x) {
+			    function inner(y) {
+			        return x + y;
+			    }
+			    return inner;
+			}
+			outer(10)(20);
+			"""
+		);
+
+		Class<?> scriptClass = script.getClass();
+		ClassLoader scriptLoader = scriptClass.getClassLoader();
+		Assertions.assertInstanceOf(hope.magic.js.compiler.JSCompiler.ScriptClassLoader.class, scriptLoader);
+
+		hope.magic.js.runtime.JSContext cx = new hope.magic.js.runtime.JSContext();
+		Object res = script.run(cx);
+		Assertions.assertEquals(30.0, res);
+
+		classRefHolder[0] = new WeakReference<>(scriptClass);
+		return new WeakReference<>(scriptLoader);
+	}
+
+	@Test
+	public void testScriptClassLoaderCanBeUnloaded() throws Throwable {
+		@SuppressWarnings("unchecked")
+		WeakReference<Class<?>>[] classRefHolder = new WeakReference[1];
+		WeakReference<ClassLoader> loaderRef = exerciseScriptCompileAndRun(classRefHolder);
+
+		boolean collected = false;
+		for (int i = 0; i < 50; i++) {
+			System.gc();
+			if (loaderRef.get() == null && classRefHolder[0].get() == null) {
+				collected = true;
+				break;
+			}
+			Thread.sleep(20);
+		}
+
+		Assertions.assertTrue(collected, "ScriptClassLoader and dynamic JSScript class must be completely garbage-collected upon dereference!");
+	}
 }

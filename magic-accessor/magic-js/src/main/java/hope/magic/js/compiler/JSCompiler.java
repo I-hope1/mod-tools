@@ -8,6 +8,7 @@ import org.objectweb.asm.*;
 
 import java.lang.invoke.*;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class JSCompiler {
@@ -63,24 +64,74 @@ public class JSCompiler {
 		return JSCompiler.compile(program);
 	}
 
+	public static class ScriptClassLoader extends ClassLoader {
+		private final Map<String, Class<?>> definedClasses = new ConcurrentHashMap<>();
+
+		public ScriptClassLoader(ClassLoader parent) {
+			super(parent);
+		}
+
+		public Class<?> defineScriptClass(String name, byte[] bytes) {
+			Class<?> clazz = Magic.defineClass(this, bytes);
+			if (name != null) {
+				definedClasses.put(name.replace('/', '.'), clazz);
+			}
+			return clazz;
+		}
+
+		@Override
+		protected Class<?> findClass(String name) throws ClassNotFoundException {
+			Class<?> c = definedClasses.get(name);
+			if (c != null) return c;
+			return super.findClass(name);
+		}
+	}
+
+	private static final ThreadLocal<ClassLoader> CURRENT_LOADER = new ThreadLocal<>();
+
 	public static byte[] compileToBytes(String code) throws Exception {
-		JSLexer      lexer   = new JSLexer(code);
-		JSParser     parser  = new JSParser(lexer.tokenize());
-		Node.Program program = parser.parse();
-		Node.Program foldedProgram = ConstantFolder.fold(program);
-		String       className     = "hope/magic/gen/MagicJSScript_" + SCRIPT_ID.incrementAndGet();
-		return generateScriptBytecode(className, foldedProgram);
+		ClassLoader parent = Thread.currentThread().getContextClassLoader();
+		if (parent == null) parent = JSCompiler.class.getClassLoader();
+		ScriptClassLoader scriptLoader = new ScriptClassLoader(parent);
+
+		ClassLoader prev = CURRENT_LOADER.get();
+		CURRENT_LOADER.set(scriptLoader);
+		try {
+			JSLexer      lexer         = new JSLexer(code);
+			JSParser     parser        = new JSParser(lexer.tokenize());
+			Node.Program program       = parser.parse();
+			Node.Program foldedProgram = ConstantFolder.fold(program);
+			String       className     = "hope/magic/gen/MagicJSScript_" + SCRIPT_ID.incrementAndGet();
+			return generateScriptBytecode(className, foldedProgram);
+		} finally {
+			if (prev != null) {
+				CURRENT_LOADER.set(prev);
+			} else {
+				CURRENT_LOADER.remove();
+			}
+		}
 	}
 
 	public static JSScript compile(Node.Program program) throws Exception {
-		Node.Program foldedProgram = ConstantFolder.fold(program);
-		String       className     = "hope/magic/gen/MagicJSScript_" + SCRIPT_ID.incrementAndGet();
-		byte[]       classBytes    = generateScriptBytecode(className, foldedProgram);
+		ClassLoader parent = Thread.currentThread().getContextClassLoader();
+		if (parent == null) parent = JSCompiler.class.getClassLoader();
+		ScriptClassLoader scriptLoader = new ScriptClassLoader(parent);
 
-		ClassLoader loader = Thread.currentThread().getContextClassLoader();
-		if (loader == null) loader = JSCompiler.class.getClassLoader();
-		Class<?> loadedClass = Magic.defineClass(loader, classBytes);
-		return (JSScript) loadedClass.getDeclaredConstructor().newInstance();
+		ClassLoader prev = CURRENT_LOADER.get();
+		CURRENT_LOADER.set(scriptLoader);
+		try {
+			Node.Program foldedProgram = ConstantFolder.fold(program);
+			String       className     = "hope/magic/gen/MagicJSScript_" + SCRIPT_ID.incrementAndGet();
+			byte[]       classBytes    = generateScriptBytecode(className, foldedProgram);
+			Class<?>     loadedClass   = scriptLoader.defineScriptClass(className, classBytes);
+			return (JSScript) loadedClass.getDeclaredConstructor().newInstance();
+		} finally {
+			if (prev != null) {
+				CURRENT_LOADER.set(prev);
+			} else {
+				CURRENT_LOADER.remove();
+			}
+		}
 	}
 
 	private static class FastClassWriter extends ClassWriter {
@@ -3802,9 +3853,14 @@ public class JSCompiler {
 		if (CLASS_DUMP_HOOK != null) {
 			CLASS_DUMP_HOOK.accept(funcClassName, bytes);
 		}
-		ClassLoader loader = Thread.currentThread().getContextClassLoader();
-		if (loader == null) loader = JSCompiler.class.getClassLoader();
-		Magic.defineClass(loader, bytes);
+		ClassLoader loader = CURRENT_LOADER.get();
+		if (loader instanceof ScriptClassLoader scl) {
+			scl.defineScriptClass(funcClassName, bytes);
+		} else {
+			if (loader == null) loader = Thread.currentThread().getContextClassLoader();
+			if (loader == null) loader = JSCompiler.class.getClassLoader();
+			Magic.defineClass(loader, bytes);
+		}
 		return funcClassName;
 	}
 

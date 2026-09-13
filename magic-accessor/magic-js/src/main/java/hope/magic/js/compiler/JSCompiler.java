@@ -2151,6 +2151,61 @@ public class JSCompiler {
 		}
 
 		if (inferVarType(idxAccess.index, ctx) == VarType.INT) {
+			VarType valType  = inferVarType(value, ctx);
+			boolean isValNum = isNumeric(valType) || isNumericExpr(value);
+			if (isValNum) {
+				int mark = ctx.markTempSlots();
+				try {
+					int targetSlot = ctx.allocTempSlot();
+					int idxSlot    = ctx.allocTempSlot();
+					int valSlot    = ctx.allocTempSlot();
+					ctx.allocTempSlot(); // double uses 2 slots
+
+					compileNode(idxAccess.target, ctx, true);
+					mv.visitVarInsn(Opcodes.ASTORE, targetSlot);
+
+					compileNodeAsInt(idxAccess.index, ctx);
+					mv.visitVarInsn(Opcodes.ISTORE, idxSlot);
+
+					compileNodeAsDouble(value, ctx);
+					if (needResult) {
+						mv.visitInsn(Opcodes.DUP2);
+					}
+					mv.visitVarInsn(Opcodes.DSTORE, valSlot);
+
+					Label slowPath = new Label();
+					Label endLabel = new Label();
+
+					// 1. JSArray fast-path: setElementDouble(int, double) (0 装箱直写！)
+					mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+					mv.visitTypeInsn(Opcodes.INSTANCEOF, IN_JSArray);
+					mv.visitJumpInsn(Opcodes.IFEQ, slowPath);
+
+					mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+					mv.visitTypeInsn(Opcodes.CHECKCAST, IN_JSArray);
+					mv.visitVarInsn(Opcodes.ILOAD, idxSlot);
+					mv.visitVarInsn(Opcodes.DLOAD, valSlot);
+					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSArray, "setElementDouble", "(ID)V", false);
+					mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+
+					// 2. slowPath: fallback to JSLinker.setIndex(target, idx, val)
+					mv.visitLabel(slowPath);
+					mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+					mv.visitVarInsn(Opcodes.ILOAD, idxSlot);
+					mv.visitVarInsn(Opcodes.DLOAD, valSlot);
+					boxDouble(mv);
+					mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSLinker, "setIndex", "(Ljava/lang/Object;ILjava/lang/Object;)V", false);
+
+					mv.visitLabel(endLabel);
+					if (needResult) {
+						boxDouble(mv);
+					}
+				} finally {
+					ctx.resetTempSlots(mark);
+				}
+				return;
+			}
+
 			int mark = ctx.markTempSlots();
 			try {
 				int targetSlot = ctx.allocTempSlot();

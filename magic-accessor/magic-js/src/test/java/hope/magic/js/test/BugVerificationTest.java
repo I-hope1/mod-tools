@@ -670,6 +670,49 @@ public class BugVerificationTest {
 		Assertions.assertEquals(true, cx.eval("res4[0];"));
 		Assertions.assertEquals(false, cx.eval("res4[1];"));
 	}
+
+	@Test
+	public void testDenseArrayPerformance() {
+		JSContext cx = new JSContext();
+		String script = """
+			function fillArray(arr, n) {
+				for (let i = 0; i < n; i++) {
+					arr[i] = i * 1.5;
+				}
+			}
+			function sumArray(arr, n) {
+				let sum = 0;
+				for (let i = 0; i < n; i++) {
+					sum += arr[i];
+				}
+				return sum;
+			}
+			let n = 20000;
+			let arr = new Array(n);
+			// Warmup
+			for (let w = 0; w < 5; w++) {
+				fillArray(arr, n);
+				sumArray(arr, n);
+			}
+			let t0 = java.lang.System.nanoTime();
+			for (let r = 0; r < 20; r++) {
+				fillArray(arr, n);
+			}
+			let t1 = java.lang.System.nanoTime();
+			let sum = 0;
+			for (let r = 0; r < 20; r++) {
+				sum += sumArray(arr, n);
+			}
+			let t2 = java.lang.System.nanoTime();
+			let fillNs = (t1 - t0) / (20.0 * n);
+			let sumNs = (t2 - t1) / (20.0 * n);
+			"denseFill: " + fillNs + " ns/op, denseSum: " + sumNs + " ns/op, sum=" + sum;
+		""";
+		Object res = cx.eval(script);
+		System.out.println("ARRAY BENCHMARK RESULT: " + res);
+		Assertions.assertTrue(((String) res).contains("denseFill:"));
+		Assertions.assertTrue(((String) res).contains("denseSum:"));
+	}
 }
 
 

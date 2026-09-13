@@ -1924,9 +1924,8 @@ public class JSContext {
 				hasAccumulator = true;
 			} else {
 				while (k < len && k < jsArr.denseSize) {
-					Object val = jsArr.elements[k];
-					if (val != JSArray.HOLE) {
-						accumulator = val;
+					if (jsArr.hasElement(k)) {
+						accumulator = jsArr.getElement(k);
 						hasAccumulator = true;
 						k++;
 						break;
@@ -1948,8 +1947,8 @@ public class JSContext {
 					}
 					return accumulator;
 				}
-				Object kVal = jsArr.elements[k];
-				if (kVal != JSArray.HOLE) {
+				if (jsArr.hasElement(k)) {
+					Object kVal = jsArr.getElement(k);
 					accumulator = callback.call4(cx, JSUndefined.INSTANCE, accumulator, kVal, (double) k, jsArr);
 				}
 				k++;
@@ -2005,8 +2004,8 @@ public class JSContext {
 					}
 					return result;
 				}
-				Object kValue = jsArr.elements[i];
-				if (kValue == JSArray.HOLE) continue;
+				if (!jsArr.hasElement(i)) continue;
+				Object kValue = jsArr.getElement(i);
 				Object selected = callback.call3(cx, thisArg, kValue, (double) i, jsArr);
 				if (JSOps.toBoolean(selected)) {
 					result.push(kValue);

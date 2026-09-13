@@ -17,10 +17,14 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		}
 	};
 
+	public static final long   HOLE_DOUBLE_BITS = 0x7FF0000000000001L;
+	public static final double HOLE_DOUBLE      = Double.longBitsToDouble(HOLE_DOUBLE_BITS);
+
 	private static final Object   NULL_SENTINEL  = new Object();
 	private static final Object[] EMPTY_ELEMENTS = new Object[0];
 
 	public Object[] elements = EMPTY_ELEMENTS;
+	public double[] doubleElements = null;
 	public int denseSize = 0;
 	private final Map<Long, Object> sparse = new HashMap<>();
 	private long length = 0;
@@ -35,8 +39,12 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		super(JSContext.LazyArray.ARRAY_PROTOTYPE);
 		if (initialCapacity > 0) {
 			int cap = Math.min(initialCapacity, MAX_DENSE_CAPACITY);
-			this.elements = new Object[Math.max(cap, INITIAL_DENSE_CAPACITY)];
-			Arrays.fill(this.elements, HOLE);
+			int actualCap = Math.max(cap, INITIAL_DENSE_CAPACITY);
+			this.doubleElements = new double[actualCap];
+			Arrays.fill(this.doubleElements, HOLE_DOUBLE);
+			this.elements = null;
+			this.denseSize = cap;
+			this.length = initialCapacity;
 		}
 	}
 
@@ -122,8 +130,14 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			long newLen = (long) d;
 			this.length = newLen;
 			if (newLen < denseSize) {
-				for (int i = (int) newLen; i < denseSize; i++) {
-					elements[i] = HOLE;
+				if (doubleElements != null) {
+					for (int i = (int) newLen; i < denseSize; i++) {
+						doubleElements[i] = HOLE_DOUBLE;
+					}
+				} else if (elements != null) {
+					for (int i = (int) newLen; i < denseSize; i++) {
+						elements[i] = HOLE;
+					}
 				}
 				denseSize = (int) newLen;
 			}
@@ -157,8 +171,39 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	//endregion
 	//region 元素快速访问 (getElement / setElement)
 
+	public void ensureObjectElements() {
+		if (doubleElements != null) {
+			int cap = doubleElements.length;
+			Object[] newArr = new Object[cap];
+			for (int i = 0; i < denseSize; i++) {
+				double d = doubleElements[i];
+				if (Double.doubleToRawLongBits(d) == HOLE_DOUBLE_BITS) {
+					newArr[i] = HOLE;
+				} else {
+					newArr[i] = Double.valueOf(d);
+				}
+			}
+			for (int i = denseSize; i < cap; i++) {
+				newArr[i] = HOLE;
+			}
+			this.elements = newArr;
+			this.doubleElements = null;
+		} else if (elements == null) {
+			this.elements = EMPTY_ELEMENTS;
+		}
+	}
+
 	public Object getElement(int index) {
-		if (index >= 0 && index < denseSize) {
+		if (doubleElements != null) {
+			if (index >= 0 && index < denseSize) {
+				double val = doubleElements[index];
+				if (Double.doubleToRawLongBits(val) != HOLE_DOUBLE_BITS) {
+					return Double.valueOf(val);
+				}
+			}
+			return getElementSlow(index);
+		}
+		if (elements != null && index >= 0 && index < denseSize) {
 			Object val = elements[index];
 			if (val != HOLE) return val;
 		}
@@ -167,14 +212,22 @@ public class JSArray extends JSObject implements Iterable<Object> {
 
 	public Object getElement(long index) {
 		if (index >= 0 && index < denseSize) {
-			Object val = elements[(int) index];
-			if (val != HOLE) return val;
+			return getElement((int) index);
 		}
 		return getElementSlow(index);
 	}
 
 	public double getElementDouble(int index) {
-		if (index >= 0 && index < denseSize) {
+		if (doubleElements != null) {
+			if (index >= 0 && index < denseSize) {
+				double val = doubleElements[index];
+				if (Double.doubleToRawLongBits(val) != HOLE_DOUBLE_BITS) {
+					return val;
+				}
+			}
+			return JSOps.toDouble(getElementSlow(index));
+		}
+		if (elements != null && index >= 0 && index < denseSize) {
 			Object val = elements[index];
 			if (val != HOLE) return JSOps.toDouble(val);
 		}
@@ -183,16 +236,14 @@ public class JSArray extends JSObject implements Iterable<Object> {
 
 	public double getElementDouble(long index) {
 		if (index >= 0 && index < denseSize) {
-			Object val = elements[(int) index];
-			if (val != HOLE) return JSOps.toDouble(val);
+			return getElementDouble((int) index);
 		}
 		return JSOps.toDouble(getElementSlow(index));
 	}
 
 	public Object getElementOwn(long index) {
 		if (index >= 0 && index < denseSize) {
-			Object val = elements[(int) index];
-			if (val != HOLE) return val;
+			return getElement(index);
 		}
 		if (index >= 0 && index <= MAX_ARRAY_INDEX) {
 			Object sparseVal = sparse.get(index);
@@ -205,8 +256,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 
 	public double getElementDoubleOwn(long index) {
 		if (index >= 0 && index < denseSize) {
-			Object val = elements[(int) index];
-			if (val != HOLE) return JSOps.toDouble(val);
+			return getElementDouble(index);
 		}
 		if (index >= 0 && index <= MAX_ARRAY_INDEX) {
 			Object sparseVal = sparse.get(index);
@@ -238,19 +288,55 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	}
 
 	public void setElement(int index, Object value) {
-		if (index >= 0 && index < denseSize) {
-			elements[index] = value;
-			return;
-		}
 		setElement((long) index, value);
 	}
 
 	public void setElementDouble(int index, double value) {
-		setElement(index, (Double) value);
+		if (index < 0) {
+			super.putDouble(String.valueOf(index), value);
+			return;
+		}
+		if (doubleElements != null) {
+			if (index < denseSize) {
+				doubleElements[index] = value;
+				return;
+			}
+			if (index >= denseSize && index < MAX_DENSE_CAPACITY && index <= denseSize + 1024) {
+				if (index >= doubleElements.length) {
+					growDouble(index + 1);
+				}
+				while (denseSize < index) {
+					doubleElements[denseSize++] = HOLE_DOUBLE;
+				}
+				doubleElements[index] = value;
+				denseSize = index + 1;
+				if (index + 1L > length) {
+					length = index + 1L;
+				}
+				return;
+			}
+		} else if ((elements == EMPTY_ELEMENTS || elements == null) && index < MAX_DENSE_CAPACITY && index <= 1024) {
+			int cap = Math.max(INITIAL_DENSE_CAPACITY, index + 1);
+			this.doubleElements = new double[cap];
+			Arrays.fill(this.doubleElements, HOLE_DOUBLE);
+			this.elements = null;
+			while (denseSize < index) {
+				doubleElements[denseSize++] = HOLE_DOUBLE;
+			}
+			doubleElements[index] = value;
+			denseSize = index + 1;
+			length = denseSize;
+			return;
+		}
+		setElement((long) index, Double.valueOf(value));
 	}
 
 	public void setElementDouble(long index, double value) {
-		setElement(index, (Double) value);
+		if (index >= 0 && index <= Integer.MAX_VALUE) {
+			setElementDouble((int) index, value);
+			return;
+		}
+		setElement(index, Double.valueOf(value));
 	}
 
 	public void setElement(long index, Object value) {
@@ -258,9 +344,16 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			super.put(String.valueOf(index), value);
 			return;
 		}
+		if (doubleElements != null) {
+			if (value instanceof Number num) {
+				setElementDouble(index, num.doubleValue());
+				return;
+			}
+			ensureObjectElements();
+		}
 		if (index < MAX_DENSE_CAPACITY && index <= denseSize + 1024) {
 			int intIdx = (int) index;
-			if (intIdx >= elements.length) {
+			if (elements == null || intIdx >= elements.length) {
 				grow(intIdx + 1);
 			}
 			while (denseSize < intIdx) {
@@ -278,13 +371,29 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		}
 	}
 
+	private void growDouble(int minCapacity) {
+		int oldCap = doubleElements == null ? 0 : doubleElements.length;
+		int newCap = oldCap == 0 ? INITIAL_DENSE_CAPACITY : (oldCap + (oldCap >> 1));
+		if (newCap < minCapacity) newCap = minCapacity;
+		if (newCap > MAX_DENSE_CAPACITY) newCap = MAX_DENSE_CAPACITY;
+		double[] newArr = new double[newCap];
+		if (denseSize > 0 && doubleElements != null) {
+			System.arraycopy(doubleElements, 0, newArr, 0, denseSize);
+		}
+		for (int i = denseSize; i < newCap; i++) {
+			newArr[i] = HOLE_DOUBLE;
+		}
+		this.doubleElements = newArr;
+	}
+
 	private void grow(int minCapacity) {
-		int oldCap = elements.length;
+		ensureObjectElements();
+		int oldCap = elements == null ? 0 : elements.length;
 		int newCap = oldCap == 0 ? INITIAL_DENSE_CAPACITY : (oldCap + (oldCap >> 1));
 		if (newCap < minCapacity) newCap = minCapacity;
 		if (newCap > MAX_DENSE_CAPACITY) newCap = MAX_DENSE_CAPACITY;
 		Object[] newArr = new Object[newCap];
-		if (denseSize > 0) {
+		if (denseSize > 0 && elements != null) {
 			System.arraycopy(elements, 0, newArr, 0, denseSize);
 		}
 		for (int i = denseSize; i < newCap; i++) {
@@ -294,6 +403,11 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	}
 
 	public void push(Object value) {
+		if (doubleElements != null && value instanceof Number num) {
+			pushDouble(num.doubleValue());
+			return;
+		}
+		ensureObjectElements();
 		if (length == denseSize && denseSize < MAX_DENSE_CAPACITY) {
 			if (denseSize == elements.length) {
 				grow(denseSize + 1);
@@ -306,7 +420,17 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	}
 
 	public void pushDouble(double value) {
-		push(Double.valueOf(value));
+		if (doubleElements != null) {
+			if (length == denseSize && denseSize < MAX_DENSE_CAPACITY) {
+				if (denseSize == doubleElements.length) {
+					growDouble(denseSize + 1);
+				}
+				doubleElements[denseSize++] = value;
+				length++;
+				return;
+			}
+		}
+		setElementDouble(length, value);
 	}
 
 	public Object pop() {
@@ -315,7 +439,11 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		Object val = getElement(lastIdx);
 		if (lastIdx < denseSize) {
 			denseSize = (int) lastIdx;
-			elements[denseSize] = HOLE;
+			if (doubleElements != null) {
+				doubleElements[denseSize] = HOLE_DOUBLE;
+			} else if (elements != null) {
+				elements[denseSize] = HOLE;
+			}
 		} else {
 			sparse.remove(lastIdx);
 		}
@@ -325,7 +453,10 @@ public class JSArray extends JSObject implements Iterable<Object> {
 
 	public boolean hasElement(long index) {
 		if (index >= 0 && index < denseSize) {
-			return elements[(int) index] != HOLE;
+			if (doubleElements != null) {
+				return Double.doubleToRawLongBits(doubleElements[(int) index]) != HOLE_DOUBLE_BITS;
+			}
+			return elements != null && elements[(int) index] != HOLE;
 		}
 		if (index >= 0 && index <= MAX_ARRAY_INDEX) {
 			return sparse.containsKey(index);
@@ -335,7 +466,11 @@ public class JSArray extends JSObject implements Iterable<Object> {
 
 	public void deleteElement(long index) {
 		if (index >= 0 && index < denseSize) {
-			elements[(int) index] = HOLE;
+			if (doubleElements != null) {
+				doubleElements[(int) index] = HOLE_DOUBLE;
+			} else if (elements != null) {
+				elements[(int) index] = HOLE;
+			}
 		} else if (index >= 0 && index <= MAX_ARRAY_INDEX) {
 			sparse.remove(index);
 		}
@@ -646,9 +781,17 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	public Set<String> keys() {
 		Set<String> allKeys = new LinkedHashSet<>();
 		// 1. 数组索引按升序遍历
-		for (int i = 0; i < denseSize; i++) {
-			if (elements[i] != HOLE) {
-				allKeys.add(String.valueOf(i));
+		if (doubleElements != null) {
+			for (int i = 0; i < denseSize; i++) {
+				if (Double.doubleToRawLongBits(doubleElements[i]) != HOLE_DOUBLE_BITS) {
+					allKeys.add(String.valueOf(i));
+				}
+			}
+		} else if (elements != null) {
+			for (int i = 0; i < denseSize; i++) {
+				if (elements[i] != HOLE) {
+					allKeys.add(String.valueOf(i));
+				}
 			}
 		}
 		if (!sparse.isEmpty()) {
@@ -666,10 +809,19 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	@Override
 	public Map<String, Object> getProperties() {
 		Map<String, Object> map = new LinkedHashMap<>();
-		for (int i = 0; i < denseSize; i++) {
-			Object val = elements[i];
-			if (val != HOLE) {
-				map.put(String.valueOf(i), val == JSUndefined.INSTANCE ? JSUndefined.INSTANCE : val);
+		if (doubleElements != null) {
+			for (int i = 0; i < denseSize; i++) {
+				double d = doubleElements[i];
+				if (Double.doubleToRawLongBits(d) != HOLE_DOUBLE_BITS) {
+					map.put(String.valueOf(i), Double.valueOf(d));
+				}
+			}
+		} else if (elements != null) {
+			for (int i = 0; i < denseSize; i++) {
+				Object val = elements[i];
+				if (val != HOLE) {
+					map.put(String.valueOf(i), val == JSUndefined.INSTANCE ? JSUndefined.INSTANCE : val);
+				}
 			}
 		}
 		if (!sparse.isEmpty()) {

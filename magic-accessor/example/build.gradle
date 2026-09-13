@@ -29,6 +29,34 @@ application {
 	]
 }
 
+tasks.register('testJSClosure', JavaExec) {
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'hope.magic.example.MagicJSBenchmark'
+	jvmArgs(
+			'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
+			'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED'
+	)
+	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
+		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
+	}
+}
+
+tasks.register('runGradient', JavaExec) {
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'hope.magic.example.GradientShapeBenchmark'
+	jvmArgs(
+			'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
+			'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED',
+			'-XX:+EnableJVMCI',
+			'-XX:+UseJVMCICompiler'
+	)
+	if (new File("F:/files/java/jdks/graalvm-jdk-21.0.12/bin/java.exe").exists()) {
+		executable = "F:/files/java/jdks/graalvm-jdk-21.0.12/bin/java.exe"
+	} else if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
+		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
+	}
+}
+
 tasks.named('run', JavaExec) {
 	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
 		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"

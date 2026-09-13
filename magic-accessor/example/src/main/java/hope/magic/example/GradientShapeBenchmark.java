@@ -1,15 +1,16 @@
 package hope.magic.example;
 
-import hope.magic.js.compiler.JSCompiler;
 import hope.magic.js.runtime.*;
 import org.graalvm.polyglot.*;
 import org.openjdk.jmh.annotations.*;
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.options.*;
 
 import java.util.concurrent.TimeUnit;
 
 /**
  * 梯度多态基准测试 (Gradient Shape Benchmark)
- * 评测 Shape 数在 1 / 2 / 4 / 8 / 64 梯度下，MagicJS vs GraalJS 的单次访问性能演进曲线。
+ * 评测 Shape 属性在 1 / 2 / 4 / 8 / 64 真正完全独立 offset 梯度下，MagicJS vs GraalJS 的单次访问性能演进曲线。
  */
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
@@ -22,11 +23,11 @@ public class GradientShapeBenchmark {
 	@Param({"1", "2", "4", "8", "64"})
 	private int shapes;
 
-	private JSContext magicContext;
-	private Context   graalContext;
+	private JSContext  magicContext;
+	private Context    graalContext;
 
-	private JSScript magicScript;
-	private Source   graalScript;
+	private JSFunction magicFunc;
+	private Value      graalFunc;
 
 	@Setup(Level.Trial)
 	public void setup() throws Throwable {
@@ -38,20 +39,15 @@ public class GradientShapeBenchmark {
 
 		// 1. 初始化数据：生成对应 shapes 的扁平化测试数据 (长度 2000)
 		String initCode = generateSetupCode(shapes);
-		Object magicData = JSCompiler.compile(initCode).run(magicContext);
-		magicContext.set("test_data_" + shapes, magicData);
+		magicContext.eval(initCode);
+		graalContext.eval("js", initCode);
 
-		Value graalData = graalContext.eval(Source.newBuilder("js", initCode, "init_" + shapes + ".js").build());
-		graalContext.getBindings("js").putMember("test_data_" + shapes, graalData);
-
-		// 2. 编译纯访问脚本 (仅做 2000 次 .val 属性读取)
+		// 2. 编译纯访问闭包 (仅做 2000 次 .val 属性读取)
 		String accessCode = generatePureAccessCode(shapes);
-		magicScript = JSCompiler.compile(accessCode);
-		graalScript = Source.newBuilder("js", accessCode, "pure_s" + shapes + ".js")
-				.cached(true)
-				.build();
+		magicFunc = (JSFunction) magicContext.eval("(function() {\n" + accessCode + "\n})");
+		graalFunc = graalContext.eval("js", "(function() {\n" + accessCode + "\n})");
 
-		// 3. 初始正确性校验 (只运行 1 次做验证，严禁在此处做耗时上万次的预热循环)
+		// 3. 初始正确性校验 (逐 bit 浮点对齐校验)
 		verifyOnce("Setup-ColdCheck");
 	}
 
@@ -68,8 +64,8 @@ public class GradientShapeBenchmark {
 
 	private void verifyOnce(String phase) throws Throwable {
 		double expected = getExpectedSum(shapes);
-		Object mRes = magicScript.run(magicContext);
-		double gRes = graalContext.eval(graalScript).asDouble();
+		double mRes = magicFunc.call0Double(magicContext);
+		double gRes = graalFunc.execute().asDouble();
 		verifyResult(phase + " Shape-" + shapes, mRes, gRes, expected);
 	}
 
@@ -84,10 +80,9 @@ public class GradientShapeBenchmark {
 		};
 	}
 
-	private static void verifyResult(String label, Object magicResult, double graalVal, double expectedVal) {
-		double magicVal = ((Number) magicResult).doubleValue();
+	private static void verifyResult(String label, double magicVal, double graalVal, double expectedVal) {
 		if (Double.isNaN(magicVal) || Double.isInfinite(magicVal)) {
-			throw new IllegalStateException("[" + label + "] MagicJS produced invalid number: " + magicResult);
+			throw new IllegalStateException("[" + label + "] MagicJS produced invalid number: " + magicVal);
 		}
 		if (Math.abs(magicVal - expectedVal) > 1e-6) {
 			throw new AssertionError(String.format(
@@ -104,13 +99,13 @@ public class GradientShapeBenchmark {
 	// ---------------------- 核心测试方法 ----------------------
 
 	@Benchmark
-	public Object test_magic() throws Throwable {
-		return magicScript.run(magicContext);
+	public double test_magic() throws Throwable {
+		return magicFunc.call0Double(magicContext);
 	}
 
 	@Benchmark
-	public Object test_graal() {
-		return graalContext.eval(graalScript);
+	public double test_graal() {
+		return graalFunc.execute().asDouble();
 	}
 
 	// ---------------------- 代码生成辅助 ----------------------
@@ -120,7 +115,7 @@ public class GradientShapeBenchmark {
 		sb.append("pool_").append(numShapes).append(" = [\n");
 		for (int i = 0; i < numShapes; i++) {
 			sb.append("    { ");
-			for (int p = 0; p < (i % 4); p++) {
+			for (int p = 0; p < i; p++) {
 				sb.append("dummy_").append(p).append(": 0, ");
 			}
 			sb.append("val: ").append(10.5 + i)
@@ -145,90 +140,22 @@ public class GradientShapeBenchmark {
 		       "    var item = data[i];\n" +
 		       "    total = total + item.val;\n" +
 		       "}\n" +
-		       "total;\n";
+		       "return total;\n";
 	}
 
-	// ---------------------- 独立调试 Main ----------------------
+	// ---------------------- 标准 JMH Runner Main ----------------------
 
-	public static record StatResult(double meanUs, double stdDevUs, double p50Us, double minUs, double maxUs) { }
-
-	public static StatResult measureStats(Runnable task, int warmupRuns, int batchCount, int runsPerBatch) {
-		for (int w = 0; w < warmupRuns; w++) {
-			task.run();
-		}
-		double[] batchMeans = new double[batchCount];
-		for (int b = 0; b < batchCount; b++) {
-			long t0 = System.nanoTime();
-			for (int r = 0; r < runsPerBatch; r++) {
-				task.run();
-			}
-			long elapsed = System.nanoTime() - t0;
-			batchMeans[b] = (elapsed / (double) runsPerBatch) / 1000.0;
-		}
-
-		double sum = 0;
-		double min = Double.MAX_VALUE;
-		double max = Double.MIN_VALUE;
-		for (double v : batchMeans) {
-			sum += v;
-			if (v < min) min = v;
-			if (v > max) max = v;
-		}
-		double mean = sum / batchCount;
-		double varSum = 0;
-		for (double v : batchMeans) {
-			varSum += (v - mean) * (v - mean);
-		}
-		double stdDev = Math.sqrt(varSum / batchCount);
-		java.util.Arrays.sort(batchMeans);
-		double p50 = batchMeans[batchCount / 2];
-		return new StatResult(mean, stdDev, p50, min, max);
-	}
-
-	public static void main(String[] args) throws Throwable {
-		System.out.println("--------------------------------------------------------------------------------");
-		System.out.println("【纯多态属性访问基准 (2000 次 item.val 读取)】[5 次采样批次 x 200 轮稳态]");
-		System.out.println("--------------------------------------------------------------------------------");
-		System.out.printf("%-14s | %-20s | %-20s | %-16s | %-14s%n",
-				"Shape 数量", "MagicJS (Mean ± Std)", "GraalJS (Mean ± Std)", "MagicJS 单次/op", "性能对比");
-		System.out.println("--------------------------------------------------------------------------------");
-
-		int[] gradients = {1, 2, 4, 8, 64};
-		for (int n : gradients) {
-			GradientShapeBenchmark bench = new GradientShapeBenchmark();
-			bench.shapes = n;
-			bench.setup();
-
-			Runnable magicTask = () -> {
-				try {
-					bench.test_magic();
-				} catch (Throwable t) {
-					throw new RuntimeException(t);
-				}
-			};
-			Runnable graalTask = bench::test_graal;
-
-			StatResult mStat = measureStats(magicTask, 200, 5, 200);
-			StatResult gStat = measureStats(graalTask, 200, 5, 200);
-
-			double ratio = gStat.meanUs / mStat.meanUs;
-			String compareStr = ratio >= 1.0
-					? String.format("MagicJS 快 %.2fx", ratio)
-					: String.format("GraalJS 快 %.2fx", 1.0 / ratio);
-
-			String shapeLabel = switch (n) {
-				case 1 -> "1 (单态)";
-				case 2 -> "2 (双态)";
-				case 4 -> "4 (多态-4)";
-				case 8 -> "8 (多态-8)";
-				case 64 -> "64 (巨态-64)";
-				default -> String.valueOf(n);
-			};
-
-			System.out.printf("%-14s | %8.2f ± %5.2f µs | %8.2f ± %5.2f µs | %10.2f ns/op   | %s%n",
-					shapeLabel, mStat.meanUs, mStat.stdDevUs, gStat.meanUs, gStat.stdDevUs, (mStat.meanUs * 1000.0 / 2000.0), compareStr);
-
-			bench.tearDown();
-		}
+	public static void main(String[] args) throws Exception {
+		Options opt = new OptionsBuilder()
+				.include(GradientShapeBenchmark.class.getSimpleName())
+				.forks(1)
+				.warmupIterations(2)
+				.warmupTime(TimeValue.seconds(1))
+				.measurementIterations(3)
+				.measurementTime(TimeValue.seconds(1))
+				.mode(Mode.AverageTime)
+				.timeUnit(TimeUnit.NANOSECONDS)
+				.build();
+		new Runner(opt).run();
 	}
 }

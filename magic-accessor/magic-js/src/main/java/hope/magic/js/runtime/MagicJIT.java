@@ -25,20 +25,17 @@ public class MagicJIT implements Opcodes {
 
 	public static final String IN_JSOps = "hope/magic/js/runtime/JSOps";
 
-	private static final class InvokerKey {
-		final Class<?> clazz;
-		final String   methodName;
-		final int      arity;
-		final boolean  isStatic;
-		final int      hash;
+	private static final class InvokerLookupKey {
+		final String  methodName;
+		final int     arity;
+		final boolean isStatic;
+		final int     hash;
 
-		InvokerKey(Class<?> clazz, String methodName, int arity, boolean isStatic) {
-			this.clazz = clazz;
+		InvokerLookupKey(String methodName, int arity, boolean isStatic) {
 			this.methodName = methodName;
 			this.arity = arity;
 			this.isStatic = isStatic;
-			int h = clazz.hashCode();
-			h = 31 * h + methodName.hashCode();
+			int h = methodName.hashCode();
 			h = 31 * h + arity;
 			h = 31 * h + (isStatic ? 1 : 0);
 			this.hash = h;
@@ -47,8 +44,8 @@ public class MagicJIT implements Opcodes {
 		@Override
 		public boolean equals(Object o) {
 			if (this == o) return true;
-			if (!(o instanceof InvokerKey that)) return false;
-			return arity == that.arity && isStatic == that.isStatic && clazz == that.clazz && methodName.equals(that.methodName);
+			if (!(o instanceof InvokerLookupKey that)) return false;
+			return arity == that.arity && isStatic == that.isStatic && methodName.equals(that.methodName);
 		}
 
 		@Override
@@ -57,64 +54,30 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
-	private static final class CtorKey {
-		final Class<?> clazz;
-		final int      arity;
-		final int      hash;
-
-		CtorKey(Class<?> clazz, int arity) {
-			this.clazz = clazz;
-			this.arity = arity;
-			this.hash = 31 * clazz.hashCode() + arity;
-		}
-
-		@Override
-		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof CtorKey that)) return false;
-			return arity == that.arity && clazz == that.clazz;
-		}
-
-		@Override
-		public int hashCode() {
-			return hash;
-		}
+	private static final class ClassJITData {
+		final Map<InvokerLookupKey, MagicInvoker> invokerCache = new ConcurrentHashMap<>();
+		final Map<Integer, MagicConstructorInvoker> ctorCache = new ConcurrentHashMap<>();
+		final Map<String, MethodHandle> getterCache = new ConcurrentHashMap<>();
+		final Map<String, MethodHandle> setterCache = new ConcurrentHashMap<>();
+		final Map<Method, MethodHandle> exactMethodCache = new ConcurrentHashMap<>();
 	}
 
-	private static final class MemberKey {
-		final Class<?> clazz;
-		final String   memberName;
-		final int      hash;
-
-		MemberKey(Class<?> clazz, String memberName) {
-			this.clazz = clazz;
-			this.memberName = memberName;
-			this.hash = 31 * clazz.hashCode() + memberName.hashCode();
-		}
-
+	private static final ClassValue<ClassJITData> JIT_DATA = new ClassValue<>() {
 		@Override
-		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof MemberKey that)) return false;
-			return clazz == that.clazz && memberName.equals(that.memberName);
+		protected ClassJITData computeValue(Class<?> type) {
+			return new ClassJITData();
 		}
+	};
 
-		@Override
-		public int hashCode() {
-			return hash;
-		}
-	}
 	// 架构优化说明：
-	// 原 FN_ADAPTER_MH_CACHE 与 OBJ_ADAPTER_MH_CACHE 采用 ConcurrentHashMap<Class<?>, MethodHandle>。
-	// 以 Class<?> 为 Key 的全局并发 Map 存在两大缺陷：
+	// 原各级反射与 JIT 存根缓存采用 ConcurrentHashMap<Key, ...>。
+	// 以 Class<?> 为 Key（或持有 Class<?> 强引用）的全局并发 Map 存在两大缺陷：
 	// 1. 强引用动态加载的 Class，阻碍其 ClassLoader 垃圾回收，造成元空间（Metaspace）内存泄漏。
 	// 2. 并发哈希表读写存在哈希冲突与分段锁/CAS 竞争开销。
-	// 改为 JDK 原生 ClassValue<MethodHandle> 后：
+	// 改为 JDK 原生 ClassValue<ClassJITData> 后：
 	// 1. 缓存生命周期与 Class 深度绑定，Class 卸载时缓存条目自动被 GC 回收。
 	// 2. JVM HotSpot 将 ClassValue 读取内联为直接指针偏移访问，达到近乎无锁的 O(1) 极速。
 	private static final AtomicLong                            COUNTER              = new AtomicLong();
-	private static final Map<InvokerKey, MagicInvoker>         INVOKER_CACHE        = new ConcurrentHashMap<>();
-	private static final Map<CtorKey, MagicConstructorInvoker> CTOR_CACHE           = new ConcurrentHashMap<>();
 	private static final ClassValue<MethodHandle>              FN_ADAPTER_MH_CACHE  = new ClassValue<>() {
 		@Override
 		protected MethodHandle computeValue(Class<?> type) {
@@ -139,20 +102,21 @@ public class MagicJIT implements Opcodes {
 	}
 
 	public static MagicInvoker getMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic) {
-		InvokerKey   key    = new InvokerKey(clazz, methodName, arity, isStatic);
-		MagicInvoker cached = INVOKER_CACHE.get(key);
+		ClassJITData     data   = JIT_DATA.get(clazz);
+		InvokerLookupKey key    = new InvokerLookupKey(methodName, arity, isStatic);
+		MagicInvoker     cached = data.invokerCache.get(key);
 		if (cached != null) return cached;
 		MagicInvoker invoker = createMethodInvoker(clazz, methodName, arity, isStatic);
-		if (invoker != null) INVOKER_CACHE.put(key, invoker);
+		if (invoker != null) data.invokerCache.put(key, invoker);
 		return invoker;
 	}
 
 	public static MagicConstructorInvoker getConstructorInvoker(Class<?> clazz, int arity) {
-		CtorKey                 key    = new CtorKey(clazz, arity);
-		MagicConstructorInvoker cached = CTOR_CACHE.get(key);
+		ClassJITData            data    = JIT_DATA.get(clazz);
+		MagicConstructorInvoker cached = data.ctorCache.get(arity);
 		if (cached != null) return cached;
 		MagicConstructorInvoker invoker = createConstructorInvoker(clazz, arity);
-		if (invoker != null) CTOR_CACHE.put(key, invoker);
+		if (invoker != null) data.ctorCache.put(arity, invoker);
 		return invoker;
 	}
 
@@ -216,8 +180,9 @@ public class MagicJIT implements Opcodes {
 			mv.visitEnd();
 
 			cw.visitEnd();
-			byte[]   bytes    = cw.toByteArray();
-			Class<?> genClass = Magic.defineClass(MagicJIT.class.getClassLoader(), bytes);
+			byte[]      bytes  = cw.toByteArray();
+			ClassLoader loader = clazz.getClassLoader() != null ? clazz.getClassLoader() : MagicJIT.class.getClassLoader();
+			Class<?>    genClass = Magic.defineClass(loader, bytes);
 			return (MagicInvoker) genClass.getDeclaredConstructor().newInstance();
 		} catch (Throwable e) {
 			throw new RuntimeException("Failed to generate MagicInvoker for " + clazz.getName() + "#" + methodName, e);
@@ -274,8 +239,9 @@ public class MagicJIT implements Opcodes {
 			mv.visitEnd();
 
 			cw.visitEnd();
-			byte[]   bytes    = cw.toByteArray();
-			Class<?> genClass = Magic.defineClass(MagicJIT.class.getClassLoader(), bytes);
+			byte[]      bytes  = cw.toByteArray();
+			ClassLoader loader = clazz.getClassLoader() != null ? clazz.getClassLoader() : MagicJIT.class.getClassLoader();
+			Class<?>    genClass = Magic.defineClass(loader, bytes);
 			return (MagicConstructorInvoker) genClass.getDeclaredConstructor().newInstance();
 		} catch (Throwable e) {
 			throw new RuntimeException("Failed to generate MagicConstructorInvoker for " + clazz.getName(), e);
@@ -291,24 +257,21 @@ public class MagicJIT implements Opcodes {
 		initMv.visitEnd();
 	}
 
-	private static final Map<MemberKey, MethodHandle> GETTER_CACHE = new ConcurrentHashMap<>();
-	private static final Map<MemberKey, MethodHandle> SETTER_CACHE = new ConcurrentHashMap<>();
-
 	public static MethodHandle getFieldGetterStub(Class<?> clazz, String fieldName) {
-		MemberKey    key    = new MemberKey(clazz, fieldName);
-		MethodHandle cached = GETTER_CACHE.get(key);
+		ClassJITData data   = JIT_DATA.get(clazz);
+		MethodHandle cached = data.getterCache.get(fieldName);
 		if (cached != null) return cached;
 		MethodHandle stub = createExactFieldGetterStub(clazz, fieldName);
-		if (stub != null) GETTER_CACHE.put(key, stub);
+		if (stub != null) data.getterCache.put(fieldName, stub);
 		return stub;
 	}
 
 	public static MethodHandle getFieldSetterStub(Class<?> clazz, String fieldName) {
-		MemberKey    key    = new MemberKey(clazz, fieldName);
-		MethodHandle cached = SETTER_CACHE.get(key);
+		ClassJITData data   = JIT_DATA.get(clazz);
+		MethodHandle cached = data.setterCache.get(fieldName);
 		if (cached != null) return cached;
 		MethodHandle stub = createExactFieldSetterStub(clazz, fieldName);
-		if (stub != null) SETTER_CACHE.put(key, stub);
+		if (stub != null) data.setterCache.put(fieldName, stub);
 		return stub;
 	}
 
@@ -318,14 +281,12 @@ public class MagicJIT implements Opcodes {
 	// 以及 getPrimitiveFieldGetterStub / createExactPrimitiveFieldGetterStub 属于冗余死代码，
 	// 全工程无任何调用处，移除以消除死代码、静态类加载初始化开销及并发容器内存占用。
 
-	private static final Map<Method, MethodHandle> EXACT_METHOD_CACHE = new ConcurrentHashMap<>();
-
 	public static MethodHandle createExactFieldGetterStub(Class<?> clazz, String fieldName) {
-		MemberKey    key    = new MemberKey(clazz, fieldName);
-		MethodHandle cached = GETTER_CACHE.get(key);
+		ClassJITData data   = JIT_DATA.get(clazz);
+		MethodHandle cached = data.getterCache.get(fieldName);
 		if (cached != null) return cached;
 		MethodHandle stub = generateExactFieldGetterStub(clazz, fieldName);
-		if (stub != null) GETTER_CACHE.put(key, stub);
+		if (stub != null) data.getterCache.put(fieldName, stub);
 		return stub;
 	}
 
@@ -355,11 +316,11 @@ public class MagicJIT implements Opcodes {
 	}
 
 	public static MethodHandle createExactFieldSetterStub(Class<?> clazz, String fieldName) {
-		MemberKey    key    = new MemberKey(clazz, fieldName);
-		MethodHandle cached = SETTER_CACHE.get(key);
+		ClassJITData data   = JIT_DATA.get(clazz);
+		MethodHandle cached = data.setterCache.get(fieldName);
 		if (cached != null) return cached;
 		MethodHandle stub = generateExactFieldSetterStub(clazz, fieldName);
-		if (stub != null) SETTER_CACHE.put(key, stub);
+		if (stub != null) data.setterCache.put(fieldName, stub);
 		return stub;
 	}
 
@@ -389,10 +350,11 @@ public class MagicJIT implements Opcodes {
 	}
 
 	public static MethodHandle createExactMethodStub(Class<?> clazz, Method targetMethod) {
-		MethodHandle cached = EXACT_METHOD_CACHE.get(targetMethod);
+		ClassJITData data   = JIT_DATA.get(clazz);
+		MethodHandle cached = data.exactMethodCache.get(targetMethod);
 		if (cached != null) return cached;
 		MethodHandle stub = generateExactMethodStub(clazz, targetMethod);
-		if (stub != null) EXACT_METHOD_CACHE.put(targetMethod, stub);
+		if (stub != null) data.exactMethodCache.put(targetMethod, stub);
 		return stub;
 	}
 
@@ -443,7 +405,8 @@ public class MagicJIT implements Opcodes {
 			mv.visitEnd();
 
 			cw.visitEnd();
-			Class<?> genClass = Magic.defineClass(MagicJIT.class.getClassLoader(), cw.toByteArray());
+			ClassLoader loader = clazz.getClassLoader() != null ? clazz.getClassLoader() : MagicJIT.class.getClassLoader();
+			Class<?> genClass = Magic.defineClass(loader, cw.toByteArray());
 			return Magic.lookup.findStatic(genClass, "invoke", stubType);
 		} catch (Throwable e) {
 			throw new RuntimeException("Failed to generate MagicExactMethod for " + clazz.getName() + "#" + targetMethod.getName(), e);

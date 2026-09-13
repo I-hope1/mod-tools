@@ -2581,22 +2581,27 @@ public class JSLinker {
 		return null;
 	}
 
-	private static final class CtorKey {
-		final Class<?> clazz;
-		final int      arity;
-		final int      hash;
+	private static final class MethodLookupKey {
+		final String  methodName;
+		final int     arity;
+		final boolean isStatic;
+		final int     hash;
 
-		CtorKey(Class<?> clazz, int arity) {
-			this.clazz = clazz;
+		MethodLookupKey(String methodName, int arity, boolean isStatic) {
+			this.methodName = methodName;
 			this.arity = arity;
-			this.hash = 31 * clazz.hashCode() + arity;
+			this.isStatic = isStatic;
+			int h = methodName.hashCode();
+			h = 31 * h + arity;
+			h = 31 * h + (isStatic ? 1 : 0);
+			this.hash = h;
 		}
 
 		@Override
 		public boolean equals(Object o) {
 			if (this == o) return true;
-			if (!(o instanceof CtorKey that)) return false;
-			return arity == that.arity && clazz == that.clazz;
+			if (!(o instanceof MethodLookupKey that)) return false;
+			return arity == that.arity && isStatic == that.isStatic && methodName.equals(that.methodName);
 		}
 
 		@Override
@@ -2605,11 +2610,21 @@ public class JSLinker {
 		}
 	}
 
-	private static final Map<CtorKey, MethodHandle> CTOR_SPREADER_CACHE = new ConcurrentHashMap<>();
+	private static final class ClassSpreaderData {
+		final Map<Integer, MethodHandle> ctorSpreaderCache = new ConcurrentHashMap<>();
+		final Map<MethodLookupKey, MethodHandle> methodSpreaderCache = new ConcurrentHashMap<>();
+	}
+
+	private static final ClassValue<ClassSpreaderData> SPREADER_DATA = new ClassValue<>() {
+		@Override
+		protected ClassSpreaderData computeValue(Class<?> type) {
+			return new ClassSpreaderData();
+		}
+	};
 
 	private static MethodHandle getConstructorSpreader(Class<?> clazz, int arity) {
-		CtorKey      key    = new CtorKey(clazz, arity);
-		MethodHandle cached = CTOR_SPREADER_CACHE.get(key);
+		ClassSpreaderData data   = SPREADER_DATA.get(clazz);
+		MethodHandle      cached = data.ctorSpreaderCache.get(arity);
 		if (cached != null) return cached;
 
 		Constructor<?> c = MethodResolver.findConstructor(clazz, arity);
@@ -2626,7 +2641,7 @@ public class JSLinker {
 			}
 			MethodHandle genericMh = adapted.asType(MethodType.genericMethodType(arity));
 			MethodHandle spreader  = genericMh.asSpreader(Object[].class, arity);
-			CTOR_SPREADER_CACHE.put(key, spreader);
+			data.ctorSpreaderCache.put(arity, spreader);
 			return spreader;
 		} catch (Throwable e) {
 			throw new RuntimeException(e);
@@ -3519,43 +3534,10 @@ public class JSLinker {
 		return getPropLongGeneric(target, propName);
 	}
 
-	private static final class MethodKey {
-		final Class<?> clazz;
-		final String   methodName;
-		final int      arity;
-		final boolean  isStatic;
-		final int      hash;
-
-		MethodKey(Class<?> clazz, String methodName, int arity, boolean isStatic) {
-			this.clazz = clazz;
-			this.methodName = methodName;
-			this.arity = arity;
-			this.isStatic = isStatic;
-			int h = clazz.hashCode();
-			h = 31 * h + methodName.hashCode();
-			h = 31 * h + arity;
-			h = 31 * h + (isStatic ? 1 : 0);
-			this.hash = h;
-		}
-
-		@Override
-		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof MethodKey that)) return false;
-			return arity == that.arity && isStatic == that.isStatic && clazz == that.clazz && methodName.equals(that.methodName);
-		}
-
-		@Override
-		public int hashCode() {
-			return hash;
-		}
-	}
-
-	private static final Map<MethodKey, MethodHandle> METHOD_SPREADER_CACHE = new ConcurrentHashMap<>();
-
 	private static MethodHandle getMethodSpreader(Class<?> clazz, String methodName, int arity, boolean isStatic) {
-		MethodKey    key    = new MethodKey(clazz, methodName, arity, isStatic);
-		MethodHandle cached = METHOD_SPREADER_CACHE.get(key);
+		ClassSpreaderData data   = SPREADER_DATA.get(clazz);
+		MethodLookupKey   key    = new MethodLookupKey(methodName, arity, isStatic);
+		MethodHandle      cached = data.methodSpreaderCache.get(key);
 		if (cached != null) return cached;
 
 		Method targetMethod = MethodResolver.findMethod(clazz, methodName, arity, isStatic);
@@ -3574,7 +3556,7 @@ public class JSLinker {
 			MethodType   genericType = MethodType.genericMethodType(1 + arity);
 			MethodHandle genericMh   = adapted.asType(genericType);
 			MethodHandle spreader    = genericMh.asSpreader(Object[].class, arity);
-			METHOD_SPREADER_CACHE.put(key, spreader);
+			data.methodSpreaderCache.put(key, spreader);
 			return spreader;
 		} catch (Throwable e) {
 			throw new RuntimeException(e);

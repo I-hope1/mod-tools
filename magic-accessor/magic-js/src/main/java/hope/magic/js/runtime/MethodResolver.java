@@ -174,11 +174,46 @@ public final class MethodResolver {
 		}
 	}
 
-	private static final Map<MethodKey, Method> METHOD_CACHE = new ConcurrentHashMap<>();
-	private static final Map<CtorKey, Constructor<?>> CTOR_CACHE = new ConcurrentHashMap<>();
-	private static final Map<PropKey, List<Method>> CANDIDATE_CACHE = new ConcurrentHashMap<>();
-	private static final Map<PropKey, Method> GETTER_CACHE = new ConcurrentHashMap<>();
-	private static final Map<PropKey, Method> SETTER_CACHE = new ConcurrentHashMap<>();
+	private static final class MethodLookupKey {
+		final String  name;
+		final int     arity;
+		final boolean isStatic;
+		final int     hash;
+
+		MethodLookupKey(String name, int arity, boolean isStatic) {
+			this.name = name;
+			this.arity = arity;
+			this.isStatic = isStatic;
+			this.hash = 31 * name.hashCode() + (arity << 1 | (isStatic ? 1 : 0));
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof MethodLookupKey that)) return false;
+			return arity == that.arity && isStatic == that.isStatic && name.equals(that.name);
+		}
+
+		@Override
+		public int hashCode() {
+			return hash;
+		}
+	}
+
+	private static final class ClassReflectionData {
+		final Map<MethodLookupKey, Method> methodCache = new ConcurrentHashMap<>();
+		final Map<Integer, Constructor<?>> ctorCache = new ConcurrentHashMap<>();
+		final Map<String, List<Method>> candidateCache = new ConcurrentHashMap<>();
+		final Map<String, Method> getterCache = new ConcurrentHashMap<>();
+		final Map<String, Method> setterCache = new ConcurrentHashMap<>();
+	}
+
+	private static final ClassValue<ClassReflectionData> REFLECTION_DATA = new ClassValue<>() {
+		@Override
+		protected ClassReflectionData computeValue(Class<?> type) {
+			return new ClassReflectionData();
+		}
+	};
 
 	private MethodResolver() {}
 
@@ -195,8 +230,9 @@ public final class MethodResolver {
 	 */
 	public static Method findMethod(Class<?> clazz, String methodName, int arity, boolean isStatic) {
 		if (clazz == null || methodName == null) return null;
-		MethodKey key = new MethodKey(clazz, methodName, arity, isStatic);
-		Method cached = METHOD_CACHE.get(key);
+		ClassReflectionData data = REFLECTION_DATA.get(clazz);
+		MethodLookupKey key = new MethodLookupKey(methodName, arity, isStatic);
+		Method cached = data.methodCache.get(key);
 		if (cached != null) return cached;
 
 		Method found = null;
@@ -242,7 +278,7 @@ public final class MethodResolver {
 			}
 		}
 		if (found != null) {
-			METHOD_CACHE.put(key, found);
+			data.methodCache.put(key, found);
 		}
 		return found;
 	}
@@ -256,8 +292,8 @@ public final class MethodResolver {
 	 */
 	public static List<Method> findCandidateMethods(Class<?> clazz, String methodName) {
 		if (clazz == null || methodName == null) return Collections.emptyList();
-		PropKey key = new PropKey(clazz, methodName);
-		List<Method> cached = CANDIDATE_CACHE.get(key);
+		ClassReflectionData data = REFLECTION_DATA.get(clazz);
+		List<Method> cached = data.candidateCache.get(methodName);
 		if (cached != null) {
 			return cached;
 		}
@@ -279,7 +315,7 @@ public final class MethodResolver {
 			}
 		} catch (Throwable ignored) {}
 		List<Method> unmod = Collections.unmodifiableList(list);
-		CANDIDATE_CACHE.put(key, unmod);
+		data.candidateCache.put(methodName, unmod);
 		return unmod;
 	}
 
@@ -288,8 +324,8 @@ public final class MethodResolver {
 	 */
 	public static Constructor<?> findConstructor(Class<?> clazz, int arity) {
 		if (clazz == null) return null;
-		CtorKey key = new CtorKey(clazz, arity);
-		Constructor<?> cached = CTOR_CACHE.get(key);
+		ClassReflectionData data = REFLECTION_DATA.get(clazz);
+		Constructor<?> cached = data.ctorCache.get(arity);
 		if (cached != null) return cached;
 
 		Constructor<?> found = null;
@@ -313,7 +349,7 @@ public final class MethodResolver {
 			}
 		}
 		if (found != null) {
-			CTOR_CACHE.put(key, found);
+			data.ctorCache.put(arity, found);
 		}
 		return found;
 	}
@@ -323,8 +359,8 @@ public final class MethodResolver {
 	 */
 	public static Method findGetterMethod(Class<?> clazz, String propName) {
 		if (clazz == null || propName == null || propName.isEmpty()) return null;
-		PropKey key = new PropKey(clazz, propName);
-		Method cached = GETTER_CACHE.get(key);
+		ClassReflectionData data = REFLECTION_DATA.get(clazz);
+		Method cached = data.getterCache.get(propName);
 		if (cached != null) return cached;
 
 		String capName = Character.toUpperCase(propName.charAt(0)) + (propName.length() > 1 ? propName.substring(1) : "");
@@ -359,7 +395,7 @@ public final class MethodResolver {
 			} catch (Throwable ignored) {}
 		}
 		if (found != null) {
-			GETTER_CACHE.put(key, found);
+			data.getterCache.put(propName, found);
 		}
 		return found;
 	}
@@ -369,8 +405,8 @@ public final class MethodResolver {
 	 */
 	public static Method findSetterMethod(Class<?> clazz, String propName) {
 		if (clazz == null || propName == null || propName.isEmpty()) return null;
-		PropKey key = new PropKey(clazz, propName);
-		Method cached = SETTER_CACHE.get(key);
+		ClassReflectionData data = REFLECTION_DATA.get(clazz);
+		Method cached = data.setterCache.get(propName);
 		if (cached != null) return cached;
 
 		String capName = Character.toUpperCase(propName.charAt(0)) + (propName.length() > 1 ? propName.substring(1) : "");
@@ -396,7 +432,7 @@ public final class MethodResolver {
 			} catch (Throwable ignored) {}
 		}
 		if (found != null) {
-			SETTER_CACHE.put(key, found);
+			data.setterCache.put(propName, found);
 		}
 		return found;
 	}

@@ -102,15 +102,22 @@ public class ChainedCallSite extends MutableCallSite {
         offsetEquivalent = false;
     }
 
-    // 记录到数组（仅保留前 MAX_CHAIN_DEPTH 个用于生成特化 GWT / TableSwitch）
-    if (polyCount < MAX_CHAIN_DEPTH) {
-        recordedShapes[polyCount] = shape;
-        recordedEntries[polyCount] = packCacheEntry(shapeId, type, offset);
-        polyCount++;
-    }
-    // 注意：即使 polyCount >= MAX_CHAIN_DEPTH，
-    // 只要它的 offset == commonOffset，offsetEquivalent 就绝不应该被置为 false！
-}
+		// 记录到数组（仅保留前 MAX_CHAIN_DEPTH 个用于生成特化 GWT / TableSwitch）
+		if (polyCount < MAX_CHAIN_DEPTH) {
+			recordedShapes[polyCount] = shape;
+			recordedEntries[polyCount] = packCacheEntry(shapeId, type, offset);
+			polyCount++;
+			return;
+		}
+
+		// 超过 MAX_CHAIN_DEPTH 且非同偏移等价，立即进化为 Megamorphic
+		if (!offsetEquivalent) {
+			megamorphic = true;
+			if (megamorphicTarget != null) {
+				setTarget(megamorphicTarget.asType(type()));
+			}
+		}
+	}
 
 	public boolean isOffsetEquivalent() {
 		return offsetEquivalent && commonOffset >= 0 && polyCount >= 2;

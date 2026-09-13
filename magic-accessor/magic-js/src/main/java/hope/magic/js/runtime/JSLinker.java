@@ -237,7 +237,7 @@ public class JSLinker {
 		}
 
 		// 多态/巨态按 Offset 分组聚合位掩码 (Offset-Class Mask Dispatch) ──
-		MethodHandle maskChain = tryBuildOffsetMaskDispatchDouble(shapes, offsets, n, snap.propId(), fallback);
+		MethodHandle maskChain = tryBuildOffsetMaskDispatchDouble(shapes, offsets, types, n, snap.propId(), fallback);
 		if (maskChain != null) {
 			return maskChain;
 		}
@@ -466,9 +466,14 @@ public class JSLinker {
 		return Arrays.copyOf(distinctOffsets, count);
 	}
 
-	private static MethodHandle tryBuildOffsetMaskDispatchDouble(JSShape[] shapes, int[] offsets, int n, int propId,
+	private static MethodHandle tryBuildOffsetMaskDispatchDouble(JSShape[] shapes, int[] offsets, byte[] types, int n, int propId,
 	                                                             MethodHandle fallback) {
 		if (propId < 0) return null;
+		for (int i = 0; i < n; i++) {
+			if ((types[i] & JSShape.TYPE_MASK) != JSShape.TYPE_DOUBLE) {
+				return null;
+			}
+		}
 		int[] distinctOffsets = collectDistinctOffsets(offsets, n);
 		if (distinctOffsets == null) return null;
 
@@ -1334,11 +1339,19 @@ public class JSLinker {
 					jsObj.put(propName, value);
 					return;
 				}
-				if (s.getBaseType(offset) == JSShape.TYPE_DOUBLE && value instanceof Number) {
-					jsObj.setDoubleSlot(offset, JSOps.toDouble(value));
-					return;
+				if (value instanceof Number num) {
+					if (s.getBaseType(offset) == JSShape.TYPE_DOUBLE) {
+						jsObj.setDoubleSlot(offset, num.doubleValue());
+						return;
+					}
+				} else {
+					if (s.getBaseType(offset) == JSShape.TYPE_OBJECT) {
+						jsObj.setSlot(offset, value);
+						return;
+					}
 				}
-				jsObj.setSlot(offset, value);
+				// 发生跨类型写入 (Double <-> Object)，必须走 put 执行状态机形状迁移
+				jsObj.put(propName, value);
 				return;
 			}
 
@@ -1350,11 +1363,18 @@ public class JSLinker {
 					jsObj.put(propName, value);
 					return;
 				}
-				if (s.getBaseType(offset) == JSShape.TYPE_DOUBLE && value instanceof Number) {
-					jsObj.setDoubleSlot(offset, JSOps.toDouble(value));
-					return;
+				if (value instanceof Number num) {
+					if (s.getBaseType(offset) == JSShape.TYPE_DOUBLE) {
+						jsObj.setDoubleSlot(offset, num.doubleValue());
+						return;
+					}
+				} else {
+					if (s.getBaseType(offset) == JSShape.TYPE_OBJECT) {
+						jsObj.setSlot(offset, value);
+						return;
+					}
 				}
-				jsObj.setSlot(offset, value);
+				jsObj.put(propName, value);
 				return;
 			}
 			jsObj.put(propName, value);
@@ -1371,7 +1391,7 @@ public class JSLinker {
 			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
 			if (entry != 0L && (int) (entry >>> 32) == s.id) {
 				int offset = (int) entry;
-				if (s.isAccessor(offset) || !s.isWritable(offset)) {
+				if (s.isAccessor(offset) || !s.isWritable(offset) || s.getBaseType(offset) != JSShape.TYPE_DOUBLE) {
 					jsObj.putDouble(propName, value);
 					return;
 				}
@@ -1383,7 +1403,7 @@ public class JSLinker {
 			int offset = (propId >= 0) ? s.getOffset(propId) : s.getOffset(propName);
 			if (offset >= 0) {
 				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
-				if (s.isAccessor(offset) || !s.isWritable(offset)) {
+				if (s.isAccessor(offset) || !s.isWritable(offset) || s.getBaseType(offset) != JSShape.TYPE_DOUBLE) {
 					jsObj.putDouble(propName, value);
 					return;
 				}
@@ -1604,6 +1624,9 @@ public class JSLinker {
 					return getAccessorProp(offset, target);
 				}
 				site.recordShape(shape, offset, type);
+				if (site.isMegamorphic()) {
+					return jsObj.getSlot(offset);
+				}
 
 				if (site.isOffsetEquivalent()) {
 					int          commonOff    = site.getCommonOffset();
@@ -1767,9 +1790,16 @@ public class JSLinker {
 					return;
 				}
 
-				site.recordShape(shape, offset, type);
-
 				boolean isDouble = (type & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE && (value instanceof Number);
+				site.recordShape(shape, offset, type);
+				if (site.isMegamorphic()) {
+					if (isDouble) {
+						jsObj.setDoubleSlot(offset, JSOps.toDouble(value));
+					} else {
+						jsObj.setSlot(offset, value);
+					}
+					return;
+				}
 				if (site.isOffsetEquivalent()) {
 					int          commonOff      = site.getCommonOffset();
 					byte         commonType     = site.getCommonType();
@@ -1798,10 +1828,9 @@ public class JSLinker {
 					return;
 				}
 
-				// 异槽多态：chainDepth >= 2 时挂载扁平 switch
-				if (site.getChainDepth() >= 2) {
-					MethodHandle fb = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget()
-					 : (site.getInitialFallback() != null ? site.getInitialFallback() : site.getTarget());
+				// 异槽多态：一旦观测到 >= 2 个异槽 Shape，挂载扁平 switch
+				if (site.getPolyCount() >= 2) {
+					MethodHandle fb = getAdaptiveFallback(site);
 					site.installFlatPolyGuard(buildFlatPolySwitchSetterObject(site.snapshotPoly(), fb));
 				} else {
 					MethodHandle test = MH_IS_EXACT_SHAPE_SETTER_OBJECT.bindTo(shape);
@@ -1964,6 +1993,10 @@ public class JSLinker {
 				}
 
 				site.recordShape(shape, offset, JSShape.TYPE_DOUBLE);
+				if (site.isMegamorphic()) {
+					jsObj.setDoubleSlot(offset, value);
+					return;
+				}
 
 				if (site.isOffsetEquivalent()) {
 					int          commonOff = site.getCommonOffset();
@@ -1977,10 +2010,9 @@ public class JSLinker {
 					return;
 				}
 
-				// 异槽多态：chainDepth >= 2 时挂载扁平 switch
-				if (site.getChainDepth() >= 2) {
-					MethodHandle fb = site.getMegamorphicTarget() != null ? site.getMegamorphicTarget()
-					 : (site.getInitialFallback() != null ? site.getInitialFallback() : site.getTarget());
+				// 异槽多态：一旦观测到 >= 2 个异槽 Shape，挂载扁平 switch
+				if (site.getPolyCount() >= 2) {
+					MethodHandle fb = getAdaptiveFallback(site);
 					site.installFlatPolyGuard(buildFlatPolySwitchSetterDouble(site.snapshotPoly(), fb));
 				} else {
 					MethodHandle test = MH_IS_EXACT_SHAPE_SETTER_DOUBLE.bindTo(shape);
@@ -3276,6 +3308,9 @@ public class JSLinker {
 			if (offset >= 0) {
 				byte type = shape.getSlotType(offset);
 				site.recordShape(shape, offset, type);
+				if (site.isMegamorphic()) {
+					return (type == JSShape.TYPE_DOUBLE) ? (int) jsObj.getDoubleSlot(offset) : JSOps.toInt(jsObj.getSlot(offset));
+				}
 
 				if (site.isOffsetEquivalent()) {
 					int          commonOff        = site.getCommonOffset();
@@ -3334,6 +3369,9 @@ public class JSLinker {
 			if (offset >= 0) {
 				byte type = shape.getSlotType(offset);
 				site.recordShape(shape, offset, type);
+				if (site.isMegamorphic()) {
+					return (type == JSShape.TYPE_DOUBLE) ? jsObj.getDoubleSlot(offset) : JSOps.toDouble(jsObj.getSlot(offset));
+				}
 
 				// 根据槽位实际类型选择 Getter (纯 double 走 Unsafe 汇编直读，Object 槽走安全解包)
 				MethodHandle directSlotGetter;
@@ -3422,6 +3460,9 @@ public class JSLinker {
 			if (offset >= 0) {
 				byte type = shape.getSlotType(offset);
 				site.recordShape(shape, offset, type);
+				if (site.isMegamorphic()) {
+					return (type == JSShape.TYPE_DOUBLE) ? (long) jsObj.getDoubleSlot(offset) : JSOps.toLong(jsObj.getSlot(offset));
+				}
 
 				if (site.isOffsetEquivalent()) {
 					int          commonOff        = site.getCommonOffset();

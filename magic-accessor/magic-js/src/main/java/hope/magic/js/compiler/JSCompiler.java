@@ -4341,11 +4341,23 @@ public class JSCompiler {
 					return;
 				}
 
+				// 特化 2.5: 混合数值类型严格/宽松等值比较 (EQ, EQ_EQ, NOT_EQ, NOT_EQ_EQ)
+				if (op == TokenType.EQ || op == TokenType.EQ_EQ || op == TokenType.NOT_EQ || op == TokenType.NOT_EQ_EQ) {
+					if ((isNumeric(leftType) && isNumeric(rightType))
+					    || (isNumericExpr(bin.left) && isNumericExpr(bin.right))) {
+						compileNodeAsDouble(bin.left, ctx);
+						compileNodeAsDouble(bin.right, ctx);
+						mv.visitInsn(Opcodes.DCMPL);
+						mv.visitJumpInsn(getZeroCompareOpcode(op, jumpOnTrue), targetLabel);
+						return;
+					}
+				}
+
 				// 特化 3: DOUBLE / 数值 / 通用关系比较 (LT, LTE, GT, GTE)
 				if (op == TokenType.LT || op == TokenType.LTE || op == TokenType.GT || op == TokenType.GTE) {
-					boolean isBothNumeric = (isNumeric(leftType) && isNumeric(rightType))
-					                        || (isNumericExpr(bin.left) && isNumericExpr(bin.right));
-					if (isBothNumeric) {
+					boolean hasNumeric = (isNumeric(leftType) || isNumeric(rightType))
+					                     || (isNumericExpr(bin.left) || isNumericExpr(bin.right));
+					if (hasNumeric) {
 						compileNodeAsDouble(bin.left, ctx);
 						compileNodeAsDouble(bin.right, ctx);
 						// IEEE 754 规范: 与 NaN 比较恒为 false

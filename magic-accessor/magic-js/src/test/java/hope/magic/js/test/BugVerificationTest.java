@@ -587,6 +587,89 @@ public class BugVerificationTest {
 		Assertions.assertTrue(((String) res).contains("s1=5000000"));
 		Assertions.assertTrue(((String) res).contains("s2=7500000"));
 	}
+
+	@Test
+	public void testRelationalLoopPerformance() {
+		JSContext cx = new JSContext();
+		String script = """
+			function runParamLimit(n) {
+				let sum = 0;
+				for (let i = 0; i < n; i++) {
+					sum += (i & 1);
+				}
+				return sum;
+			}
+			function runConstLimit() {
+				let sum = 0;
+				for (let i = 0; i < 5000000; i++) {
+					sum += (i & 1);
+				}
+				return sum;
+			}
+			function runIfCompareParam(n) {
+				let cnt = 0;
+				for (let i = 0; i < 5000000; i++) {
+					if (i < n) cnt++;
+				}
+				return cnt;
+			}
+			// Warmup
+			for (let w = 0; w < 5; w++) {
+				runParamLimit(200000);
+				runConstLimit();
+				runIfCompareParam(200000);
+			}
+			let t0 = java.lang.System.nanoTime();
+			let s1 = runConstLimit();
+			let t1 = java.lang.System.nanoTime();
+			let s2 = runParamLimit(5000000);
+			let t2 = java.lang.System.nanoTime();
+			let s3 = runIfCompareParam(5000000);
+			let t3 = java.lang.System.nanoTime();
+			let constNs = (t1 - t0) / 5000000.0;
+			let paramNs = (t2 - t1) / 5000000.0;
+			let ifParamNs = (t3 - t2) / 5000000.0;
+			"constLimit: " + constNs + " ns/op, paramLimit: " + paramNs + " ns/op, ifParam: " + ifParamNs + " ns/op, s1=" + s1 + ", s2=" + s2 + ", s3=" + s3;
+		""";
+		Object res = cx.eval(script);
+		System.out.println("RELATIONAL BENCHMARK RESULT: " + res);
+		Assertions.assertEquals(2500000.0, ((Number) cx.eval("s1;")).doubleValue());
+		Assertions.assertEquals(2500000.0, ((Number) cx.eval("s2;")).doubleValue());
+		Assertions.assertEquals(5000000.0, ((Number) cx.eval("s3;")).doubleValue());
+	}
+
+	@Test
+	public void testMixedNumericEqualitySpecialization() {
+		JSContext cx = new JSContext();
+		String script = """
+			function checkEq(i, d) {
+				return [i === d, i !== d, i == d, i != d];
+			}
+			let res1 = checkEq(42, 42.0);
+			let res2 = checkEq(42, 43.5);
+			let res3 = checkEq(NaN, NaN);
+			let res4 = checkEq(0, -0.0);
+			[res1, res2, res3, res4];
+		""";
+		cx.eval(script);
+		Assertions.assertEquals(true, cx.eval("res1[0];"));
+		Assertions.assertEquals(false, cx.eval("res1[1];"));
+		Assertions.assertEquals(true, cx.eval("res1[2];"));
+		Assertions.assertEquals(false, cx.eval("res1[3];"));
+
+		Assertions.assertEquals(false, cx.eval("res2[0];"));
+		Assertions.assertEquals(true, cx.eval("res2[1];"));
+		Assertions.assertEquals(false, cx.eval("res2[2];"));
+		Assertions.assertEquals(true, cx.eval("res2[3];"));
+
+		// NaN === NaN is false in JS
+		Assertions.assertEquals(false, cx.eval("res3[0];"));
+		Assertions.assertEquals(true, cx.eval("res3[1];"));
+
+		// 0 === -0 is true in JS
+		Assertions.assertEquals(true, cx.eval("res4[0];"));
+		Assertions.assertEquals(false, cx.eval("res4[1];"));
+	}
 }
 
 

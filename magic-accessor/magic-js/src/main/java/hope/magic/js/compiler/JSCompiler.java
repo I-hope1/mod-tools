@@ -43,6 +43,19 @@ public class JSCompiler {
 	 BSM_GET_INDEX       = createBSM("bootstrapGetIndex", BSM_TYPE_BASE),
 	 BSM_SET_INDEX       = createBSM("bootstrapSetIndex", BSM_TYPE_BASE);
 
+	public static volatile boolean ENABLE_LOOP_INVARIANT_HOISTING = true;
+	public static volatile boolean ENABLE_INTEGER_MOD_SPECIALIZATION = false;
+	public static volatile java.util.function.BiConsumer<String, byte[]> CLASS_DUMP_HOOK = null;
+
+	public static String disassemble(byte[] classBytes) {
+		org.objectweb.asm.ClassReader cr = new org.objectweb.asm.ClassReader(classBytes);
+		java.io.StringWriter sw = new java.io.StringWriter();
+		java.io.PrintWriter pw = new java.io.PrintWriter(sw);
+		org.objectweb.asm.util.TraceClassVisitor tcv = new org.objectweb.asm.util.TraceClassVisitor(pw);
+		cr.accept(tcv, 0);
+		return sw.toString();
+	}
+
 	public static JSScript compile(String code) throws Exception {
 		JSLexer      lexer   = new JSLexer(code);
 		JSParser     parser  = new JSParser(lexer.tokenize());
@@ -130,7 +143,11 @@ public class JSCompiler {
 		generateRunMethod(cw, className, program, "runLong", "(L" + IN_JSContext + ";)J", VarType.LONG);
 
 		cw.visitEnd();
-		return cw.toByteArray();
+		byte[] classBytes = cw.toByteArray();
+		if (CLASS_DUMP_HOOK != null) {
+			CLASS_DUMP_HOOK.accept(className, classBytes);
+		}
+		return classBytes;
 	}
 
 	private static void generateRunMethod(ClassWriter cw, String className, Node.Program program,
@@ -1338,8 +1355,130 @@ public class JSCompiler {
 		}
 	}
 
+	private static Set<String> findHoistableLoopInvariants(Node body, Node cond, Node update, CompileContext ctx) {
+		if (!ENABLE_LOOP_INVARIANT_HOISTING) {
+			return Collections.emptySet();
+		}
+		Set<String> reads = new LinkedHashSet<>();
+		Set<String> writes = new HashSet<>();
+		boolean[] hasSideEffects = new boolean[1];
+
+		collectLoopIdentAccess(body, reads, writes, hasSideEffects);
+		if (cond != null) collectLoopIdentAccess(cond, reads, writes, hasSideEffects);
+		if (update != null) collectLoopIdentAccess(update, reads, writes, hasSideEffects);
+
+		if (hasSideEffects[0]) {
+			return Collections.emptySet();
+		}
+
+		Set<String> hoistable = new LinkedHashSet<>();
+		for (String name : reads) {
+			if (!writes.contains(name)
+					&& !isSpecialGlobalOrBuiltin(name)
+					&& ctx.getLocal(name) == null) {
+				hoistable.add(name);
+			}
+		}
+		return hoistable;
+	}
+
+	private static void collectLoopIdentAccess(Node node, Set<String> reads, Set<String> writes, boolean[] hasSideEffects) {
+		if (node == null || hasSideEffects[0]) return;
+
+		if (node instanceof Node.IdentifierExpr ident) {
+			reads.add(ident.name);
+			return;
+		}
+		if (node instanceof Node.AssignExpr assign) {
+			if (assign.target instanceof Node.IdentifierExpr targetIdent) {
+				writes.add(targetIdent.name);
+			} else {
+				collectLoopIdentAccess(assign.target, reads, writes, hasSideEffects);
+			}
+			collectLoopIdentAccess(assign.value, reads, writes, hasSideEffects);
+			return;
+		}
+		if (node instanceof Node.UnaryExpr un) {
+			if (un.op == TokenType.PLUS_PLUS || un.op == TokenType.MINUS_MINUS) {
+				if (un.expr instanceof Node.IdentifierExpr targetIdent) {
+					writes.add(targetIdent.name);
+					reads.add(targetIdent.name);
+					return;
+				}
+			}
+			collectLoopIdentAccess(un.expr, reads, writes, hasSideEffects);
+			return;
+		}
+		if (node instanceof Node.VarDecl decl) {
+			writes.add(decl.name);
+			if (decl.init != null) {
+				collectLoopIdentAccess(decl.init, reads, writes, hasSideEffects);
+			}
+			return;
+		}
+		if (node instanceof Node.ForInStmt forIn) {
+			writes.add(forIn.varName);
+			collectLoopIdentAccess(forIn.object, reads, writes, hasSideEffects);
+			collectLoopIdentAccess(forIn.body, reads, writes, hasSideEffects);
+			return;
+		}
+		if (node instanceof Node.ForOfStmt forOf) {
+			writes.add(forOf.varName);
+			collectLoopIdentAccess(forOf.iterable, reads, writes, hasSideEffects);
+			collectLoopIdentAccess(forOf.body, reads, writes, hasSideEffects);
+			return;
+		}
+		if (node instanceof Node.CallExpr call) {
+			if (call.callee instanceof Node.MemberAccessExpr mem
+					&& mem.target instanceof Node.IdentifierExpr target
+					&& "Math".equals(target.name)) {
+				for (Node arg : call.arguments) {
+					collectLoopIdentAccess(arg, reads, writes, hasSideEffects);
+				}
+				return;
+			}
+			hasSideEffects[0] = true;
+			return;
+		}
+		if (node instanceof Node.FunctionDecl || node instanceof Node.FunctionExpr || node instanceof Node.AwaitExpr) {
+			hasSideEffects[0] = true;
+			return;
+		}
+
+		forEachChildNode(node, child -> collectLoopIdentAccess(child, reads, writes, hasSideEffects));
+	}
+
+	private static boolean isSpecialGlobalOrBuiltin(String name) {
+		return "this".equals(name) || "arguments".equals(name)
+				|| "NaN".equals(name) || "undefined".equals(name) || "Infinity".equals(name)
+				|| "Math".equals(name) || "globalThis".equals(name) || "window".equals(name) || "global".equals(name);
+	}
+
+	private static Map<String, LocalVar> hoistLoopInvariants(Set<String> hoistable, CompileContext ctx) {
+		if (hoistable.isEmpty()) return Collections.emptyMap();
+		Map<String, LocalVar> hoistedMap = new LinkedHashMap<>();
+		for (String name : hoistable) {
+			LocalVar var = ctx.declareLocal("$hoist_" + name + "_" + (++ctx.tempVarCounter), VarType.OBJECT);
+			loadIdentifier(ctx, name);
+			ctx.mv.visitVarInsn(Opcodes.ASTORE, var.slot);
+			hoistedMap.put(name, var);
+			ctx.locals.put(name, var);
+		}
+		return hoistedMap;
+	}
+
+	private static void cleanupHoistedLoopInvariants(Map<String, LocalVar> hoistedMap, CompileContext ctx) {
+		for (String name : hoistedMap.keySet()) {
+			ctx.locals.remove(name);
+		}
+	}
+
 	private static void compileWhile(Node.WhileStmt whileStmt, CompileContext ctx) {
 		MethodVisitor mv       = ctx.mv;
+
+		Set<String>           hoistable  = findHoistableLoopInvariants(whileStmt.body, whileStmt.condition, null, ctx);
+		Map<String, LocalVar> hoistedMap = hoistLoopInvariants(hoistable, ctx);
+
 		Label         loopCond = new Label();
 		Label         loopBody = new Label();
 		Label         loopEnd  = new Label();
@@ -1358,6 +1497,8 @@ public class JSCompiler {
 		mv.visitLabel(loopEnd);
 		ctx.breakTargets.pop();
 		ctx.continueTargets.pop();
+
+		cleanupHoistedLoopInvariants(hoistedMap, ctx);
 	}
 
 	private static void compileFor(Node.ForStmt forStmt, CompileContext ctx) {
@@ -1365,6 +1506,9 @@ public class JSCompiler {
 		if (forStmt.init != null) {
 			compileNode(forStmt.init, ctx, false);
 		}
+
+		Set<String>           hoistable  = findHoistableLoopInvariants(forStmt.body, forStmt.condition, forStmt.update, ctx);
+		Map<String, LocalVar> hoistedMap = hoistLoopInvariants(hoistable, ctx);
 
 		Label loopCond   = new Label();
 		Label loopBody   = new Label();
@@ -1396,6 +1540,8 @@ public class JSCompiler {
 		mv.visitLabel(loopEnd);
 		ctx.breakTargets.pop();
 		ctx.continueTargets.pop();
+
+		cleanupHoistedLoopInvariants(hoistedMap, ctx);
 	}
 
 	private static void compileIteratorLoop(Node iterable, String iterMethod, String varName, Node body,
@@ -1460,6 +1606,10 @@ public class JSCompiler {
 
 	private static void compileDoWhile(Node.DoWhileStmt doWhile, CompileContext ctx) {
 		MethodVisitor mv            = ctx.mv;
+
+		Set<String>           hoistable  = findHoistableLoopInvariants(doWhile.body, doWhile.condition, null, ctx);
+		Map<String, LocalVar> hoistedMap = hoistLoopInvariants(hoistable, ctx);
+
 		Label         startLabel    = new Label();
 		Label         continueLabel = new Label();
 		Label         endLabel      = new Label();
@@ -1477,6 +1627,8 @@ public class JSCompiler {
 
 		ctx.breakTargets.pop();
 		ctx.continueTargets.pop();
+
+		cleanupHoistedLoopInvariants(hoistedMap, ctx);
 	}
 
 	private static void compileTry(Node.TryStmt tryStmt, CompileContext ctx) {
@@ -3519,6 +3671,9 @@ public class JSCompiler {
 
 		cw.visitEnd();
 		byte[]      bytes  = cw.toByteArray();
+		if (CLASS_DUMP_HOOK != null) {
+			CLASS_DUMP_HOOK.accept(funcClassName, bytes);
+		}
 		ClassLoader loader = Thread.currentThread().getContextClassLoader();
 		if (loader == null) loader = JSCompiler.class.getClassLoader();
 		Magic.defineClass(loader, bytes);
@@ -3955,6 +4110,13 @@ public class JSCompiler {
 				return;
 			}
 			// ─────────────────────────────────────────────────────────────────────
+			if (bin.op == TokenType.PERCENT && ENABLE_INTEGER_MOD_SPECIALIZATION) {
+				if (inferVarType(bin.left, ctx) == VarType.INT && inferVarType(bin.right, ctx) == VarType.INT) {
+					compileNodeAsInt(bin, ctx);
+					mv.visitInsn(Opcodes.I2D);
+					return;
+				}
+			}
 			int opcode = switch (bin.op) {
 				case STAR    -> Opcodes.DMUL;
 				case SLASH   -> Opcodes.DDIV;

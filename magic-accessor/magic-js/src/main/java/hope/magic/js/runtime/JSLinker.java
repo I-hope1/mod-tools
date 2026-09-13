@@ -38,6 +38,7 @@ public class JSLinker {
 	public static final MethodHandle MH_TO_INTERFACE;
 	public static final MethodHandle MH_IS_EXACT_CLASS;
 	public static final MethodHandle MH_IS_EXACT_SHAPE;
+	public static final MethodHandle MH_IS_EXACT_SHAPE_AND_PROTO;
 	public static final MethodHandle MH_IS_SAME_OBJECT;
 	public static final MethodHandle MH_TRANSITION_SET_DOUBLE;
 	public static final MethodHandle MH_TRANSITION_SET_OBJECT;
@@ -60,6 +61,7 @@ public class JSLinker {
 			MH_TO_INTERFACE = LOOKUP.findStatic(JSOps.class, "castValue", MethodType.methodType(Object.class, Object.class, Class.class));
 			MH_IS_EXACT_CLASS = LOOKUP.findStatic(JSLinker.class, "isExactClass", MethodType.methodType(boolean.class, Class.class, Object.class));
 			MH_IS_EXACT_SHAPE = LOOKUP.findStatic(JSLinker.class, "isExactShape", MethodType.methodType(boolean.class, JSShape.class, Object.class));
+			MH_IS_EXACT_SHAPE_AND_PROTO = LOOKUP.findStatic(JSLinker.class, "isExactShapeAndProto", MethodType.methodType(boolean.class, JSShape.class, JSObject.class, Object.class));
 			MH_IS_SAME_OBJECT = LOOKUP.findStatic(JSLinker.class, "isSameObject", MethodType.methodType(boolean.class, Object.class, Object.class));
 			MH_TRANSITION_SET_DOUBLE = LOOKUP.findStatic(JSLinker.class, "transitionSetDouble", MethodType.methodType(void.class, JSShape.class, int.class, Object.class, double.class));
 			MH_TRANSITION_SET_OBJECT = LOOKUP.findStatic(JSLinker.class, "transitionSetObject", MethodType.methodType(void.class, JSShape.class, int.class, Object.class, Object.class));
@@ -2438,28 +2440,36 @@ public class JSLinker {
 				int ownOffset = jsObj.shape.getOffset(methodName);
 				// 当方法不在自身槽位上（offset < 0，即来自原型链），或为内置单例对象（如 JSObjectConstructor / JSArrayConstructor）时，函数实例恒定，方可绑定常量
 				if (ownOffset < 0 || jsObj instanceof JSContext.JSObjectConstructor || jsObj instanceof JSContext.JSArrayConstructor) {
-					MethodHandle test = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
-					if (site.type().parameterCount() > 1) {
-						test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
-					}
-					int          arity = args.length;
-					MethodHandle exactFuncCall;
-					if (arity == 0) {
-						exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL0, 1, (Object) null).bindTo(func);
-					} else if (arity == 1) {
-						exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL1, 1, (Object) null).bindTo(func);
-					} else if (arity == 2) {
-						exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL2, 1, (Object) null).bindTo(func);
-					} else if (arity == 3) {
-						exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL3, 1, (Object) null).bindTo(func);
-					} else if (arity == 4) {
-						exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL4, 1, (Object) null).bindTo(func);
+					MethodHandle test;
+					if (ownOffset < 0) {
+						JSObject proto = jsObj.getPrototype();
+						test = (proto != null) ? MH_IS_EXACT_SHAPE_AND_PROTO.bindTo(jsObj.shape).bindTo(proto) : null;
 					} else {
-						exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL, 1, (Object) null)
-						 .bindTo(func)
-						 .asCollector(1, Object[].class, arity);
+						test = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
 					}
-					site.installGuardOrSwitchMegamorphic(test, exactFuncCall.asType(site.type()));
+					if (test != null) {
+						if (site.type().parameterCount() > 1) {
+							test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+						}
+						int          arity = args.length;
+						MethodHandle exactFuncCall;
+						if (arity == 0) {
+							exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL0, 1, (Object) null).bindTo(func);
+						} else if (arity == 1) {
+							exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL1, 1, (Object) null).bindTo(func);
+						} else if (arity == 2) {
+							exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL2, 1, (Object) null).bindTo(func);
+						} else if (arity == 3) {
+							exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL3, 1, (Object) null).bindTo(func);
+						} else if (arity == 4) {
+							exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL4, 1, (Object) null).bindTo(func);
+						} else {
+							exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL, 1, (Object) null)
+							 .bindTo(func)
+							 .asCollector(1, Object[].class, arity);
+						}
+						site.installGuardOrSwitchMegamorphic(test, exactFuncCall.asType(site.type()));
+					}
 				}
 				// 若为自有闭包属性，则不绑定死常量，保持动态调用
 				return func.call(null, jsObj, args);
@@ -3225,6 +3235,9 @@ public class JSLinker {
 	public static boolean isExactShape(JSShape expected, Object target) {
 		if (target instanceof JSObject && ((JSObject) target).shape == expected) return true;
 		return false;
+	}
+	public static boolean isExactShapeAndProto(JSShape expectedShape, JSObject expectedProto, Object target) {
+		return target instanceof JSObject jsObj && jsObj.shape == expectedShape && jsObj.getPrototype() == expectedProto;
 	}
 	public static boolean isExactShapeSetterDouble(JSShape expected, Object target, double val) {
 		return target instanceof JSObject && ((JSObject) target).shape == expected;

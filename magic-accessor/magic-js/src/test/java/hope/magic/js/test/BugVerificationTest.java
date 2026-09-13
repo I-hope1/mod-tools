@@ -522,5 +522,72 @@ public class BugVerificationTest {
 		Assertions.assertEquals(hope.magic.js.runtime.JSShape.TYPE_DOUBLE, jsObj.shape.getBaseType(offset),
 			"strObj's shape must transition to TYPE_DOUBLE instead of remaining TYPE_OBJECT");
 	}
+
+	@Test
+	public void testPrototypeMethodDispatchDifferentClassesSameShape() {
+		JSContext cx = new JSContext();
+		String script = """
+			class Dog {
+				speak() { return "woof"; }
+			}
+			class Cat {
+				speak() { return "meow"; }
+			}
+			function makeNoise(animal) {
+				return animal.speak();
+			}
+			let dogResult = makeNoise(new Dog());
+			let catResult = makeNoise(new Cat());
+			[dogResult, catResult];
+		""";
+		cx.eval(script);
+		Assertions.assertEquals("woof", cx.eval("dogResult;"));
+		Assertions.assertEquals("meow", cx.eval("catResult;"));
+	}
+
+	@Test
+	public void testPrototypeMethodCallPerformance() {
+		JSContext cx = new JSContext();
+		String script = """
+			class Dog { speak() { return 1; } }
+			class Cat { speak() { return 2; } }
+			function runMono(d, n) {
+				let sum = 0;
+				for (let i = 0; i < n; i++) {
+					sum += d.speak();
+				}
+				return sum;
+			}
+			function runPoly(d, c, n) {
+				let sum = 0;
+				for (let i = 0; i < n; i++) {
+					let obj = (i % 2 === 0) ? d : c;
+					sum += obj.speak();
+				}
+				return sum;
+			}
+			let d = new Dog();
+			let c = new Cat();
+			// Warmup
+			for (let w = 0; w < 5; w++) {
+				runMono(d, 100000);
+				runPoly(d, c, 100000);
+			}
+			let t0 = java.lang.System.nanoTime();
+			let s1 = runMono(d, 5000000);
+			let t1 = java.lang.System.nanoTime();
+			let s2 = runPoly(d, c, 5000000);
+			let t2 = java.lang.System.nanoTime();
+			let monoNs = (t1 - t0) / 5000000.0;
+			let polyNs = (t2 - t1) / 5000000.0;
+			"mono: " + monoNs + " ns/op, poly: " + polyNs + " ns/op, s1=" + s1 + ", s2=" + s2;
+		""";
+		Object res = cx.eval(script);
+		System.out.println("PROTOTYPE IC RESULT: " + res);
+		Assertions.assertTrue(((String) res).contains("s1=5000000"));
+		Assertions.assertTrue(((String) res).contains("s2=7500000"));
+	}
 }
+
+
 

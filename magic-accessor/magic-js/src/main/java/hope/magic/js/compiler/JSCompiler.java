@@ -335,8 +335,37 @@ public class JSCompiler {
 		return ctx;
 	}
 
+	private static boolean isMathCall(Node node, CompileContext ctx) {
+		if (node instanceof Node.CallExpr call) {
+			if (call.callee instanceof Node.MemberAccessExpr member
+			    && member.target instanceof Node.IdentifierExpr targetIdent
+			    && targetIdent.name.equals("Math")
+			    && (ctx == null || ctx.getLocal("Math") == null)) {
+				int argc = call.arguments.size();
+				String prop = member.property;
+				if (argc == 0 && "random".equals(prop)) return true;
+				if (argc == 1) {
+					return switch (prop) {
+						case "abs", "sqrt", "floor", "ceil", "sin", "cos", "tan", "log", "log10", "log2", "exp", "round", "sign", "trunc", "asin", "acos", "atan", "cbrt" -> true;
+						default -> false;
+					};
+				}
+				if (argc == 2) {
+					return switch (prop) {
+						case "min", "max", "pow", "atan2", "hypot" -> true;
+						default -> false;
+					};
+				}
+			}
+		}
+		return false;
+	}
+
 	private static VarType inferVarType(Node node, CompileContext ctx) {
 		if (node == null) return VarType.OBJECT;
+		if (node instanceof Node.CallExpr call) {
+			if (isMathCall(call, ctx)) return VarType.DOUBLE;
+		}
 		if (node instanceof Node.LiteralExpr lit) {
 			Object val = lit.value;
 			if (val instanceof Integer || val instanceof Short || val instanceof Byte) {
@@ -456,6 +485,7 @@ public class JSCompiler {
 
 	private static boolean isNumericExpr(Node node) {
 		if (node == null) return false;
+		if (isMathCall(node, null)) return true;
 		if (node instanceof Node.LiteralExpr lit && lit.value instanceof Number) return true;
 		if (node instanceof Node.BinaryExpr bin) {
 			if (bin.op == TokenType.PLUS && !isStringExpr(bin.left) && !isStringExpr(bin.right)) {
@@ -2821,6 +2851,15 @@ public class JSCompiler {
 
 	private static void compileCall(Node.CallExpr call, CompileContext ctx, boolean needResult) {
 		MethodVisitor mv = ctx.mv;
+		if (isMathCall(call, ctx)) {
+			compileNodeAsDouble(call, ctx);
+			if (needResult) {
+				boxDouble(mv);
+			} else {
+				mv.visitInsn(Opcodes.POP2);
+			}
+			return;
+		}
 		if (call.callee instanceof Node.SuperExpr) {
 			mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
 			compileIdentifier(new Node.IdentifierExpr("this", call.line, call.column), ctx);
@@ -3021,6 +3060,29 @@ public class JSCompiler {
 			mv.visitTypeInsn(Opcodes.NEW, IN_JSArray);
 			mv.visitInsn(Opcodes.DUP);
 			mv.visitMethodInsn(Opcodes.INVOKESPECIAL, IN_JSArray, "<init>", "()V", false);
+			if (!needResult) mv.visitInsn(Opcodes.POP);
+			return;
+		}
+
+		boolean allNumeric = true;
+		for (Node elem : arrLit.elements) {
+			VarType vt = inferVarType(elem, ctx);
+			if (!isNumeric(vt) && !isNumericExpr(elem)) {
+				allNumeric = false;
+				break;
+			}
+		}
+
+		if (allNumeric) {
+			pushInt(mv, size);
+			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_DOUBLE);
+			for (int i = 0; i < size; i++) {
+				mv.visitInsn(Opcodes.DUP);
+				pushInt(mv, i);
+				compileNodeAsDouble(arrLit.elements.get(i), ctx);
+				mv.visitInsn(Opcodes.DASTORE);
+			}
+			mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSArray, "fromDoubleElements", "([D)L" + IN_JSArray + ";", false);
 			if (!needResult) mv.visitInsn(Opcodes.POP);
 			return;
 		}
@@ -3227,10 +3289,17 @@ public class JSCompiler {
 		List<Node.ReturnStmt> returns = new ArrayList<>();
 		collectReturnStmts(body, returns);
 		if (returns.isEmpty()) return false;
-		Set<String> paramSet = new HashSet<>(params);
+		Set<String> numericNames = new HashSet<>(params);
+		List<Node.VarDecl> varDecls = new ArrayList<>();
+		collectVarDecls(body, varDecls);
+		for (Node.VarDecl vd : varDecls) {
+			if (isVarUsedAsNumeric(vd.name, body)) {
+				numericNames.add(vd.name);
+			}
+		}
 		for (Node.ReturnStmt ret : returns) {
 			if (ret.value == null) return false;
-			if (!isNumericReturnExpr(ret.value, paramSet, functionName)) {
+			if (!isNumericReturnExpr(ret.value, numericNames, functionName)) {
 				return false;
 			}
 		}
@@ -3239,6 +3308,7 @@ public class JSCompiler {
 
 	private static boolean isNumericReturnExpr(Node node, Set<String> params, String functionName) {
 		if (node == null) return false;
+		if (isMathCall(node, null)) return true;
 		if (node instanceof Node.LiteralExpr lit) {
 			return lit.value instanceof Number;
 		}
@@ -3260,6 +3330,9 @@ public class JSCompiler {
 			return isNumericUnaryOp(un.op) && isNumericReturnExpr(un.expr, params, functionName);
 		}
 		if (node instanceof Node.CallExpr call) {
+			if (isMathCall(call, null)) {
+				return true;
+			}
 			if (call.callee instanceof Node.IdentifierExpr ident && ident.name.equals(functionName)) {
 				return true;
 			}
@@ -4231,12 +4304,17 @@ public class JSCompiler {
 		}
 
 		if (node instanceof Node.CallExpr call) {
-			if (call.callee instanceof Node.MemberAccessExpr member && member.target instanceof Node.IdentifierExpr targetIdent && targetIdent.name.equals("Math")) {
+			if (isMathCall(call, ctx)) {
+				Node.MemberAccessExpr member = (Node.MemberAccessExpr) call.callee;
 				String mathMethod = member.property;
 				int    argc       = call.arguments.size();
+				if (argc == 0 && "random".equals(mathMethod)) {
+					mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Math", "random", "()D", false);
+					return;
+				}
 				if (argc == 1) {
 					switch (mathMethod) {
-						case "abs", "sqrt", "floor", "ceil", "sin", "cos" -> {
+						case "abs", "sqrt", "floor", "ceil", "sin", "cos", "tan", "asin", "acos", "atan", "exp", "log", "log10", "cbrt" -> {
 							compileNodeAsDouble(call.arguments.get(0), ctx);
 							mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Math", mathMethod, "(D)D", false);
 							return;
@@ -4247,10 +4325,25 @@ public class JSCompiler {
 							mv.visitInsn(Opcodes.L2D);
 							return;
 						}
+						case "sign" -> {
+							compileNodeAsDouble(call.arguments.get(0), ctx);
+							mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Math", "signum", "(D)D", false);
+							return;
+						}
+						case "trunc" -> {
+							compileNodeAsDouble(call.arguments.get(0), ctx);
+							mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "trunc", "(D)D", false);
+							return;
+						}
+						case "log2" -> {
+							compileNodeAsDouble(call.arguments.get(0), ctx);
+							mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "log2", "(D)D", false);
+							return;
+						}
 					}
 				} else if (argc == 2) {
 					switch (mathMethod) {
-						case "min", "max", "pow" -> {
+						case "min", "max", "pow", "atan2", "hypot" -> {
 							compileNodeAsDouble(call.arguments.get(0), ctx);
 							compileNodeAsDouble(call.arguments.get(1), ctx);
 							mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Math", mathMethod, "(DD)D", false);

@@ -34,6 +34,14 @@ public class JSOps {
 
 	//region Primitive 特化 (Zero-Boxing Fast Paths)
 
+	public static double trunc(double d) {
+		return d < 0 ? Math.ceil(d) : Math.floor(d);
+	}
+
+	public static double log2(double d) {
+		return Math.log(d) / 0.6931471805599453;
+	}
+
 	public static double add(double a, double b) {
 		return a + b;
 	}

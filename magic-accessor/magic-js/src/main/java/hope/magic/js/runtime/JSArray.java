@@ -118,6 +118,17 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		return arr;
 	}
 
+	public static JSArray fromDoubleElements(double[] doubleElements) {
+		JSArray arr = new JSArray();
+		if (doubleElements != null && doubleElements.length > 0) {
+			arr.doubleElements = doubleElements;
+			arr.elements = null;
+			arr.denseSize = doubleElements.length;
+			arr.length = doubleElements.length;
+		}
+		return arr;
+	}
+
 	//endregion
 	//region 长度属性操作
 
@@ -332,7 +343,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 	}
 
 	public void setElementDouble(long index, double value) {
-		if (index >= 0 && index <= Integer.MAX_VALUE) {
+		if (index >= 0 && index <= Integer.MAX_VALUE && index < MAX_DENSE_CAPACITY && index <= denseSize + 1024) {
 			setElementDouble((int) index, value);
 			return;
 		}
@@ -345,7 +356,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			return;
 		}
 		if (doubleElements != null) {
-			if (value instanceof Number num) {
+			if (index < MAX_DENSE_CAPACITY && index <= denseSize + 1024 && value instanceof Number num) {
 				setElementDouble(index, num.doubleValue());
 				return;
 			}

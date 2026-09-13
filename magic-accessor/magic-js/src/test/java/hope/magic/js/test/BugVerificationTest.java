@@ -1,5 +1,6 @@
 package hope.magic.js.test;
 
+import hope.magic.js.runtime.JSArray;
 import hope.magic.js.runtime.JSContext;
 import hope.magic.js.runtime.JSUndefined;
 import org.junit.jupiter.api.Assertions;
@@ -712,6 +713,57 @@ public class BugVerificationTest {
 		System.out.println("ARRAY BENCHMARK RESULT: " + res);
 		Assertions.assertTrue(((String) res).contains("denseFill:"));
 		Assertions.assertTrue(((String) res).contains("denseSum:"));
+	}
+
+	@Test
+	public void testMathPerformance() {
+		JSContext cx = new JSContext();
+		String script = """
+			function runMath(n) {
+				let s = 0.0;
+				for (let i = 0; i < n; i++) {
+					s += Math.abs(Math.floor(i * 1.5) - Math.ceil(i * 0.5));
+				}
+				return s;
+			}
+			let n = 20000;
+			// Warmup
+			for (let w = 0; w < 5; w++) {
+				runMath(n);
+			}
+			let t0 = java.lang.System.nanoTime();
+			let sum = 0;
+			for (let r = 0; r < 20; r++) {
+				sum += runMath(n);
+			}
+			let t1 = java.lang.System.nanoTime();
+			let mathNs = (t1 - t0) / (20.0 * n);
+			"mathBench: " + mathNs + " ns/op, sum=" + sum;
+		""";
+		Object res = cx.eval(script);
+		System.out.println("MATH BENCHMARK RESULT: " + res);
+		Assertions.assertTrue(((String) res).contains("mathBench:"));
+	}
+
+	@Test
+	public void testNumericArrayLiteralSpecialization() {
+		JSContext cx = new JSContext();
+		cx.eval("var arr = [1.5, 2.5, 3.5, 4.5];");
+		JSArray arr = (JSArray) cx.get("arr");
+		Assertions.assertNotNull(arr.doubleElements, "doubleElements should be non-null for numeric literal");
+		Assertions.assertNull(arr.elements, "elements should be null for numeric literal");
+		Assertions.assertEquals(4, arr.length());
+		Assertions.assertEquals(1.5, arr.getElementDouble(0));
+		Assertions.assertEquals(2.5, arr.getElementDouble(1));
+		Assertions.assertEquals(3.5, arr.getElementDouble(2));
+		Assertions.assertEquals(4.5, arr.getElementDouble(3));
+
+		// Mixed literal degrades to Object[]
+		cx.eval("var mixed = [1.5, 'hello', 3.5];");
+		JSArray mixed = (JSArray) cx.get("mixed");
+		Assertions.assertNull(mixed.doubleElements, "doubleElements should be null for mixed literal");
+		Assertions.assertNotNull(mixed.elements, "elements should be non-null for mixed literal");
+		Assertions.assertEquals("hello", mixed.getElement(1));
 	}
 }
 

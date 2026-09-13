@@ -10,6 +10,7 @@ dependencies {
 	implementation "org.ow2.asm:asm:$asmVersion"
 	implementation "org.ow2.asm:asm-commons:$asmVersion"
 	implementation "org.ow2.asm:asm-tree:$asmVersion"
+	implementation "org.ow2.asm:asm-util:$asmVersion"
 
 	testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -17,6 +18,22 @@ dependencies {
 
 test {
 	useJUnitPlatform()
+}
+
+tasks.register('soakTest', Test) {
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	useJUnitPlatform()
+	include '**/PolyMorphicSoakTest.*'
+	jvmArgs = [
+		'-Xcheck:jni',
+		'-XX:+UnlockDiagnosticVMOptions',
+		'-XX:+VerifyBeforeGC',
+		'-XX:+VerifyAfterGC'
+	]
+	testLogging {
+		events "passed", "skipped", "failed", "standardOut", "standardError"
+	}
 }
 
 tasks.withType(JavaCompile).configureEach {

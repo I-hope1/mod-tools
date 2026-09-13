@@ -294,5 +294,233 @@ public class BugVerificationTest {
 		Assertions.assertEquals("London Zoo animal: Bird:Parrot [span=0.5m, total=2]", cx.eval("rA2;"));
 		Assertions.assertEquals("Beijing Zoo animal: Bird:Crane [span=1.8m, total=1]", cx.eval("rB1;"));
 	}
+
+	@Test
+	public void testLoopInvariantSlotHoisting() {
+		JSContext cx = new JSContext();
+		String script = """
+			var multiplier = 3;
+			function compute(arr) {
+				var sum = 0;
+				for (var i = 0; i < arr.length; i++) {
+					sum += arr[i] * multiplier;
+				}
+				return sum;
+			}
+			var list = [1, 2, 3, 4, 5];
+			var res = compute(list);
+			""";
+		cx.eval(script);
+		Assertions.assertEquals(45.0, ((Number) cx.eval("res;")).doubleValue());
+
+		// While loop test
+		String whileScript = """
+			var factor = 2;
+			var i = 0;
+			var acc = 0;
+			while (i < 5) {
+				acc += i * factor;
+				i++;
+			}
+			acc;
+			""";
+		Assertions.assertEquals(20.0, ((Number) cx.eval(whileScript)).doubleValue());
+
+		// Re-assigned variable should not break semantics
+		String mutateScript = """
+			var step = 1;
+			var total = 0;
+			for (var j = 0; j < 3; j++) {
+				total += step;
+				step = step * 2;
+			}
+			total;
+			""";
+		Assertions.assertEquals(7.0, ((Number) cx.eval(mutateScript)).doubleValue());
+	}
+
+	@Test
+	public void testDumpPolyBytecode() throws Exception {
+		hope.magic.js.compiler.JSCompiler.ENABLE_INTEGER_MOD_SPECIALIZATION = true;
+		hope.magic.js.compiler.JSCompiler.CLASS_DUMP_HOOK = (name, bytes) -> {
+			if (name.contains("Function")) {
+				try {
+					java.nio.file.Files.writeString(java.nio.file.Path.of("poly_disasm.txt"), hope.magic.js.compiler.JSCompiler.disassemble(bytes));
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		};
+		JSContext cx = new JSContext();
+		String init_poly = """
+		 var pool = [
+		     { type: 1, val: 10, tag: 5 },
+		     { type: 2, val: 20.5, meta: 3.14 },
+		     { type: 3, val: 30, flag: 1, note: 100 },
+		     { type: 4, val: 40, extra: { base: 200 } },
+		     { type: 5, val: 50.25, delta: 1.75 }
+		 ];
+		 """;
+		String code_poly = """
+		 var total = 0;
+		 var factor = 1;
+		 
+		 for (var i = 0; i < 2000; i++) {
+		     var item = pool[i % 5];
+		     var t = item.type;
+		 
+		     if (i % 2 === 0) {
+		         factor = i % 10;
+		     } else {
+		         factor = (i % 10) + 0.5;
+		     }
+		 
+		     var contribution = 0;
+		     if (t === 1) {
+		         contribution = item.val * factor + item.tag;
+		     } else if (t === 2) {
+		         contribution = item.val * 1.5 + factor * item.meta;
+		     } else if (t === 3) {
+		         contribution = (item.val + factor) * item.flag + item.note;
+		     } else if (t === 4) {
+		         contribution = item.extra.base + item.val * factor;
+		     } else {
+		         contribution = item.val * factor - item.delta;
+		     }
+		 
+		     total = total + contribution;
+		 }
+		 return total;
+		 """;
+		cx.eval(init_poly);
+		cx.eval("(function() {\n" + code_poly + "\n})");
+		hope.magic.js.compiler.JSCompiler.CLASS_DUMP_HOOK = null;
+	}
+
+	@Test
+	public void testDistinctOffsetShapes() {
+		for (int n : new int[]{1, 2, 4, 8, 64}) {
+			JSContext cx = new JSContext();
+			StringBuilder sb = new StringBuilder();
+			sb.append("pool_").append(n).append(" = [\n");
+			for (int i = 0; i < n; i++) {
+				sb.append("    { ");
+				for (int p = 0; p < i; p++) {
+					sb.append("dummy_").append(p).append(": 0, ");
+				}
+				sb.append("val: ").append(10.5 + i)
+				  .append(", prop_").append(i).append(": ").append(i * 10)
+				  .append(" }");
+				if (i < n - 1) sb.append(",\n");
+			}
+			sb.append("\n];\n\n");
+			sb.append("test_data_").append(n).append(" = [];\n");
+			sb.append("for (var i = 0; i < 2000; i++) {\n");
+			sb.append("    test_data_").append(n).append("[i] = pool_").append(n).append("[i % ").append(n).append("];\n");
+			sb.append("}\n");
+			cx.eval(sb.toString());
+
+			String access = """
+				var data = test_data_%d;
+				var total = 0;
+				for (var i = 0; i < 2000; i++) {
+				    total = total + data[i].val;
+				}
+				total;
+				""".formatted(n);
+			Object res = cx.eval(access);
+			double expected = switch (n) {
+				case 1 -> 21000.0;
+				case 2 -> 22000.0;
+				case 4 -> 24000.0;
+				case 8 -> 28000.0;
+				case 64 -> 83616.0;
+				default -> 0.0;
+			};
+			Assertions.assertEquals(expected, ((Number) res).doubleValue(), 1e-6);
+		}
+	}
+
+	@Test
+	public void testBugA_OffsetCollisionWithDifferentTypes() {
+		JSContext cx = new JSContext();
+		String script = """
+			function readVal(o) {
+				return o.val;
+			}
+			let objA = { val: 12.5 };
+			let objB = { dummy: 1, val: 25.0 };
+			let objC = { val: "text_data", tag: 99 };
+
+			// 预热多态 IC: 依次读 objA 和 objB (促成以 double 为主的多态状态)
+			let a = readVal(objA);
+			let b = readVal(objB);
+
+			// 现在读 objC: offset 为 0，但类型是 String (TYPE_OBJECT)
+			let c = readVal(objC);
+			[a, b, c];
+			""";
+		cx.eval(script);
+		Assertions.assertEquals(12.5, ((Number) cx.eval("a;")).doubleValue());
+		Assertions.assertEquals(25.0, ((Number) cx.eval("b;")).doubleValue());
+		Assertions.assertEquals("text_data", cx.eval("c;"), "Must correctly return String, not 0.0 or corrupted double bits from prim0!");
+	}
+
+	@Test
+	public void testBugB_SetterNotPrematurelyMegamorphicAtThreeShapes() {
+		JSContext cx = new JSContext();
+		String script = """
+			function writeVal(o, v) {
+				o.val = v;
+			}
+			let o1 = { val: 1.0 };
+			let o2 = { d1: 0, val: 2.0 };
+			let o3 = { d1: 0, d2: 0, val: 3.0 };
+			let o4 = { d1: 0, d2: 0, d3: 0, val: 4.0 };
+			let o5 = { d1: 0, d2: 0, d3: 0, d4: 0, val: 5.0 };
+
+			writeVal(o1, 10.0);
+			writeVal(o2, 20.0);
+			writeVal(o3, 30.0);
+			writeVal(o4, 40.0);
+			writeVal(o5, 50.0);
+
+			[o1.val, o2.val, o3.val, o4.val, o5.val];
+			""";
+		cx.eval(script);
+		Assertions.assertEquals(10.0, ((Number) cx.eval("o1.val;")).doubleValue());
+		Assertions.assertEquals(20.0, ((Number) cx.eval("o2.val;")).doubleValue());
+		Assertions.assertEquals(30.0, ((Number) cx.eval("o3.val;")).doubleValue());
+		Assertions.assertEquals(40.0, ((Number) cx.eval("o4.val;")).doubleValue());
+		Assertions.assertEquals(50.0, ((Number) cx.eval("o5.val;")).doubleValue());
+	}
+
+	@Test
+	public void testBugC_MegamorphicSetterTypeTransition() {
+		JSContext cx = new JSContext();
+		StringBuilder init = new StringBuilder();
+		init.append("""
+			function setVal(o, v) {
+				o.val = v;
+			}
+			""");
+		for (int i = 0; i < 10; i++) {
+			init.append("let s_").append(i).append(" = { ");
+			for (int p = 0; p < i; p++) init.append("d_").append(p).append(": 0, ");
+			init.append("val: ").append(i * 1.0).append(" };\n");
+			init.append("setVal(s_").append(i).append(", ").append(i * 10.0).append(");\n");
+		}
+		init.append("""
+			let strObj = { val: "initial_string" };
+			setVal(strObj, 999.5);
+			let finalVal = strObj.val;
+			""");
+		cx.eval(init.toString());
+		Assertions.assertEquals(999.5, ((Number) cx.eval("finalVal;")).doubleValue());
+		hope.magic.js.runtime.JSObject jsObj = (hope.magic.js.runtime.JSObject) cx.eval("strObj;");
+		int offset = jsObj.shape.getOffset("val");
+		Assertions.assertEquals(hope.magic.js.runtime.JSShape.TYPE_DOUBLE, jsObj.shape.getBaseType(offset),
+			"strObj's shape must transition to TYPE_DOUBLE instead of remaining TYPE_OBJECT");
+	}
 }
 

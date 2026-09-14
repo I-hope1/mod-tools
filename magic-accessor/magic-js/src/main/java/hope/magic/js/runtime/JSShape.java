@@ -144,10 +144,6 @@ public final class JSShape {
 	 * 只分配 1 个负数内置 Shape ID，掩码恒为 0L（不占用宝贵的 0..63 位掩码空间）。
 	 */
 	public static JSShape createStaticPrototypeShape(List<String> propNames) {
-		return createStaticPrototypeShape(null, propNames);
-	}
-
-	public static JSShape createStaticPrototypeShape(JSShape parentProtoShape, List<String> propNames) {
 		int    n       = propNames.size();
 		int[]  propIds = new int[n];
 		byte[] types   = new byte[n];

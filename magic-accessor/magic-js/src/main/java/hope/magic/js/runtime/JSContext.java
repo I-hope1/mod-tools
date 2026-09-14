@@ -718,7 +718,7 @@ public class JSContext {
 		}
 
 		private static JSObjectConstructor createObjectConstructor(JSObject proto) {
-			JSShape             shape = JSShape.createStaticPrototypeShape(proto.shape, OBJECT_CTOR_PROPS);
+			JSShape             shape = JSShape.createStaticPrototypeShape(OBJECT_CTOR_PROPS);
 			JSObjectConstructor ctor  = new JSObjectConstructor(shape, proto);
 			proto.put("constructor", ctor);
 
@@ -1173,7 +1173,7 @@ public class JSContext {
 		static final JSArrayConstructor ARRAY           = createArrayConstructor(ARRAY_PROTOTYPE);
 
 		private static JSArray createArrayPrototype(JSObject objectProto) {
-			JSShape shape = JSShape.createStaticPrototypeShape(objectProto.shape, ARRAY_PROTO_PROPS);
+			JSShape shape = JSShape.createStaticPrototypeShape(ARRAY_PROTO_PROPS);
 			return new JSArray(shape, objectProto);
 		}
 
@@ -2740,7 +2740,7 @@ public class JSContext {
 		public static final JSObject DATE           = createDateConstructor(DATE_PROTOTYPE);
 
 		private static JSObject createDatePrototype() {
-			JSShape  shape = JSShape.createStaticPrototypeShape(LazyObject.OBJECT_PROTOTYPE.shape, DATE_PROTO_PROPS);
+			JSShape  shape = JSShape.createStaticPrototypeShape(DATE_PROTO_PROPS);
 			JSObject proto = new JSObject(shape, LazyObject.OBJECT_PROTOTYPE);
 
 			proto.put("getTime", makeMethod("getTime", 0, (cx, thisObj, args) -> {

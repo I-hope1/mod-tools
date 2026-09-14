@@ -42,13 +42,15 @@ public final class JSShape {
 	public static volatile JSShape[]     PRECOMPUTED_SHAPES = new JSShape[PRECOMPUTED_SHAPES_CAPACITY];
 	private static final   AtomicInteger PRECOMPUTED_ID     = new AtomicInteger(0);
 
-	/** 返回预计算的Shape数组索引 */
+	/** 返回预计算的Shape数组索引，确保并发安全发布 (JMM Safe Publication) */
 	public static synchronized int registerPrecomputedShape(JSShape shape) {
-		int id = PRECOMPUTED_ID.getAndIncrement();
-		if (id >= PRECOMPUTED_SHAPES.length) {
-			PRECOMPUTED_SHAPES = Arrays.copyOf(PRECOMPUTED_SHAPES, Math.max(PRECOMPUTED_SHAPES.length * 2, id + 1));
+		int       id  = PRECOMPUTED_ID.getAndIncrement();
+		JSShape[] arr = PRECOMPUTED_SHAPES;
+		if (id >= arr.length) {
+			arr = Arrays.copyOf(arr, Math.max(arr.length * 2, id + 1));
 		}
-		PRECOMPUTED_SHAPES[id] = shape;
+		arr[id] = shape;
+		PRECOMPUTED_SHAPES = arr; // 保证元素写入在 volatile 写 (Release 屏障) 之前完成
 		return id;
 	}
 

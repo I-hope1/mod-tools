@@ -2274,13 +2274,13 @@ public class JSLinker {
 		}
 
 		if (target instanceof JSFunction func && "$invoke$".equals(methodName)) {
-			return func.call(null, JSUndefined.INSTANCE, args);
+			return func.call(JSContext.current(), JSUndefined.INSTANCE, args);
 		}
 
 		if (target instanceof JSFunction func && "call".equals(methodName)) {
 			Object   thisArg = args.length > 0 && args[0] != null ? args[0] : JSUndefined.INSTANCE;
 			Object[] rest    = args.length > 1 ? Arrays.copyOfRange(args, 1, args.length) : new Object[0];
-			return func.call(null, thisArg, rest);
+			return func.call(JSContext.current(), thisArg, rest);
 		}
 
 		if (methodName.startsWith("__magic_super_")) {
@@ -2415,12 +2415,13 @@ public class JSLinker {
 			}
 			site.installGuardOrSwitchMegamorphic(test, directMh.asType(site.type()));
 
-			if (arity == 0) return func.call0(null, JSUndefined.INSTANCE);
-			if (arity == 1) return func.call1(null, JSUndefined.INSTANCE, args[0]);
-			if (arity == 2) return func.call2(null, JSUndefined.INSTANCE, args[0], args[1]);
-			if (arity == 3) return func.call3(null, JSUndefined.INSTANCE, args[0], args[1], args[2]);
-			if (arity == 4) return func.call4(null, JSUndefined.INSTANCE, args[0], args[1], args[2], args[3]);
-			return func.call(null, JSUndefined.INSTANCE, args);
+			JSContext cx = JSContext.current();
+			if (arity == 0) return func.call0(cx, JSUndefined.INSTANCE);
+			if (arity == 1) return func.call1(cx, JSUndefined.INSTANCE, args[0]);
+			if (arity == 2) return func.call2(cx, JSUndefined.INSTANCE, args[0], args[1]);
+			if (arity == 3) return func.call3(cx, JSUndefined.INSTANCE, args[0], args[1], args[2]);
+			if (arity == 4) return func.call4(cx, JSUndefined.INSTANCE, args[0], args[1], args[2], args[3]);
+			return func.call(cx, JSUndefined.INSTANCE, args);
 		}
 
 		if (target instanceof JSFunction func && "call".equals(methodName)) {
@@ -2456,13 +2457,14 @@ public class JSLinker {
 			}
 			site.installGuardOrSwitchMegamorphic(test, directMh.asType(site.type()));
 
+			JSContext cx = JSContext.current();
 			Object thisArg = arity > 0 && args[0] != null ? args[0] : JSUndefined.INSTANCE;
-			if (arity == 0 || arity == 1) return func.call0(null, thisArg);
-			if (arity == 2) return func.call1(null, thisArg, args[1]);
-			if (arity == 3) return func.call2(null, thisArg, args[1], args[2]);
-			if (arity == 4) return func.call3(null, thisArg, args[1], args[2], args[3]);
-			if (arity == 5) return func.call4(null, thisArg, args[1], args[2], args[3], args[4]);
-			return func.call(null, thisArg, Arrays.copyOfRange(args, 1, arity));
+			if (arity == 0 || arity == 1) return func.call0(cx, thisArg);
+			if (arity == 2) return func.call1(cx, thisArg, args[1]);
+			if (arity == 3) return func.call2(cx, thisArg, args[1], args[2]);
+			if (arity == 4) return func.call3(cx, thisArg, args[1], args[2], args[3]);
+			if (arity == 5) return func.call4(cx, thisArg, args[1], args[2], args[3], args[4]);
+			return func.call(cx, thisArg, Arrays.copyOfRange(args, 1, arity));
 		}
 
 		if (target instanceof JSObject jsObj) {
@@ -2782,6 +2784,26 @@ public class JSLinker {
 		}
 
 		throw JSContext.makeTypeError(ctor + " is not a constructor");
+	}
+
+	public static boolean isConstructor(Object ctor) {
+		if (ctor == null || ctor == JSUndefined.INSTANCE) return false;
+		if (ctor instanceof Class<?>) return true;
+		if (ctor instanceof JSContext.JSBuiltinMethod) return false;
+		if (ctor == JSContext.LazySymbol.SYMBOL) return false;
+		if (ctor instanceof JSContext.JSArrayConstructor) return true;
+		if (ctor instanceof JSContext.JSBuiltinConstructor) return true;
+		if (ctor instanceof JSFunction) {
+			if (ctor instanceof JSObject jo) {
+				if (jo.shape.getOffset("prototype") >= 0) {
+					return true;
+				}
+				Object p = jo.get("prototype");
+				return p != JSUndefined.INSTANCE && p != null;
+			}
+			return true;
+		}
+		return false;
 	}
 
 	public static boolean isSameObject(Object expected, Object actual) {

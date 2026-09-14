@@ -327,59 +327,63 @@ public class JSContext {
 			return p != null ? p : LazyFunction.FUNCTION_PROTOTYPE;
 		}
 
+		private static JSContext ensureCx(JSContext cx) {
+			return cx != null ? cx : JSContext.current();
+		}
+
 		@Override
 		public Object call(JSContext cx, Object thisObj, Object[] args) throws Throwable {
-			return fn.call(cx, thisObj, args);
+			return fn.call(ensureCx(cx), thisObj, args);
 		}
 
 		@Override
 		public Object call0(JSContext cx, Object thisObj) throws Throwable {
-			return fn.call0(cx, thisObj);
+			return fn.call0(ensureCx(cx), thisObj);
 		}
 
 		@Override
 		public Object call1(JSContext cx, Object thisObj, Object a0) throws Throwable {
-			return fn.call1(cx, thisObj, a0);
+			return fn.call1(ensureCx(cx), thisObj, a0);
 		}
 
 		@Override
 		public Object call2(JSContext cx, Object thisObj, Object a0, Object a1) throws Throwable {
-			return fn.call2(cx, thisObj, a0, a1);
+			return fn.call2(ensureCx(cx), thisObj, a0, a1);
 		}
 
 		@Override
 		public Object call3(JSContext cx, Object thisObj, Object a0, Object a1, Object a2) throws Throwable {
-			return fn.call3(cx, thisObj, a0, a1, a2);
+			return fn.call3(ensureCx(cx), thisObj, a0, a1, a2);
 		}
 
 		@Override
 		public Object call4(JSContext cx, Object thisObj, Object a0, Object a1, Object a2, Object a3) throws Throwable {
-			return fn.call4(cx, thisObj, a0, a1, a2, a3);
+			return fn.call4(ensureCx(cx), thisObj, a0, a1, a2, a3);
 		}
 
 		@Override
 		public double call0Double(JSContext cx) throws Throwable {
-			return fn.call0Double(cx);
+			return fn.call0Double(ensureCx(cx));
 		}
 
 		@Override
 		public double call1Double(JSContext cx, double a0) throws Throwable {
-			return fn.call1Double(cx, a0);
+			return fn.call1Double(ensureCx(cx), a0);
 		}
 
 		@Override
 		public double call2Double(JSContext cx, double a0, double a1) throws Throwable {
-			return fn.call2Double(cx, a0, a1);
+			return fn.call2Double(ensureCx(cx), a0, a1);
 		}
 
 		@Override
 		public double call3Double(JSContext cx, double a0, double a1, double a2) throws Throwable {
-			return fn.call3Double(cx, a0, a1, a2);
+			return fn.call3Double(ensureCx(cx), a0, a1, a2);
 		}
 
 		@Override
 		public double call4Double(JSContext cx, double a0, double a1, double a2, double a3) throws Throwable {
-			return fn.call4Double(cx, a0, a1, a2, a3);
+			return fn.call4Double(ensureCx(cx), a0, a1, a2, a3);
 		}
 
 		@Override
@@ -1217,18 +1221,34 @@ public class JSContext {
 				}
 				Object thisArg = args.length > 2 ? args[2] : JSUndefined.INSTANCE;
 
-				JSArray res = new JSArray();
+				JSContext currentCx = cx != null ? cx : JSContext.current();
+				boolean   isCtor    = JSLinker.isConstructor(thisObj);
+
 				Object usingIterator = JSUndefined.INSTANCE;
 				if (items instanceof JSObject jo) {
 					usingIterator = jo.get(JSSymbol.ITERATOR);
+				} else if (items instanceof CharSequence) {
+					usingIterator = LazyPrimitiveConstructors.STRING_PROTOTYPE.get(JSSymbol.ITERATOR);
 				}
 				if (usingIterator != JSUndefined.INSTANCE && usingIterator != null) {
 					if (!(usingIterator instanceof JSFunction itFn)) {
 						throw makeTypeError("Result of the Symbol.iterator method is not a function");
 					}
+					Object res;
+					if (isCtor) {
+						try {
+							res = JSLinker.newGeneric(thisObj, JSFunction.EMPTY_ARGS);
+						} catch (Throwable t) {
+							if (t instanceof RuntimeException re) throw re;
+							throw new RuntimeException(t);
+						}
+					} else {
+						res = new JSArray();
+					}
+
 					Object iterator;
 					try {
-						iterator = itFn.call(cx, items, JSFunction.EMPTY_ARGS);
+						iterator = itFn.call(currentCx, items, JSFunction.EMPTY_ARGS);
 					} catch (Throwable t) {
 						if (t instanceof RuntimeException re) throw re;
 						throw new RuntimeException(t);
@@ -1244,7 +1264,7 @@ public class JSContext {
 					while (true) {
 						Object nextResult;
 						try {
-							nextResult = nextFn.call(cx, iterator, JSFunction.EMPTY_ARGS);
+							nextResult = nextFn.call(currentCx, iterator, JSFunction.EMPTY_ARGS);
 						} catch (Throwable t) {
 							if (t instanceof RuntimeException re) throw re;
 							throw new RuntimeException(t);
@@ -1259,46 +1279,77 @@ public class JSContext {
 						Object val = nextObj.get("value");
 						if (mapFn != null) {
 							try {
-								val = mapFn.call2(cx, thisArg, val, (double) k);
+								val = mapFn.call2(currentCx, thisArg, val, (double) k);
 							} catch (Throwable t) {
 								if (t instanceof RuntimeException re) throw re;
 								throw new RuntimeException(t);
 							}
 						}
-						res.push(val);
+						setProperty(res, k, val);
 						k++;
+					}
+					if (!(res instanceof JSArray)) {
+						setLength(res, k);
 					}
 					return res;
 				}
 				if (items instanceof Iterable<?> it) {
-					long idx = 0;
-					for (Object item : it) {
-						if (mapFn != null) {
-							try {
-								res.push(mapFn.call2(cx, thisArg, item, (double) idx++));
-							} catch (Throwable t) {
-								if (t instanceof RuntimeException re) throw re;
-								throw new RuntimeException(t);
-							}
-						} else {
-							res.push(item);
-						}
-					}
-					return res;
-				}
-				long len = toLength(items);
-				for (long k = 0; k < len; k++) {
-					Object val = getProperty(items, k);
-					if (mapFn != null) {
+					Object res;
+					if (isCtor) {
 						try {
-							res.push(mapFn.call2(cx, thisArg, val, (double) k));
+							res = JSLinker.newGeneric(thisObj, JSFunction.EMPTY_ARGS);
 						} catch (Throwable t) {
 							if (t instanceof RuntimeException re) throw re;
 							throw new RuntimeException(t);
 						}
 					} else {
-						res.push(val);
+						res = new JSArray();
 					}
+					long idx = 0;
+					for (Object item : it) {
+						Object val = item;
+						if (mapFn != null) {
+							try {
+								val = mapFn.call2(currentCx, thisArg, val, (double) idx);
+							} catch (Throwable t) {
+								if (t instanceof RuntimeException re) throw re;
+								throw new RuntimeException(t);
+							}
+						}
+						setProperty(res, idx, val);
+						idx++;
+					}
+					if (!(res instanceof JSArray)) {
+						setLength(res, idx);
+					}
+					return res;
+				}
+				long len = toLength(items);
+				Object res;
+				if (isCtor) {
+					try {
+						res = JSLinker.newGeneric(thisObj, new Object[]{ (double) len });
+					} catch (Throwable t) {
+						if (t instanceof RuntimeException re) throw re;
+						throw new RuntimeException(t);
+					}
+				} else {
+					res = new JSArray((int) Math.min(len, Integer.MAX_VALUE));
+				}
+				for (long k = 0; k < len; k++) {
+					Object val = getProperty(items, k);
+					if (mapFn != null) {
+						try {
+							val = mapFn.call2(currentCx, thisArg, val, (double) k);
+						} catch (Throwable t) {
+							if (t instanceof RuntimeException re) throw re;
+							throw new RuntimeException(t);
+						}
+					}
+					setProperty(res, k, val);
+				}
+				if (!(res instanceof JSArray)) {
+					setLength(res, len);
 				}
 				return res;
 			}));
@@ -2082,6 +2133,20 @@ public class JSContext {
 				arr.setElement(index, value);
 			} else if (obj instanceof JSObject jsObj) {
 				jsObj.put(String.valueOf(index), value);
+			} else {
+				JSLinker.setIndex(obj, (int) index, value);
+			}
+		}
+
+		private static void setLength(Object obj, long len) {
+			if (obj instanceof JSArray arr) {
+				if (arr.length() != len) {
+					arr.setLength(len);
+				}
+			} else if (obj instanceof JSObject jsObj) {
+				jsObj.put("length", (double) len);
+			} else {
+				JSLinker.setPropGeneric(obj, (double) len, "length");
 			}
 		}
 

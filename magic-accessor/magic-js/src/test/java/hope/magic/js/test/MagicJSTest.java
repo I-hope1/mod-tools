@@ -1815,6 +1815,97 @@ public class MagicJSTest {
 	}
 
 	@Test
+	public void testArrayFromCall() {
+		JSContext cx = new JSContext();
+		// Case 1: Array.from.call(Array, [1, 2, 3])
+		Object r1 = cx.eval("Array.from.call(Array, [1, 2, 3])");
+		Assertions.assertTrue(r1 instanceof JSArray);
+		Assertions.assertEquals(3L, ((JSArray) r1).length());
+		Assertions.assertEquals(1.0, ((Number) ((JSArray) r1).getElement(0)).doubleValue());
+
+		// Case 2: Array.from.call(null, [1, 2, 3])
+		Object r2 = cx.eval("Array.from.call(null, [1, 2, 3])");
+		Assertions.assertTrue(r2 instanceof JSArray);
+		Assertions.assertEquals(3L, ((JSArray) r2).length());
+
+		// Case 3: Array.from.call(undefined, [1, 2, 3])
+		Object r3 = cx.eval("Array.from.call(undefined, [1, 2, 3])");
+		Assertions.assertTrue(r3 instanceof JSArray);
+		Assertions.assertEquals(3L, ((JSArray) r3).length());
+
+		// Case 4: custom constructor with iterable
+		Object r4 = cx.eval("""
+			function MyClass() { this.isMyClass = true; }
+			var res = Array.from.call(MyClass, [10, 20]);
+			({
+				isInst: res instanceof MyClass,
+				notArr: !Array.isArray(res),
+				len: res.length,
+				v0: res[0],
+				v1: res[1],
+				marker: res.isMyClass
+			});
+		""");
+		Assertions.assertTrue(r4 instanceof JSObject);
+		JSObject o4 = (JSObject) r4;
+		Assertions.assertEquals(Boolean.TRUE, o4.get("isInst"));
+		Assertions.assertEquals(Boolean.TRUE, o4.get("notArr"));
+		Assertions.assertEquals(2.0, ((Number) o4.get("len")).doubleValue());
+		Assertions.assertEquals(10.0, ((Number) o4.get("v0")).doubleValue());
+		Assertions.assertEquals(20.0, ((Number) o4.get("v1")).doubleValue());
+		Assertions.assertEquals(Boolean.TRUE, o4.get("marker"));
+
+		// Case 5: custom constructor with array-like object
+		Object r5 = cx.eval("""
+			function ItemHolder() { this.holder = true; }
+			var resLike = Array.from.call(ItemHolder, { length: 2, 0: "hello", 1: "world" });
+			({
+				isInst: resLike instanceof ItemHolder,
+				notArr: !Array.isArray(resLike),
+				len: resLike.length,
+				v0: resLike[0],
+				v1: resLike[1]
+			});
+		""");
+		Assertions.assertTrue(r5 instanceof JSObject);
+		JSObject o5 = (JSObject) r5;
+		Assertions.assertEquals(Boolean.TRUE, o5.get("isInst"));
+		Assertions.assertEquals(2.0, ((Number) o5.get("len")).doubleValue());
+		Assertions.assertEquals("hello", o5.get("v0"));
+		Assertions.assertEquals("world", o5.get("v1"));
+
+		// Case 6: SubArray subclass via Array.from
+		Object r6 = cx.eval("""
+			class SubArray extends Array {}
+			var sub = SubArray.from([1, 2, 3]);
+			({
+				isSub: sub instanceof SubArray,
+				len: sub.length,
+				v0: sub[0],
+				v2: sub[2]
+			});
+		""");
+		Assertions.assertTrue(r6 instanceof JSObject);
+		JSObject o6 = (JSObject) r6;
+		Assertions.assertEquals(Boolean.TRUE, o6.get("isSub"));
+		Assertions.assertEquals(3.0, ((Number) o6.get("len")).doubleValue());
+		Assertions.assertEquals(1.0, ((Number) o6.get("v0")).doubleValue());
+		Assertions.assertEquals(3.0, ((Number) o6.get("v2")).doubleValue());
+
+		// Case 7: Array.from.call with mapping function
+		Object r7 = cx.eval("""
+			Array.from.call(Array, [1, 2, 3], x => x * 2).join(',');
+		""");
+		Assertions.assertEquals("2,4,6", r7);
+
+		// Case 8: Unicode string code points via Array.from.call
+		Object r8 = cx.eval("""
+			Array.from.call(null, "a😀b").length;
+		""");
+		Assertions.assertEquals(3.0, ((Number) r8).doubleValue());
+	}
+
+	@Test
 	public void testJSArrayIterable() {
 		JSArray arr = new JSArray();
 		arr.push(10);

@@ -10,31 +10,10 @@ import java.util.*;
 public class ShapeMegamorphicAnalysis {
 
     public static void main(String[] args) throws Throwable {
-        System.out.println("=== JSShape 物理内存字段布局 (Field Offsets) ===");
-        sun.misc.Unsafe u = hope.magic.runtime.Magic.unsafe;
-        java.lang.reflect.Field[] fields = JSShape.class.getDeclaredFields();
-        List<java.lang.reflect.Field> instFields = new ArrayList<>();
-        for (var f : fields) {
-            if (!java.lang.reflect.Modifier.isStatic(f.getModifiers())) {
-                instFields.add(f);
-            }
-        }
-        instFields.sort(Comparator.comparingLong(u::objectFieldOffset));
-        long maxOffset = 0;
-        int lastSize = 0;
-        for (var f : instFields) {
-            long off = u.objectFieldOffset(f);
-            Class<?> t = f.getType();
-            int sz = (t == long.class || t == double.class) ? 8 : (t == int.class || t == float.class) ? 4 : (t == short.class || t == char.class) ? 2 : (t == byte.class || t == boolean.class) ? 1 : 4;
-            System.out.printf("  Offset %3d [%2d bytes] %-20s : %s\n", off, sz, f.getName(), t.getSimpleName());
-            if (off > maxOffset) {
-                maxOffset = off;
-                lastSize = sz;
-            }
-        }
-        long rawSize = maxOffset + lastSize;
-        long paddedSize = (rawSize + 7) & ~7;
-        System.out.printf("JSShape 实例物理尺寸: %d 字节 (8字节对齐后: %d 字节)\n\n", rawSize, paddedSize);
+        System.out.println("=== JSShape 物理内存字段布局 (OpenJDK JOL - Java Object Layout) ===");
+        System.out.println(org.openjdk.jol.info.ClassLayout.parseClass(JSShape.class).toPrintable());
+        System.out.println("=== JSShape.ROOT 实例内存布局 (OpenJDK JOL) ===");
+        System.out.println(org.openjdk.jol.info.ClassLayout.parseInstance(JSShape.ROOT).toPrintable());
 
         System.out.println("=== GradientShapeBenchmark 64 态 Shape 分布与 Cache 冲突实测分析 ===");
 

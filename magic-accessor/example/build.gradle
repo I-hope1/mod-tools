@@ -184,9 +184,15 @@ tasks.register('coldJS', JavaExec) {
 tasks.register('gradientJS', JavaExec) {
 	classpath = sourceSets.main.runtimeClasspath
 	mainClass = 'org.openjdk.jmh.Main'
-	args = [
-			'hope.magic.example.GradientShapeBenchmark'
-	]
+	if (project.hasProperty('jmhArgs')) {
+		args = project.property('jmhArgs').toString().split('\\s+').toList()
+	} else {
+		args = ['hope.magic.example.GradientShapeBenchmark']
+	}
+	jvmArgs(
+			'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
+			'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED',
+	)
 	if (jsBenchmarkJdk.exists()) {
 		executable = jsBenchmarkJdk.absolutePath
 	}
@@ -232,6 +238,20 @@ tasks.register('benchBun', JavaExec) {
 tasks.register('densityJS', JavaExec) {
 	classpath = sourceSets.main.runtimeClasspath
 	mainClass = 'hope.magic.example.ContextDensityBenchmark'
+	if (jsBenchmarkJdk.exists()) {
+		executable = jsBenchmarkJdk.absolutePath
+	}
+}
+
+tasks.register('analysisJS', JavaExec) {
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'hope.magic.example.ShapeMegamorphicAnalysis'
+	jvmArgs(
+			'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
+			'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED',
+			'-Dmagic.cache.stats=true',
+			'-Dmagic.cache.size=' + System.getProperty('magic.cache.size', '512')
+	)
 	if (jsBenchmarkJdk.exists()) {
 		executable = jsBenchmarkJdk.absolutePath
 	}

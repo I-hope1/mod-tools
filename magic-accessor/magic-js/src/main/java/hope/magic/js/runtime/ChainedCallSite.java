@@ -39,17 +39,36 @@ public class ChainedCallSite extends MutableCallSite {
 	private final LinkedHashMap<JSShape, Integer> shapeOffsetMap = new LinkedHashMap<>(4);
 
 	// Megamorphic 多槽直接映射表 (Direct Mapped Fast Shape->Offset Cache)
-	public static final int CACHE_SIZE = 64;
-	public static final int PHI_32     = 0x9E3779B9; // 黄金比例常数
+	public static final int CACHE_SIZE  = Integer.getInteger("magic.cache.size", 512);
+	public static final int CACHE_SHIFT = 32 - Integer.numberOfTrailingZeros(CACHE_SIZE);
+	public static final int PHI_32      = 0x9E3779B9; // 黄金比例常数
+
+	public static final boolean ENABLE_STATS = Boolean.getBoolean("magic.cache.stats");
+	public static final java.util.concurrent.atomic.LongAdder STATS_HITS = new java.util.concurrent.atomic.LongAdder();
+	public static final java.util.concurrent.atomic.LongAdder STATS_MISSES = new java.util.concurrent.atomic.LongAdder();
 
 	/** 极速 32 位黄金比例散列：单条 imul + 单条 shr 汇编指令 */
 	public static int cacheIndex(int shapeId) {
-		return (shapeId * PHI_32) >>> 26; // 32 - 6 = 26，输出 [0, 63]
+		return (shapeId * PHI_32) >>> CACHE_SHIFT;
 	}
 
-	// directCache
-	public static final VarHandle CACHE_VH    = MethodHandles.arrayElementVarHandle(long[].class);
-	public final        long[]    directCache = new long[CACHE_SIZE];
+	// directCache (惰性分配，避免海量单态/小多态 CallSite 空占数组堆内存)
+	public static final VarHandle CACHE_VH = MethodHandles.arrayElementVarHandle(long[].class);
+	public volatile     long[]    directCache;
+
+	public long[] getOrCreateDirectCache() {
+		long[] cache = directCache;
+		if (cache == null) {
+			synchronized (this) {
+				cache = directCache;
+				if (cache == null) {
+					cache = new long[CACHE_SIZE];
+					directCache = cache;
+				}
+			}
+		}
+		return cache;
+	}
 
 
 	public ChainedCallSite(MethodType type, MethodHandle megamorphicTarget) {
@@ -113,6 +132,7 @@ public class ChainedCallSite extends MutableCallSite {
 		// 超过 MAX_CHAIN_DEPTH 且非同偏移等价，立即进化为 Megamorphic
 		if (!offsetEquivalent) {
 			megamorphic = true;
+			getOrCreateDirectCache();
 			if (megamorphicTarget != null) {
 				setTarget(megamorphicTarget.asType(type()));
 			}
@@ -159,6 +179,7 @@ public class ChainedCallSite extends MutableCallSite {
 		chainDepth++;
 		if (chainDepth > MAX_CHAIN_DEPTH) {
 			megamorphic = true;
+			getOrCreateDirectCache();
 			if (megamorphicTarget != null) setTarget(megamorphicTarget.asType(type()));
 			return false;
 		}

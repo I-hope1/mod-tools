@@ -1201,16 +1201,16 @@ public class JSLinker {
 
 	public static Object getPropMegamorphic(ChainedCallSite site, Object target, String propName) {
 		if (target instanceof JSObject jsObj) {
-			JSShape s   = jsObj.shape;
-			int     idx = ChainedCallSite.cacheIndex(s.id);
+			JSShape s     = jsObj.shape;
+			long[]  cache = site.directCache;
+			if (cache == null) cache = site.getOrCreateDirectCache();
+			int     idx   = ChainedCallSite.cacheIndex(s.id);
 
 			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
-			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
+			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(cache, idx);
 			if (entry != 0L && (int) (entry >>> 32) == s.id) {
+				if (ChainedCallSite.ENABLE_STATS) ChainedCallSite.STATS_HITS.increment();
 				int offset = (int) entry;
-				if (s.hasAccessors && s.isAccessor(offset)) {
-					return jsObj.get(propName);
-				}
 				Object raw = jsObj.getRawObjectSlot(offset);
 				if (raw != JSObject.DELETED) {
 					return jsObj.getSlot(offset);
@@ -1218,18 +1218,18 @@ public class JSLinker {
 				return jsObj.get(propName);
 			}
 
+			if (ChainedCallSite.ENABLE_STATS) ChainedCallSite.STATS_MISSES.increment();
 			int propId = site.getPropId();
 			int offset = (propId >= 0) ? s.getOffset(propId) : s.getOffset(propName);
 			if (offset >= 0) {
-				// 64-bit 原子无锁写入 (高位 shape.id, 低位 offset)
-				long newEntry = ((long) s.id << 32) | (offset & 0xFFFFFFFFL);
-				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, newEntry);
-				if (s.hasAccessors && s.isAccessor(offset)) {
-					return jsObj.get(propName);
-				}
-				Object raw = jsObj.getRawObjectSlot(offset);
-				if (raw != JSObject.DELETED) {
-					return jsObj.getSlot(offset);
+				if (!s.hasAccessors || !s.isAccessor(offset)) {
+					// 64-bit 原子无锁写入 (高位 shape.id, 低位 offset)
+					long newEntry = ((long) s.id << 32) | (offset & 0xFFFFFFFFL);
+					ChainedCallSite.CACHE_VH.setOpaque(cache, idx, newEntry);
+					Object raw = jsObj.getRawObjectSlot(offset);
+					if (raw != JSObject.DELETED) {
+						return jsObj.getSlot(offset);
+					}
 				}
 			}
 			return jsObj.get(propName);
@@ -1240,25 +1240,24 @@ public class JSLinker {
 
 	public static double getPropDoubleMegamorphic(ChainedCallSite site, Object target, String propName) {
 		if (target instanceof JSObject jsObj) {
-			JSShape s   = jsObj.shape;
-			int     idx = ChainedCallSite.cacheIndex(s.id);
+			JSShape s     = jsObj.shape;
+			long[]  cache = site.directCache;
+			if (cache == null) cache = site.getOrCreateDirectCache();
+			int     idx   = ChainedCallSite.cacheIndex(s.id);
 
 			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
-			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
+			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(cache, idx);
 			if (entry != 0L && (int) (entry >>> 32) == s.id) {
-				int offset = (int) entry;
-				// 必须验证该槽位当前存储的是不是原生 double
-				if (jsObj.isDoubleSlot(offset)) {
-					return jsObj.getDoubleSlot(offset);
-				}
-				return jsObj.getAsDouble(propName);
+				if (ChainedCallSite.ENABLE_STATS) ChainedCallSite.STATS_HITS.increment();
+				return jsObj.getDoubleSlot((int) entry);
 			}
 
+			if (ChainedCallSite.ENABLE_STATS) ChainedCallSite.STATS_MISSES.increment();
 			int propId = site.getPropId();
 			int offset = (propId >= 0) ? s.getOffset(propId) : s.getOffset(propName);
 			if (offset >= 0) {
-				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
-				if (jsObj.isDoubleSlot(offset)) {
+				if (s.getBaseType(offset) == JSShape.TYPE_DOUBLE || jsObj.isDoubleSlot(offset)) {
+					ChainedCallSite.CACHE_VH.setOpaque(cache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
 					return jsObj.getDoubleSlot(offset);
 				}
 			}
@@ -1270,25 +1269,24 @@ public class JSLinker {
 
 	public static int getPropIntMegamorphic(ChainedCallSite site, Object target, String propName) {
 		if (target instanceof JSObject jsObj) {
-			JSShape s   = jsObj.shape;
-			int     idx = ChainedCallSite.cacheIndex(s.id);
+			JSShape s     = jsObj.shape;
+			long[]  cache = site.directCache;
+			if (cache == null) cache = site.getOrCreateDirectCache();
+			int     idx   = ChainedCallSite.cacheIndex(s.id);
 
 			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
-			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
+			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(cache, idx);
 			if (entry != 0L && (int) (entry >>> 32) == s.id) {
-				int offset = (int) entry;
-				// 必须验证该槽位当前存储的是不是原生 double
-				if (jsObj.isDoubleSlot(offset)) {
-					return (int) jsObj.getDoubleSlot(offset);
-				}
-				return (int) jsObj.getAsDouble(propName);
+				if (ChainedCallSite.ENABLE_STATS) ChainedCallSite.STATS_HITS.increment();
+				return (int) jsObj.getDoubleSlot((int) entry);
 			}
 
+			if (ChainedCallSite.ENABLE_STATS) ChainedCallSite.STATS_MISSES.increment();
 			int propId = site.getPropId();
 			int offset = (propId >= 0) ? s.getOffset(propId) : s.getOffset(propName);
 			if (offset >= 0) {
-				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
-				if (jsObj.isDoubleSlot(offset)) {
+				if (s.getBaseType(offset) == JSShape.TYPE_DOUBLE || jsObj.isDoubleSlot(offset)) {
+					ChainedCallSite.CACHE_VH.setOpaque(cache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
 					return (int) jsObj.getDoubleSlot(offset);
 				}
 			}
@@ -1300,25 +1298,24 @@ public class JSLinker {
 
 	public static long getPropLongMegamorphic(ChainedCallSite site, Object target, String propName) {
 		if (target instanceof JSObject jsObj) {
-			JSShape s   = jsObj.shape;
-			int     idx = ChainedCallSite.cacheIndex(s.id);
+			JSShape s     = jsObj.shape;
+			long[]  cache = site.directCache;
+			if (cache == null) cache = site.getOrCreateDirectCache();
+			int     idx   = ChainedCallSite.cacheIndex(s.id);
 
 			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
-			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
+			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(cache, idx);
 			if (entry != 0L && (int) (entry >>> 32) == s.id) {
-				int offset = (int) entry;
-				// 必须验证该槽位当前存储的是不是原生 double
-				if (jsObj.isDoubleSlot(offset)) {
-					return (long) jsObj.getDoubleSlot(offset);
-				}
-				return (long) jsObj.getAsDouble(propName);
+				if (ChainedCallSite.ENABLE_STATS) ChainedCallSite.STATS_HITS.increment();
+				return (long) jsObj.getDoubleSlot((int) entry);
 			}
 
+			if (ChainedCallSite.ENABLE_STATS) ChainedCallSite.STATS_MISSES.increment();
 			int propId = site.getPropId();
 			int offset = (propId >= 0) ? s.getOffset(propId) : s.getOffset(propName);
 			if (offset >= 0) {
-				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
-				if (jsObj.isDoubleSlot(offset)) {
+				if (s.getBaseType(offset) == JSShape.TYPE_DOUBLE || jsObj.isDoubleSlot(offset)) {
+					ChainedCallSite.CACHE_VH.setOpaque(cache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
 					return (long) jsObj.getDoubleSlot(offset);
 				}
 			}
@@ -1330,11 +1327,13 @@ public class JSLinker {
 
 	public static void setPropMegamorphic(ChainedCallSite site, Object target, Object value, String propName) {
 		if (target instanceof JSObject jsObj) {
-			JSShape s   = jsObj.shape;
-			int     idx = ChainedCallSite.cacheIndex(s.id);
+			JSShape s     = jsObj.shape;
+			long[]  cache = site.directCache;
+			if (cache == null) cache = site.getOrCreateDirectCache();
+			int     idx   = ChainedCallSite.cacheIndex(s.id);
 
 			// 64-bit 严格原子读取，防指令重排与 32 位 JVM 字撕裂
-			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
+			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(cache, idx);
 			if (entry != 0L && (int) (entry >>> 32) == s.id) {
 				int offset = (int) entry;
 				if (s.isAccessor(offset) || !s.isWritable(offset)) {
@@ -1360,7 +1359,7 @@ public class JSLinker {
 			int propId = site.getPropId();
 			int offset = (propId >= 0) ? s.getOffset(propId) : s.getOffset(propName);
 			if (offset >= 0) {
-				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
+				ChainedCallSite.CACHE_VH.setOpaque(cache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
 				if (s.isAccessor(offset) || !s.isWritable(offset)) {
 					jsObj.put(propName, value);
 					return;
@@ -1387,10 +1386,12 @@ public class JSLinker {
 
 	public static void setPropDoubleMegamorphic(ChainedCallSite site, Object target, double value, String propName) {
 		if (target instanceof JSObject jsObj) {
-			JSShape s   = jsObj.shape;
-			int     idx = ChainedCallSite.cacheIndex(s.id);
+			JSShape s     = jsObj.shape;
+			long[]  cache = site.directCache;
+			if (cache == null) cache = site.getOrCreateDirectCache();
+			int     idx   = ChainedCallSite.cacheIndex(s.id);
 
-			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(site.directCache, idx);
+			long entry = (long) ChainedCallSite.CACHE_VH.getOpaque(cache, idx);
 			if (entry != 0L && (int) (entry >>> 32) == s.id) {
 				int offset = (int) entry;
 				if (s.isAccessor(offset) || !s.isWritable(offset) || s.getBaseType(offset) != JSShape.TYPE_DOUBLE) {
@@ -1404,7 +1405,7 @@ public class JSLinker {
 			int propId = site.getPropId();
 			int offset = (propId >= 0) ? s.getOffset(propId) : s.getOffset(propName);
 			if (offset >= 0) {
-				ChainedCallSite.CACHE_VH.setOpaque(site.directCache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
+				ChainedCallSite.CACHE_VH.setOpaque(cache, idx, ((long) s.id << 32) | (offset & 0xFFFFFFFFL));
 				if (s.isAccessor(offset) || !s.isWritable(offset) || s.getBaseType(offset) != JSShape.TYPE_DOUBLE) {
 					jsObj.putDouble(propName, value);
 					return;

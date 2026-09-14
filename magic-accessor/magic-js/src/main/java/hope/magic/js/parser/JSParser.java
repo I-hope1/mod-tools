@@ -472,6 +472,39 @@ public class JSParser {
 				Node body = parseStatement();
 				return new Node.ForInStmt(varId.text, isDecl, object, body, kw.line, kw.column);
 			}
+		} else if (check(TokenType.LBRACKET) || check(TokenType.LBRACE)) {
+			DestructuringPattern pattern = check(TokenType.LBRACKET) ? parseArrayPattern() : parseObjectPattern();
+			if (match(TokenType.OF)) {
+				Node iterable = parseExpression();
+				consume(TokenType.RPAREN, "Expected ')' after for-of expression");
+				Node body = parseStatement();
+				String loopVar = "$d_forof_" + TEMP_VAR_GEN.getAndIncrement();
+				List<Node> unpackStmts = new ArrayList<>();
+				pattern.desugar(new Node.IdentifierExpr(loopVar, kw.line, kw.column), isDecl, unpackStmts, kw.line, kw.column);
+				List<Node> fullBodyStmts = new ArrayList<>(unpackStmts);
+				if (body instanceof Node.BlockStmt bs) {
+					fullBodyStmts.addAll(bs.statements);
+				} else {
+					fullBodyStmts.add(body);
+				}
+				Node newBody = new Node.BlockStmt(fullBodyStmts, body.line, body.column);
+				return new Node.ForOfStmt(loopVar, true, iterable, newBody, kw.line, kw.column);
+			} else if (match(TokenType.IN)) {
+				Node object = parseExpression();
+				consume(TokenType.RPAREN, "Expected ')' after for-in expression");
+				Node body = parseStatement();
+				String loopVar = "$d_forin_" + TEMP_VAR_GEN.getAndIncrement();
+				List<Node> unpackStmts = new ArrayList<>();
+				pattern.desugar(new Node.IdentifierExpr(loopVar, kw.line, kw.column), isDecl, unpackStmts, kw.line, kw.column);
+				List<Node> fullBodyStmts = new ArrayList<>(unpackStmts);
+				if (body instanceof Node.BlockStmt bs) {
+					fullBodyStmts.addAll(bs.statements);
+				} else {
+					fullBodyStmts.add(body);
+				}
+				Node newBody = new Node.BlockStmt(fullBodyStmts, body.line, body.column);
+				return new Node.ForInStmt(loopVar, true, object, newBody, kw.line, kw.column);
+			}
 		}
 		cursor = saveCursor;
 
@@ -1204,9 +1237,25 @@ public class JSParser {
 					pattern.entries.add(new ObjectPattern.Entry(restId.text, restId.text, null, null, true));
 					break;
 				}
-				Token keyToken = consume(TokenType.IDENTIFIER, "Expected property name");
-				String key = keyToken.text;
-				String targetName = key;
+
+				String key = null;
+				Node keyExpr = null;
+				String targetName = null;
+
+				if (match(TokenType.LBRACKET)) {
+					// 计算属性名 [expr]: alias
+					keyExpr = parseExpression();
+					consume(TokenType.RBRACKET, "Expected ']' after computed property key");
+				} else if (check(TokenType.STRING)) {
+					key = advance().text;
+				} else if (check(TokenType.NUMBER)) {
+					key = advance().text;
+				} else {
+					Token keyToken = consumePropertyName("Expected property name");
+					key = keyToken.text;
+					targetName = key;
+				}
+
 				DestructuringPattern nested = null;
 				if (match(TokenType.COLON)) {
 					if (check(TokenType.LBRACE)) {
@@ -1219,12 +1268,15 @@ public class JSParser {
 						Token alias = consume(TokenType.IDENTIFIER, "Expected alias identifier");
 						targetName = alias.text;
 					}
+				} else if (keyExpr != null || targetName == null) {
+					throw new RuntimeException("Expected ':' after non-identifier property in destructuring pattern");
 				}
+
 				Node defaultValue = null;
 				if (match(TokenType.ASSIGN)) {
 					defaultValue = parseAssignment();
 				}
-				pattern.entries.add(new ObjectPattern.Entry(key, targetName, nested, defaultValue, false));
+				pattern.entries.add(new ObjectPattern.Entry(key, keyExpr, targetName, nested, defaultValue, false));
 			} while (match(TokenType.COMMA) && !check(TokenType.RBRACE));
 		}
 		consume(TokenType.RBRACE, "Expected '}'");
@@ -1280,13 +1332,19 @@ public class JSParser {
 	public static class ObjectPattern implements DestructuringPattern {
 		public static class Entry {
 			public final String key;
+			public final Node keyExpr;
 			public final String targetName;
 			public final DestructuringPattern nestedPattern;
 			public final Node defaultValue;
 			public final boolean isRest;
 
 			public Entry(String key, String targetName, DestructuringPattern nestedPattern, Node defaultValue, boolean isRest) {
+				this(key, null, targetName, nestedPattern, defaultValue, isRest);
+			}
+
+			public Entry(String key, Node keyExpr, String targetName, DestructuringPattern nestedPattern, Node defaultValue, boolean isRest) {
 				this.key = key;
+				this.keyExpr = keyExpr;
 				this.targetName = targetName;
 				this.nestedPattern = nestedPattern;
 				this.defaultValue = defaultValue;
@@ -1303,7 +1361,7 @@ public class JSParser {
 
 			List<String> normalKeys = new ArrayList<>();
 			for (Entry entry : entries) {
-				if (!entry.isRest) {
+				if (!entry.isRest && entry.key != null) {
 					normalKeys.add(entry.key);
 				}
 			}
@@ -1334,7 +1392,10 @@ public class JSParser {
 					continue;
 				}
 
-				Node propAccess = new Node.MemberAccessExpr(new Node.IdentifierExpr(tmpVar, line, column), entry.key, line, column);
+				Node propAccess = entry.keyExpr != null
+					? new Node.IndexAccessExpr(new Node.IdentifierExpr(tmpVar, line, column), entry.keyExpr, line, column)
+					: new Node.MemberAccessExpr(new Node.IdentifierExpr(tmpVar, line, column), entry.key, line, column);
+
 				Node valExpr;
 				if (entry.defaultValue != null) {
 					Node undef = new Node.LiteralExpr(hope.magic.js.runtime.JSUndefined.INSTANCE, line, column);
@@ -1379,7 +1440,16 @@ public class JSParser {
 		@Override
 		public void desugar(Node sourceExpr, boolean isDecl, List<Node> outStmts, int line, int column) {
 			String tmpVar = "$d_tmp_" + TEMP_VAR_GEN.getAndIncrement();
-			outStmts.add(new Node.VarDecl(tmpVar, sourceExpr, line, column));
+			Node toArrayCall = new Node.CallExpr(
+				new Node.MemberAccessExpr(
+					new Node.IdentifierExpr("JSOps", line, column),
+					"toArray",
+					line, column
+				),
+				List.of(sourceExpr),
+				line, column
+			);
+			outStmts.add(new Node.VarDecl(tmpVar, toArrayCall, line, column));
 
 			for (int i = 0; i < elements.size(); i++) {
 				Element elem = elements.get(i);
@@ -1476,15 +1546,16 @@ public class JSParser {
 		ObjectPattern pattern = new ObjectPattern();
 		for (Node.ObjectLiteralExpr.Entry prop : objLit.entries) {
 			String key = prop.key();
+			Node keyExpr = prop.keyExpr();
 			Node val = prop.value();
 			if (val instanceof Node.IdentifierExpr id) {
-				pattern.entries.add(new ObjectPattern.Entry(key, id.name, null, null, false));
+				pattern.entries.add(new ObjectPattern.Entry(key, keyExpr, id.name, null, null, false));
 			} else if (val instanceof Node.AssignExpr assign && assign.target instanceof Node.IdentifierExpr id) {
-				pattern.entries.add(new ObjectPattern.Entry(key, id.name, null, assign.value, false));
+				pattern.entries.add(new ObjectPattern.Entry(key, keyExpr, id.name, null, assign.value, false));
 			} else if (val instanceof Node.ObjectLiteralExpr nestedObj) {
-				pattern.entries.add(new ObjectPattern.Entry(key, null, convertObjectLiteralToPattern(nestedObj), null, false));
+				pattern.entries.add(new ObjectPattern.Entry(key, keyExpr, null, convertObjectLiteralToPattern(nestedObj), null, false));
 			} else if (val instanceof Node.ArrayLiteralExpr nestedArr) {
-				pattern.entries.add(new ObjectPattern.Entry(key, null, convertArrayLiteralToPattern(nestedArr), null, false));
+				pattern.entries.add(new ObjectPattern.Entry(key, keyExpr, null, convertArrayLiteralToPattern(nestedArr), null, false));
 			}
 		}
 		return pattern;

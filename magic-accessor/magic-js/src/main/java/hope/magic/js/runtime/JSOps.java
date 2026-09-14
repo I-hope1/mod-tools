@@ -701,9 +701,63 @@ public class JSOps {
 	}
 
 	public static java.util.Iterator<?> toIterator(Object target) {
+		return toIterator(JSContext.current(), target);
+	}
+
+	public static java.util.Iterator<?> toIterator(JSContext cx, Object target) {
 		if (target == null || target == JSUndefined.INSTANCE) {
-			return java.util.Collections.emptyIterator();
+			throw JSContext.makeTypeError(target + " is not iterable (cannot read property Symbol(Symbol.iterator))");
 		}
+		// 1. JSObject 自定义 Symbol.iterator 协议支持
+		if (target instanceof JSObject jo) {
+			// 原生 JSArray 在未被局部重写 Symbol.iterator 时走极速直接迭代器
+			if (jo instanceof JSArray arr && !arr.hasOwnProperty(JSSymbol.ITERATOR)) {
+				return arr.iterator();
+			}
+			Object iterMethod = jo.get(JSSymbol.ITERATOR);
+			if (iterMethod instanceof JSFunction iterFn) {
+				Object iterObj;
+				try {
+					iterObj = iterFn.call(cx, jo, JSFunction.EMPTY_ARGS);
+				} catch (Throwable t) {
+					if (t instanceof RuntimeException re) throw re;
+					throw new RuntimeException(t);
+				}
+				if (!(iterObj instanceof JSObject itObj)) {
+					throw JSContext.makeTypeError("Result of the Symbol.iterator method is not an object");
+				}
+				Object nextProp = itObj.get("next");
+				if (!(nextProp instanceof JSFunction nextFn)) {
+					throw JSContext.makeTypeError("iterator.next is not a function");
+				}
+				return new JSIteratorWrapper(cx, itObj, nextFn);
+			}
+		}
+
+		// 2. 字符串迭代 (按 Unicode 码点展开)
+		if (target instanceof CharSequence cs) {
+			return new java.util.Iterator<Object>() {
+				private final String s = cs.toString();
+				private int index = 0;
+				private final int len = s.length();
+
+				@Override
+				public boolean hasNext() {
+					return index < len;
+				}
+
+				@Override
+				public Object next() {
+					if (index >= len) throw new java.util.NoSuchElementException();
+					int cp = Character.codePointAt(s, index);
+					String res = new String(Character.toChars(cp));
+					index += Character.charCount(cp);
+					return res;
+				}
+			};
+		}
+
+		// 3. 原生 Java 集合与迭代器互操作
 		if (target instanceof Iterable<?> iterable) {
 			return iterable.iterator();
 		}
@@ -714,7 +768,7 @@ public class JSOps {
 			return java.util.Arrays.asList(arr).iterator();
 		}
 		if (target.getClass().isArray()) {
-			int                    len  = java.lang.reflect.Array.getLength(target);
+			int len = java.lang.reflect.Array.getLength(target);
 			java.util.List<Object> list = new java.util.ArrayList<>(len);
 			for (int i = 0; i < len; i++) {
 				list.add(java.lang.reflect.Array.get(target, i));
@@ -724,7 +778,70 @@ public class JSOps {
 		if (target instanceof java.util.Map<?, ?> map) {
 			return map.entrySet().iterator();
 		}
-		return java.util.Collections.singletonList(target).iterator();
+
+		throw JSContext.makeTypeError(toStr(target) + " is not iterable");
+	}
+
+	public static class JSIteratorWrapper implements java.util.Iterator<Object> {
+		private final JSContext cx;
+		private final JSObject iterObj;
+		private final JSFunction nextFn;
+		private Object nextValue;
+		private boolean hasCached = false;
+		private boolean done = false;
+
+		public JSIteratorWrapper(JSContext cx, JSObject iterObj, JSFunction nextFn) {
+			this.cx = cx;
+			this.iterObj = iterObj;
+			this.nextFn = nextFn;
+		}
+
+		@Override
+		public boolean hasNext() {
+			if (done) return false;
+			if (hasCached) return true;
+			try {
+				Object res = nextFn.call(cx, iterObj, JSFunction.EMPTY_ARGS);
+				if (!(res instanceof JSObject resObj)) {
+					throw JSContext.makeTypeError("Iterator next result is not an object");
+				}
+				Object doneVal = resObj.get("done");
+				if (isTruthy(doneVal)) {
+					done = true;
+					return false;
+				}
+				nextValue = resObj.get("value");
+				hasCached = true;
+				return true;
+			} catch (Throwable t) {
+				if (t instanceof RuntimeException re) throw re;
+				throw new RuntimeException(t);
+			}
+		}
+
+		@Override
+		public Object next() {
+			if (!hasNext()) {
+				throw new java.util.NoSuchElementException();
+			}
+			hasCached = false;
+			return nextValue;
+		}
+	}
+
+	public static JSArray toArray(Object target) {
+		if (target == null || target == JSUndefined.INSTANCE) {
+			throw JSContext.makeTypeError(target + " is not iterable");
+		}
+		if (target instanceof JSArray arr) {
+			return arr;
+		}
+		java.util.Iterator<?> it = toIterator(target);
+		JSArray res = new JSArray();
+		while (it.hasNext()) {
+			res.push(it.next());
+		}
+		return res;
 	}
 
 	public static Object slice(Object target, int start) {

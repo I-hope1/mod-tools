@@ -504,4 +504,59 @@ public class ModuleSystemTest {
 			fail(t);
 		}
 	}
+
+	@Test
+	void testTopLevelAwaitInModule() {
+		cx.registerModule("tlaSource", """
+			export const asyncData = await Promise.resolve(42);
+			export const computed = (await Promise.resolve(10)) * 2;
+		""");
+
+		Object result = cx.eval("""
+			import { asyncData, computed } from 'tlaSource';
+			export const sum = asyncData + computed;
+		""");
+
+		assertTrue(result instanceof JSObject);
+		JSObject exp = (JSObject) result;
+		assertEquals(62.0, ((Number) exp.get("sum")).doubleValue(), 1e-5);
+	}
+
+	@Test
+	void testTopLevelAwaitInScript() {
+		Object result = cx.eval("""
+			const a = await Promise.resolve(100);
+			const b = await Promise.resolve(200);
+			a + b;
+		""");
+		assertEquals(300.0, ((Number) result).doubleValue(), 1e-5);
+	}
+
+	@Test
+	void testTopLevelAwaitDefaultExport() {
+		cx.registerModule("tlaDefault", """
+			export default await Promise.resolve("magic_answer");
+		""");
+
+		Object result = cx.eval("""
+			import val from 'tlaDefault';
+			export const output = val;
+		""");
+
+		JSObject exp = (JSObject) result;
+		assertEquals("magic_answer", exp.get("output"));
+	}
+
+	@Test
+	void testTopLevelAwaitCjsRequire() {
+		cx.registerModule("tlaForCjs", """
+			export const num = await Promise.resolve(555);
+		""");
+
+		Object result = cx.eval("""
+			const m = require('tlaForCjs');
+			m.num;
+		""");
+		assertEquals(555.0, ((Number) result).doubleValue(), 1e-5);
+	}
 }

@@ -1684,10 +1684,15 @@ public class JSCompiler {
 	private static void compileIteratorLoop(Node iterable, String iterMethod, String varName, Node body,
 	                                        CompileContext ctx) {
 		MethodVisitor mv = ctx.mv;
-		// 1. 编译可迭代对象表达式压入栈顶
-		compileNode(iterable, ctx, true);
-		// 2. 调用 JSOps.toIterator(target) 转为统一 Iterator<?>
-		mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, iterMethod, "(Ljava/lang/Object;)Ljava/util/Iterator;", false);
+		// 1. 编译可迭代对象表达式压入栈顶并转为统一 Iterator<?>
+		if ("toIterator".equals(iterMethod)) {
+			mv.visitVarInsn(Opcodes.ALOAD, 1); // cx (always in slot 1)
+			compileNode(iterable, ctx, true);
+			mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toIterator", "(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;)Ljava/util/Iterator;", false);
+		} else {
+			compileNode(iterable, ctx, true);
+			mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, iterMethod, "(Ljava/lang/Object;)Ljava/util/Iterator;", false);
+		}
 
 		// 3. 分配局部变量槽位存放 Iterator
 		LocalVar iterVar = ctx.declareLocal("$iter_" + (++ctx.tempVarCounter), VarType.OBJECT);

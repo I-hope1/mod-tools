@@ -862,7 +862,8 @@ public class JSArray extends JSObject implements Iterable<Object> {
 				if (cursor >= length) {
 					throw new NoSuchElementException();
 				}
-				return getElement(cursor++);
+				Object val = getElement(cursor++);
+				return (val == HOLE) ? JSUndefined.INSTANCE : val;
 			}
 		};
 	}

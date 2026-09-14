@@ -1912,7 +1912,7 @@ public class JSContext {
 				return new JSArrayIterator(O);
 			});
 			proto.put("values", valuesFn);
-			proto.put(JSSymbol.ITERATOR.getKey(), valuesFn);
+			proto.put(JSSymbol.ITERATOR, valuesFn);
 		}
 
 		private static Object fastDenseReduce(JSContext cx, JSArray jsArr, JSFunction callback, Object[] args)
@@ -2146,7 +2146,34 @@ public class JSContext {
 					}
 					return res;
 				}));
-				put(JSSymbol.ITERATOR.getKey(), makeMethod("[Symbol.iterator]", 0, (cx, thisObj, args) -> this));
+				put(JSSymbol.ITERATOR, makeMethod("[Symbol.iterator]", 0, (cx, thisObj, args) -> this));
+			}
+		}
+
+		public static class JSStringIterator extends JSObject {
+			private final String str;
+			private int index = 0;
+			private boolean done = false;
+
+			public JSStringIterator(String str) {
+				super(LazyObject.OBJECT_PROTOTYPE);
+				this.str = str;
+				put("next", makeMethod("next", 0, (cx, thisObj, args) -> {
+					JSObject res = new JSObject();
+					if (index >= str.length() || done) {
+						done = true;
+						res.put("value", JSUndefined.INSTANCE);
+						res.put("done", Boolean.TRUE);
+					} else {
+						int cp = Character.codePointAt(str, index);
+						String ch = new String(Character.toChars(cp));
+						index += Character.charCount(cp);
+						res.put("value", ch);
+						res.put("done", Boolean.FALSE);
+					}
+					return res;
+				}));
+				put(JSSymbol.ITERATOR, makeMethod("[Symbol.iterator]", 0, (cx, thisObj, args) -> this));
 			}
 		}
 	}
@@ -2572,6 +2599,17 @@ public class JSContext {
 					return JSOps.toStr(jo.get("[[PrimitiveValue]]"));
 				}
 				throw new RuntimeException("TypeError: String.prototype.toString requires that 'this' be a String");
+			}));
+			proto.put(JSSymbol.ITERATOR, makeMethod("[Symbol.iterator]", 0, (cx, thisObj, args) -> {
+				String str;
+				if (thisObj instanceof CharSequence cs) {
+					str = cs.toString();
+				} else if (thisObj instanceof JSObject jo && jo.has("[[PrimitiveValue]]")) {
+					str = JSOps.toStr(jo.get("[[PrimitiveValue]]"));
+				} else {
+					throw makeTypeError("String.prototype[Symbol.iterator] requires that 'this' be a String");
+				}
+				return new LazyArray.JSStringIterator(str);
 			}));
 			return proto;
 		}

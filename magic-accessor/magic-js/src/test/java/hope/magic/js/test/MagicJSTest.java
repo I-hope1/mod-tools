@@ -1757,6 +1757,64 @@ public class MagicJSTest {
 	}
 
 	@Test
+	public void testDestructuringAdvanced() {
+		JSContext cx = new JSContext();
+
+		// 1. for...of 数组解构
+		Object r1 = cx.eval("""
+			const pairs = [[1, 10], [2, 20], [3, 30]];
+			let sum = 0;
+			for (const [k, v] of pairs) {
+				sum += k * v;
+			}
+			sum;
+		""");
+		Assertions.assertEquals(1*10 + 2*20 + 3*30, ((Number) r1).doubleValue());
+
+		// 2. for...of 对象解构带别名与默认值
+		Object r2 = cx.eval("""
+			const users = [
+				{ name: "Alice", age: 25 },
+				{ name: "Bob" }
+			];
+			let totalAge = 0;
+			for (const { age = 18 } of users) {
+				totalAge += age;
+			}
+			totalAge;
+		""");
+		Assertions.assertEquals(43.0, ((Number) r2).doubleValue());
+
+		// 3. 通用 Iterable (字符串与 rest) 数组解构
+		Object r3 = cx.eval("""
+			const [first, ...rest] = "hello";
+			first + ":" + rest.join("");
+		""");
+		Assertions.assertEquals("h:ello", r3);
+
+		// 4. 对象解构支持字符串键、数字键与计算属性名
+		Object r4 = cx.eval("""
+			const sym = Symbol("mySym");
+			const obj = {
+				"content-type": "application/json",
+				404: "Not Found",
+				[sym]: 9999
+			};
+			const { "content-type": ct, 404: statusText, [sym]: symVal } = obj;
+			ct + "|" + statusText + "|" + symVal;
+		""");
+		Assertions.assertEquals("application/json|Not Found|9999", r4);
+
+		// 5. 无声明循环解构 for ([a, b] of list)
+		Object r5 = cx.eval("""
+			let x = 0, y = 0;
+			for ([x, y] of [[5, 6], [7, 8]]) {}
+			x * 10 + y;
+		""");
+		Assertions.assertEquals(78.0, ((Number) r5).doubleValue());
+	}
+
+	@Test
 	public void testJSArrayIterable() {
 		JSArray arr = new JSArray();
 		arr.push(10);

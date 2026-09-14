@@ -169,4 +169,57 @@ public class SymbolFeaturesTest {
 		Object res = cx.eval(code);
 		Assertions.assertEquals(100000.0, ((Number) res).doubleValue(), 1e-6);
 	}
+
+	@Test
+	public void testCustomSymbolIteratorForOf() {
+		JSContext cx = new JSContext();
+		String code = """
+			const myIterable = {
+				[Symbol.iterator]() {
+					let i = 0;
+					return {
+						next() {
+							if (i < 3) return { value: ++i * 10, done: false };
+							return { value: undefined, done: true };
+						}
+					};
+				}
+			};
+			let sum = 0;
+			for (const x of myIterable) {
+				sum += x;
+			}
+			sum;
+		""";
+		Object res = cx.eval(code);
+		Assertions.assertEquals(60.0, ((Number) res).doubleValue(), 1e-6);
+	}
+
+	@Test
+	public void testStringForOf() {
+		JSContext cx = new JSContext();
+		String code = """
+			let res = [];
+			for (const ch of "hello") {
+				res.push(ch);
+			}
+			res.join("-");
+		""";
+		Object res = cx.eval(code);
+		Assertions.assertEquals("h-e-l-l-o", res);
+	}
+
+	@Test
+	public void testNotIterableThrowsTypeError() {
+		JSContext cx = new JSContext();
+		Assertions.assertThrows(RuntimeException.class, () -> {
+			cx.eval("for (const x of null) {}");
+		});
+		Assertions.assertThrows(RuntimeException.class, () -> {
+			cx.eval("for (const x of undefined) {}");
+		});
+		Assertions.assertThrows(RuntimeException.class, () -> {
+			cx.eval("for (const x of {}) {}");
+		});
+	}
 }

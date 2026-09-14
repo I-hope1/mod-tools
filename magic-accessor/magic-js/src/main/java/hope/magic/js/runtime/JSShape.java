@@ -336,19 +336,19 @@ public final class JSShape {
 	}
 
 	private JSShape updatePropertyTypeSlow(int encoded, int offset, byte newType) {
-		// 1. 防御校验与无操作快退下沉到二级慢路径，减轻顶级快路径内联负担与分支判断
+		// 防御校验与无操作快退下沉到二级慢路径，减轻顶级快路径内联负担与分支判断
 		if (offset >= propertyCount || getSlotType(offset) == newType) {
 			return this;
 		}
 
-		// 2. 二级快路径：多态 COW 无锁安全并发读取
+		// 二级快路径：多态 COW 无锁安全并发读取
 		IntObjectMap<JSShape> multi = this.multiTransitions;
 		if (multi != null) {
 			JSShape cached = multi.get(encoded);
 			if (cached != null) return cached;
 		}
 
-		// 3. 三级冷路径：真正需要写操作时进入同步块创建新节点
+		// 三级冷路径：真正需要写操作时进入同步块创建新节点
 		return updatePropertyTypeSync(encoded, offset, newType);
 	}
 
@@ -400,7 +400,7 @@ public final class JSShape {
 	public JSShape addProperty(int propId, byte type) {
 		int encoded = encodeKey(propId, type);
 		JSShape trans;
-		// 1. 一级快路径：单迁移无哈希极速返回 (< 28 字节，无条件 C2 内联)
+		// 一级快路径：单迁移无哈希极速返回 (< 28 字节，无条件 C2 内联)
 		if (this.singleKey == encoded && (trans = this.singleTransition) != null) {
 			return trans;
 		}
@@ -408,13 +408,13 @@ public final class JSShape {
 	}
 
 	private JSShape addPropertySlow(int encoded, int propId, byte type) {
-		// 2. 二级快路径：多分支 COW 无锁并发读取
+		// 二级快路径：多分支 COW 无锁并发读取
 		IntObjectMap<JSShape> multi = this.multiTransitions;
 		if (multi != null) {
 			JSShape next = multi.get(encoded);
 			if (next != null) return next;
 		}
-		// 3. 三级冷路径：仅在首次创建全新分支节点时才加锁
+		// 三级冷路径：仅在首次创建全新分支节点时才加锁
 		return addPropertySync(encoded, propId, type);
 	}
 

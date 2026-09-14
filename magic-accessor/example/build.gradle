@@ -258,3 +258,10 @@ tasks.register('analysisJS', JavaExec) {
 	}
 }
 
+tasks.register('benchMultiTransition', JavaExec) {
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'hope.magic.example.MultiTransitionStrategyBenchmark'
+	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
+		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
+	}
+}

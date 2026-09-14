@@ -805,10 +805,6 @@ public class JSLinker {
 
 	//region Multi-Shape Guard Stubs (同偏移多态坍缩快速守卫)
 
-	public static boolean isMatchMask(long expectedMask, Object target) {
-		return target instanceof JSObject jsObj && (int) (jsObj.shape.mask & expectedMask) != 0;
-	}
-
 	/**
 	 * O(1) 槽位属性归属验证：
 	 * 验证当前对象在指定 offset 槽位上的属性确为 propId。
@@ -831,16 +827,6 @@ public class JSLinker {
 	private static MethodHandle buildMultiShapeGuard(JSShape[] shapes, int propId, int commonOff) {
 		int n = shapes.length;
 		if (n == 1) return MH_IS_EXACT_SHAPE.bindTo(shapes[0]);
-
-		// 位掩码多态守卫 (包含严格的属性归属验证)
-		long    combinedMask = 0L;
-		boolean allHaveMask  = true;
-		for (JSShape s : shapes) {
-			if (s.mask == 0L) {
-				break;
-			}
-			combinedMask |= s.mask;
-		}
 
 		if (propId >= 0 && commonOff >= 0) {
 			return MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, commonOff);

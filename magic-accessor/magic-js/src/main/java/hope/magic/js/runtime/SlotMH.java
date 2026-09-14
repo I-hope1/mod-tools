@@ -24,7 +24,6 @@ public final class SlotMH {
 	public static final MethodHandle   MH_GET_JS_DOUBLE_SLOT_DOUBLE;
 	public static final MethodHandle   MH_IS_EXACT_SHAPE_SETTER_DOUBLE;
 	public static final MethodHandle   MH_IS_EXACT_SHAPE_SETTER_OBJECT;
-	public static final MethodHandle   MH_IS_MATCH_MASK;
 	public static final MethodHandle   MH_IS_MATCH_PROP;
 
 	static {
@@ -51,7 +50,6 @@ public final class SlotMH {
 
 			MH_IS_EXACT_SHAPE_SETTER_DOUBLE = LOOKUP.findStatic(JSLinker.class, "isExactShapeSetterDouble", MethodType.methodType(boolean.class, JSShape.class, Object.class, double.class));
 			MH_IS_EXACT_SHAPE_SETTER_OBJECT = LOOKUP.findStatic(JSLinker.class, "isExactShapeSetterObject", MethodType.methodType(boolean.class, JSShape.class, Object.class, Object.class));
-			MH_IS_MATCH_MASK = LOOKUP.findStatic(JSLinker.class, "isMatchMask", MethodType.methodType(boolean.class, long.class, Object.class));
 			MH_IS_MATCH_PROP = LOOKUP.findStatic(JSLinker.class, "isMatchPropAt", MethodType.methodType(boolean.class, int.class, int.class, Object.class));
 		} catch (Throwable e) {
 			throw new ExceptionInInitializerError(e);

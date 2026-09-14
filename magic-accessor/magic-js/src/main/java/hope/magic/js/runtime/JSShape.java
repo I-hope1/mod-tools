@@ -21,6 +21,7 @@ public final class JSShape {
 	// 此处废弃并移除无用的 VAR_HANDLES 缓存与 casIC 方法，消除死代码并减轻静态类加载开销。
 
 	// 语义化控制常量
+	@Deprecated
 	public static final int  BITMASK_MAX_SHAPES          = 64;
 	public static final int  PRECOMPUTED_SHAPES_CAPACITY = 65536;
 	public static final int  INLINE_PROPERTY_CAPACITY    = 4;
@@ -54,12 +55,20 @@ public final class JSShape {
 	public static final JSShape ROOT = new JSShape(null, SymbolTable.NO_SYMBOL, TYPE_UNKNOWN, false);
 
 	public final  int     id;
-	public final  long    mask;            // 单指令位掩码 (1L << id，当 0 <= id < 64 时有效)
 	public final  boolean hasAccessors;
 	public final  int     propertyCount;
 
 	public boolean isBuiltin() {
 		return id < 0;
+	}
+
+	/**
+	 * @deprecated 早期基于 64 位掩码的守卫已全面升级为多态直接跳转表与属性归属验证。
+	 * 为向后兼容保留该动态计算方法，消除实例常驻 8 字节开销。
+	 */
+	@Deprecated
+	public long mask() {
+		return (id >= 0 && id < BITMASK_MAX_SHAPES) ? (1L << id) : 0L;
 	}
 
 	// In-Shape 内联 0~3 键 (涵盖 90%+ 的小对象，0 额外数组堆分配)
@@ -82,7 +91,6 @@ public final class JSShape {
 	private JSShape(JSShape parent, int propId, byte propType, boolean isBuiltin) {
 		this.hasAccessors = (parent != null && parent.hasAccessors) || ((propType & FLAG_ACCESSOR) != 0);
 		this.id = isBuiltin ? BUILTIN_ID_GEN.getAndDecrement() : USER_ID_GEN.getAndIncrement();
-		this.mask = (this.id >= 0 && this.id < BITMASK_MAX_SHAPES) ? (1L << this.id) : 0L;
 		int count = (parent == null ? 0 : parent.propertyCount) + (propId >= 0 ? 1 : 0);
 		this.propertyCount = count;
 
@@ -171,7 +179,6 @@ public final class JSShape {
 		}
 		this.hasAccessors = hasAcc;
 		this.id = isBuiltin ? BUILTIN_ID_GEN.getAndDecrement() : USER_ID_GEN.getAndIncrement();
-		this.mask = (this.id >= 0 && this.id < BITMASK_MAX_SHAPES) ? (1L << this.id) : 0L;
 		int count = propIds.length;
 		this.propertyCount = count;
 

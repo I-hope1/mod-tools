@@ -2664,14 +2664,14 @@ public class MagicJSTest {
 		Assertions.assertNotNull(proto);
 		Assertions.assertTrue(proto.shape.isBuiltin(), "Array.prototype 必须标记为内置 Shape");
 		Assertions.assertTrue(proto.shape.id < 0, "Array.prototype 的 Shape ID 必须使用负数隔离命名空间");
-		Assertions.assertEquals(0L, proto.shape.mask, "内置 Shape 的位掩码必须恒为 0L，不挤占 0..63 位掩码空间");
+		Assertions.assertEquals(0L, proto.shape.mask(), "内置 Shape 的位掩码必须恒为 0L，不挤占 0..63 位掩码空间");
 
 		// 验证用户 Shape 依然使用正数分配，与内置隔离
 		JSObject userObj = (JSObject) cx.eval("({ a: 1, b: 2 });");
 		Assertions.assertFalse(userObj.shape.isBuiltin(), "用户对象不得标记为内置");
 		Assertions.assertTrue(userObj.shape.id > 0, "用户对象的 Shape ID 必须为正数");
 		if (userObj.shape.id < JSShape.BITMASK_MAX_SHAPES) {
-			Assertions.assertTrue(userObj.shape.mask != 0L, "用户对象的 Shape 在 0..63 空间内必须享有有效的位掩码");
+			Assertions.assertTrue(userObj.shape.mask() != 0L, "用户对象的 Shape 在 0..63 空间内必须享有有效的位掩码");
 		}
 	}
 

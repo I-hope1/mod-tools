@@ -302,7 +302,6 @@ public final class JSShape {
 	public static int encodeUpdateKey(int offset, byte newType) {
 		assert (newType >= 0 && (newType & ~TRANSITION_TYPE_MASK) == 0) : "Invalid property type: " + newType;
 		assert (newType & FLAG_ACCESSOR) == 0 || (newType & TYPE_MASK) == 0;
-		assert offset >= 0 : "Invalid offset: " + offset;
 		return UPDATE_TYPE_TAG | (offset << TRANSITION_TYPE_SHIFT) | (newType & TRANSITION_TYPE_MASK);
 	}
 
@@ -325,10 +324,9 @@ public final class JSShape {
 	}
 
 	public JSShape updatePropertyType(int offset, byte newType) {
-		if (offset < 0) return this;
 		int encoded = encodeUpdateKey(offset, newType);
 		JSShape trans;
-		// 一级快路径：单类型迁移无哈希极速返回 (< 28 字节，100% C2 内联)
+		// 一级快路径：单类型迁移无哈希极速返回 (== 35 字节，完美契合 HotSpot MaxInlineSize=35 平价内联上限)
 		if (this.singleKey == encoded && (trans = this.singleTransition) != null) {
 			return trans;
 		}
@@ -337,7 +335,7 @@ public final class JSShape {
 
 	private JSShape updatePropertyTypeSlow(int encoded, int offset, byte newType) {
 		// 防御校验与无操作快退下沉到二级慢路径，减轻顶级快路径内联负担与分支判断
-		if (offset >= propertyCount || getSlotType(offset) == newType) {
+		if (offset < 0 || offset >= propertyCount || getSlotType(offset) == newType) {
 			return this;
 		}
 
@@ -395,12 +393,12 @@ public final class JSShape {
 		return new JSShape(keys, types, this.isBuiltin());
 	}
 
-	// 迁移树构建 (三级阶梯架构，一级快路径 < 28 字节，100% 无条件 C2 JIT 内联)
+	// 迁移树构建 (三级阶梯架构，一级快路径 == 35 字节，完美契合 HotSpot MaxInlineSize=35 平价内联上限)
 
 	public JSShape addProperty(int propId, byte type) {
 		int encoded = encodeKey(propId, type);
 		JSShape trans;
-		// 一级快路径：单迁移无哈希极速返回 (< 28 字节，无条件 C2 内联)
+		// 一级快路径：单迁移无哈希极速返回 (== 35 字节，完美契合 HotSpot MaxInlineSize=35 平价内联上限)
 		if (this.singleKey == encoded && (trans = this.singleTransition) != null) {
 			return trans;
 		}

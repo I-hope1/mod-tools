@@ -543,9 +543,25 @@ public abstract class Node {
 	public static class ObjectLiteralExpr extends Node {
 		public final List<Entry> entries;
 
-		public record Entry(String key, Node value, PropertyKind kind) {
+		public record Entry(String key, Node keyExpr, Node value, PropertyKind kind) {
+			public Entry(String key, Node value, PropertyKind kind) {
+				this(key, null, value, kind);
+			}
+
 			public Entry(String key, Node value) {
-				this(key, value, PropertyKind.NORMAL);
+				this(key, null, value, PropertyKind.NORMAL);
+			}
+
+			public Entry(Node keyExpr, Node value, PropertyKind kind) {
+				this(null, keyExpr, value, kind);
+			}
+
+			public Entry(Node keyExpr, Node value) {
+				this(null, keyExpr, value, PropertyKind.NORMAL);
+			}
+
+			public boolean isComputed() {
+				return keyExpr != null;
 			}
 		}
 

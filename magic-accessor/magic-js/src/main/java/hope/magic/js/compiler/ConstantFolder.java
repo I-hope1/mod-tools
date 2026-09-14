@@ -303,6 +303,10 @@ public class ConstantFolder {
 			Map<Object, Integer> literalIndexMap = new HashMap<>();
 
 			for (var e : objLit.entries) {
+				if (e.isComputed()) {
+					newEntries.add(new Node.ObjectLiteralExpr.Entry(foldNode(e.keyExpr()), foldNode(e.value()), e.kind()));
+					continue;
+				}
 				var     foldedVal        = foldNode(e.value());
 				boolean currentIsLiteral = (e.kind() == Node.PropertyKind.NORMAL) && (foldedVal instanceof Node.LiteralExpr);
 				Integer prevLiteralIdx   = literalIndexMap.get(e.key());

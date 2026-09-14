@@ -2578,7 +2578,14 @@ public class JSContext {
 
 		private static JSObject createStringConstructor(JSObject proto) {
 			return new JSBuiltinConstructor("String", 1, proto, (cx, thisObj, args) -> {
-				String s = args.length > 0 ? JSOps.toStr(args[0]) : "";
+				String s;
+				if (args.length == 0) {
+					s = "";
+				} else if (args[0] instanceof JSSymbol sym) {
+					s = sym.toString();
+				} else {
+					s = JSOps.toStr(args[0]);
+				}
 				if (thisObj instanceof JSObject jo && jo.getPrototype() == proto) {
 					jo.put("[[PrimitiveValue]]", s);
 					return jo;

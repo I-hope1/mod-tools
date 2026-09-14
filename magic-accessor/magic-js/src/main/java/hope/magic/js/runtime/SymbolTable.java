@@ -22,7 +22,29 @@ public final class SymbolTable {
 	private static final    ConcurrentHashMap<String, String>  TABLE            = new ConcurrentHashMap<>(INITIAL_CAPACITY);
 	private static final    ConcurrentHashMap<String, Integer> NAME_TO_ID       = new ConcurrentHashMap<>(INITIAL_CAPACITY);
 	private static volatile String[]                           ID_TO_NAME       = new String[INITIAL_CAPACITY];
-	private static final    AtomicInteger                      ID_GEN           = new AtomicInteger(0);
+	private static final    AtomicInteger                      ID_GEN           = new AtomicInteger(JSSymbol.WELL_KNOWN_COUNT);
+
+	static {
+		registerWellKnown(JSSymbol.ID_ITERATOR, JSSymbol.ITERATOR);
+		registerWellKnown(JSSymbol.ID_ASYNC_ITERATOR, JSSymbol.ASYNC_ITERATOR);
+		registerWellKnown(JSSymbol.ID_TO_STRING_TAG, JSSymbol.TO_STRING_TAG);
+		registerWellKnown(JSSymbol.ID_HAS_INSTANCE, JSSymbol.HAS_INSTANCE);
+		registerWellKnown(JSSymbol.ID_IS_CONCAT_SPREADABLE, JSSymbol.IS_CONCAT_SPREADABLE);
+		registerWellKnown(JSSymbol.ID_SPECIES, JSSymbol.SPECIES);
+		registerWellKnown(JSSymbol.ID_TO_PRIMITIVE, JSSymbol.TO_PRIMITIVE);
+		registerWellKnown(JSSymbol.ID_UNSCOPABLES, JSSymbol.UNSCOPABLES);
+		registerWellKnown(JSSymbol.ID_MATCH, JSSymbol.MATCH);
+		registerWellKnown(JSSymbol.ID_REPLACE, JSSymbol.REPLACE);
+		registerWellKnown(JSSymbol.ID_SEARCH, JSSymbol.SEARCH);
+		registerWellKnown(JSSymbol.ID_SPLIT, JSSymbol.SPLIT);
+	}
+
+	private static void registerWellKnown(int id, JSSymbol sym) {
+		String key = sym.getKey();
+		TABLE.put(key, key);
+		NAME_TO_ID.put(key, id);
+		ID_TO_NAME[id] = key;
+	}
 
 	// private static final VarHandle ID_ARR_VH = MethodHandles.arrayElementVarHandle(String[].class);
 

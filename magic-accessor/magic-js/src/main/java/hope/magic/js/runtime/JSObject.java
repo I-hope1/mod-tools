@@ -1,6 +1,7 @@
 package hope.magic.js.runtime;
 
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class JSObject {
 	//region 初始化
@@ -563,7 +564,33 @@ public class JSObject {
 		}
 	}
 
+	private static final Map<JSObject, List<JSSymbol>> OBJECT_SYMBOLS = Collections.synchronizedMap(new WeakHashMap<>());
+
+	private void registerSymbolProperty(JSSymbol sym) {
+		if (sym != null && !sym.isWellKnown()) {
+			List<JSSymbol> list = OBJECT_SYMBOLS.computeIfAbsent(this, k -> new CopyOnWriteArrayList<>());
+			if (!list.contains(sym)) {
+				list.add(sym);
+			}
+		}
+	}
+
+	private void unregisterSymbolProperty(JSSymbol sym) {
+		if (sym != null && !sym.isWellKnown()) {
+			List<JSSymbol> list = OBJECT_SYMBOLS.get(this);
+			if (list != null) {
+				list.remove(sym);
+				if (list.isEmpty()) {
+					OBJECT_SYMBOLS.remove(this);
+				}
+			}
+		}
+	}
+
 	public void put(String key, Object value) {
+		if (JSSymbol.isSymbolKey(key)) {
+			registerSymbolProperty(JSSymbol.fromKey(key));
+		}
 		put(SymbolTable.id(key), value);
 	}
 
@@ -619,23 +646,29 @@ public class JSObject {
 	}
 
 	public boolean has(JSSymbol sym) {
-		return sym != null && has(sym.getKey());
+		return sym != null && has(sym.getSymbolId());
 	}
 
 	public Object get(JSSymbol sym) {
-		return sym != null ? get(sym.getKey()) : JSUndefined.INSTANCE;
+		return sym != null ? get(sym.getSymbolId()) : JSUndefined.INSTANCE;
 	}
 
 	public void put(JSSymbol sym, Object value) {
-		if (sym != null) put(sym.getKey(), value);
+		if (sym != null) {
+			registerSymbolProperty(sym);
+			put(sym.getSymbolId(), value);
+		}
 	}
 
 	public boolean hasOwnProperty(JSSymbol sym) {
-		return sym != null && hasOwnProperty(sym.getKey());
+		return sym != null && hasOwnProperty(sym.getSymbolId());
 	}
 
 	public void delete(JSSymbol sym) {
-		if (sym != null) delete(sym.getKey());
+		if (sym != null) {
+			unregisterSymbolProperty(sym);
+			delete(sym.getSymbolId());
+		}
 	}
 
 	public boolean hasOwnProperty(String key) {
@@ -664,6 +697,9 @@ public class JSObject {
 	}
 
 	public void delete(String key) {
+		if (JSSymbol.isSymbolKey(key)) {
+			unregisterSymbolProperty(JSSymbol.fromKey(key));
+		}
 		delete(SymbolTable.id(key));
 	}
 

@@ -527,7 +527,7 @@ public class JSOps {
 			}
 		}
 		if (val instanceof JSObject jo) {
-			Object prim = toPrimitive(jo, false);
+			Object prim = toPrimitive(jo, "number");
 			return toDouble(prim);
 		}
 		return Double.NaN;
@@ -610,7 +610,7 @@ public class JSOps {
 	public static String toStrSlow(Object val) {
 		if (val == null) return "null";
 		if (val == JSUndefined.INSTANCE) return "undefined";
-		if (val instanceof JSSymbol sym) return sym.toString();
+		if (val instanceof JSSymbol) throw JSContext.makeTypeError("Cannot convert a Symbol value to a string");
 		if (val instanceof Boolean b) {
 			return b ? "true" : "false";
 		}
@@ -625,21 +625,43 @@ public class JSOps {
 			}
 		}
 		if (val instanceof JSObject jo) {
-			Object prim = toPrimitive(jo, true);
+			Object prim = toPrimitive(jo, "string");
 			return toStr(prim);
 		}
 		return String.valueOf(val);
 	}
 
 	public static Object toPrimitive(Object val, boolean preferString) {
+		return toPrimitive(val, preferString ? "string" : "default");
+	}
+
+	public static Object toPrimitive(Object val, String hint) {
 		if (!(val instanceof JSObject jo)) return val;
+		boolean preferString = "string".equals(hint);
 		if (jo instanceof JSContext.JSDate && !preferString) {
 			preferString = true;
 		}
-		String first  = preferString ? "toString" : "valueOf";
-		String second = preferString ? "valueOf" : "toString";
 
 		JSContext cx = JSContext.CURRENT.get();
+
+		// ES6 7.1.1 ToPrimitive: check @@toPrimitive method first
+		if (jo.has(JSSymbol.TO_PRIMITIVE)) {
+			Object toPrim = jo.get(JSSymbol.TO_PRIMITIVE);
+			if (toPrim instanceof JSFunction fn) {
+				try {
+					Object res = fn.call1(cx, jo, hint != null ? hint : "default");
+					if (!(res instanceof JSObject)) return res;
+					throw JSContext.makeTypeError("Cannot convert object to primitive value");
+				} catch (RuntimeException re) {
+					throw re;
+				} catch (Throwable t) {
+					throw new RuntimeException(t);
+				}
+			}
+		}
+
+		String first  = preferString ? "toString" : "valueOf";
+		String second = preferString ? "valueOf" : "toString";
 
 		Object m1 = jo.get(first);
 		if (m1 instanceof JSFunction fn) {

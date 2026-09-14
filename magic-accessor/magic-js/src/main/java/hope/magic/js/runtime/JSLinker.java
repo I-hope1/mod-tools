@@ -1150,22 +1150,35 @@ public class JSLinker {
 		       && (key == expectedKey || (key != null && (key.equals(expectedKey) || (key instanceof JSSymbol sym && sym.getKey().equals(expectedKey)))));
 	}
 
+	/** 字符串属性专用高速守卫：Shape 相同且 String Key 相同（先做引用比较 ==，失败再做 String.equals，无 JSSymbol 任何开销） */
+	public static boolean isExactShapeAndStringKey(JSShape expectedShape, String expectedKey, Object target, Object key) {
+		return target instanceof JSObject jsObj
+		       && jsObj.shape == expectedShape
+		       && (key == expectedKey || expectedKey.equals(key));
+	}
+
+	/** 符号属性专用单指令守卫：Shape 相同且 Symbol 引用指针完全一致（纯 == 比较） */
+	public static boolean isExactShapeAndSymbol(JSShape expectedShape, JSSymbol expectedSymbol, Object target, Object key) {
+		return target instanceof JSObject jsObj
+		       && jsObj.shape == expectedShape
+		       && key == expectedSymbol;
+	}
+
 	/** 动态对象索引读取的通用 Fallback 入口 */
 	public static Object getIndexDynamicFallback(ChainedCallSite site, Object target, Object index) throws Throwable {
 		if (target instanceof JSContext.JSGlobalThis globalThis) {
 			return globalThis.get(toPropertyKey(index));
 		}
 		if (target instanceof JSObject jsObj) {
-			String strKey = (index instanceof JSSymbol sym) ? sym.getKey() : (index instanceof String s ? s : null);
-			if (strKey != null) {
+			if (index instanceof String strKey) {
 				JSShape s      = jsObj.shape;
 				int     offset = s.getOffset(strKey);
 
-				// 只有当属性命中且缓存深度 < 3 时挂载 Keyed IC 单态/多态分支
-				if (offset >= 0 && site.getChainDepth() < 3) {
+				// 只有当属性命中且非 accessor 且缓存深度 < 3 时挂载 String Keyed IC 单态/多态分支
+				if (offset >= 0 && (!s.hasAccessors || !s.isAccessor(offset)) && site.getChainDepth() < 3) {
 					MethodHandle test = LOOKUP.findStatic(
 					 JSLinker.class,
-					 "isExactShapeAndKey",
+					 "isExactShapeAndStringKey",
 					 MethodType.methodType(boolean.class, JSShape.class, String.class, Object.class, Object.class)
 					).bindTo(s).bindTo(strKey);
 
@@ -1174,6 +1187,26 @@ public class JSLinker {
 					 ? MH_GET_SLOT_OBJECT[offset]
 					 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, offset);
 					// 丢弃第 1 个参数 key，适配签名 (Object, Object) -> Object
+					MethodHandle directTarget = MethodHandles.dropArguments(getter, 1, Object.class);
+
+					site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
+					return jsObj.getSlot(offset);
+				}
+			} else if (index instanceof JSSymbol symKey) {
+				JSShape s      = jsObj.shape;
+				int     offset = s.getOffset(symKey.getSymbolId());
+
+				// 针对 Symbol 进行引用恒等比较的单指令 IC 守卫（非 accessor）
+				if (offset >= 0 && (!s.hasAccessors || !s.isAccessor(offset)) && site.getChainDepth() < 3) {
+					MethodHandle test = LOOKUP.findStatic(
+					 JSLinker.class,
+					 "isExactShapeAndSymbol",
+					 MethodType.methodType(boolean.class, JSShape.class, JSSymbol.class, Object.class, Object.class)
+					).bindTo(s).bindTo(symKey);
+
+					MethodHandle getter = offset < 8
+					 ? MH_GET_SLOT_OBJECT[offset]
+					 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, offset);
 					MethodHandle directTarget = MethodHandles.dropArguments(getter, 1, Object.class);
 
 					site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
@@ -2222,6 +2255,17 @@ public class JSLinker {
 			}
 		}
 		return oneMoreSpecific;
+	}
+
+	public static Object invokeIndex(Object target, Object index, Object[] args) throws Throwable {
+		if (target == null || target == JSUndefined.INSTANCE) {
+			throw new NullPointerException("Cannot invoke method on null/undefined");
+		}
+		Object fn = getIndex(target, index);
+		if (fn instanceof JSFunction func) {
+			return func.call(JSContext.CURRENT.get(), target, args);
+		}
+		throw JSContext.makeTypeError(JSArray.toPropertyKey(index) + " is not a function");
 	}
 
 	public static Object invokeGeneric(Object target, Object[] args, String methodName) throws Throwable {

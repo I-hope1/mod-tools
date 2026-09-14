@@ -805,13 +805,20 @@ public class JSParser {
 
 					if (isAsyncMethod) {
 						Token asyncToken = advance();
+						Node keyExpr = null;
+						String key = null;
 						Token nameToken;
-						if (match(TokenType.IDENTIFIER, TokenType.STRING, TokenType.NUMBER)) {
+						if (check(TokenType.LBRACKET)) {
+							nameToken = advance();
+							keyExpr = parseAssignment();
+							consume(TokenType.RBRACKET, "Expected ']' after computed property key");
+						} else if (match(TokenType.IDENTIFIER, TokenType.STRING, TokenType.NUMBER)) {
 							nameToken = previous();
+							key = nameToken.text;
 						} else {
 							nameToken = consumePropertyName("Expected method name after 'async'");
+							key = nameToken.text;
 						}
-						String key = nameToken.text;
 						consume(TokenType.LPAREN, "Expected '(' after method name");
 						ParamParseResult paramRes = parseFunctionParams(nameToken);
 						consume(TokenType.RPAREN, "Expected ')' after parameters");
@@ -820,17 +827,28 @@ public class JSParser {
 						allStmts.addAll(rawBody.statements);
 						Node.BlockStmt body = new Node.BlockStmt(allStmts, rawBody.line, rawBody.column);
 						Node val = new Node.FunctionExpr(key, paramRes.params, body, true, nameToken.line, nameToken.column);
-						entries.add(new Node.ObjectLiteralExpr.Entry(key, val, Node.PropertyKind.NORMAL));
+						if (keyExpr != null) {
+							entries.add(new Node.ObjectLiteralExpr.Entry(keyExpr, val, Node.PropertyKind.NORMAL));
+						} else {
+							entries.add(new Node.ObjectLiteralExpr.Entry(key, val, Node.PropertyKind.NORMAL));
+						}
 					} else if (isAccessor) {
 						Token accToken = advance();
 						Node.PropertyKind kind = "get".equals(accToken.text) ? Node.PropertyKind.GETTER : Node.PropertyKind.SETTER;
+						Node keyExpr = null;
+						String key = null;
 						Token nameToken;
-						if (match(TokenType.IDENTIFIER, TokenType.STRING, TokenType.NUMBER)) {
+						if (check(TokenType.LBRACKET)) {
+							nameToken = advance();
+							keyExpr = parseAssignment();
+							consume(TokenType.RBRACKET, "Expected ']' after computed property key");
+						} else if (match(TokenType.IDENTIFIER, TokenType.STRING, TokenType.NUMBER)) {
 							nameToken = previous();
+							key = nameToken.text;
 						} else {
 							nameToken = consumePropertyName("Expected property name after '" + accToken.text + "'");
+							key = nameToken.text;
 						}
-						String key = nameToken.text;
 						consume(TokenType.LPAREN, "Expected '(' after accessor name");
 						ParamParseResult paramRes = parseFunctionParams(nameToken);
 						consume(TokenType.RPAREN, "Expected ')' after parameters");
@@ -845,7 +863,31 @@ public class JSParser {
 						allStmts.addAll(rawBody.statements);
 						Node.BlockStmt body = new Node.BlockStmt(allStmts, rawBody.line, rawBody.column);
 						Node val = new Node.FunctionExpr(key, paramRes.params, body, nameToken.line, nameToken.column);
-						entries.add(new Node.ObjectLiteralExpr.Entry(key, val, kind));
+						if (keyExpr != null) {
+							entries.add(new Node.ObjectLiteralExpr.Entry(keyExpr, val, kind));
+						} else {
+							entries.add(new Node.ObjectLiteralExpr.Entry(key, val, kind));
+						}
+					} else if (check(TokenType.LBRACKET)) {
+						Token lbracket = advance();
+						Node keyExpr = parseAssignment();
+						consume(TokenType.RBRACKET, "Expected ']' after computed property key");
+						Node val;
+						if (match(TokenType.COLON)) {
+							val = parseAssignment();
+						} else if (check(TokenType.LPAREN)) {
+							consume(TokenType.LPAREN, "Expected '('");
+							ParamParseResult paramRes = parseFunctionParams(previous());
+							consume(TokenType.RPAREN, "Expected ')' after parameters");
+							Node.BlockStmt rawBody = parseBlockStatement();
+							List<Node> allStmts = new ArrayList<>(paramRes.unpackStmts);
+							allStmts.addAll(rawBody.statements);
+							Node.BlockStmt body = new Node.BlockStmt(allStmts, rawBody.line, rawBody.column);
+							val = new Node.FunctionExpr(null, paramRes.params, body, lbracket.line, lbracket.column);
+						} else {
+							throw new RuntimeException("Expected ':' or '(' after computed property key at line " + lbracket.line + ":" + lbracket.column);
+						}
+						entries.add(new Node.ObjectLiteralExpr.Entry(keyExpr, val, Node.PropertyKind.NORMAL));
 					} else {
 						Token keyToken = advance();
 						String key = keyToken.text;

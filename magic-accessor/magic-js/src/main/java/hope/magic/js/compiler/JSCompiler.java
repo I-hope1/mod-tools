@@ -866,7 +866,10 @@ public class JSCompiler {
 		} else if (node instanceof Node.ArrayLiteralExpr arr) {
 			for (Node el : arr.elements) action.accept(el);
 		} else if (node instanceof Node.ObjectLiteralExpr obj) {
-			for (Node.ObjectLiteralExpr.Entry e : obj.entries) action.accept(e.value());
+			for (Node.ObjectLiteralExpr.Entry e : obj.entries) {
+				if (e.isComputed()) action.accept(e.keyExpr());
+				action.accept(e.value());
+			}
 		} else if (node instanceof Node.AwaitExpr awaitExpr) {
 			action.accept(awaitExpr.expr);
 		} else if (node instanceof Node.FunctionDecl fn) {
@@ -3002,6 +3005,28 @@ public class JSCompiler {
 			return;
 		}
 
+		if (call.callee instanceof Node.IndexAccessExpr idx) {
+			compileNode(idx.target, ctx, true);
+			compileNode(idx.index, ctx, true);
+			pushInt(mv, call.arguments.size());
+			mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+			for (int i = 0; i < call.arguments.size(); i++) {
+				mv.visitInsn(Opcodes.DUP);
+				pushInt(mv, i);
+				compileNode(call.arguments.get(i), ctx, true);
+				mv.visitInsn(Opcodes.AASTORE);
+			}
+			mv.visitMethodInsn(
+					Opcodes.INVOKESTATIC,
+					IN_JSLinker,
+					"invokeIndex",
+					"(Ljava/lang/Object;Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
+					false
+			);
+			if (!needResult) mv.visitInsn(Opcodes.POP);
+			return;
+		}
+
 		boolean isMember = (call.callee instanceof Node.MemberAccessExpr);
 		Node    target   = isMember ? ((Node.MemberAccessExpr) call.callee).target : call.callee;
 		String  name     = isMember ? ((Node.MemberAccessExpr) call.callee).property : "$invoke$";
@@ -3032,40 +3057,74 @@ public class JSCompiler {
 		MethodVisitor mv = ctx.mv;
 
 		boolean hasAccessors = false;
+		boolean hasComputed = false;
 		for (var entry : objLit.entries) {
 			if (entry.kind() != Node.PropertyKind.NORMAL) {
 				hasAccessors = true;
-				break;
+			}
+			if (entry.isComputed()) {
+				hasComputed = true;
 			}
 		}
 
-		if (hasAccessors) {
+		if (hasAccessors || hasComputed) {
 			mv.visitTypeInsn(Opcodes.NEW, IN_JSObject);
 			mv.visitInsn(Opcodes.DUP);
 			mv.visitMethodInsn(Opcodes.INVOKESPECIAL, IN_JSObject, "<init>", "()V", false);
 			for (var entry : objLit.entries) {
 				mv.visitInsn(Opcodes.DUP);
-				if (entry.kind() == Node.PropertyKind.GETTER) {
-					mv.visitLdcInsn(entry.key());
-					compileNode(entry.value(), ctx, true);
-					mv.visitTypeInsn(Opcodes.CHECKCAST, "hope/magic/js/runtime/JSFunction");
-					mv.visitInsn(Opcodes.ACONST_NULL);
-					mv.visitInsn(Opcodes.ICONST_1); // enumerable = true
-					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "defineAccessor",
-							"(Ljava/lang/String;Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSFunction;Z)V", false);
-				} else if (entry.kind() == Node.PropertyKind.SETTER) {
-					mv.visitLdcInsn(entry.key());
-					mv.visitInsn(Opcodes.ACONST_NULL);
-					compileNode(entry.value(), ctx, true);
-					mv.visitTypeInsn(Opcodes.CHECKCAST, "hope/magic/js/runtime/JSFunction");
-					mv.visitInsn(Opcodes.ICONST_1); // enumerable = true
-					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "defineAccessor",
-							"(Ljava/lang/String;Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSFunction;Z)V", false);
+				if (entry.isComputed()) {
+					if (entry.kind() == Node.PropertyKind.GETTER) {
+						compileNode(entry.keyExpr(), ctx, true);
+						mv.visitMethodInsn(Opcodes.INVOKESTATIC, "hope/magic/js/runtime/JSArray", "toPropertyKey",
+								"(Ljava/lang/Object;)Ljava/lang/String;", false);
+						compileNode(entry.value(), ctx, true);
+						mv.visitTypeInsn(Opcodes.CHECKCAST, "hope/magic/js/runtime/JSFunction");
+						mv.visitInsn(Opcodes.ACONST_NULL);
+						mv.visitInsn(Opcodes.ICONST_1); // enumerable = true
+						mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "defineAccessor",
+								"(Ljava/lang/String;Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSFunction;Z)V", false);
+					} else if (entry.kind() == Node.PropertyKind.SETTER) {
+						compileNode(entry.keyExpr(), ctx, true);
+						mv.visitMethodInsn(Opcodes.INVOKESTATIC, "hope/magic/js/runtime/JSArray", "toPropertyKey",
+								"(Ljava/lang/Object;)Ljava/lang/String;", false);
+						mv.visitInsn(Opcodes.ACONST_NULL);
+						compileNode(entry.value(), ctx, true);
+						mv.visitTypeInsn(Opcodes.CHECKCAST, "hope/magic/js/runtime/JSFunction");
+						mv.visitInsn(Opcodes.ICONST_1); // enumerable = true
+						mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "defineAccessor",
+								"(Ljava/lang/String;Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSFunction;Z)V", false);
+					} else {
+						compileNode(entry.keyExpr(), ctx, true);
+						mv.visitMethodInsn(Opcodes.INVOKESTATIC, "hope/magic/js/runtime/JSArray", "toPropertyKey",
+								"(Ljava/lang/Object;)Ljava/lang/String;", false);
+						compileNode(entry.value(), ctx, true);
+						mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "put",
+								"(Ljava/lang/String;Ljava/lang/Object;)V", false);
+					}
 				} else {
-					mv.visitLdcInsn(entry.key());
-					compileNode(entry.value(), ctx, true);
-					mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "put",
-							"(Ljava/lang/String;Ljava/lang/Object;)V", false);
+					if (entry.kind() == Node.PropertyKind.GETTER) {
+						mv.visitLdcInsn(entry.key());
+						compileNode(entry.value(), ctx, true);
+						mv.visitTypeInsn(Opcodes.CHECKCAST, "hope/magic/js/runtime/JSFunction");
+						mv.visitInsn(Opcodes.ACONST_NULL);
+						mv.visitInsn(Opcodes.ICONST_1); // enumerable = true
+						mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "defineAccessor",
+								"(Ljava/lang/String;Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSFunction;Z)V", false);
+					} else if (entry.kind() == Node.PropertyKind.SETTER) {
+						mv.visitLdcInsn(entry.key());
+						mv.visitInsn(Opcodes.ACONST_NULL);
+						compileNode(entry.value(), ctx, true);
+						mv.visitTypeInsn(Opcodes.CHECKCAST, "hope/magic/js/runtime/JSFunction");
+						mv.visitInsn(Opcodes.ICONST_1); // enumerable = true
+						mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "defineAccessor",
+								"(Ljava/lang/String;Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSFunction;Z)V", false);
+					} else {
+						mv.visitLdcInsn(entry.key());
+						compileNode(entry.value(), ctx, true);
+						mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "put",
+								"(Ljava/lang/String;Ljava/lang/Object;)V", false);
+					}
 				}
 			}
 			if (!needResult) mv.visitInsn(Opcodes.POP);
@@ -3524,7 +3583,10 @@ public class JSCompiler {
 			return false;
 		}
 		if (node instanceof Node.ObjectLiteralExpr obj) {
-			for (var entry : obj.entries) if (usesArguments(entry.value())) return true;
+			for (var entry : obj.entries) {
+				if (entry.isComputed() && usesArguments(entry.keyExpr())) return true;
+				if (usesArguments(entry.value())) return true;
+			}
 			return false;
 		}
 		if (node instanceof Node.VarDecl vd) return usesArguments(vd.init);

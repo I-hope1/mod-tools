@@ -225,7 +225,7 @@ public final class JSShape {
 	}
 
 	private static int scanOverflow(int[] of, int propId) {
-		for (int i = 0; i < of.length; i++) {
+		for (int i = of.length - 1; i >= 0; i--) {
 			if (of[i] == propId) return i + INLINE_PROPERTY_CAPACITY;
 		}
 		return -1;

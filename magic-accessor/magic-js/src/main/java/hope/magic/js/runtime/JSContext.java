@@ -2,6 +2,7 @@ package hope.magic.js.runtime;
 
 import hope.magic.js.ast.*;
 import hope.magic.js.compiler.JSCompiler;
+import hope.magic.js.module.*;
 import hope.magic.js.parser.*;
 
 import java.time.*;
@@ -293,6 +294,7 @@ public class JSContext {
 	public static final int SLOT_GLOBAL          = getGlobalSlot("global");
 	public static final int SLOT_DOLLAR_262      = getGlobalSlot("$262");
 	public static final int SLOT_SYMBOL          = getGlobalSlot("Symbol");
+	public static final int SLOT_REQUIRE         = getGlobalSlot("require");
 	public static volatile Consumer<JSContext> realmCreatedListener;
 
 	public static class JSBuiltinMethod extends JSObject implements JSFunction {
@@ -2241,6 +2243,14 @@ public class JSContext {
 		return new JSOps.JSException(LazyErrors.createErrorInstance(LazyErrors.RANGE_ERROR, message));
 	}
 
+	public static JSOps.JSException makeError(String message) {
+		return new JSOps.JSException(LazyErrors.createErrorInstance(LazyErrors.ERROR, message));
+	}
+
+	public static JSOps.JSException makeSyntaxError(String message) {
+		return new JSOps.JSException(LazyErrors.createErrorInstance(LazyErrors.SYNTAX_ERROR, message));
+	}
+
 	public static class LazyErrors {
 		public static final JSObject ERROR           = createErrorConstructor("Error");
 		public static final JSObject TYPE_ERROR      = createErrorConstructor("TypeError");
@@ -3605,6 +3615,8 @@ public class JSContext {
 			val = new Dollar262(this);
 		} else if (slot == SLOT_SYMBOL) {
 			val = LazySymbol.SYMBOL;
+		} else if (slot == SLOT_REQUIRE) {
+			val = getModuleManager().getRequireFunction();
 		}
 
 		if (val != null) {
@@ -3710,6 +3722,62 @@ public class JSContext {
 			throw new RuntimeException("Script execution error: " + t.getMessage(), t);
 		} finally {
 			CURRENT.set(old);
+		}
+	}
+
+	private volatile JSModuleManager moduleManager;
+
+	public JSModuleManager getModuleManager() {
+		JSModuleManager mgr = this.moduleManager;
+		if (mgr == null) {
+			synchronized (this) {
+				mgr = this.moduleManager;
+				if (mgr == null) {
+					mgr = new JSModuleManager(this);
+					this.moduleManager = mgr;
+				}
+			}
+		}
+		return mgr;
+	}
+
+	public void setModuleManager(JSModuleManager moduleManager) {
+		this.moduleManager = moduleManager;
+	}
+
+	public Object require(String specifier) {
+		return getModuleManager().require(specifier, null);
+	}
+
+	public JSModule loadModule(String specifier) {
+		return getModuleManager().load(specifier, null);
+	}
+
+	public void registerModule(String id, String code) {
+		ModuleResolver resolver = getModuleManager().getResolver();
+		if (resolver instanceof CompositeModuleResolver cmr) {
+			cmr.getVirtualResolver().register(id, code);
+		} else if (resolver instanceof VirtualModuleResolver vmr) {
+			vmr.register(id, code);
+		} else {
+			CompositeModuleResolver cmr = new CompositeModuleResolver();
+			cmr.addResolverFirst(resolver);
+			cmr.getVirtualResolver().register(id, code);
+			setModuleManager(new JSModuleManager(this, cmr));
+		}
+	}
+
+	public void registerModuleInstance(String id, Object instance) {
+		ModuleResolver resolver = getModuleManager().getResolver();
+		if (resolver instanceof CompositeModuleResolver cmr) {
+			cmr.getVirtualResolver().registerInstance(id, instance);
+		} else if (resolver instanceof VirtualModuleResolver vmr) {
+			vmr.registerInstance(id, instance);
+		} else {
+			CompositeModuleResolver cmr = new CompositeModuleResolver();
+			cmr.addResolverFirst(resolver);
+			cmr.getVirtualResolver().registerInstance(id, instance);
+			setModuleManager(new JSModuleManager(this, cmr));
 		}
 	}
 }

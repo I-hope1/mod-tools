@@ -134,6 +134,32 @@ public class JSCompiler {
 		}
 	}
 
+	public static JSFunction compileModule(String code, String filename) throws Exception {
+		ClassLoader parent = Thread.currentThread().getContextClassLoader();
+		if (parent == null) parent = JSCompiler.class.getClassLoader();
+		ScriptClassLoader scriptLoader = new ScriptClassLoader(parent);
+
+		ClassLoader prev = CURRENT_LOADER.get();
+		CURRENT_LOADER.set(scriptLoader);
+		try {
+			JSLexer      lexer         = new JSLexer(code);
+			JSParser     parser        = new JSParser(lexer.tokenize());
+			Node.Program program       = parser.parse();
+			Node.Program foldedProgram = ConstantFolder.fold(program);
+			Node.BlockStmt body        = new Node.BlockStmt(foldedProgram.body, foldedProgram.line, foldedProgram.column);
+			List<String> params        = List.of("exports", "require", "module", "__filename", "__dirname");
+			String       funcClass     = generateFunctionClass(null, params, body, false);
+			Class<?>     clazz         = scriptLoader.loadClass(funcClass.replace('/', '.'));
+			return (JSFunction) clazz.getDeclaredConstructor().newInstance();
+		} finally {
+			if (prev != null) {
+				CURRENT_LOADER.set(prev);
+			} else {
+				CURRENT_LOADER.remove();
+			}
+		}
+	}
+
 	private static class FastClassWriter extends ClassWriter {
 		public FastClassWriter(int flags) {
 			super(flags);

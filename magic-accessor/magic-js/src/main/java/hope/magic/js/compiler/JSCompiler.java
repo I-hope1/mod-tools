@@ -100,7 +100,8 @@ public class JSCompiler {
 			JSLexer      lexer         = new JSLexer(code);
 			JSParser     parser        = new JSParser(lexer.tokenize());
 			Node.Program program       = parser.parse();
-			Node.Program foldedProgram = ConstantFolder.fold(program);
+			Node.Program modProg       = hope.magic.js.module.ModuleTransformer.transform(program);
+			Node.Program foldedProgram = ConstantFolder.fold(modProg);
 			String       className     = "hope/magic/gen/MagicJSScript_" + SCRIPT_ID.incrementAndGet();
 			return generateScriptBytecode(className, foldedProgram);
 		} finally {
@@ -120,7 +121,8 @@ public class JSCompiler {
 		ClassLoader prev = CURRENT_LOADER.get();
 		CURRENT_LOADER.set(scriptLoader);
 		try {
-			Node.Program foldedProgram = ConstantFolder.fold(program);
+			Node.Program modProg       = hope.magic.js.module.ModuleTransformer.transform(program);
+			Node.Program foldedProgram = ConstantFolder.fold(modProg);
 			String       className     = "hope/magic/gen/MagicJSScript_" + SCRIPT_ID.incrementAndGet();
 			byte[]       classBytes    = generateScriptBytecode(className, foldedProgram);
 			Class<?>     loadedClass   = scriptLoader.defineScriptClass(className, classBytes);
@@ -145,7 +147,8 @@ public class JSCompiler {
 			JSLexer      lexer         = new JSLexer(code);
 			JSParser     parser        = new JSParser(lexer.tokenize());
 			Node.Program program       = parser.parse();
-			Node.Program foldedProgram = ConstantFolder.fold(program);
+			Node.Program modProg       = hope.magic.js.module.ModuleTransformer.transform(program);
+			Node.Program foldedProgram = ConstantFolder.fold(modProg);
 			Node.BlockStmt body        = new Node.BlockStmt(foldedProgram.body, foldedProgram.line, foldedProgram.column);
 			List<String> params        = List.of("exports", "require", "module", "__filename", "__dirname");
 			String       funcClass     = generateFunctionClass(null, params, body, false);
@@ -881,6 +884,10 @@ public class JSCompiler {
 			if (cls.constructor != null) action.accept(cls.constructor.body);
 			for (Node.FunctionDecl m : cls.methods) action.accept(m.body);
 			for (Node.FunctionDecl m : cls.staticMethods) action.accept(m.body);
+		} else if (node instanceof Node.DynamicImportExpr dyn) {
+			action.accept(dyn.specifier);
+		} else if (node instanceof Node.ExportDecl exp) {
+			if (exp.declaration != null) action.accept(exp.declaration);
 		}
 	}
 
@@ -1390,6 +1397,26 @@ public class JSCompiler {
 		if (node instanceof Node.AwaitExpr awaitExpr) {
 			compileAwaitExpr(awaitExpr, ctx, needResult);
 			return;
+		}
+		if (node instanceof Node.DynamicImportExpr dynImport) {
+			compileDynamicImport(dynImport, ctx, needResult);
+			return;
+		}
+	}
+
+	private static void compileDynamicImport(Node.DynamicImportExpr dynImport, CompileContext ctx, boolean needResult) {
+		MethodVisitor mv = ctx.mv;
+		mv.visitVarInsn(Opcodes.ALOAD, 1); // cx (always in slot 1)
+		compileNode(dynImport.specifier, ctx, true);
+		LocalVar dirVar = ctx.getLocal("__dirname");
+		if (dirVar != null) {
+			mv.visitVarInsn(Opcodes.ALOAD, dirVar.slot);
+		} else {
+			mv.visitInsn(Opcodes.ACONST_NULL);
+		}
+		mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSLinker, "importDynamic", "(L" + IN_JSContext + ";Ljava/lang/Object;Ljava/lang/Object;)Lhope/magic/js/runtime/JSPromise;", false);
+		if (!needResult) {
+			mv.visitInsn(Opcodes.POP);
 		}
 	}
 

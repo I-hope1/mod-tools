@@ -15,6 +15,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * 负责模块解析、生命周期调度、缓存管理与循环依赖防御。
  */
 public class JSModuleManager {
+	private static final ThreadLocal<JSModule> CURRENT_MODULE = new ThreadLocal<>();
+
+	public static JSModule getCurrentModule() {
+		return CURRENT_MODULE.get();
+	}
+
 	private final JSContext              cx;
 	private       ModuleResolver         resolver;
 	private final Map<String, JSModule>  cache           = new ConcurrentHashMap<>();
@@ -109,6 +115,8 @@ public class JSModuleManager {
 		cache.put(id, module);
 		cacheJsObject.put(id, module);
 
+		JSModule prevModule = CURRENT_MODULE.get();
+		CURRENT_MODULE.set(module);
 		try {
 			if (source instanceof VirtualModuleResolver.InstanceModuleSource ims) {
 				// 宿主直接注入的 Java 对象实例
@@ -137,9 +145,43 @@ public class JSModuleManager {
 			cacheJsObject.delete(id);
 			if (t instanceof RuntimeException re) throw re;
 			throw new RuntimeException("Error loading module '" + specifier + "': " + t.getMessage(), t);
+		} finally {
+			if (prevModule != null) CURRENT_MODULE.set(prevModule);
+			else CURRENT_MODULE.remove();
 		}
 
 		return module;
+	}
+
+	/**
+	 * 异步加载模块并返回 ES 模块命名空间对象的 Promise (支持 dynamic import())。
+	 */
+	public hope.magic.js.runtime.JSPromise importDynamic(String specifier, JSModule parentModule) {
+		hope.magic.js.runtime.JSPromise promise = new hope.magic.js.runtime.JSPromise(cx);
+		hope.magic.js.runtime.JSPromise.enqueueMicrotask(cx, () -> {
+			try {
+				JSModule loaded = load(specifier, parentModule);
+				Object exports = loaded.getExports();
+				JSObject ns = new JSObject();
+				ns.put(hope.magic.js.runtime.JSSymbol.TO_STRING_TAG, "Module");
+				if (exports instanceof JSObject expObj) {
+					for (String key : expObj.keys()) {
+						if (!hope.magic.js.runtime.JSSymbol.isSymbolKey(key)) {
+							ns.put(key, expObj.get(key));
+						}
+					}
+					if (!ns.has("default")) {
+						ns.put("default", expObj);
+					}
+				} else {
+					ns.put("default", exports);
+				}
+				promise.fulfill(ns);
+			} catch (Throwable t) {
+				promise.reject(t);
+			}
+		});
+		return promise;
 	}
 
 	/**

@@ -3844,5 +3844,36 @@ public class JSLinker {
 			throw new RuntimeException("Failed to find static method " + name, e);
 		}
 	}
+
+	public static JSPromise importDynamic(JSContext cx, Object specifierObj, Object currentDirOrModule) {
+		if (cx == null) cx = JSContext.current();
+		if (specifierObj == null || specifierObj == JSUndefined.INSTANCE) {
+			JSPromise p = new JSPromise(cx);
+			p.reject(JSContext.makeTypeError("Invalid module specifier"));
+			return p;
+		}
+		String specifier = JSOps.toStr(specifierObj);
+		hope.magic.js.module.JSModuleManager mgr = cx.getModuleManager();
+		hope.magic.js.module.JSModule parent = null;
+		if (currentDirOrModule instanceof hope.magic.js.module.JSModule m) {
+			parent = m;
+		} else if (currentDirOrModule instanceof String dirname) {
+			parent = new hope.magic.js.module.JSModule("temp", "", dirname, null);
+		} else {
+			parent = hope.magic.js.module.JSModuleManager.getCurrentModule();
+		}
+		return mgr.importDynamic(specifier, parent);
+	}
+
+	public static void exportAll(Object targetExports, Object sourceMod) {
+		if (targetExports instanceof JSObject target && sourceMod instanceof JSObject source) {
+			for (String key : source.keys()) {
+				if ("default".equals(key) || "__esModule".equals(key)) continue;
+				if (!JSSymbol.isSymbolKey(key)) {
+					target.put(key, source.get(key));
+				}
+			}
+		}
+	}
 	//endregion
 }

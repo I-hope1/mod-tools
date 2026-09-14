@@ -42,6 +42,8 @@ public class JSLexer {
 		KEYWORDS.put("extends", TokenType.EXTENDS);
 		KEYWORDS.put("super", TokenType.SUPER);
 		KEYWORDS.put("instanceof", TokenType.INSTANCEOF);
+		KEYWORDS.put("import", TokenType.IMPORT);
+		KEYWORDS.put("export", TokenType.EXPORT);
 		KEYWORDS.put("new", TokenType.NEW);
 		KEYWORDS.put("this", TokenType.THIS);
 		KEYWORDS.put("true", TokenType.TRUE);

@@ -51,6 +51,9 @@ public abstract class Node {
 		R visitClassDecl(ClassDecl node, C context);
 		R visitSuperExpr(SuperExpr node, C context);
 		R visitAwaitExpr(AwaitExpr node, C context);
+		default R visitImportDecl(ImportDecl node, C context) { return null; }
+		default R visitExportDecl(ExportDecl node, C context) { return null; }
+		default R visitDynamicImportExpr(DynamicImportExpr node, C context) { return null; }
 	}
 
 	//region 语句 Statements
@@ -694,6 +697,86 @@ public abstract class Node {
 		@Override
 		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
 			return visitor.visitAwaitExpr(this, context);
+		}
+	}
+
+	public static class DynamicImportExpr extends Node {
+		public final Node specifier;
+
+		public DynamicImportExpr(Node specifier, int line, int column) {
+			super(line, column);
+			this.specifier = specifier;
+		}
+
+		@Override
+		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+			return visitor.visitDynamicImportExpr(this, context);
+		}
+	}
+
+	public static class ImportSpecifier {
+		public final String importedName;
+		public final String localName;
+
+		public ImportSpecifier(String importedName, String localName) {
+			this.importedName = importedName;
+			this.localName = localName;
+		}
+	}
+
+	public static class ImportDecl extends Node {
+		public final String moduleSpecifier;
+		public final String defaultBinding;
+		public final String namespaceBinding;
+		public final List<ImportSpecifier> namedSpecifiers;
+
+		public ImportDecl(String moduleSpecifier, String defaultBinding, String namespaceBinding,
+		                  List<ImportSpecifier> namedSpecifiers, int line, int column) {
+			super(line, column);
+			this.moduleSpecifier = moduleSpecifier;
+			this.defaultBinding = defaultBinding;
+			this.namespaceBinding = namespaceBinding;
+			this.namedSpecifiers = namedSpecifiers != null ? namedSpecifiers : List.of();
+		}
+
+		@Override
+		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+			return visitor.visitImportDecl(this, context);
+		}
+	}
+
+	public static class ExportSpecifier {
+		public final String localName;
+		public final String exportedName;
+
+		public ExportSpecifier(String localName, String exportedName) {
+			this.localName = localName;
+			this.exportedName = exportedName;
+		}
+	}
+
+	public static class ExportDecl extends Node {
+		public final boolean isDefault;
+		public final Node declaration;
+		public final List<ExportSpecifier> namedSpecifiers;
+		public final String fromModuleSpecifier;
+		public final boolean isExportAll;
+		public final String exportAllAs;
+
+		public ExportDecl(boolean isDefault, Node declaration, List<ExportSpecifier> namedSpecifiers,
+		                  String fromModuleSpecifier, boolean isExportAll, String exportAllAs, int line, int column) {
+			super(line, column);
+			this.isDefault = isDefault;
+			this.declaration = declaration;
+			this.namedSpecifiers = namedSpecifiers != null ? namedSpecifiers : List.of();
+			this.fromModuleSpecifier = fromModuleSpecifier;
+			this.isExportAll = isExportAll;
+			this.exportAllAs = exportAllAs;
+		}
+
+		@Override
+		public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+			return visitor.visitExportDecl(this, context);
 		}
 	}
 	//endregion

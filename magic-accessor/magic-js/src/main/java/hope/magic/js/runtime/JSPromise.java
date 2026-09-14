@@ -246,6 +246,10 @@ public class JSPromise extends JSObject {
 	}
 
 	private void enqueueMicrotask(Runnable task) {
+		enqueueMicrotask(this.cx, task);
+	}
+
+	public static void enqueueMicrotask(JSContext cx, Runnable task) {
 		JSContext targetCx = cx != null ? cx : JSContext.current();
 		if (targetCx != null) {
 			targetCx.queueMicrotask(task);

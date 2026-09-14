@@ -233,4 +233,275 @@ public class ModuleSystemTest {
 		});
 		assertTrue(ex.getMessage().contains("Cannot find module 'non_existent_module_xyz'"));
 	}
+
+	@Test
+	void testEsmNamedExportsAndImports() {
+		cx.registerModule("esmMath", """
+			export const PI = 3.14159;
+			export let count = 10;
+			export function add(a, b) {
+				return a + b;
+			}
+		""");
+
+		Object result = cx.eval("""
+			import { PI, count, add as myAdd } from 'esmMath';
+			export const total = myAdd(PI, count);
+		""");
+
+		assertTrue(result instanceof JSObject);
+		JSObject exp = (JSObject) result;
+		assertEquals(13.14159, ((Number) exp.get("total")).doubleValue(), 1e-5);
+	}
+
+	@Test
+	void testEsmDefaultExportAndImport() {
+		cx.registerModule("esmCalc", """
+			export default function(a, b) {
+				return a * b;
+			}
+		""");
+
+		Object result = cx.eval("""
+			import multiply from 'esmCalc';
+			export const res = multiply(6, 7);
+		""");
+
+		JSObject exp = (JSObject) result;
+		assertEquals(42.0, ((Number) exp.get("res")).doubleValue(), 1e-5);
+	}
+
+	@Test
+	void testEsmDefaultExportClass() {
+		cx.registerModule("esmGreeter", """
+			export default class Greeter {
+				constructor(name) {
+					this.name = name;
+				}
+				greet() {
+					return "Hello, " + this.name + "!";
+				}
+			}
+		""");
+
+		Object result = cx.eval("""
+			import Greeter from 'esmGreeter';
+			const g = new Greeter("Antigravity");
+			export const greeting = g.greet();
+		""");
+
+		JSObject exp = (JSObject) result;
+		assertEquals("Hello, Antigravity!", exp.get("greeting").toString());
+	}
+
+	@Test
+	void testEsmNamespaceImport() {
+		cx.registerModule("esmUtils", """
+			export const x = 100;
+			export const y = 200;
+			export function sum() { return x + y; }
+		""");
+
+		Object result = cx.eval("""
+			import * as utils from 'esmUtils';
+			export const total = utils.sum();
+			export const xVal = utils.x;
+		""");
+
+		JSObject exp = (JSObject) result;
+		assertEquals(300.0, ((Number) exp.get("total")).doubleValue(), 1e-5);
+		assertEquals(100.0, ((Number) exp.get("xVal")).doubleValue(), 1e-5);
+	}
+
+	@Test
+	void testEsmCombinedImport() {
+		cx.registerModule("esmStyle", """
+			export default 100;
+			export const unit = "px";
+		""");
+
+		Object result = cx.eval("""
+			import size, { unit } from 'esmStyle';
+			export const formatted = "" + size + unit;
+		""");
+
+		JSObject exp = (JSObject) result;
+		assertEquals("100px", exp.get("formatted").toString());
+	}
+
+	@Test
+	void testEsmSideEffectImport() {
+		cx.registerModule("sideEffectMod", """
+			globalThis.sideEffectPassed = 999;
+		""");
+
+		Object result = cx.eval("""
+			import 'sideEffectMod';
+			export const val = globalThis.sideEffectPassed;
+		""");
+
+		JSObject exp = (JSObject) result;
+		assertEquals(999.0, ((Number) exp.get("val")).doubleValue(), 1e-5);
+	}
+
+	@Test
+	void testEsmReExport() {
+		cx.registerModule("sourceMod", """
+			export const a = 1;
+			export const b = 2;
+			export default function defaultFn() { return 42; }
+		""");
+
+		cx.registerModule("reexportMod", """
+			export { a as alpha } from 'sourceMod';
+			export * as allSource from 'sourceMod';
+			export * from 'sourceMod';
+		""");
+
+		Object result = cx.eval("""
+			import { alpha, b, allSource } from 'reexportMod';
+			export const sum = alpha + b + allSource.a;
+		""");
+
+		JSObject exp = (JSObject) result;
+		assertEquals(4.0, ((Number) exp.get("sum")).doubleValue(), 1e-5);
+	}
+
+	@Test
+	void testEsmExportList() {
+		cx.registerModule("exportListMod", """
+			const val1 = "foo";
+			const val2 = "bar";
+			export { val1, val2 as alias2 };
+		""");
+
+		Object result = cx.eval("""
+			import { val1, alias2 } from 'exportListMod';
+			export const joined = val1 + ":" + alias2;
+		""");
+
+		JSObject exp = (JSObject) result;
+		assertEquals("foo:bar", exp.get("joined").toString());
+	}
+
+	@Test
+	void testEsmCircularDependency() {
+		cx.registerModule("circEsmA", """
+			import { getB } from 'circEsmB';
+			export const nameA = "A";
+			export function callB() {
+				return getB();
+			}
+			export function getA() {
+				return "RealA";
+			}
+		""");
+
+		cx.registerModule("circEsmB", """
+			import { getA } from 'circEsmA';
+			export const nameB = "B";
+			export function getB() {
+				return "RealB";
+			}
+			export function callA() {
+				return getA();
+			}
+		""");
+
+		Object result = cx.eval("""
+			import { callB, nameA } from 'circEsmA';
+			import { callA, nameB } from 'circEsmB';
+			export const bResult = callB();
+			export const aResult = callA();
+		""");
+
+		JSObject exp = (JSObject) result;
+		assertEquals("RealB", exp.get("bResult").toString());
+		assertEquals("RealA", exp.get("aResult").toString());
+	}
+
+	@Test
+	void testEsmCjsInterop() {
+		// 1. ESM imports CJS module
+		cx.registerModule("legacyCjs", """
+			module.exports = function legacy(x) {
+				return x * 10;
+			};
+		""");
+
+		Object esmRes = cx.eval("""
+			import legacy from 'legacyCjs';
+			export const out = legacy(5);
+		""");
+
+		JSObject esmExp = (JSObject) esmRes;
+		assertEquals(50.0, ((Number) esmExp.get("out")).doubleValue(), 1e-5);
+
+		// 2. CJS requires ESM module
+		cx.registerModule("modernEsm", """
+			export const greeting = "hello";
+			export default function sayHi() {
+				return "hi";
+			}
+		""");
+
+		Object cjsRes = cx.eval("""
+			const mod = require('modernEsm');
+			const greeting = mod.greeting;
+			const defaultCall = mod.default();
+			const isEsm = mod.__esModule;
+			({ greeting, defaultCall, isEsm });
+		""");
+
+		JSObject cjsExp = (JSObject) cjsRes;
+		assertEquals("hello", cjsExp.get("greeting").toString());
+		assertEquals("hi", cjsExp.get("defaultCall").toString());
+		assertTrue((Boolean) cjsExp.get("isEsm"));
+	}
+
+	@Test
+	void testDynamicImportInAsyncFunction() {
+		cx.registerModule("asyncTarget", """
+			export function greet(who) {
+				return "Welcome, " + who;
+			}
+		""");
+
+		Object result = cx.eval("""
+			async function run() {
+				const m = await import('asyncTarget');
+				return m.greet("Antigravity");
+			}
+			await run();
+		""");
+
+		assertEquals("Welcome, Antigravity", result.toString());
+	}
+
+	@Test
+	void testDynamicImportWithPromiseThen() {
+		cx.registerModule("promiseTarget", """
+			export const number = 777;
+		""");
+
+		Object result = cx.eval("""
+			let value = 0;
+			import('promiseTarget').then(m => {
+				value = m.number;
+			});
+			// 返回包含读取函数的对象
+			({ getVal: () => value });
+		""");
+
+		JSObject obj = (JSObject) result;
+		cx.drainMicrotasks();
+		// 直接通过 Java 调用 getVal 方法
+		hope.magic.js.runtime.JSFunction getVal = (hope.magic.js.runtime.JSFunction) obj.get("getVal");
+		try {
+			Object finalVal = getVal.call(cx, obj, new Object[0]);
+			assertEquals(777.0, ((Number) finalVal).doubleValue(), 1e-5);
+		} catch (Throwable t) {
+			fail(t);
+		}
+	}
 }

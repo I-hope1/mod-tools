@@ -35,6 +35,12 @@ public class JSParser {
 
 	private Node parseStatement() {
 		Token t = peek();
+		if (t.type == TokenType.IMPORT && peekNext().type != TokenType.LPAREN) {
+			return parseImportDeclaration();
+		}
+		if (t.type == TokenType.EXPORT) {
+			return parseExportDeclaration();
+		}
 		if (t.type == TokenType.VAR || t.type == TokenType.LET || t.type == TokenType.CONST) {
 			return parseVarDecl();
 		}
@@ -164,8 +170,20 @@ public class JSParser {
 	}
 
 	private Node parseFunctionDecl(boolean isAsync) {
+		return parseFunctionDecl(isAsync, false);
+	}
+
+	private Node parseFunctionDecl(boolean isAsync, boolean allowAnonymous) {
 		Token kw = advance();
-		Token id = consume(TokenType.IDENTIFIER, "Expected function name");
+		String name = null;
+		if (check(TokenType.IDENTIFIER)) {
+			name = advance().text;
+		} else if (allowAnonymous) {
+			name = null;
+		} else {
+			Token id = consume(TokenType.IDENTIFIER, "Expected function name");
+			name = id.text;
+		}
 		consume(TokenType.LPAREN, "Expected '(' after function name");
 
 		ParamParseResult paramRes = parseFunctionParams(kw);
@@ -174,7 +192,161 @@ public class JSParser {
 		Node.BlockStmt rawBody = parseBlockStatement();
 		List<Node> allStmts = new ArrayList<>(paramRes.unpackStmts);
 		allStmts.addAll(rawBody.statements);
-		return new Node.FunctionDecl(id.text, paramRes.params, new Node.BlockStmt(allStmts, rawBody.line, rawBody.column), Node.PropertyKind.NORMAL, isAsync, kw.line, kw.column);
+		return new Node.FunctionDecl(name, paramRes.params, new Node.BlockStmt(allStmts, rawBody.line, rawBody.column), Node.PropertyKind.NORMAL, isAsync, kw.line, kw.column);
+	}
+
+	private Node parseImportDeclaration() {
+		Token importToken = consume(TokenType.IMPORT, "Expected 'import'");
+
+		// Case 1: import "module-specifier";
+		if (match(TokenType.STRING)) {
+			String specifier = (String) previous().value;
+			match(TokenType.SEMICOLON);
+			return new Node.ImportDecl(specifier, null, null, Collections.emptyList(), importToken.line, importToken.column);
+		}
+
+		String defaultBinding = null;
+		String namespaceBinding = null;
+		List<Node.ImportSpecifier> namedSpecifiers = new ArrayList<>();
+
+		// Check if first token is default binding: import defaultBinding ...
+		if (check(TokenType.IDENTIFIER) && !"from".equals(peek().text)) {
+			defaultBinding = advance().text;
+			if (match(TokenType.COMMA)) {
+				// followed by * as ns OR { ... }
+			}
+		}
+
+		// Namespace: * as ns
+		if (match(TokenType.STAR)) {
+			Token asToken = consume(TokenType.IDENTIFIER, "Expected 'as' after '*'");
+			if (!"as".equals(asToken.text)) {
+				throw new RuntimeException("Expected 'as' after '*' at line " + asToken.line + ":" + asToken.column);
+			}
+			Token nsToken = consume(TokenType.IDENTIFIER, "Expected namespace identifier");
+			namespaceBinding = nsToken.text;
+		} else if (match(TokenType.LBRACE)) {
+			// Named imports: { a, b as c, default as d }
+			if (!check(TokenType.RBRACE)) {
+				do {
+					if (check(TokenType.RBRACE)) break;
+					Token imported = consumePropertyName("Expected import specifier name");
+					String importedName = imported.value instanceof String s ? s : imported.text;
+					String localName = importedName;
+					if (check(TokenType.IDENTIFIER) && "as".equals(peek().text)) {
+						advance(); // consume 'as'
+						Token localToken = consume(TokenType.IDENTIFIER, "Expected alias identifier");
+						localName = localToken.text;
+					}
+					namedSpecifiers.add(new Node.ImportSpecifier(importedName, localName));
+				} while (match(TokenType.COMMA));
+			}
+			consume(TokenType.RBRACE, "Expected '}' after import specifiers");
+		}
+
+		Token fromToken = consume(TokenType.IDENTIFIER, "Expected 'from' in import statement");
+		if (!"from".equals(fromToken.text)) {
+			throw new RuntimeException("Expected 'from' at line " + fromToken.line + ":" + fromToken.column);
+		}
+		Token specToken = consume(TokenType.STRING, "Expected module specifier string");
+		String moduleSpecifier = (String) specToken.value;
+		match(TokenType.SEMICOLON);
+
+		return new Node.ImportDecl(moduleSpecifier, defaultBinding, namespaceBinding, namedSpecifiers, importToken.line, importToken.column);
+	}
+
+	private Node parseExportDeclaration() {
+		Token exportToken = consume(TokenType.EXPORT, "Expected 'export'");
+
+		// Case 1: export default ...
+		if (match(TokenType.DEFAULT)) {
+			if (check(TokenType.FUNCTION)) {
+				Node fn = parseFunctionDecl(false, true);
+				return new Node.ExportDecl(true, fn, null, null, false, null, exportToken.line, exportToken.column);
+			}
+			if (check(TokenType.ASYNC) && peekNext().type == TokenType.FUNCTION) {
+				advance(); // consume async
+				Node fn = parseFunctionDecl(true, true);
+				return new Node.ExportDecl(true, fn, null, null, false, null, exportToken.line, exportToken.column);
+			}
+			if (check(TokenType.CLASS)) {
+				Token classKw = advance();
+				Node cls = parseClassDecl(classKw);
+				return new Node.ExportDecl(true, cls, null, null, false, null, exportToken.line, exportToken.column);
+			}
+			Node expr = parseExpression();
+			match(TokenType.SEMICOLON);
+			return new Node.ExportDecl(true, expr, null, null, false, null, exportToken.line, exportToken.column);
+		}
+
+		// Case 2: export * from "mod"; or export * as ns from "mod";
+		if (match(TokenType.STAR)) {
+			String exportAllAs = null;
+			if (check(TokenType.IDENTIFIER) && "as".equals(peek().text)) {
+				advance(); // consume 'as'
+				Token nsToken = consume(TokenType.IDENTIFIER, "Expected identifier after 'as'");
+				exportAllAs = nsToken.text;
+			}
+			Token fromToken = consume(TokenType.IDENTIFIER, "Expected 'from' after export *");
+			if (!"from".equals(fromToken.text)) {
+				throw new RuntimeException("Expected 'from' at line " + fromToken.line + ":" + fromToken.column);
+			}
+			Token specToken = consume(TokenType.STRING, "Expected module specifier string");
+			match(TokenType.SEMICOLON);
+			return new Node.ExportDecl(false, null, null, (String) specToken.value, true, exportAllAs, exportToken.line, exportToken.column);
+		}
+
+		// Case 3: export { a, b as c } [from "mod"];
+		if (match(TokenType.LBRACE)) {
+			List<Node.ExportSpecifier> specifiers = new ArrayList<>();
+			if (!check(TokenType.RBRACE)) {
+				do {
+					if (check(TokenType.RBRACE)) break;
+					Token localToken = consumePropertyName("Expected export specifier name");
+					String localName = localToken.value instanceof String s ? s : localToken.text;
+					String exportedName = localName;
+					if (check(TokenType.IDENTIFIER) && "as".equals(peek().text)) {
+						advance(); // 'as'
+						Token expToken = consumePropertyName("Expected exported identifier");
+						exportedName = expToken.value instanceof String s ? s : expToken.text;
+					}
+					specifiers.add(new Node.ExportSpecifier(localName, exportedName));
+				} while (match(TokenType.COMMA));
+			}
+			consume(TokenType.RBRACE, "Expected '}' after export specifiers");
+
+			String fromSpecifier = null;
+			if (check(TokenType.IDENTIFIER) && "from".equals(peek().text)) {
+				advance(); // 'from'
+				Token specToken = consume(TokenType.STRING, "Expected module specifier string");
+				fromSpecifier = (String) specToken.value;
+			}
+			match(TokenType.SEMICOLON);
+			return new Node.ExportDecl(false, null, specifiers, fromSpecifier, false, null, exportToken.line, exportToken.column);
+		}
+
+		// Case 4: export var/let/const/function/class
+		Token next = peek();
+		if (next.type == TokenType.VAR || next.type == TokenType.LET || next.type == TokenType.CONST) {
+			Node varDecl = parseVarDecl();
+			return new Node.ExportDecl(false, varDecl, null, null, false, null, exportToken.line, exportToken.column);
+		}
+		if (next.type == TokenType.ASYNC && peekNext().type == TokenType.FUNCTION) {
+			advance(); // async
+			Node fnDecl = parseFunctionDecl(true, false);
+			return new Node.ExportDecl(false, fnDecl, null, null, false, null, exportToken.line, exportToken.column);
+		}
+		if (next.type == TokenType.FUNCTION) {
+			Node fnDecl = parseFunctionDecl(false, false);
+			return new Node.ExportDecl(false, fnDecl, null, null, false, null, exportToken.line, exportToken.column);
+		}
+		if (next.type == TokenType.CLASS) {
+			Token classKw = advance();
+			Node classDecl = parseClassDecl(classKw);
+			return new Node.ExportDecl(false, classDecl, null, null, false, null, exportToken.line, exportToken.column);
+		}
+
+		throw new RuntimeException("Unexpected token '" + next.text + "' after 'export' at line " + next.line + ":" + next.column);
 	}
 
 	private Node.ClassDecl parseClassDecl(Token classToken) {
@@ -691,6 +863,15 @@ public class JSParser {
 		}
 		if (match(TokenType.SUPER)) {
 			return new Node.SuperExpr(previous().line, previous().column);
+		}
+		if (match(TokenType.IMPORT)) {
+			Token importToken = previous();
+			if (match(TokenType.LPAREN)) {
+				Node specifier = parseExpression();
+				consume(TokenType.RPAREN, "Expected ')' after import(...)");
+				return new Node.DynamicImportExpr(specifier, importToken.line, importToken.column);
+			}
+			throw new RuntimeException("Unexpected 'import' keyword in expression at line " + importToken.line + ":" + importToken.column);
 		}
 		if (match(TokenType.CLASS)) {
 			return parseClassDecl(previous());

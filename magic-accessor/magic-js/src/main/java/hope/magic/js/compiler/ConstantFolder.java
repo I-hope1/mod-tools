@@ -353,6 +353,18 @@ public class ConstantFolder {
 			return new Node.AwaitExpr(foldNode(awaitExpr.expr), awaitExpr.line, awaitExpr.column);
 		}
 
+		if (node instanceof Node.DynamicImportExpr dyn) {
+			return new Node.DynamicImportExpr(foldNode(dyn.specifier), dyn.line, dyn.column);
+		}
+
+		if (node instanceof Node.ExportDecl exp) {
+			return new Node.ExportDecl(exp.isDefault, foldNode(exp.declaration), exp.namedSpecifiers, exp.fromModuleSpecifier, exp.isExportAll, exp.exportAllAs, exp.line, exp.column);
+		}
+
+		if (node instanceof Node.ImportDecl imp) {
+			return imp;
+		}
+
 		return node;
 	}
 

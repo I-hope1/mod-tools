@@ -3720,6 +3720,10 @@ public class JSContext {
 			JSParser     parser  = new JSParser(tokens);
 			Node.Program program = parser.parse();
 
+			if (hope.magic.js.module.ModuleTransformer.hasModuleSyntax(program)) {
+				return evalModule(code);
+			}
+
 			JSScript script = JSCompiler.compile(program);
 			return script.run(this);
 		} catch (Throwable t) {
@@ -3727,6 +3731,32 @@ public class JSContext {
 				throw (RuntimeException) t;
 			}
 			throw new RuntimeException("Script execution error: " + t.getMessage(), t);
+		} finally {
+			CURRENT.set(old);
+		}
+	}
+
+	public Object evalModule(String code) {
+		JSContext old = CURRENT.get();
+		CURRENT.set(this);
+		try {
+			JSFunction moduleFunc = JSCompiler.compileModule(code, "eval_module.js");
+			JSObject exports = new JSObject();
+			hope.magic.js.module.JSModule module = new hope.magic.js.module.JSModule("eval_module", "eval_module.js", "", null);
+			module.setExports(exports);
+			hope.magic.js.module.JSModuleManager.RequireFunction localRequire = getModuleManager().createRequireFunction(module);
+			Object[] args = new Object[]{
+					exports,
+					localRequire,
+					module,
+					"eval_module.js",
+					""
+			};
+			moduleFunc.call(this, exports, args);
+			return module.getExports();
+		} catch (Throwable t) {
+			if (t instanceof RuntimeException re) throw re;
+			throw new RuntimeException("Error evaluating module: " + t.getMessage(), t);
 		} finally {
 			CURRENT.set(old);
 		}

@@ -1219,10 +1219,11 @@ public class JSContext {
 						throw makeTypeError("Array.from: mapfn is not callable");
 					}
 				}
-				Object thisArg = args.length > 2 ? args[2] : JSUndefined.INSTANCE;
-
 				JSContext currentCx = cx != null ? cx : JSContext.current();
-				boolean   isCtor    = JSLinker.isConstructor(thisObj);
+				Object thisArg = (args.length > 2 && args[2] != null && args[2] != JSUndefined.INSTANCE)
+				 ? args[2]
+				 : currentCx.getGlobalThis();
+				boolean isCtor = JSLinker.isConstructor(thisObj);
 
 				Object usingIterator = JSUndefined.INSTANCE;
 				if (items instanceof JSObject jo) {
@@ -3408,7 +3409,10 @@ public class JSContext {
 			if (name != null) {
 				return get(name, receiver);
 			}
-			return super.get(propId, receiver);
+			Object ownVal = getOwn(propId, receiver, cx);
+			if (ownVal != DELETED) return ownVal;
+			JSObject proto = getPrototype();
+			return proto != null ? proto.get(propId, receiver) : JSUndefined.INSTANCE;
 		}
 
 		@Override
@@ -3418,7 +3422,8 @@ public class JSContext {
 			if (ownVal != DELETED) return ownVal;
 			Object val = cx.get(key);
 			if (val != JSUndefined.INSTANCE) return val;
-			return super.get(key, receiver);
+			JSObject proto = getPrototype();
+			return proto != null ? proto.get(key, receiver) : JSUndefined.INSTANCE;
 		}
 
 		@Override

@@ -329,6 +329,11 @@ public final class JSShape {
 			JSShape trans = this.singleTransition;
 			if (trans != null) return trans;
 		}
+		IntObjectMap<JSShape> multi = this.multiTransitions;
+		if (multi != null) {
+			JSShape next = multi.get(encoded);
+			if (next != null) return next;
+		}
 		return updatePropertyTypeSlow(encoded, offset, newType);
 	}
 
@@ -350,18 +355,18 @@ public final class JSShape {
 			return next;
 		}
 
-		// 出现分叉（第二条以上分支）：冷创建多迁移哈希表
+		// 出现分叉（第二条以上分支）：COW 创建/克隆多迁移哈希表
+		IntObjectMap<JSShape> map;
 		if (this.multiTransitions == null) {
-			IntObjectMap<JSShape> map = new IntObjectMap<>();
+			map = new IntObjectMap<>();
 			map.put(this.singleKey, this.singleTransition);
-			this.multiTransitions = map;
+		} else {
+			map = this.multiTransitions.copy();
 		}
 
-		JSShape next = this.multiTransitions.get(encoded);
-		if (next == null) {
-			next = createUpdatedShape(offset, newType);
-			this.multiTransitions.put(encoded, next);
-		}
+		JSShape next = createUpdatedShape(offset, newType);
+		map.put(encoded, next);
+		this.multiTransitions = map; // volatile 写，安全发布给所有读线程
 		return next;
 	}
 
@@ -375,22 +380,33 @@ public final class JSShape {
 		return new JSShape(keys, types, this.isBuiltin());
 	}
 
-	// 迁移树构建 (极简编码，快路径 < 28 字节，100% C2 内联)
+	// 迁移树构建 (极简编码，快路径 < 35 字节，100% C2 内联)
 
 	public JSShape addProperty(int propId, byte type) {
 		int encoded = encodeKey(propId, type);
-		// 先读 volatile singleKey
+		// 1. 一级快路径：单迁移无哈希极速返回
 		if (this.singleKey == encoded) {
-			// 确保匹配后再读 volatile singleTransition，此时必定非空且已完全初始化
 			JSShape trans = this.singleTransition;
 			if (trans != null) return trans;
 		}
+		// 2. 二级快路径：多分支 COW 无锁并发读取
+		IntObjectMap<JSShape> multi = this.multiTransitions;
+		if (multi != null) {
+			JSShape next = multi.get(encoded);
+			if (next != null) return next;
+		}
+		// 3. 慢路径：仅在首次创建全新分支节点时才加锁
 		return addPropertySlow(encoded, propId, type);
 	}
 
 	private synchronized JSShape addPropertySlow(int encoded, int propId, byte type) {
+		// DCL 双重检查：防止并发等待线程重复创建
 		if (this.singleKey == encoded && this.singleTransition != null) {
 			return this.singleTransition;
+		}
+		if (this.multiTransitions != null) {
+			JSShape next = this.multiTransitions.get(encoded);
+			if (next != null) return next;
 		}
 
 		// 第一条生长分支：直接装入 singleTransition，避免 new IntObjectMap
@@ -406,18 +422,18 @@ public final class JSShape {
 			return next;
 		}
 
-		// 出现分叉（第二条以上分支）：冷创建多迁移哈希表
+		// 出现分叉（第二条以上分支）：COW 创建/克隆多迁移哈希表
+		IntObjectMap<JSShape> map;
 		if (this.multiTransitions == null) {
-			IntObjectMap<JSShape> map = new IntObjectMap<>();
+			map = new IntObjectMap<>();
 			map.put(this.singleKey, this.singleTransition);
-			this.multiTransitions = map;
+		} else {
+			map = this.multiTransitions.copy();
 		}
 
-		JSShape next = this.multiTransitions.get(encoded);
-		if (next == null) {
-			next = new JSShape(this, propId, type);
-			this.multiTransitions.put(encoded, next);
-		}
+		JSShape next = new JSShape(this, propId, type);
+		map.put(encoded, next);
+		this.multiTransitions = map; // volatile 写，安全发布给并发读线程
 
 		// 确保本慢路径方法字节码大小 > 325 字节，使 HotSpot C2 将此冷路径判定为 'hot method too big'，绝不在顶层内联
 		// 让 C2 有更多预算内联其他方法

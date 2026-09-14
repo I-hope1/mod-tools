@@ -36,6 +36,19 @@ public final class IntObjectMap<V> {
 		init(cap);
 	}
 
+	public IntObjectMap(IntObjectMap<V> other) {
+		this.capacity = other.capacity;
+		this.mask = other.mask;
+		this.size = other.size;
+		this.tombstoneCount = other.tombstoneCount;
+		this.keys = other.keys.clone();
+		this.values = other.values.clone();
+	}
+
+	public IntObjectMap<V> copy() {
+		return new IntObjectMap<>(this);
+	}
+
 	private void init(int cap) {
 		this.capacity = cap;
 		this.mask = cap - 1;

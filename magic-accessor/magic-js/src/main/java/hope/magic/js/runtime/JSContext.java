@@ -50,11 +50,15 @@ public class JSContext {
 	// 故将其替换为轻量 HashMap<String, Object>，写操作集中在 synchronized 的 set() 中，
 	// 读操作通过 synchronized (globals) 块保证复合原子性与线程安全，大幅减少 Context 创建开销。
 	private final       Map<String, Object> globals                       = new HashMap<>();
+	private final       Set<String>         negativeClassCache            = new HashSet<>();
 	private final       List<String>        importedPackages              = new CopyOnWriteArrayList<>();
 
 	public void addImportedPackage(String packageName) {
 		if (packageName != null && !packageName.isEmpty() && !importedPackages.contains(packageName)) {
 			importedPackages.add(packageName);
+			synchronized (globals) {
+				negativeClassCache.clear();
+			}
 		}
 	}
 
@@ -3809,6 +3813,21 @@ public class JSContext {
 	}
 
 	private Object resolveVariableByName(String name, int slot) {
+		// 1. 首字母大写命名启发式前置拦截 (PascalCase Heuristic)
+		// Java 类名规范绝大多数首字母大写；普通 JS 小写变量 (如 i, count, foo) 0 耗时瞬间跳过，杜绝 99.9% 无用异常探测
+		if (name.isEmpty() || !Character.isUpperCase(name.charAt(0))) {
+			return JSUndefined.INSTANCE;
+		}
+
+		// 2. 负缓存检查 (Negative Cache / Absence Cache)
+		// 若此前已探明该名称在所有已导入包中均不存在，直接 O(1) 快退，绝不重复调用 Class.forName
+		synchronized (globals) {
+			if (negativeClassCache.contains(name)) {
+				return JSUndefined.INSTANCE;
+			}
+		}
+
+		// 3. 遍历 importedPackages 按导入顺序探测
 		if (!importedPackages.isEmpty()) {
 			for (String pkg : importedPackages) {
 				String fqcn = pkg + "." + name;
@@ -3827,19 +3846,23 @@ public class JSContext {
 			}
 		}
 
-		if (!name.isEmpty() && Character.isUpperCase(name.charAt(0))) {
-			try {
-				Class<?> c = Class.forName(name);
-				synchronized (globals) {
-					globals.put(name, c);
-				}
-				if (slot >= 0) {
-					ensureGlobalSlotCapacity(slot);
-					globalSlots[slot] = c;
-				}
-				return c;
-			} catch (ClassNotFoundException ignored) {
+		// 4. 全限定类名探测 (例如直接写 java.util.ArrayList 或 com.example.Foo)
+		try {
+			Class<?> c = Class.forName(name);
+			synchronized (globals) {
+				globals.put(name, c);
 			}
+			if (slot >= 0) {
+				ensureGlobalSlotCapacity(slot);
+				globalSlots[slot] = c;
+			}
+			return c;
+		} catch (ClassNotFoundException ignored) {
+		}
+
+		// 5. 探明不存在：计入负缓存，避免后续重复触发异常与反射开销
+		synchronized (globals) {
+			negativeClassCache.add(name);
 		}
 
 		return JSUndefined.INSTANCE;
@@ -3854,6 +3877,7 @@ public class JSContext {
 	public synchronized void set(String name, Object value) {
 		synchronized (globals) {
 			globals.put(name, value == null ? NULL_VALUE : value);
+			negativeClassCache.remove(name);
 		}
 		int slot = getGlobalSlot(name);
 		ensureGlobalSlotCapacity(slot);

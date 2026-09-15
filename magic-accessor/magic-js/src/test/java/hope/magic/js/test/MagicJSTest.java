@@ -3025,5 +3025,26 @@ public class MagicJSTest {
 		""");
 		Assertions.assertEquals(42, ((Number) res).intValue());
 	}
+
+	@Test
+	public void testImportPackageNegativeCacheAndUppercaseFilter() {
+		JSContext cx = new JSContext();
+		// 1. 小写变量不会触发包探测
+		Object res = cx.eval("""
+			importPackage(java.util);
+			var foo = typeof notExistVar;
+			foo;
+		""");
+		Assertions.assertEquals("undefined", res);
+
+		// 2. 不存在的大写类名首次进入负缓存
+		Assertions.assertEquals("undefined", cx.eval("typeof NotExistentClass"));
+
+		// 3. 动态导入新包后负缓存清空并正确解析新包中的类
+		cx.eval("importPackage(java.io);");
+		Object fileVal = cx.eval("typeof File;");
+		Assertions.assertEquals("object", fileVal);
+		Assertions.assertEquals("test.txt", cx.eval("new File('test.txt').getName();"));
+	}
 }
 

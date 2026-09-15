@@ -67,6 +67,9 @@ public class MagicJIT implements Opcodes {
 	public static AccessMode getEffectiveMode() {
 		AccessMode m = currentMode;
 		if (m == AccessMode.AUTO) {
+			if (MEMBER_NAME_CLASS != null && !LinkerHelper.IS_ANDROID) {
+				return AccessMode.UNSAFE_AND_LINKTO;
+			}
 			return AccessMode.UNSAFE_AND_METHODHANDLE;
 		}
 		return m;

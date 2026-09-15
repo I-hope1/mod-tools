@@ -1,16 +1,12 @@
 package hope.magic.js.test;
 
 import hope.magic.annotation.AccessMode;
-import hope.magic.js.runtime.JSContext;
-import hope.magic.js.runtime.MagicJIT;
+import hope.magic.js.runtime.*;
 import hope.magic.runtime.Magic;
 import org.junit.jupiter.api.Test;
 
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
+import java.lang.invoke.*;
+import java.lang.reflect.*;
 import java.text.DecimalFormat;
 
 public class MagicJITLinkToBenchmarkTest {
@@ -151,14 +147,24 @@ public class MagicJITLinkToBenchmarkTest {
 		double timeInvokerArr = (System.nanoTime() - startInvokerArr) / 1_000_000.0;
 		printRow("5. MagicInvoker.invoke (Object[])", timeInvokerArr, iterations, timeInvokerArr / time0);
 
-		// 6. 新架构 MagicInvoker.invoke2 (零 MH、零数组分配、linkTo 直调)
+		// 6. 新架构 MagicInvoker.invoke2 (零 MH、零数组分配特化直调，含传参装箱)
 		long startInvoker2 = System.nanoTime();
 		long sumInvoker2 = 0;
 		for (int i = 0; i < iterations; i++) {
 			sumInvoker2 += ((Number) invoker.invoke2(target, i, 2)).intValue();
 		}
 		double timeInvoker2 = (System.nanoTime() - startInvoker2) / 1_000_000.0;
-		printRow("6. MagicInvoker.invoke2 (零MH/零分配特化)", timeInvoker2, iterations, timeInvoker2 / time0);
+		printRow("6. MagicInvoker.invoke2 (含基本类型装箱)", timeInvoker2, iterations, timeInvoker2 / time0);
+
+		// 6.1 新架构 MagicInvoker.invoke2 (零装箱纯调度分发测试: 复用对象传参)
+		Integer boxA = 6, boxB = 7;
+		long startInvokerNoBox = System.nanoTime();
+		long sumInvokerNoBox = 0;
+		for (int i = 0; i < iterations; i++) {
+			sumInvokerNoBox += ((Number) invoker.invoke2(target, boxA, boxB)).intValue();
+		}
+		double timeInvokerNoBox = (System.nanoTime() - startInvokerNoBox) / 1_000_000.0;
+		printRow("6.1 MagicInvoker.invoke2 (零装箱纯直调)", timeInvokerNoBox, iterations, timeInvokerNoBox / time0);
 
 		// 7. 新架构 ExactMethodStub (JIT CallSite 优化路径)
 		MethodHandle exactStub = MagicJIT.createExactMethodStub(BenchmarkTarget.class, m);
@@ -271,7 +277,7 @@ public class MagicJITLinkToBenchmarkTest {
 	/**
 	 * 基准 4：端到端 JS 引擎中的方法调用与实例化
 	 */
-	private void benchmarkEndToEndJSEngine() {
+	private void benchmarkEndToEndJSEngine() throws Throwable {
 		System.out.println("\n【基准 4】端到端 JS 引擎执行性能 (JSContext.eval) 1,000,000 次");
 		System.out.printf("%-42s | %-12s | %-16s%n", "测试场景", "耗时 (ms)", "吞吐量 (ops/ms)");
 		System.out.println("-------------------------------------------+--------------+------------------");
@@ -279,7 +285,26 @@ public class MagicJITLinkToBenchmarkTest {
 		int iterations = 1_000_000;
 		BenchmarkTarget target = new BenchmarkTarget(100, "jsTarget");
 
-		// 场景 A: JS 循环调用 Java 私有方法
+		// 场景 A-1: 预编译 JSFunction (0 编译开销，纯字节码执行循环)
+		JSContext cxFn = new JSContext();
+		cxFn.set("target", target);
+		cxFn.eval("function benchMethod(n) { var sum = 0; for (var i = 0; i < n; i++) { sum += target.multiply(i, 2); } return sum; }");
+		hope.magic.js.runtime.JSFunction fn = (hope.magic.js.runtime.JSFunction) cxFn.get("benchMethod");
+		Object[] warmupArg = new Object[]{ 100_000 };
+		Object[] iterArg = new Object[]{ iterations };
+		// 预热 JIT
+		fn.call(cxFn, null, warmupArg);
+
+		long startFn = System.nanoTime();
+		Object resFn = fn.call(cxFn, null, iterArg);
+		double timeFn = (System.nanoTime() - startFn) / 1_000_000.0;
+		System.out.printf("%-42s | %-12s | %-16s%n",
+			"预编译 JSFunction (0编译开销纯循环调用)",
+			DF.format(timeFn),
+			DF_INT.format(iterations / timeFn)
+		);
+
+		// 场景 A-2: 全流程 eval 包含完整 compile (词法+语法+ASM编译+类加载)
 		JSContext cx1 = new JSContext();
 		cx1.set("target", target);
 		String scriptMethod = """
@@ -294,7 +319,7 @@ public class MagicJITLinkToBenchmarkTest {
 		Object resA = cx1.eval(scriptMethod);
 		double timeA = (System.nanoTime() - startA) / 1_000_000.0;
 		System.out.printf("%-42s | %-12s | %-16s%n",
-			"JS 循环调用 Java 私有方法 (target.multiply)",
+			"JSContext.eval (含Lexer+Parser+ASM编译)",
 			DF.format(timeA),
 			DF_INT.format(iterations / timeA)
 		);

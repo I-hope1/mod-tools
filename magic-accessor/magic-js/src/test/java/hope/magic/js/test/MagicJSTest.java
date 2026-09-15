@@ -2951,5 +2951,79 @@ public class MagicJSTest {
 		 """);
 		Assertions.assertEquals(Boolean.TRUE, res);
 	}
+
+	@Test
+	public void testImportPackageBasic() {
+		JSContext cx = new JSContext();
+		Object res = cx.eval("""
+			importPackage(java.util);
+			var list = new ArrayList();
+			list.add("hello");
+			list.add("world");
+			list.size();
+		""");
+		Assertions.assertEquals(2, ((Number) res).intValue());
+
+		Object val = cx.eval("list.get(0);");
+		Assertions.assertEquals("hello", val);
+	}
+
+	@Test
+	public void testImportPackagesVarargs() {
+		JSContext cx = new JSContext();
+		Object res = cx.eval("""
+			importPackages(java.util, java.io);
+			var map = new HashMap();
+			map.put("key", "val");
+			var f = new File("test.txt");
+			map.get("key") + ":" + f.getName();
+		""");
+		Assertions.assertEquals("val:test.txt", res);
+	}
+
+	@Test
+	public void testImportPackageStringAndPackagesPrefix() {
+		JSContext cx = new JSContext();
+		Object res = cx.eval("""
+			importPackage(Packages.java.util);
+			importPackage("java.text");
+			var sdf = new SimpleDateFormat("yyyy");
+			var l = new LinkedList();
+			l.add(1);
+			l.size();
+		""");
+		Assertions.assertEquals(1, ((Number) res).intValue());
+	}
+
+	@Test
+	public void testImportPackagePrecedenceAndFunctionScope() {
+		JSContext cx = new JSContext();
+		Object res = cx.eval("""
+			importPackage(java.lang);
+			importPackage(java.util);
+			// 确保原生 JS Math 和 Array 不会被 java.lang.Math 覆盖
+			var m = Math.max(10, 20);
+			function inFunc() {
+				var set = new HashSet();
+				set.add("a");
+				return set.size();
+			}
+			m + ":" + inFunc();
+		""");
+		Assertions.assertEquals("20:1", res);
+	}
+
+	@Test
+	public void testImportPackageClassFallback() {
+		JSContext cx = new JSContext();
+		// 宽容处理：传 Class 相当于 importClass
+		Object res = cx.eval("""
+			importPackage(java.util.ArrayList);
+			var arr = new ArrayList();
+			arr.add(42);
+			arr.get(0);
+		""");
+		Assertions.assertEquals(42, ((Number) res).intValue());
+	}
 }
 

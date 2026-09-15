@@ -9,20 +9,38 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 public class JSContext {
-	private static final ConcurrentHashMap<String, Integer> GLOBAL_SLOT_REGISTRY = new ConcurrentHashMap<>();
-	private static final AtomicInteger                      NEXT_GLOBAL_SLOT     = new AtomicInteger(0);
+	public static final  int                         INITIAL_GLOBAL_SLOTS_CAPACITY = 64;
+	private static final ConcurrentHashMap<String, Integer> GLOBAL_SLOT_REGISTRY           = new ConcurrentHashMap<>();
+	private static final AtomicInteger                      NEXT_GLOBAL_SLOT               = new AtomicInteger(0);
+	private static volatile String[]                        GLOBAL_SLOT_NAMES              = new String[INITIAL_GLOBAL_SLOTS_CAPACITY];
 
 	public static int getGlobalSlot(String name) {
-		return GLOBAL_SLOT_REGISTRY.computeIfAbsent(name, k -> NEXT_GLOBAL_SLOT.getAndIncrement());
+		return GLOBAL_SLOT_REGISTRY.computeIfAbsent(name, k -> {
+			int slot = NEXT_GLOBAL_SLOT.getAndIncrement();
+			recordGlobalSlotName(slot, k);
+			return slot;
+		});
+	}
+
+	private static synchronized void recordGlobalSlotName(int slot, String name) {
+		if (slot >= GLOBAL_SLOT_NAMES.length) {
+			GLOBAL_SLOT_NAMES = Arrays.copyOf(GLOBAL_SLOT_NAMES, Math.max(GLOBAL_SLOT_NAMES.length * 2, slot + 1));
+		}
+		GLOBAL_SLOT_NAMES[slot] = name;
+	}
+
+	public static String getGlobalSlotName(int slot) {
+		String[] names = GLOBAL_SLOT_NAMES;
+		return (slot >= 0 && slot < names.length) ? names[slot] : null;
 	}
 
 	private static final Object NULL_VALUE = new Object();
 
-	public static final int                 INITIAL_GLOBAL_SLOTS_CAPACITY = 64;
 	public volatile     Object[]            globalSlots                   = new Object[INITIAL_GLOBAL_SLOTS_CAPACITY];
 	// 架构优化说明：
 	// 原 globals 采用 ConcurrentHashMap<String, Object> 作为实例字段，
@@ -32,6 +50,17 @@ public class JSContext {
 	// 故将其替换为轻量 HashMap<String, Object>，写操作集中在 synchronized 的 set() 中，
 	// 读操作通过 synchronized (globals) 块保证复合原子性与线程安全，大幅减少 Context 创建开销。
 	private final       Map<String, Object> globals                       = new HashMap<>();
+	private final       List<String>        importedPackages              = new CopyOnWriteArrayList<>();
+
+	public void addImportedPackage(String packageName) {
+		if (packageName != null && !packageName.isEmpty() && !importedPackages.contains(packageName)) {
+			importedPackages.add(packageName);
+		}
+	}
+
+	public List<String> getImportedPackages() {
+		return importedPackages;
+	}
 
 	public static class JSMathFunction implements JSFunction {
 		public static final int OP_ABS    = 0;
@@ -265,6 +294,8 @@ public class JSContext {
 	public static final int SLOT_CONSOLE         = getGlobalSlot("console");
 	public static final int SLOT_MATH            = getGlobalSlot("Math");
 	public static final int SLOT_IMPORT_CLASS    = getGlobalSlot("importClass");
+	public static final int SLOT_IMPORT_PACKAGE  = getGlobalSlot("importPackage");
+	public static final int SLOT_IMPORT_PACKAGES = getGlobalSlot("importPackages");
 	public static final int SLOT_PACKAGES        = getGlobalSlot("Packages");
 	public static final int SLOT_REGEXP          = getGlobalSlot("RegExp");
 	public static final int SLOT_OBJECT          = getGlobalSlot("Object");
@@ -506,11 +537,33 @@ public class JSContext {
 			return JSUndefined.INSTANCE;
 		};
 
+		static final JSFunction IMPORT_PACKAGE = (cx, thisObj, args) -> {
+			for (Object arg : args) {
+				if (arg instanceof PackageObject po) {
+					String p = po.getPrefix();
+					if (p != null && !p.isEmpty()) {
+						cx.addImportedPackage(p);
+					}
+				} else if (arg instanceof String s) {
+					if (!s.isEmpty()) {
+						cx.addImportedPackage(s);
+					}
+				} else if (arg instanceof Class<?> c) {
+					cx.set(c.getSimpleName(), c);
+				}
+			}
+			return JSUndefined.INSTANCE;
+		};
+
 		public static class PackageObject extends JSObject {
 			private final String prefix;
 
 			public PackageObject(String prefix) {
 				this.prefix = prefix;
+			}
+
+			public String getPrefix() {
+				return prefix;
 			}
 
 			@Override
@@ -2311,6 +2364,8 @@ public class JSContext {
 		public static final JSObject            MATH              = LazyMath.MATH;
 		public static final JSFunction          PRINT             = LazyMisc.PRINT;
 		public static final JSFunction          IMPORT_CLASS      = LazyMisc.IMPORT_CLASS;
+		public static final JSFunction          IMPORT_PACKAGE    = LazyMisc.IMPORT_PACKAGE;
+		public static final JSFunction          IMPORT_PACKAGES   = LazyMisc.IMPORT_PACKAGE;
 		public static final JSObject            PACKAGES          = LazyMisc.PACKAGES;
 		public static final JSFunction          REGEXP            = LazyMisc.REGEXP;
 		public static final JSObject            JAVA              = LazyMisc.JAVA;
@@ -3377,7 +3432,7 @@ public class JSContext {
 			"Promise", "Proxy", "Reflect",
 			"console", "print", "queueMicrotask",
 			"globalThis", "window", "global",
-			"Packages", "Java", "java", "javax", "importClass", "JSOps", "$262"
+			"Packages", "Java", "java", "javax", "importClass", "importPackage", "importPackages", "JSOps", "$262"
 		);
 
 		public boolean isBuiltinGlobal(String name) {
@@ -3732,6 +3787,8 @@ public class JSContext {
 			val = LazySymbol.SYMBOL;
 		} else if (slot == SLOT_REQUIRE) {
 			val = getModuleManager().getRequireFunction();
+		} else if (slot == SLOT_IMPORT_PACKAGE || slot == SLOT_IMPORT_PACKAGES) {
+			val = LazyMisc.IMPORT_PACKAGE;
 		}
 
 		if (val != null) {
@@ -3739,6 +3796,52 @@ public class JSContext {
 			globalSlots[slot] = val;
 			return val;
 		}
+
+		String name = getGlobalSlotName(slot);
+		if (name != null) {
+			Object resolved = resolveVariableByName(name, slot);
+			if (resolved != JSUndefined.INSTANCE) {
+				return resolved;
+			}
+		}
+
+		return JSUndefined.INSTANCE;
+	}
+
+	private Object resolveVariableByName(String name, int slot) {
+		if (!importedPackages.isEmpty()) {
+			for (String pkg : importedPackages) {
+				String fqcn = pkg + "." + name;
+				try {
+					Class<?> c = Class.forName(fqcn);
+					synchronized (globals) {
+						globals.put(name, c);
+					}
+					if (slot >= 0) {
+						ensureGlobalSlotCapacity(slot);
+						globalSlots[slot] = c;
+					}
+					return c;
+				} catch (ClassNotFoundException ignored) {
+				}
+			}
+		}
+
+		if (!name.isEmpty() && Character.isUpperCase(name.charAt(0))) {
+			try {
+				Class<?> c = Class.forName(name);
+				synchronized (globals) {
+					globals.put(name, c);
+				}
+				if (slot >= 0) {
+					ensureGlobalSlotCapacity(slot);
+					globalSlots[slot] = c;
+				}
+				return c;
+			} catch (ClassNotFoundException ignored) {
+			}
+		}
+
 		return JSUndefined.INSTANCE;
 	}
 
@@ -3782,19 +3885,10 @@ public class JSContext {
 			if (resolved != JSUndefined.INSTANCE) {
 				return resolved;
 			}
-		}
-		if (!name.isEmpty() && Character.isUpperCase(name.charAt(0))) {
-			try {
-				Class<?> c = Class.forName(name);
-				synchronized (globals) {
-					globals.put(name, c);
-				}
-				if (slot >= 0) {
-					ensureGlobalSlotCapacity(slot);
-					globalSlots[slot] = c;
-				}
-				return c;
-			} catch (ClassNotFoundException ignored) {
+		} else {
+			Object resolved = resolveVariableByName(name, -1);
+			if (resolved != JSUndefined.INSTANCE) {
+				return resolved;
 			}
 		}
 		return JSUndefined.INSTANCE;

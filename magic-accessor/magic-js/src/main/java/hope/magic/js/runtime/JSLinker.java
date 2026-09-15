@@ -2290,17 +2290,7 @@ public class JSLinker {
 				Class<?> clazz        = target.getClass();
 				Method   targetMethod = MethodResolver.findBestMatchingMethod(clazz, methodName, args);
 				if (targetMethod != null) {
-					targetMethod.setAccessible(true);
-					Class<?>[] paramTypes = targetMethod.getParameterTypes();
-					Object[]   castedArgs = new Object[args.length];
-					for (int i = 0; i < args.length; i++) {
-						castedArgs[i] = JSOps.castValue(args[i], paramTypes[i]);
-					}
-					MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(clazz, methodName, args.length, Modifier.isStatic(targetMethod.getModifiers()));
-					if (invoker != null) {
-						return invoker.invoke(target, castedArgs);
-					}
-					return targetMethod.invoke(target, castedArgs);
+					return invokeMatchedMethod(target, targetMethod, args, clazz, methodName);
 				}
 			}
 
@@ -2363,20 +2353,40 @@ public class JSLinker {
 		Class<?> clazz        = (target instanceof Class<?>) ? (Class<?>) target : target.getClass();
 		Method   targetMethod = MethodResolver.findBestMatchingMethod(clazz, methodName, args);
 		if (targetMethod != null) {
-			targetMethod.setAccessible(true);
-			Class<?>[] paramTypes = targetMethod.getParameterTypes();
-			Object[]   castedArgs = new Object[args.length];
-			for (int i = 0; i < args.length; i++) {
-				castedArgs[i] = JSOps.castValue(args[i], paramTypes[i]);
-			}
-			MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(clazz, methodName, args.length, Modifier.isStatic(targetMethod.getModifiers()));
-			if (invoker != null) {
-				return invoker.invoke(target, castedArgs);
-			}
-			return targetMethod.invoke(target, castedArgs);
+			return invokeMatchedMethod(target, targetMethod, args, clazz, methodName);
 		}
 
 		return invokeJavaMethod(target, methodName, args);
+	}
+
+	private static Object invokeMatchedMethod(Object target, Method targetMethod, Object[] args, Class<?> clazz, String methodName) throws Throwable {
+		targetMethod.setAccessible(true);
+		Class<?>[] paramTypes = targetMethod.getParameterTypes();
+		int arity = args.length;
+		MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(clazz, methodName, arity, Modifier.isStatic(targetMethod.getModifiers()));
+		if (invoker != null) {
+			switch (arity) {
+				case 0:
+					return invoker.invoke0(target);
+				case 1:
+					return invoker.invoke1(target, JSOps.castValue(args[0], paramTypes[0]));
+				case 2:
+					return invoker.invoke2(target, JSOps.castValue(args[0], paramTypes[0]), JSOps.castValue(args[1], paramTypes[1]));
+				case 3:
+					return invoker.invoke3(target, JSOps.castValue(args[0], paramTypes[0]), JSOps.castValue(args[1], paramTypes[1]), JSOps.castValue(args[2], paramTypes[2]));
+				default:
+					Object[] castedArgs = new Object[arity];
+					for (int i = 0; i < arity; i++) {
+						castedArgs[i] = JSOps.castValue(args[i], paramTypes[i]);
+					}
+					return invoker.invoke(target, castedArgs);
+			}
+		}
+		Object[] castedArgs = new Object[arity];
+		for (int i = 0; i < arity; i++) {
+			castedArgs[i] = JSOps.castValue(args[i], paramTypes[i]);
+		}
+		return targetMethod.invoke(target, castedArgs);
 	}
 
 	public static Object invokeFallback(ChainedCallSite site, Object target, Object[] args, String methodName)
@@ -2980,7 +2990,13 @@ public class JSLinker {
 				try {
 					MagicJIT.MagicConstructorInvoker ctorInvoker = MagicJIT.getConstructorInvoker(clazz, arity);
 					if (ctorInvoker != null) {
-						return ctorInvoker.newInstance(args);
+						switch (arity) {
+							case 0: return ctorInvoker.newInstance0();
+							case 1: return ctorInvoker.newInstance1(args[0]);
+							case 2: return ctorInvoker.newInstance2(args[0], args[1]);
+							case 3: return ctorInvoker.newInstance3(args[0], args[1], args[2]);
+							default: return ctorInvoker.newInstance(args);
+						}
 					}
 				} catch (Throwable ignored) {
 				}
@@ -3761,9 +3777,16 @@ public class JSLinker {
 
 		if (STRATEGY == InvocationStrategy.MAGIC_ACCESSOR) {
 			try {
-				MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(clazz, methodName, args.length, isStatic);
+				int arity = args.length;
+				MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(clazz, methodName, arity, isStatic);
 				if (invoker != null) {
-					return invoker.invoke(target, args);
+					switch (arity) {
+						case 0: return invoker.invoke0(target);
+						case 1: return invoker.invoke1(target, args[0]);
+						case 2: return invoker.invoke2(target, args[0], args[1]);
+						case 3: return invoker.invoke3(target, args[0], args[1], args[2]);
+						default: return invoker.invoke(target, args);
+					}
 				}
 			} catch (Throwable ignored) {
 			}

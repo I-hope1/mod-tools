@@ -1,5 +1,6 @@
 package hope.magic.js.test;
 
+import hope.magic.annotation.AccessMode;
 import hope.magic.js.compiler.JSCompiler;
 import hope.magic.js.runtime.*;
 import org.junit.jupiter.api.*;
@@ -14,9 +15,21 @@ public class MagicJSTest {
 		private int    secretCode;
 		private String message;
 
+		public TargetJavaClass() {
+			this(100, "default");
+		}
+
+		public TargetJavaClass(int secretCode) {
+			this(secretCode, "single");
+		}
+
 		public TargetJavaClass(int secretCode, String message) {
 			this.secretCode = secretCode;
 			this.message = message;
+		}
+
+		public int add3(int a, int b, int c) {
+			return a + b + c;
 		}
 
 		private int multiply(int a, int b) {
@@ -27,6 +40,7 @@ public class MagicJSTest {
 			return "Hello, " + name;
 		}
 
+		public String singleArgTest(int a) { return "single:" + a; }
 		public String overloadTest(int a) { return "int:" + a; }
 		public String overloadTest(String s) { return "str:" + s; }
 
@@ -3045,6 +3059,138 @@ public class MagicJSTest {
 		Object fileVal = cx.eval("typeof File;");
 		Assertions.assertEquals("object", fileVal);
 		Assertions.assertEquals("test.txt", cx.eval("new File('test.txt').getName();"));
+	}
+
+	@Test
+	public void testMagicJITLinkToStubAndInvoker() throws Throwable {
+		// 1. 测试实例私有方法 exactStub (linkToSpecial/linkToVirtual)
+		java.lang.reflect.Method multiplyMethod = TargetJavaClass.class.getDeclaredMethod("multiply", int.class, int.class);
+		multiplyMethod.setAccessible(true);
+		java.lang.invoke.MethodHandle exactMultiply = MagicJIT.createExactMethodStub(TargetJavaClass.class, multiplyMethod);
+		Assertions.assertNotNull(exactMultiply);
+		TargetJavaClass target = new TargetJavaClass(12345, "LinkToTest");
+		Object multRes = exactMultiply.invoke(target, 6, 7);
+		Assertions.assertEquals(42, ((Number) multRes).intValue());
+
+		// 2. 测试静态私有方法 exactStub (linkToStatic)
+		java.lang.reflect.Method greetMethod = TargetJavaClass.class.getDeclaredMethod("greet", String.class);
+		greetMethod.setAccessible(true);
+		java.lang.invoke.MethodHandle exactGreet = MagicJIT.createExactMethodStub(TargetJavaClass.class, greetMethod);
+		Assertions.assertNotNull(exactGreet);
+		Object greetRes = exactGreet.invoke(TargetJavaClass.class, "LinkTo");
+		Assertions.assertEquals("Hello, LinkTo", greetRes);
+
+		// 3. 测试 MagicInvoker (Arity 0~3 特化直调及 asSpreader 展开)
+		MagicJIT.MagicInvoker invoker2 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "multiply", 2, false);
+		Assertions.assertNotNull(invoker2);
+		Object invokerResArray = invoker2.invoke(target, new Object[]{ 8, 9 });
+		Assertions.assertEquals(72, ((Number) invokerResArray).intValue());
+		Object invokerRes2 = invoker2.invoke2(target, 8, 9);
+		Assertions.assertEquals(72, ((Number) invokerRes2).intValue());
+
+		// 3.1 测试 Arity 0 特化
+		MagicJIT.MagicInvoker invoker0 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "getSecretCode", 0, false);
+		Assertions.assertNotNull(invoker0);
+		Assertions.assertEquals(12345, ((Number) invoker0.invoke0(target)).intValue());
+		Assertions.assertEquals(12345, ((Number) invoker0.invoke(target, null)).intValue());
+
+		// 3.2 测试 Arity 1 特化
+		MagicJIT.MagicInvoker invoker1 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "singleArgTest", 1, false);
+		Assertions.assertNotNull(invoker1);
+		Assertions.assertEquals("single:42", invoker1.invoke1(target, 42));
+
+		// 3.3 测试 Arity 3 特化
+		MagicJIT.MagicInvoker invoker3 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "add3", 3, false);
+		Assertions.assertNotNull(invoker3);
+		Assertions.assertEquals(60, ((Number) invoker3.invoke3(target, 10, 20, 30)).intValue());
+
+		// 4. 测试 MagicConstructorInvoker (Arity 0~3 特化直调)
+		MagicJIT.MagicConstructorInvoker ctorInvoker0 = MagicJIT.getConstructorInvoker(TargetJavaClass.class, 0);
+		Assertions.assertNotNull(ctorInvoker0);
+		TargetJavaClass obj0 = (TargetJavaClass) ctorInvoker0.newInstance0();
+		Assertions.assertEquals(100, obj0.secretCode);
+
+		MagicJIT.MagicConstructorInvoker ctorInvoker1 = MagicJIT.getConstructorInvoker(TargetJavaClass.class, 1);
+		Assertions.assertNotNull(ctorInvoker1);
+		TargetJavaClass obj1 = (TargetJavaClass) ctorInvoker1.newInstance1(777);
+		Assertions.assertEquals(777, obj1.secretCode);
+
+		MagicJIT.MagicConstructorInvoker ctorInvoker = MagicJIT.getConstructorInvoker(TargetJavaClass.class, 2);
+		Assertions.assertNotNull(ctorInvoker);
+		Object newObj = ctorInvoker.newInstance(new Object[]{ 8888, "CreatedByLinkToCtor" });
+		Assertions.assertInstanceOf(TargetJavaClass.class, newObj);
+		Assertions.assertEquals(8888, ((TargetJavaClass) newObj).secretCode);
+		Object newObjDirect = ctorInvoker.newInstance2(9999, "CreatedDirect");
+		Assertions.assertEquals(9999, ((TargetJavaClass) newObjDirect).secretCode);
+
+		// 5. 端到端 JS 执行链路测试 (通过 JSLinker.invokeMatchedMethod 与 newFallback 零分配调用)
+		JSContext testCx = new JSContext();
+		testCx.set("TargetJavaClass", TargetJavaClass.class);
+		testCx.set("target", target);
+		Assertions.assertEquals(100, ((Number) testCx.eval("new TargetJavaClass().getSecretCode()")).intValue());
+		Assertions.assertEquals(555, ((Number) testCx.eval("new TargetJavaClass(555).getSecretCode()")).intValue());
+		Assertions.assertEquals(666, ((Number) testCx.eval("new TargetJavaClass(666, 'custom').getSecretCode()")).intValue());
+		Assertions.assertEquals(12345, ((Number) testCx.eval("target.getSecretCode()")).intValue());
+		Assertions.assertEquals("int:123", testCx.eval("target.overloadTest(123)"));
+		Assertions.assertEquals(42, ((Number) testCx.eval("target.multiply(6, 7)")).intValue());
+		Assertions.assertEquals(60, ((Number) testCx.eval("target.add3(10, 20, 30)")).intValue());
+
+		// 6. 测试 void 方法与接口回调自适应参数 (Runnable)
+		java.lang.reflect.Method runCbMethod = TargetJavaClass.class.getDeclaredMethod("runCallback", Runnable.class);
+		runCbMethod.setAccessible(true);
+		java.lang.invoke.MethodHandle exactRunCb = MagicJIT.createExactMethodStub(TargetJavaClass.class, runCbMethod);
+		Assertions.assertNotNull(exactRunCb);
+		boolean[] ran = new boolean[1];
+		Object voidRes = exactRunCb.invoke(target, (Runnable) () -> ran[0] = true);
+		Assertions.assertTrue(ran[0]);
+		Assertions.assertSame(JSUndefined.INSTANCE, voidRes);
+	}
+
+	@Test
+	public void testAllAccessModesExecution() throws Throwable {
+		AccessMode original = MagicJIT.getMode();
+		try {
+			TargetJavaClass target = new TargetJavaClass(789, "MultiModeTest");
+
+			for (AccessMode mode : new AccessMode[]{
+				AccessMode.UNSAFE_AND_METHODHANDLE,
+				AccessMode.UNSAFE_AND_LINKTO,
+				AccessMode.MAGIC_ACCESSOR
+			}) {
+				MagicJIT.setMode(mode);
+
+				// 1. 测试特化 invoker (arity=0, 1, 2, 3)
+				MagicJIT.MagicInvoker inv0 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "getSecretCode", 0, false, mode);
+				Assertions.assertEquals(789, ((Number) inv0.invoke0(target)).intValue());
+
+				MagicJIT.MagicInvoker inv1 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "singleArgTest", 1, false, mode);
+				Assertions.assertEquals("single:99", inv1.invoke1(target, 99));
+
+				MagicJIT.MagicInvoker inv2 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "multiply", 2, false, mode);
+				Assertions.assertEquals(56, ((Number) inv2.invoke2(target, 7, 8)).intValue());
+
+				MagicJIT.MagicInvoker inv3 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "add3", 3, false, mode);
+				Assertions.assertEquals(15, ((Number) inv3.invoke3(target, 4, 5, 6)).intValue());
+
+				// 2. 测试构造器 invoker
+				MagicJIT.MagicConstructorInvoker ctor0 = MagicJIT.getConstructorInvoker(TargetJavaClass.class, 0, mode);
+				Assertions.assertEquals(100, ((TargetJavaClass) ctor0.newInstance0()).secretCode);
+
+				MagicJIT.MagicConstructorInvoker ctor1 = MagicJIT.getConstructorInvoker(TargetJavaClass.class, 1, mode);
+				Assertions.assertEquals(1234, ((TargetJavaClass) ctor1.newInstance1(1234)).secretCode);
+
+				// 3. 端到端 JS 引擎测试
+				JSContext cx = new JSContext();
+				cx.set("target", target);
+				cx.set("TargetJavaClass", TargetJavaClass.class);
+				Assertions.assertEquals(789, ((Number) cx.eval("target.getSecretCode()")).intValue());
+				Assertions.assertEquals("int:66", cx.eval("target.overloadTest(66)"));
+				Assertions.assertEquals(20, ((Number) cx.eval("target.multiply(4, 5)")).intValue());
+				Assertions.assertEquals(999, ((Number) cx.eval("new TargetJavaClass(999).getSecretCode()")).intValue());
+			}
+		} finally {
+			MagicJIT.setMode(original);
+		}
 	}
 }
 

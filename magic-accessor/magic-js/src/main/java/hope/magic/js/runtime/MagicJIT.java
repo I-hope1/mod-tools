@@ -38,6 +38,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *   <li><b>MAGIC_ACCESSOR:</b> 经典 ASM 动态生成特权类字节码直调 (JDK &le; 21)。</li>
  * </ul>
  */
+@SuppressWarnings("removal")
 public class MagicJIT implements Opcodes {
 
 	public static final String IN_JSOps = "hope/magic/js/runtime/JSOps";
@@ -77,10 +78,10 @@ public class MagicJIT implements Opcodes {
 
 	private static final class InvokerLookupKey {
 		final AccessMode mode;
-		final String  methodName;
-		final int     arity;
-		final boolean isStatic;
-		final int     hash;
+		final String     methodName;
+		final int        arity;
+		final boolean    isStatic;
+		final int        hash;
 
 		InvokerLookupKey(AccessMode mode, String methodName, int arity, boolean isStatic) {
 			this.mode = mode;
@@ -109,8 +110,8 @@ public class MagicJIT implements Opcodes {
 
 	private static final class ExactMethodKey {
 		final AccessMode mode;
-		final Method method;
-		final int hash;
+		final Method     method;
+		final int        hash;
 
 		ExactMethodKey(AccessMode mode, Method method) {
 			this.mode = mode;
@@ -133,8 +134,8 @@ public class MagicJIT implements Opcodes {
 
 	private static final class CtorLookupKey {
 		final AccessMode mode;
-		final int arity;
-		final int hash;
+		final int        arity;
+		final int        hash;
 
 		CtorLookupKey(AccessMode mode, int arity) {
 			this.mode = mode;
@@ -156,11 +157,11 @@ public class MagicJIT implements Opcodes {
 	}
 
 	private static final class ClassJITData {
-		final Map<InvokerLookupKey, MagicInvoker> invokerCache = new ConcurrentHashMap<>();
-		final Map<CtorLookupKey, MagicConstructorInvoker> ctorCache = new ConcurrentHashMap<>();
-		final Map<String, MethodHandle> getterCache = new ConcurrentHashMap<>();
-		final Map<String, MethodHandle> setterCache = new ConcurrentHashMap<>();
-		final Map<ExactMethodKey, MethodHandle> exactMethodCache = new ConcurrentHashMap<>();
+		final Map<InvokerLookupKey, MagicInvoker>         invokerCache     = new ConcurrentHashMap<>();
+		final Map<CtorLookupKey, MagicConstructorInvoker> ctorCache        = new ConcurrentHashMap<>();
+		final Map<String, MethodHandle>                   getterCache      = new ConcurrentHashMap<>();
+		final Map<String, MethodHandle>                   setterCache      = new ConcurrentHashMap<>();
+		final Map<ExactMethodKey, MethodHandle>           exactMethodCache = new ConcurrentHashMap<>();
 	}
 
 	private static final ClassValue<ClassJITData> JIT_DATA = new ClassValue<>() {
@@ -178,6 +179,7 @@ public class MagicJIT implements Opcodes {
 	// 改为 JDK 原生 ClassValue<ClassJITData> 后：
 	private static final Object[] EMPTY_ARGS = new Object[0];
 	private static final Class<?> MEMBER_NAME_CLASS;
+
 	static {
 		Class<?> mnClass = null;
 		try {
@@ -187,14 +189,14 @@ public class MagicJIT implements Opcodes {
 		MEMBER_NAME_CLASS = mnClass;
 	}
 
-	private static final AtomicLong                            COUNTER              = new AtomicLong();
-	private static final ClassValue<MethodHandle>              FN_ADAPTER_MH_CACHE  = new ClassValue<>() {
+	private static final AtomicLong               COUNTER              = new AtomicLong();
+	private static final ClassValue<MethodHandle> FN_ADAPTER_MH_CACHE  = new ClassValue<>() {
 		@Override
 		protected MethodHandle computeValue(Class<?> type) {
 			return createFunctionAdapterHandle(type);
 		}
 	};
-	private static final ClassValue<MethodHandle>              OBJ_ADAPTER_MH_CACHE = new ClassValue<>() {
+	private static final ClassValue<MethodHandle> OBJ_ADAPTER_MH_CACHE = new ClassValue<>() {
 		@Override
 		protected MethodHandle computeValue(Class<?> type) {
 			return createObjectAdapterHandle(type);
@@ -210,15 +212,15 @@ public class MagicJIT implements Opcodes {
 		}
 
 		default Object invoke1(Object target, Object a0) throws Throwable {
-			return invoke(target, new Object[]{ a0 });
+			return invoke(target, new Object[]{a0});
 		}
 
 		default Object invoke2(Object target, Object a0, Object a1) throws Throwable {
-			return invoke(target, new Object[]{ a0, a1 });
+			return invoke(target, new Object[]{a0, a1});
 		}
 
 		default Object invoke3(Object target, Object a0, Object a1, Object a2) throws Throwable {
-			return invoke(target, new Object[]{ a0, a1, a2 });
+			return invoke(target, new Object[]{a0, a1, a2});
 		}
 	}
 
@@ -231,62 +233,82 @@ public class MagicJIT implements Opcodes {
 		}
 
 		default Object newInstance1(Object a0) throws Throwable {
-			return newInstance(new Object[]{ a0 });
+			return newInstance(new Object[]{a0});
 		}
 
 		default Object newInstance2(Object a0, Object a1) throws Throwable {
-			return newInstance(new Object[]{ a0, a1 });
+			return newInstance(new Object[]{a0, a1});
 		}
 
 		default Object newInstance3(Object a0, Object a1, Object a2) throws Throwable {
-			return newInstance(new Object[]{ a0, a1, a2 });
+			return newInstance(new Object[]{a0, a1, a2});
 		}
 	}
 
 	private static final class Arity0Invoker implements MagicInvoker {
 		private final MethodHandle mh;
 		Arity0Invoker(MethodHandle mh) { this.mh = mh; }
-		@Override public Object invoke(Object target, Object[] args) throws Throwable { return mh.invokeExact(target); }
-		@Override public Object invoke0(Object target) throws Throwable { return mh.invokeExact(target); }
+		@Override
+		public Object invoke(Object target, Object[] args) throws Throwable { return mh.invokeExact(target); }
+		@Override
+		public Object invoke0(Object target) throws Throwable { return mh.invokeExact(target); }
 	}
 
 	private static final class Arity1Invoker implements MagicInvoker {
 		private final MethodHandle mh;
 		private final MethodHandle spreader;
-		Arity1Invoker(MethodHandle mh) { this.mh = mh; this.spreader = mh.asSpreader(Object[].class, 1); }
-		@Override public Object invoke(Object target, Object[] args) throws Throwable {
+		Arity1Invoker(MethodHandle mh) {
+			this.mh = mh;
+			this.spreader = mh.asSpreader(Object[].class, 1);
+		}
+		@Override
+		public Object invoke(Object target, Object[] args) throws Throwable {
 			if (args != null && args.length == 1) return mh.invokeExact(target, args[0]);
 			return spreader.invoke(target, args == null ? EMPTY_ARGS : args);
 		}
-		@Override public Object invoke1(Object target, Object a0) throws Throwable { return mh.invokeExact(target, a0); }
+		@Override
+		public Object invoke1(Object target, Object a0) throws Throwable { return mh.invokeExact(target, a0); }
 	}
 
 	private static final class Arity2Invoker implements MagicInvoker {
 		private final MethodHandle mh;
 		private final MethodHandle spreader;
-		Arity2Invoker(MethodHandle mh) { this.mh = mh; this.spreader = mh.asSpreader(Object[].class, 2); }
-		@Override public Object invoke(Object target, Object[] args) throws Throwable {
+		Arity2Invoker(MethodHandle mh) {
+			this.mh = mh;
+			this.spreader = mh.asSpreader(Object[].class, 2);
+		}
+		@Override
+		public Object invoke(Object target, Object[] args) throws Throwable {
 			if (args != null && args.length == 2) return mh.invokeExact(target, args[0], args[1]);
 			return spreader.invoke(target, args == null ? EMPTY_ARGS : args);
 		}
-		@Override public Object invoke2(Object target, Object a0, Object a1) throws Throwable { return mh.invokeExact(target, a0, a1); }
+		@Override
+		public Object invoke2(Object target, Object a0, Object a1)
+		 throws Throwable { return mh.invokeExact(target, a0, a1); }
 	}
 
 	private static final class Arity3Invoker implements MagicInvoker {
 		private final MethodHandle mh;
 		private final MethodHandle spreader;
-		Arity3Invoker(MethodHandle mh) { this.mh = mh; this.spreader = mh.asSpreader(Object[].class, 3); }
-		@Override public Object invoke(Object target, Object[] args) throws Throwable {
+		Arity3Invoker(MethodHandle mh) {
+			this.mh = mh;
+			this.spreader = mh.asSpreader(Object[].class, 3);
+		}
+		@Override
+		public Object invoke(Object target, Object[] args) throws Throwable {
 			if (args != null && args.length == 3) return mh.invokeExact(target, args[0], args[1], args[2]);
 			return spreader.invoke(target, args == null ? EMPTY_ARGS : args);
 		}
-		@Override public Object invoke3(Object target, Object a0, Object a1, Object a2) throws Throwable { return mh.invokeExact(target, a0, a1, a2); }
+		@Override
+		public Object invoke3(Object target, Object a0, Object a1, Object a2)
+		 throws Throwable { return mh.invokeExact(target, a0, a1, a2); }
 	}
 
 	private static final class GenericInvoker implements MagicInvoker {
 		private final MethodHandle spreader;
 		GenericInvoker(MethodHandle spreader) { this.spreader = spreader; }
-		@Override public Object invoke(Object target, Object[] args) throws Throwable {
+		@Override
+		public Object invoke(Object target, Object[] args) throws Throwable {
 			return spreader.invoke(target, args == null ? EMPTY_ARGS : args);
 		}
 	}
@@ -294,47 +316,65 @@ public class MagicJIT implements Opcodes {
 	private static final class Arity0CtorInvoker implements MagicConstructorInvoker {
 		private final MethodHandle mh;
 		Arity0CtorInvoker(MethodHandle mh) { this.mh = mh; }
-		@Override public Object newInstance(Object[] args) throws Throwable { return mh.invokeExact(); }
-		@Override public Object newInstance0() throws Throwable { return mh.invokeExact(); }
+		@Override
+		public Object newInstance(Object[] args) throws Throwable { return mh.invokeExact(); }
+		@Override
+		public Object newInstance0() throws Throwable { return mh.invokeExact(); }
 	}
 
 	private static final class Arity1CtorInvoker implements MagicConstructorInvoker {
 		private final MethodHandle mh;
 		private final MethodHandle spreader;
-		Arity1CtorInvoker(MethodHandle mh) { this.mh = mh; this.spreader = mh.asSpreader(Object[].class, 1); }
-		@Override public Object newInstance(Object[] args) throws Throwable {
+		Arity1CtorInvoker(MethodHandle mh) {
+			this.mh = mh;
+			this.spreader = mh.asSpreader(Object[].class, 1);
+		}
+		@Override
+		public Object newInstance(Object[] args) throws Throwable {
 			if (args != null && args.length == 1) return mh.invokeExact(args[0]);
 			return spreader.invoke(args == null ? EMPTY_ARGS : args);
 		}
-		@Override public Object newInstance1(Object a0) throws Throwable { return mh.invokeExact(a0); }
+		@Override
+		public Object newInstance1(Object a0) throws Throwable { return mh.invokeExact(a0); }
 	}
 
 	private static final class Arity2CtorInvoker implements MagicConstructorInvoker {
 		private final MethodHandle mh;
 		private final MethodHandle spreader;
-		Arity2CtorInvoker(MethodHandle mh) { this.mh = mh; this.spreader = mh.asSpreader(Object[].class, 2); }
-		@Override public Object newInstance(Object[] args) throws Throwable {
+		Arity2CtorInvoker(MethodHandle mh) {
+			this.mh = mh;
+			this.spreader = mh.asSpreader(Object[].class, 2);
+		}
+		@Override
+		public Object newInstance(Object[] args) throws Throwable {
 			if (args != null && args.length == 2) return mh.invokeExact(args[0], args[1]);
 			return spreader.invoke(args == null ? EMPTY_ARGS : args);
 		}
-		@Override public Object newInstance2(Object a0, Object a1) throws Throwable { return mh.invokeExact(a0, a1); }
+		@Override
+		public Object newInstance2(Object a0, Object a1) throws Throwable { return mh.invokeExact(a0, a1); }
 	}
 
 	private static final class Arity3CtorInvoker implements MagicConstructorInvoker {
 		private final MethodHandle mh;
 		private final MethodHandle spreader;
-		Arity3CtorInvoker(MethodHandle mh) { this.mh = mh; this.spreader = mh.asSpreader(Object[].class, 3); }
-		@Override public Object newInstance(Object[] args) throws Throwable {
+		Arity3CtorInvoker(MethodHandle mh) {
+			this.mh = mh;
+			this.spreader = mh.asSpreader(Object[].class, 3);
+		}
+		@Override
+		public Object newInstance(Object[] args) throws Throwable {
 			if (args != null && args.length == 3) return mh.invokeExact(args[0], args[1], args[2]);
 			return spreader.invoke(args == null ? EMPTY_ARGS : args);
 		}
-		@Override public Object newInstance3(Object a0, Object a1, Object a2) throws Throwable { return mh.invokeExact(a0, a1, a2); }
+		@Override
+		public Object newInstance3(Object a0, Object a1, Object a2) throws Throwable { return mh.invokeExact(a0, a1, a2); }
 	}
 
 	private static final class GenericCtorInvoker implements MagicConstructorInvoker {
 		private final MethodHandle spreader;
 		GenericCtorInvoker(MethodHandle spreader) { this.spreader = spreader; }
-		@Override public Object newInstance(Object[] args) throws Throwable {
+		@Override
+		public Object newInstance(Object[] args) throws Throwable {
 			return spreader.invoke(args == null ? EMPTY_ARGS : args);
 		}
 	}
@@ -343,7 +383,8 @@ public class MagicJIT implements Opcodes {
 		return getMethodInvoker(clazz, methodName, arity, isStatic, getEffectiveMode());
 	}
 
-	public static MagicInvoker getMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic, AccessMode mode) {
+	public static MagicInvoker getMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic,
+	                                            AccessMode mode) {
 		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
 		ClassJITData     data   = JIT_DATA.get(clazz);
 		InvokerLookupKey key    = new InvokerLookupKey(mode, methodName, arity, isStatic);
@@ -360,8 +401,8 @@ public class MagicJIT implements Opcodes {
 
 	public static MagicConstructorInvoker getConstructorInvoker(Class<?> clazz, int arity, AccessMode mode) {
 		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
-		ClassJITData            data    = JIT_DATA.get(clazz);
-		CtorLookupKey           key     = new CtorLookupKey(mode, arity);
+		ClassJITData            data   = JIT_DATA.get(clazz);
+		CtorLookupKey           key    = new CtorLookupKey(mode, arity);
 		MagicConstructorInvoker cached = data.ctorCache.get(key);
 		if (cached != null) return cached;
 		MagicConstructorInvoker invoker = createConstructorInvoker(clazz, arity, mode);
@@ -373,14 +414,16 @@ public class MagicJIT implements Opcodes {
 		return createMethodInvoker(clazz, methodName, arity, isStatic, getEffectiveMode());
 	}
 
-	public static MagicInvoker createMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic, AccessMode mode) {
+	public static MagicInvoker createMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic,
+	                                               AccessMode mode) {
 		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
 		Method targetMethod = MethodResolver.findMethod(clazz, methodName, arity, isStatic);
 		if (targetMethod == null) return null;
 		targetMethod.setAccessible(true);
 		try {
 			if (mode == AccessMode.MAGIC_ACCESSOR) {
-				if (!Modifier.isPrivate(targetMethod.getModifiers())) {
+				if (!Magic.isInstalled()) Magic.install();
+				if (Magic.isMagicAccessorInstalled()) {
 					MagicInvoker invoker = generateAsmMethodInvoker(clazz, targetMethod);
 					if (invoker != null) return invoker;
 				}
@@ -395,11 +438,16 @@ public class MagicJIT implements Opcodes {
 			MethodHandle exactMh = generateDirectMethodHandleStub(clazz, targetMethod);
 			if (exactMh == null) return null;
 			switch (arity) {
-				case 0: return new Arity0Invoker(exactMh);
-				case 1: return new Arity1Invoker(exactMh);
-				case 2: return new Arity2Invoker(exactMh);
-				case 3: return new Arity3Invoker(exactMh);
-				default: return new GenericInvoker(exactMh.asSpreader(Object[].class, arity));
+				case 0:
+					return new Arity0Invoker(exactMh);
+				case 1:
+					return new Arity1Invoker(exactMh);
+				case 2:
+					return new Arity2Invoker(exactMh);
+				case 3:
+					return new Arity3Invoker(exactMh);
+				default:
+					return new GenericInvoker(exactMh.asSpreader(Object[].class, arity));
 			}
 		} catch (Throwable e) {
 			throw new RuntimeException("Failed to generate MagicInvoker for " + clazz.getName() + "#" + methodName + " (mode=" + mode + ")", e);
@@ -413,8 +461,11 @@ public class MagicJIT implements Opcodes {
 	public static MagicConstructorInvoker createConstructorInvoker(Class<?> clazz, int arity, AccessMode mode) {
 		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
 		if (mode == AccessMode.MAGIC_ACCESSOR) {
-			MagicConstructorInvoker asmInvoker = generateAsmConstructorInvoker(clazz, arity);
-			if (asmInvoker != null) return asmInvoker;
+			if (!Magic.isInstalled()) Magic.install();
+			if (Magic.isMagicAccessorInstalled()) {
+				MagicConstructorInvoker asmInvoker = generateAsmConstructorInvoker(clazz, arity);
+				if (asmInvoker != null) return asmInvoker;
+			}
 			MagicConstructorInvoker linkToCtor = generateLinkToConstructorInvoker(clazz, arity);
 			if (linkToCtor != null) return linkToCtor;
 		} else if (mode == AccessMode.UNSAFE_AND_LINKTO) {
@@ -426,8 +477,8 @@ public class MagicJIT implements Opcodes {
 		if (targetCtor == null) return null;
 		targetCtor.setAccessible(true);
 		try {
-			MethodHandle ctorMh = Magic.lookup.unreflectConstructor(targetCtor);
-			Class<?>[] paramTypes = targetCtor.getParameterTypes();
+			MethodHandle ctorMh     = Magic.lookup.unreflectConstructor(targetCtor);
+			Class<?>[]   paramTypes = targetCtor.getParameterTypes();
 			for (int i = 0; i < arity; i++) {
 				MethodHandle filter = JSLinker.getArgumentFilter(paramTypes[i]);
 				if (filter != null) {
@@ -441,11 +492,16 @@ public class MagicJIT implements Opcodes {
 			Arrays.fill(genericParams, Object.class);
 			MethodHandle finalCtorMh = ctorMh.asType(MethodType.methodType(Object.class, genericParams));
 			switch (arity) {
-				case 0: return new Arity0CtorInvoker(finalCtorMh);
-				case 1: return new Arity1CtorInvoker(finalCtorMh);
-				case 2: return new Arity2CtorInvoker(finalCtorMh);
-				case 3: return new Arity3CtorInvoker(finalCtorMh);
-				default: return new GenericCtorInvoker(finalCtorMh.asSpreader(Object[].class, arity));
+				case 0:
+					return new Arity0CtorInvoker(finalCtorMh);
+				case 1:
+					return new Arity1CtorInvoker(finalCtorMh);
+				case 2:
+					return new Arity2CtorInvoker(finalCtorMh);
+				case 3:
+					return new Arity3CtorInvoker(finalCtorMh);
+				default:
+					return new GenericCtorInvoker(finalCtorMh.asSpreader(Object[].class, arity));
 			}
 		} catch (Throwable e) {
 			throw new RuntimeException("Failed to generate MagicConstructorInvoker for " + clazz.getName() + " (mode=" + mode + ")", e);
@@ -506,7 +562,7 @@ public class MagicJIT implements Opcodes {
 			mh = FieldMH.GET_CHAR;
 		} else if (fType == boolean.class) {
 			mh = FieldMH.GET_BOOLEAN;
-		} else mh = FieldMH.GET_OBJECT;
+		} else { mh = FieldMH.GET_OBJECT; }
 		return MethodHandles.insertArguments(mh, 0, offset);
 	}
 
@@ -540,7 +596,7 @@ public class MagicJIT implements Opcodes {
 			mh = FieldMH.PUT_CHAR;
 		} else if (fType == boolean.class) {
 			mh = FieldMH.PUT_BOOLEAN;
-		} else mh = FieldMH.PUT_OBJECT;
+		} else { mh = FieldMH.PUT_OBJECT; }
 		return MethodHandles.insertArguments(mh, 0, offset);
 	}
 
@@ -554,9 +610,9 @@ public class MagicJIT implements Opcodes {
 
 	public static MethodHandle getExactMethodStub(Class<?> clazz, Method targetMethod, AccessMode mode) {
 		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
-		ClassJITData     data   = JIT_DATA.get(clazz);
-		ExactMethodKey   key    = new ExactMethodKey(mode, targetMethod);
-		MethodHandle     cached = data.exactMethodCache.get(key);
+		ClassJITData   data   = JIT_DATA.get(clazz);
+		ExactMethodKey key    = new ExactMethodKey(mode, targetMethod);
+		MethodHandle   cached = data.exactMethodCache.get(key);
 		if (cached != null) return cached;
 		MethodHandle stub = generateExactMethodStub(clazz, targetMethod, mode);
 		if (stub != null) data.exactMethodCache.put(key, stub);
@@ -564,23 +620,14 @@ public class MagicJIT implements Opcodes {
 	}
 
 	public static MethodHandle generateExactMethodStub(Class<?> clazz, Method targetMethod, AccessMode mode) {
-		if (mode == AccessMode.MAGIC_ACCESSOR) {
-			if (!Modifier.isPrivate(targetMethod.getModifiers())) {
-				try {
-					MethodHandle stub = generateAsmExactMethodStub(clazz, targetMethod);
-					if (stub != null) return stub;
-				} catch (Throwable ignored) {
-				}
-			}
-		}
 		return generateDirectMethodHandleStub(clazz, targetMethod);
 	}
 
 	private static MethodHandle generateDirectMethodHandleStub(Class<?> clazz, Method targetMethod) {
-		int        arity       = targetMethod.getParameterCount();
-		boolean    isStatic    = Modifier.isStatic(targetMethod.getModifiers());
-		Class<?>[] paramTypes  = targetMethod.getParameterTypes();
-		Class<?>   retType     = targetMethod.getReturnType();
+		int        arity      = targetMethod.getParameterCount();
+		boolean    isStatic   = Modifier.isStatic(targetMethod.getModifiers());
+		Class<?>[] paramTypes = targetMethod.getParameterTypes();
+		Class<?>   retType    = targetMethod.getReturnType();
 
 		targetMethod.setAccessible(true);
 		MethodHandle bound;
@@ -661,51 +708,14 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
-	private static boolean isClassVisibleToBootstrap(Class<?> cls) {
-		if (cls == null) return false;
-		if (cls.isPrimitive()) return true;
-		if (cls.isArray()) return isClassVisibleToBootstrap(cls.getComponentType());
-		if (cls.getClassLoader() == null) return true;
-		try {
-			return Class.forName(cls.getName(), false, ClassLoader.getSystemClassLoader()) == cls;
-		} catch (Throwable ignored) {
-			return false;
-		}
-	}
-
-	private static boolean isMethodVisibleToBootstrap(Class<?> clazz, Method method) {
-		if (!isClassVisibleToBootstrap(clazz)) return false;
-		if (!isClassVisibleToBootstrap(method.getReturnType())) return false;
-		for (Class<?> p : method.getParameterTypes()) {
-			if (!isClassVisibleToBootstrap(p)) return false;
-		}
-		return true;
-	}
-
-	private static boolean isConstructorVisibleToBootstrap(Class<?> clazz, Constructor<?> ctor) {
-		if (!isClassVisibleToBootstrap(clazz)) return false;
-		for (Class<?> p : ctor.getParameterTypes()) {
-			if (!isClassVisibleToBootstrap(p)) return false;
-		}
-		return true;
-	}
-
-	private static void emitPushClassForBootstrap(MethodVisitor mv, Class<?> clazz) {
-		if (clazz.getClassLoader() == null) {
-			mv.visitLdcInsn(Type.getType(clazz));
-		} else {
-			mv.visitLdcInsn(clazz.getName());
-			mv.visitInsn(ICONST_1);
-			mv.visitMethodInsn(INVOKESTATIC, "java/lang/ClassLoader", "getSystemClassLoader", "()Ljava/lang/ClassLoader;", false);
-			mv.visitMethodInsn(INVOKESTATIC, "java/lang/Class", "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;", false);
-		}
-	}
+	private static final ConcurrentHashMap<String, LinkToBridgeInfo> METHOD_BRIDGE_CACHE = new ConcurrentHashMap<>();
+	private static final ConcurrentHashMap<String, CtorBridgeInfo>   CTOR_BRIDGE_CACHE   = new ConcurrentHashMap<>();
 
 	private static final class LinkToBridgeInfo {
 		final Class<?> bridgeClass;
-		final String bridgeInternalName;
-		final String bridgeDesc;
-		final String linkToName;
+		final String   bridgeInternalName;
+		final String   bridgeDesc;
+		final String   linkToName;
 
 		LinkToBridgeInfo(Class<?> bridgeClass, String bridgeInternalName, String bridgeDesc, String linkToName) {
 			this.bridgeClass = bridgeClass;
@@ -715,21 +725,278 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
+	private static final class CtorBridgeInfo {
+		final Class<?> bridgeClass;
+		final String   bridgeInternalName;
+		final String   bridgeDesc;
+
+		CtorBridgeInfo(Class<?> bridgeClass, String bridgeInternalName, String bridgeDesc) {
+			this.bridgeClass = bridgeClass;
+			this.bridgeInternalName = bridgeInternalName;
+			this.bridgeDesc = bridgeDesc;
+		}
+	}
+
+	public static int getMethodBridgeCacheSize() {
+		return METHOD_BRIDGE_CACHE.size();
+	}
+
+	public static int getCtorBridgeCacheSize() {
+		return CTOR_BRIDGE_CACHE.size();
+	}
+
+	private static String computeMethodBridgeKey(String linkToName, Class<?>[] paramTypes, Class<?> retType) {
+		StringBuilder sb = new StringBuilder(linkToName).append(":(");
+		for (Class<?> p : paramTypes) {
+			if (p.isPrimitive()) {
+				sb.append(Type.getDescriptor(p));
+			} else {
+				sb.append('L');
+			}
+		}
+		sb.append(')');
+		if (retType == void.class) {
+			sb.append('V');
+		} else if (retType.isPrimitive()) {
+			sb.append(Type.getDescriptor(retType));
+		} else {
+			sb.append('L');
+		}
+		return sb.toString();
+	}
+
+	private static String computeCtorBridgeKey(Class<?>[] paramTypes) {
+		StringBuilder sb = new StringBuilder("ctor:(");
+		for (Class<?> p : paramTypes) {
+			if (p.isPrimitive()) {
+				sb.append(Type.getDescriptor(p));
+			} else {
+				sb.append('L');
+			}
+		}
+		sb.append(')');
+		return sb.toString();
+	}
+
+	private static CtorBridgeInfo getOrCreateCtorBridge(Class<?>[] paramTypes) {
+		String         key      = computeCtorBridgeKey(paramTypes);
+		CtorBridgeInfo existing = CTOR_BRIDGE_CACHE.get(key);
+		if (existing != null) {
+			return existing;
+		}
+		return CTOR_BRIDGE_CACHE.computeIfAbsent(key, k -> createCtorBridge(paramTypes));
+	}
+
+	private static CtorBridgeInfo createCtorBridge(Class<?>[] paramTypes) {
+		int arity = paramTypes.length;
+		try {
+			Magic.install();
+			String bridgeSimpleName   = "MagicCtorBridge_" + COUNTER.incrementAndGet();
+			String bridgeInternalName = "java/lang/invoke/" + bridgeSimpleName;
+
+			ClassWriter bw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+			bw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, bridgeInternalName, null, "java/lang/Object", null);
+
+			StringBuilder bridgeDesc = new StringBuilder("(Ljava/lang/Class;");
+			for (int i = 0; i < arity; i++) {
+				bridgeDesc.append("Ljava/lang/Object;");
+			}
+			bridgeDesc.append("Ljava/lang/Object;"); // mn
+			bridgeDesc.append(")Ljava/lang/Object;");
+
+			MethodVisitor mv = bw.visitMethod(ACC_PUBLIC | ACC_STATIC, "newInstance", bridgeDesc.toString(), null, new String[]{"java/lang/Throwable"});
+			mv.visitAnnotation("Ljdk/internal/vm/annotation/ForceInline;", true).visitEnd();
+			mv.visitAnnotation("Ljava/lang/invoke/ForceInline;", true).visitEnd();
+			mv.visitAnnotation("Ljdk/internal/vm/annotation/Hidden;", true).visitEnd();
+			mv.visitAnnotation("Ljava/lang/invoke/LambdaForm$Hidden;", true).visitEnd();
+			mv.visitCode();
+
+			mv.visitMethodInsn(INVOKESTATIC, "jdk/internal/misc/Unsafe", "getUnsafe", "()Ljdk/internal/misc/Unsafe;", false);
+			mv.visitVarInsn(ALOAD, 0); // Class<?> cls
+			mv.visitMethodInsn(INVOKEVIRTUAL, "jdk/internal/misc/Unsafe", "allocateInstance", "(Ljava/lang/Class;)Ljava/lang/Object;", false);
+			mv.visitInsn(DUP);
+
+			for (int i = 0; i < arity; i++) {
+				mv.visitVarInsn(ALOAD, 1 + i);
+				emitBootstrapUnbox(mv, paramTypes[i]);
+			}
+
+			// Load mn from slot (1 + arity)
+			mv.visitVarInsn(ALOAD, 1 + arity);
+			mv.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
+
+			StringBuilder linkToDesc = new StringBuilder("(Ljava/lang/Object;");
+			for (int i = 0; i < arity; i++) {
+				if (paramTypes[i].isPrimitive()) {
+					linkToDesc.append(Type.getDescriptor(paramTypes[i]));
+				} else {
+					linkToDesc.append("Ljava/lang/Object;");
+				}
+			}
+			linkToDesc.append("Ljava/lang/invoke/MemberName;)V");
+
+			mv.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandle", "linkToSpecial", linkToDesc.toString(), false);
+			mv.visitInsn(ARETURN);
+			mv.visitMaxs(0, 0);
+			mv.visitEnd();
+
+			bw.visitEnd();
+
+			Class<?> bridgeClass = Magic.defineClass(null, bw.toByteArray());
+			return new CtorBridgeInfo(bridgeClass, bridgeInternalName, bridgeDesc.toString());
+		} catch (Throwable t) {
+			return null;
+		}
+	}
+
+	private static void emitResolveOrFailMethod(ClassWriter cw) {
+		MethodVisitor mv = cw.visitMethod(ACC_PUBLIC | ACC_STATIC, "resolveOrFail",
+		 "(BLjava/lang/Class;Ljava/lang/String;Ljava/lang/Object;)Ljava/lang/Object;",
+		 null, new String[]{"java/lang/Throwable"});
+		mv.visitCode();
+
+		Label lClass      = new Label();
+		Label lMemberName = new Label();
+		Label lFail       = new Label();
+		Label lResolve    = new Label();
+
+		// if (type instanceof MethodType)
+		mv.visitVarInsn(ALOAD, 3);
+		mv.visitTypeInsn(INSTANCEOF, "java/lang/invoke/MethodType");
+		mv.visitJumpInsn(IFEQ, lClass);
+
+		mv.visitTypeInsn(NEW, "java/lang/invoke/MemberName");
+		mv.visitInsn(DUP);
+		mv.visitVarInsn(ALOAD, 1); // refc
+		mv.visitVarInsn(ALOAD, 2); // name
+		mv.visitVarInsn(ALOAD, 3); // type
+		mv.visitTypeInsn(CHECKCAST, "java/lang/invoke/MethodType");
+		mv.visitVarInsn(ILOAD, 0); // refKind
+		mv.visitMethodInsn(INVOKESPECIAL, "java/lang/invoke/MemberName", "<init>",
+		 "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;B)V", false);
+		mv.visitVarInsn(ASTORE, 4);
+		mv.visitJumpInsn(GOTO, lResolve);
+
+		// else if (type instanceof Class)
+		mv.visitLabel(lClass);
+		mv.visitVarInsn(ALOAD, 3);
+		mv.visitTypeInsn(INSTANCEOF, "java/lang/Class");
+		mv.visitJumpInsn(IFEQ, lMemberName);
+
+		mv.visitTypeInsn(NEW, "java/lang/invoke/MemberName");
+		mv.visitInsn(DUP);
+		mv.visitVarInsn(ALOAD, 1);
+		mv.visitVarInsn(ALOAD, 2);
+		mv.visitVarInsn(ALOAD, 3);
+		mv.visitTypeInsn(CHECKCAST, "java/lang/Class");
+		mv.visitVarInsn(ILOAD, 0);
+		mv.visitMethodInsn(INVOKESPECIAL, "java/lang/invoke/MemberName", "<init>",
+		 "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Class;B)V", false);
+		mv.visitVarInsn(ASTORE, 4);
+		mv.visitJumpInsn(GOTO, lResolve);
+
+		// else if (type instanceof MemberName)
+		mv.visitLabel(lMemberName);
+		mv.visitVarInsn(ALOAD, 3);
+		mv.visitTypeInsn(INSTANCEOF, "java/lang/invoke/MemberName");
+		mv.visitJumpInsn(IFEQ, lFail);
+
+		mv.visitVarInsn(ALOAD, 3);
+		mv.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
+		mv.visitVarInsn(ASTORE, 4);
+		mv.visitJumpInsn(GOTO, lResolve);
+
+		// else fail
+		mv.visitLabel(lFail);
+		mv.visitTypeInsn(NEW, "java/lang/IllegalArgumentException");
+		mv.visitInsn(DUP);
+		mv.visitLdcInsn("Unsupported type for MemberName resolution");
+		mv.visitMethodInsn(INVOKESPECIAL, "java/lang/IllegalArgumentException", "<init>", "(Ljava/lang/String;)V", false);
+		mv.visitInsn(ATHROW);
+
+		// resolve
+		mv.visitLabel(lResolve);
+		mv.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MemberName", "getFactory", "()Ljava/lang/invoke/MemberName$Factory;", false);
+		mv.visitVarInsn(ILOAD, 0); // refKind
+		mv.visitVarInsn(ALOAD, 4); // MemberName
+		mv.visitInsn(ACONST_NULL); // lookupClass
+		mv.visitInsn(ICONST_M1); // allowedModes = -1 (TRUSTED)
+		mv.visitLdcInsn(Type.getType(NoSuchMethodException.class));
+		mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/invoke/MemberName$Factory", "resolveOrFail",
+		 "(BLjava/lang/invoke/MemberName;Ljava/lang/Class;ILjava/lang/Class;)Ljava/lang/invoke/MemberName;", false);
+		mv.visitInsn(ARETURN);
+		mv.visitMaxs(0, 0);
+		mv.visitEnd();
+	}
+
+	private static void emitResolveOrFailMethodTypeOverload(ClassWriter cw, String owner) {
+		MethodVisitor mv = cw.visitMethod(ACC_PUBLIC | ACC_STATIC, "resolveOrFail",
+		 "(BLjava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;)Ljava/lang/Object;",
+		 null, new String[]{"java/lang/Throwable"});
+		mv.visitCode();
+		mv.visitVarInsn(ILOAD, 0);
+		mv.visitVarInsn(ALOAD, 1);
+		mv.visitVarInsn(ALOAD, 2);
+		mv.visitVarInsn(ALOAD, 3);
+		mv.visitMethodInsn(INVOKESTATIC, owner, "resolveOrFail",
+		 "(BLjava/lang/Class;Ljava/lang/String;Ljava/lang/Object;)Ljava/lang/Object;", false);
+		mv.visitInsn(ARETURN);
+		mv.visitMaxs(0, 0);
+		mv.visitEnd();
+	}
+
+	private static final ThreadLocal<Object[]> PENDING_INIT = new ThreadLocal<>();
+
+	public static Object getPendingInit(int index) {
+		Object[] arr = PENDING_INIT.get();
+		return arr != null && index < arr.length ? arr[index] : null;
+	}
+
+	private static volatile MethodHandle RESOLVE_OR_FAIL_MH;
+
+	private static MethodHandle getResolveOrFailHandle() {
+		MethodHandle mh = RESOLVE_OR_FAIL_MH;
+		if (mh != null) return mh;
+		synchronized (MagicJIT.class) {
+			if (RESOLVE_OR_FAIL_MH != null) return RESOLVE_OR_FAIL_MH;
+			try {
+				Magic.install();
+				Class<?> bridgeClass;
+				try {
+					bridgeClass = Class.forName("java.lang.invoke.MagicResolveBridge", false, null);
+				} catch (ClassNotFoundException ignored) {
+					ClassWriter bw                 = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+					String      bridgeInternalName = "java/lang/invoke/MagicResolveBridge";
+					bw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, bridgeInternalName, null, "java/lang/Object", null);
+					emitResolveOrFailMethod(bw);
+					emitResolveOrFailMethodTypeOverload(bw, bridgeInternalName);
+					bw.visitEnd();
+					bridgeClass = Magic.defineClass(null, bw.toByteArray());
+				}
+				MethodHandle h = Magic.lookup.findStatic(bridgeClass, "resolveOrFail",
+				 MethodType.methodType(Object.class, byte.class, Class.class, String.class, Object.class));
+				RESOLVE_OR_FAIL_MH = h;
+				return h;
+			} catch (Throwable t) {
+				throw new RuntimeException("Failed to initialize java.lang.invoke.MagicResolveBridge", t);
+			}
+		}
+	}
+
 	/**
-	 * 在 Bootstrap ClassLoader 的 {@code java.lang.invoke} 包下动态生成 {@code MagicBridge} 类。
-	 * <p>该桥接类包含静态成员 {@code @Stable MemberName MN} 以及静态方法 {@code x0}，
-	 * 内部直接发射 JVM 虚拟机底层原语指令（{@code linkToVirtual / linkToStatic / linkToSpecial / linkToInterface}）。</p>
-	 *
-	 * <b>性能与 C2 优化优势：</b>
-	 * <ul>
-	 *   <li><b>C2 Inlining Budget 极度节约：</b>调用图深仅 1 层，无需经历 LambdaForm、rebind、guard 等繁复中转，杜绝 C2 内联预算耗尽。</li>
-	 *   <li><b>消除同构签名递归中断：</b>无多层泛型签名中转，不会触发 C2 的同构方法内联截断（MaxRecursiveInlineLevel）。</li>
-	 *   <li><b>特权穿透：</b>原生原语直接操作方法槽，天然支持访问私有方法。</li>
-	 * </ul>
+	 * 暴露 static 的 MemberName.Factory#resolveOrFail 原生直调方法。
+	 * 在 java.lang.invoke 包中以 LM_TRUSTED (-1) 特权模式执行，支持解析任意私有/保护/公开的方法、构造器与字段。
 	 */
-	private static LinkToBridgeInfo createLinkToBridge(Class<?> clazz, Method targetMethod) {
+	public static Object resolveOrFail(byte refKind, Class<?> refc, String name, Object type) throws Throwable {
+		return getResolveOrFailHandle().invokeExact(refKind, refc, name, type);
+	}
+
+	public static Object resolveOrFail(byte refKind, Class<?> refc, String name, MethodType type) throws Throwable {
+		return resolveOrFail(refKind, refc, name, (Object) type);
+	}
+
+	private static LinkToBridgeInfo getOrCreateLinkToBridge(Class<?> clazz, Method targetMethod) {
 		if (MEMBER_NAME_CLASS == null || LinkerHelper.IS_ANDROID) return null;
-		int        arity       = targetMethod.getParameterCount();
 		boolean    isStatic    = Modifier.isStatic(targetMethod.getModifiers());
 		boolean    isSpecial   = Modifier.isPrivate(targetMethod.getModifiers());
 		boolean    isInterface = clazz.isInterface();
@@ -737,54 +1004,45 @@ public class MagicJIT implements Opcodes {
 		Class<?>   retType     = targetMethod.getReturnType();
 
 		String linkToName;
-		byte refKind;
 		if (isStatic) {
 			linkToName = "linkToStatic";
-			refKind = 6;
 		} else if (isSpecial) {
 			linkToName = "linkToSpecial";
-			refKind = 7;
 		} else if (isInterface) {
 			linkToName = "linkToInterface";
-			refKind = 9;
 		} else {
 			linkToName = "linkToVirtual";
-			refKind = 5;
 		}
 
-		boolean visible = isMethodVisibleToBootstrap(clazz, targetMethod);
-		Object fallbackMn = null;
+		String           key      = computeMethodBridgeKey(linkToName, paramTypes, retType);
+		LinkToBridgeInfo existing = METHOD_BRIDGE_CACHE.get(key);
+		if (existing != null) {
+			return existing;
+		}
+		return METHOD_BRIDGE_CACHE.computeIfAbsent(key, k -> createLinkToBridge(linkToName, paramTypes, retType));
+	}
 
+	/**
+	 * 在 Bootstrap ClassLoader 的 {@code java.lang.invoke} 包下动态生成彻底无状态且按签名复用的 {@code MagicBridge} 类（方案 A）。
+	 * <p>按方法调用语义（linkToName）与擦除后的类型描述符全局复用缓存，彻底杜绝 Metaspace 线性膨胀与泄漏。</p>
+	 */
+	private static LinkToBridgeInfo createLinkToBridge(String linkToName, Class<?>[] paramTypes, Class<?> retType) {
+		int     arity    = paramTypes.length;
+		boolean isStatic = "linkToStatic".equals(linkToName);
 		try {
-			targetMethod.setAccessible(true);
-			if (!visible) {
-				MethodHandle raw = Magic.lookup.unreflect(targetMethod);
-				fallbackMn = LinkerHelper.extractMemberName(raw);
-				if (fallbackMn == null) return null;
-			}
-
 			Magic.install();
-			String bridgeSimpleName = "MagicBridge_" + COUNTER.incrementAndGet();
+			String bridgeSimpleName   = "MagicBridge_" + COUNTER.incrementAndGet();
 			String bridgeInternalName = "java/lang/invoke/" + bridgeSimpleName;
 
 			ClassWriter bw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 			bw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, bridgeInternalName, null, "java/lang/Object", null);
-
-			if (visible) {
-				FieldVisitor fv = bw.visitField(ACC_PUBLIC | ACC_STATIC | ACC_FINAL, "MN", "Ljava/lang/invoke/MemberName;", null, null);
-				fv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
-				fv.visitEnd();
-			} else {
-				FieldVisitor fv = bw.visitField(ACC_PUBLIC | ACC_STATIC | ACC_VOLATILE, "MN", "Ljava/lang/Object;", null, null);
-				fv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
-				fv.visitEnd();
-			}
 
 			StringBuilder bridgeDesc = new StringBuilder("(");
 			bridgeDesc.append("Ljava/lang/Object;"); // target (slot 0)
 			for (int i = 0; i < arity; i++) {
 				bridgeDesc.append("Ljava/lang/Object;");
 			}
+			bridgeDesc.append("Ljava/lang/Object;"); // mn (slot 1 + arity)
 			bridgeDesc.append(")Ljava/lang/Object;");
 
 			MethodVisitor mv = bw.visitMethod(ACC_PUBLIC | ACC_STATIC, "x0", bridgeDesc.toString(), null, new String[]{"java/lang/Throwable"});
@@ -802,12 +1060,9 @@ public class MagicJIT implements Opcodes {
 				emitBootstrapUnbox(mv, paramTypes[i]);
 			}
 
-			if (visible) {
-				mv.visitFieldInsn(GETSTATIC, bridgeInternalName, "MN", "Ljava/lang/invoke/MemberName;");
-			} else {
-				mv.visitFieldInsn(GETSTATIC, bridgeInternalName, "MN", "Ljava/lang/Object;");
-				mv.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
-			}
+			// Load mn from parameter slot (1 + arity)
+			mv.visitVarInsn(ALOAD, 1 + arity);
+			mv.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
 
 			StringBuilder linkToDesc = new StringBuilder("(");
 			if (!isStatic) {
@@ -832,7 +1087,7 @@ public class MagicJIT implements Opcodes {
 			mv.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandle", linkToName, linkToDesc.toString(), false);
 
 			if (retType == void.class) {
-				mv.visitInsn(ACONST_NULL);
+				mv.visitFieldInsn(GETSTATIC, "hope/magic/js/runtime/JSUndefined", "INSTANCE", "Lhope/magic/js/runtime/JSUndefined;");
 			} else if (retType.isPrimitive()) {
 				emitBootstrapBox(mv, retType);
 			}
@@ -840,45 +1095,9 @@ public class MagicJIT implements Opcodes {
 			mv.visitMaxs(0, 0);
 			mv.visitEnd();
 
-			if (visible) {
-				MethodVisitor clinit = bw.visitMethod(ACC_STATIC, "<clinit>", "()V", null, null);
-				clinit.visitCode();
-
-				clinit.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MemberName", "getFactory", "()Ljava/lang/invoke/MemberName$Factory;", false);
-				clinit.visitIntInsn(BIPUSH, refKind);
-				clinit.visitTypeInsn(NEW, "java/lang/invoke/MemberName");
-				clinit.visitInsn(DUP);
-
-				emitPushClassForBootstrap(clinit, clazz);
-				clinit.visitLdcInsn(targetMethod.getName());
-				clinit.visitLdcInsn(Type.getMethodDescriptor(targetMethod));
-				clinit.visitMethodInsn(INVOKESTATIC, "java/lang/ClassLoader", "getSystemClassLoader", "()Ljava/lang/ClassLoader;", false);
-				clinit.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodType", "fromMethodDescriptorString",
-					"(Ljava/lang/String;Ljava/lang/ClassLoader;)Ljava/lang/invoke/MethodType;", false);
-
-				clinit.visitIntInsn(BIPUSH, refKind);
-				clinit.visitMethodInsn(INVOKESPECIAL, "java/lang/invoke/MemberName", "<init>",
-					"(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;B)V", false);
-
-				clinit.visitInsn(ACONST_NULL);
-				clinit.visitInsn(ICONST_M1);
-				clinit.visitLdcInsn(Type.getType(NoSuchMethodException.class));
-				clinit.visitMethodInsn(INVOKEVIRTUAL, "java/lang/invoke/MemberName$Factory", "resolveOrFail",
-					"(BLjava/lang/invoke/MemberName;Ljava/lang/Class;ILjava/lang/Class;)Ljava/lang/invoke/MemberName;", false);
-				clinit.visitFieldInsn(PUTSTATIC, bridgeInternalName, "MN", "Ljava/lang/invoke/MemberName;");
-
-				clinit.visitInsn(RETURN);
-				clinit.visitMaxs(0, 0);
-				clinit.visitEnd();
-			}
-
 			bw.visitEnd();
 
 			Class<?> bridgeClass = Magic.defineClass(null, bw.toByteArray());
-			if (!visible) {
-				Field mnField = bridgeClass.getDeclaredField("MN");
-				Magic.unsafe.putObject(Magic.unsafe.staticFieldBase(mnField), Magic.unsafe.staticFieldOffset(mnField), fallbackMn);
-			}
 
 			return new LinkToBridgeInfo(bridgeClass, bridgeInternalName, bridgeDesc.toString(), linkToName);
 		} catch (Throwable t) {
@@ -887,35 +1106,65 @@ public class MagicJIT implements Opcodes {
 	}
 
 	/**
-	 * 动态生成基于 {@code linkTo*} 方案的 {@link MagicInvoker} 实例。
-	 * <p>通过直接发射字节码 {@code invokestatic MagicBridge_N.x0} 直连底层原语，
-	 * 特化实现 {@code invoke0} ~ {@code invoke3}：</p>
-	 * <ul>
-	 *   <li><b>0 个 MethodHandle 实例与 0 次 invokeExact 调用；</b></li>
-	 *   <li><b>0 次通用参数数组分配 (杜绝 new Object[])；</b></li>
-	 *   <li><b>扁平调用图，最大化保留 C2 JIT 内联预算。</b></li>
-	 * </ul>
+	 * 动态生成基于 {@code linkTo*} 方案的 {@link MagicInvoker} 实例（方案 A）。
+	 * <p>MemberName 保存在 Invoker 动态类的 {@code public static final} 静态常量中，在 {@code <clinit>} 中初始化，
+	 * 由插件类自身的 ClassLoader 加载，生命周期与插件 Class 完全同步，彻底消除全局泄漏，并利于 C2 常量折叠。</p>
 	 */
 	private static MagicInvoker generateLinkToMethodInvoker(Class<?> clazz, Method targetMethod) {
-		LinkToBridgeInfo bridge = createLinkToBridge(clazz, targetMethod);
+		LinkToBridgeInfo bridge = getOrCreateLinkToBridge(clazz, targetMethod);
 		if (bridge == null) return null;
 
 		int      arity   = targetMethod.getParameterCount();
 		Class<?> retType = targetMethod.getReturnType();
 
-		try {
-			ClassWriter iw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
-			String invokerClassName = "hope/magic/gen/MagicLinkToInvoker_" + COUNTER.incrementAndGet();
-			iw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
-				new String[]{Type.getInternalName(MagicInvoker.class)});
+		boolean isStatic    = Modifier.isStatic(targetMethod.getModifiers());
+		boolean isSpecial   = Modifier.isPrivate(targetMethod.getModifiers());
+		boolean isInterface = clazz.isInterface();
+		byte    refKind;
+		if (isStatic) {
+			refKind = 6;
+		} else if (isSpecial) {
+			refKind = 7;
+		} else if (isInterface) {
+			refKind = 9;
+		} else {
+			refKind = 5;
+		}
 
-			MethodVisitor initMv = iw.visitMethod(ACC_PUBLIC, "<init>", "()V", null, null);
-			initMv.visitCode();
-			initMv.visitVarInsn(ALOAD, 0);
-			initMv.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
-			initMv.visitInsn(RETURN);
-			initMv.visitMaxs(0, 0);
-			initMv.visitEnd();
+		Object mn = null;
+		try {
+			MethodType mt = MethodType.methodType(retType, targetMethod.getParameterTypes());
+			mn = resolveOrFail(refKind, clazz, targetMethod.getName(), mt);
+		} catch (Throwable ignored) {
+		}
+		if (mn == null) {
+			try {
+				targetMethod.setAccessible(true);
+				MethodHandle raw = Magic.lookup.unreflect(targetMethod);
+				mn = LinkerHelper.extractMemberName(raw);
+			} catch (Throwable ignored) {
+			}
+		}
+		if (mn == null) return null;
+
+		try {
+			ClassWriter iw               = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+			String      invokerClassName = "hope/magic/gen/MagicLinkToInvoker_" + COUNTER.incrementAndGet();
+			iw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
+			 new String[]{Type.getInternalName(MagicInvoker.class)});
+
+			FieldVisitor fv = iw.visitField(ACC_PUBLIC | ACC_STATIC | ACC_FINAL, "MN", "Ljava/lang/Object;", null, null);
+			fv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
+			fv.visitEnd();
+
+			MethodVisitor clinit = iw.visitMethod(ACC_STATIC, "<clinit>", "()V", null, null);
+			clinit.visitCode();
+			pushInt(clinit, 0);
+			clinit.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/MagicJIT", "getPendingInit", "(I)Ljava/lang/Object;", false);
+			clinit.visitFieldInsn(PUTSTATIC, invokerClassName, "MN", "Ljava/lang/Object;");
+			clinit.visitInsn(RETURN);
+			clinit.visitMaxs(0, 0);
+			clinit.visitEnd();
 
 			// invoke(Object target, Object[] args)
 			MethodVisitor invMv = iw.visitMethod(ACC_PUBLIC, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
@@ -926,8 +1175,8 @@ public class MagicJIT implements Opcodes {
 				pushInt(invMv, i);
 				invMv.visitInsn(AALOAD);
 			}
+			invMv.visitFieldInsn(GETSTATIC, invokerClassName, "MN", "Ljava/lang/Object;");
 			invMv.visitMethodInsn(INVOKESTATIC, bridge.bridgeInternalName, "x0", bridge.bridgeDesc, false);
-			emitBridgeReturnCheck(invMv, retType);
 			invMv.visitInsn(ARETURN);
 			invMv.visitMaxs(0, 0);
 			invMv.visitEnd();
@@ -936,8 +1185,8 @@ public class MagicJIT implements Opcodes {
 				MethodVisitor m0 = iw.visitMethod(ACC_PUBLIC, "invoke0", "(Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
 				m0.visitCode();
 				m0.visitVarInsn(ALOAD, 1);
+				m0.visitFieldInsn(GETSTATIC, invokerClassName, "MN", "Ljava/lang/Object;");
 				m0.visitMethodInsn(INVOKESTATIC, bridge.bridgeInternalName, "x0", bridge.bridgeDesc, false);
-				emitBridgeReturnCheck(m0, retType);
 				m0.visitInsn(ARETURN);
 				m0.visitMaxs(0, 0);
 				m0.visitEnd();
@@ -946,8 +1195,8 @@ public class MagicJIT implements Opcodes {
 				m1.visitCode();
 				m1.visitVarInsn(ALOAD, 1);
 				m1.visitVarInsn(ALOAD, 2);
+				m1.visitFieldInsn(GETSTATIC, invokerClassName, "MN", "Ljava/lang/Object;");
 				m1.visitMethodInsn(INVOKESTATIC, bridge.bridgeInternalName, "x0", bridge.bridgeDesc, false);
-				emitBridgeReturnCheck(m1, retType);
 				m1.visitInsn(ARETURN);
 				m1.visitMaxs(0, 0);
 				m1.visitEnd();
@@ -957,8 +1206,8 @@ public class MagicJIT implements Opcodes {
 				m2.visitVarInsn(ALOAD, 1);
 				m2.visitVarInsn(ALOAD, 2);
 				m2.visitVarInsn(ALOAD, 3);
+				m2.visitFieldInsn(GETSTATIC, invokerClassName, "MN", "Ljava/lang/Object;");
 				m2.visitMethodInsn(INVOKESTATIC, bridge.bridgeInternalName, "x0", bridge.bridgeDesc, false);
-				emitBridgeReturnCheck(m2, retType);
 				m2.visitInsn(ARETURN);
 				m2.visitMaxs(0, 0);
 				m2.visitEnd();
@@ -969,45 +1218,43 @@ public class MagicJIT implements Opcodes {
 				m3.visitVarInsn(ALOAD, 2);
 				m3.visitVarInsn(ALOAD, 3);
 				m3.visitVarInsn(ALOAD, 4);
+				m3.visitFieldInsn(GETSTATIC, invokerClassName, "MN", "Ljava/lang/Object;");
 				m3.visitMethodInsn(INVOKESTATIC, bridge.bridgeInternalName, "x0", bridge.bridgeDesc, false);
-				emitBridgeReturnCheck(m3, retType);
 				m3.visitInsn(ARETURN);
 				m3.visitMaxs(0, 0);
 				m3.visitEnd();
 			}
 
 			iw.visitEnd();
-			ClassLoader loader = clazz.getClassLoader() != null ? clazz.getClassLoader() : MagicJIT.class.getClassLoader();
-			Class<?> invokerClass = Magic.defineClass(loader, iw.toByteArray());
-			return (MagicInvoker) invokerClass.getDeclaredConstructor().newInstance();
+			PENDING_INIT.set(new Object[]{mn});
+			try {
+				ClassLoader loader       = clazz.getClassLoader() != null ? clazz.getClassLoader() : MagicJIT.class.getClassLoader();
+				Class<?>    invokerClass = Magic.defineClass(loader, iw.toByteArray());
+				return (MagicInvoker) Magic.unsafe.allocateInstance(invokerClass);
+			} finally {
+				PENDING_INIT.remove();
+			}
 		} catch (Throwable t) {
 			return null;
 		}
 	}
 
-	private static void emitBridgeReturnCheck(MethodVisitor mv, Class<?> retType) {
-		if (retType == void.class) {
-			mv.visitInsn(POP);
-			mv.visitFieldInsn(GETSTATIC, "hope/magic/js/runtime/JSUndefined", "INSTANCE", "Lhope/magic/js/runtime/JSUndefined;");
-		}
-	}
-
-	private static MagicInvoker generateAsmMethodInvoker(Class<?> clazz, Method targetMethod) {
-		int        arity       = targetMethod.getParameterCount();
-		boolean    isStatic    = Modifier.isStatic(targetMethod.getModifiers());
-		Class<?>[] paramTypes  = targetMethod.getParameterTypes();
-		Class<?>   retType     = targetMethod.getReturnType();
+	private static MagicJIT.MagicInvoker generateAsmMethodInvoker(Class<?> clazz, Method targetMethod) {
+		int        arity      = targetMethod.getParameterCount();
+		boolean    isStatic   = Modifier.isStatic(targetMethod.getModifiers());
+		Class<?>[] paramTypes = targetMethod.getParameterTypes();
+		Class<?>   retType    = targetMethod.getReturnType();
 
 		try {
 			Magic.install();
-			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
-			String className = "hope/magic/gen/MagicDirectInvoker_" + COUNTER.incrementAndGet();
+			ClassWriter cw        = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+			String      className = "hope/magic/gen/MagicDirectInvoker_" + COUNTER.incrementAndGet();
 			cw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, className, null, "hope/magic/runtime/MAGICIMPL",
-				new String[]{Type.getInternalName(MagicInvoker.class)});
+			 new String[]{Type.getInternalName(MagicInvoker.class)});
 
-			createMagicInitMethod(cw);
+			// createMagicInitMethod(cw);
 
-			String owner = Type.getInternalName(clazz);
+			String owner      = Type.getInternalName(clazz);
 			String methodDesc = Type.getMethodDescriptor(targetMethod);
 
 			// 1. invoke(Object target, Object[] args)
@@ -1092,87 +1339,38 @@ public class MagicJIT implements Opcodes {
 			}
 
 			cw.visitEnd();
-			ClassLoader loader = clazz.getClassLoader() != null ? clazz.getClassLoader() : MagicJIT.class.getClassLoader();
-			Class<?> genClass = Magic.defineClass(loader, cw.toByteArray());
-			return (MagicInvoker) genClass.getDeclaredConstructor().newInstance();
+			ClassLoader loader   = clazz.getClassLoader() != null ? clazz.getClassLoader() : MagicJIT.class.getClassLoader();
+			Class<?>    genClass = Magic.defineClass(loader, cw.toByteArray());
+			return (MagicInvoker) Magic.unsafe.allocateInstance(genClass);
 		} catch (Throwable e) {
 			return null;
 		}
 	}
 
-	private static void emitInvokeTarget(MethodVisitor mv, Class<?> clazz, Method targetMethod, String owner, String methodDesc, boolean isStatic) {
-		if (isStatic) {
-			mv.visitMethodInsn(INVOKESTATIC, owner, targetMethod.getName(), methodDesc, clazz.isInterface());
-		} else if (clazz.isInterface()) {
-			mv.visitMethodInsn(INVOKEINTERFACE, owner, targetMethod.getName(), methodDesc, true);
-		} else {
-			mv.visitMethodInsn(INVOKEVIRTUAL, owner, targetMethod.getName(), methodDesc, false);
-		}
-	}
-
-	private static MethodHandle generateAsmExactMethodStub(Class<?> clazz, Method targetMethod) {
-		int     arity    = targetMethod.getParameterCount();
-		boolean isStatic = Modifier.isStatic(targetMethod.getModifiers());
-
-		try {
-			Magic.install();
-			ClassWriter cw        = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
-			String      className = "hope/magic/gen/MagicExactMethod_" + COUNTER.incrementAndGet();
-			cw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, className, null, "hope/magic/runtime/MAGICIMPL", null);
-
-			createMagicInitMethod(cw);
-
-			Class<?>[] argTypes = new Class<?>[1 + arity];
-			argTypes[0] = Object.class;
-			for (int i = 0; i < arity; i++) argTypes[1 + i] = Object.class;
-			MethodType stubType = MethodType.methodType(Object.class, argTypes);
-
-			MethodVisitor mv = cw.visitMethod(ACC_PUBLIC | ACC_STATIC, "invoke", stubType.toMethodDescriptorString(), null, null);
-			mv.visitCode();
-			String owner = Type.getInternalName(clazz);
-			if (!isStatic) {
-				mv.visitVarInsn(ALOAD, 0);
-				mv.visitTypeInsn(CHECKCAST, owner);
-			}
-
-			Class<?>[] paramTypes = targetMethod.getParameterTypes();
-			for (int i = 0; i < arity; i++) {
-				mv.visitVarInsn(ALOAD, 1 + i);
-				emitArgumentCast(mv, paramTypes[i]);
-			}
-
-			String methodDesc = Type.getMethodDescriptor(targetMethod);
-			emitInvokeTarget(mv, clazz, targetMethod, owner, methodDesc, isStatic);
-
-			emitReturnBox(mv, targetMethod.getReturnType());
-			mv.visitInsn(ARETURN);
-			mv.visitMaxs(0, 0);
-			mv.visitEnd();
-
-			cw.visitEnd();
-			ClassLoader loader = clazz.getClassLoader() != null ? clazz.getClassLoader() : MagicJIT.class.getClassLoader();
-			Class<?> genClass = Magic.defineClass(loader, cw.toByteArray());
-			return Magic.lookup.findStatic(genClass, "invoke", stubType);
-		} catch (Throwable e) {
-			return null;
-		}
+	private static void emitInvokeTarget(MethodVisitor mv, Class<?> clazz, Method targetMethod, String owner,
+	                                     String methodDesc, boolean isStatic) {
+		int opcode = isStatic ? INVOKESTATIC :
+		 clazz.isInterface() ? INVOKEINTERFACE :
+		  Modifier.isPrivate(targetMethod.getModifiers()) ? INVOKESPECIAL :
+		   INVOKEVIRTUAL;
+		mv.visitMethodInsn(opcode, owner, targetMethod.getName(), methodDesc, clazz.isInterface());
 	}
 
 	private static MagicConstructorInvoker generateAsmConstructorInvoker(Class<?> clazz, int arity) {
 		Constructor<?> targetCtor = MethodResolver.findConstructor(clazz, arity);
 		if (targetCtor == null || Modifier.isPrivate(targetCtor.getModifiers())) return null;
-		targetCtor.setAccessible(true);
+		// targetCtor.setAccessible(true); // 没必要
 		try {
 			Magic.install();
 			ClassWriter cw        = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 			String      className = "hope/magic/gen/MagicCtorInvoker_" + COUNTER.incrementAndGet();
 			cw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, className, null, "hope/magic/runtime/MAGICIMPL", new String[]{Type.getInternalName(MagicConstructorInvoker.class)});
 
-			createMagicInitMethod(cw);
+			// createMagicInitMethod(cw);
 
-			String targetOwner = Type.getInternalName(clazz);
-			String ctorDesc = Type.getConstructorDescriptor(targetCtor);
-			Class<?>[] paramTypes = targetCtor.getParameterTypes();
+			String     targetOwner = Type.getInternalName(clazz);
+			String     ctorDesc    = Type.getConstructorDescriptor(targetCtor);
+			Class<?>[] paramTypes  = targetCtor.getParameterTypes();
 
 			// newInstance(Object[] args)
 			MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
@@ -1241,10 +1439,10 @@ public class MagicJIT implements Opcodes {
 			}
 
 			cw.visitEnd();
-			byte[]      bytes  = cw.toByteArray();
-			ClassLoader loader = clazz.getClassLoader() != null ? clazz.getClassLoader() : MagicJIT.class.getClassLoader();
+			byte[]      bytes    = cw.toByteArray();
+			ClassLoader loader   = clazz.getClassLoader() != null ? clazz.getClassLoader() : MagicJIT.class.getClassLoader();
 			Class<?>    genClass = Magic.defineClass(loader, bytes);
-			return (MagicConstructorInvoker) genClass.getDeclaredConstructor().newInstance();
+			return (MagicConstructorInvoker) Magic.unsafe.allocateInstance(genClass);
 		} catch (Throwable e) {
 			return null;
 		}
@@ -1265,137 +1463,56 @@ public class MagicJIT implements Opcodes {
 		if (MEMBER_NAME_CLASS == null || LinkerHelper.IS_ANDROID) return null;
 		Constructor<?> targetCtor = MethodResolver.findConstructor(clazz, arity);
 		if (targetCtor == null) return null;
-		boolean visible = isConstructorVisibleToBootstrap(clazz, targetCtor);
-		Object fallbackMn = null;
+
+		Object mn = null;
+		try {
+			MethodType mt = MethodType.methodType(void.class, targetCtor.getParameterTypes());
+			mn = resolveOrFail((byte) 7, clazz, "<init>", mt);
+		} catch (Throwable ignored) {
+		}
+		if (mn == null) {
+			try {
+				targetCtor.setAccessible(true);
+				MethodHandle rawCtor = Magic.lookup.unreflectConstructor(targetCtor);
+				mn = LinkerHelper.extractMemberName(rawCtor);
+			} catch (Throwable ignored) {
+			}
+		}
+		if (mn == null) return null;
+
+		CtorBridgeInfo bridge = getOrCreateCtorBridge(targetCtor.getParameterTypes());
+		if (bridge == null) return null;
+
+		String bridgeInternalName = bridge.bridgeInternalName;
+		String bridgeDesc         = bridge.bridgeDesc;
 
 		try {
-			if (!visible) {
-				MethodHandle rawCtor = Magic.lookup.unreflectConstructor(targetCtor);
-				fallbackMn = LinkerHelper.extractMemberName(rawCtor);
-				if (fallbackMn == null) return null;
-			}
-
-			Magic.install();
-			String bridgeSimpleName = "MagicCtorBridge_" + COUNTER.incrementAndGet();
-			String bridgeInternalName = "java/lang/invoke/" + bridgeSimpleName;
-
-			ClassWriter bw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
-			bw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, bridgeInternalName, null, "java/lang/Object", null);
-
-			if (visible) {
-				FieldVisitor fv = bw.visitField(ACC_PUBLIC | ACC_STATIC | ACC_FINAL, "MN", "Ljava/lang/invoke/MemberName;", null, null);
-				fv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
-				fv.visitEnd();
-			} else {
-				FieldVisitor fv = bw.visitField(ACC_PUBLIC | ACC_STATIC | ACC_VOLATILE, "MN", "Ljava/lang/Object;", null, null);
-				fv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
-				fv.visitEnd();
-			}
-
-			StringBuilder bridgeDesc = new StringBuilder("(Ljava/lang/Class;");
-			for (int i = 0; i < arity; i++) {
-				bridgeDesc.append("Ljava/lang/Object;");
-			}
-			bridgeDesc.append(")Ljava/lang/Object;");
-
-			MethodVisitor mv = bw.visitMethod(ACC_PUBLIC | ACC_STATIC, "newInstance", bridgeDesc.toString(), null, new String[]{"java/lang/Throwable"});
-			mv.visitAnnotation("Ljdk/internal/vm/annotation/ForceInline;", true).visitEnd();
-			mv.visitAnnotation("Ljava/lang/invoke/ForceInline;", true).visitEnd();
-			mv.visitAnnotation("Ljdk/internal/vm/annotation/Hidden;", true).visitEnd();
-			mv.visitAnnotation("Ljava/lang/invoke/LambdaForm$Hidden;", true).visitEnd();
-			mv.visitCode();
-
-			mv.visitMethodInsn(INVOKESTATIC, "jdk/internal/misc/Unsafe", "getUnsafe", "()Ljdk/internal/misc/Unsafe;", false);
-			mv.visitVarInsn(ALOAD, 0); // Class<?> cls
-			mv.visitMethodInsn(INVOKEVIRTUAL, "jdk/internal/misc/Unsafe", "allocateInstance", "(Ljava/lang/Class;)Ljava/lang/Object;", false);
-			mv.visitInsn(DUP);
-
-			Class<?>[] paramTypes = targetCtor.getParameterTypes();
-			for (int i = 0; i < arity; i++) {
-				mv.visitVarInsn(ALOAD, 1 + i);
-				emitBootstrapUnbox(mv, paramTypes[i]);
-			}
-
-			if (visible) {
-				mv.visitFieldInsn(GETSTATIC, bridgeInternalName, "MN", "Ljava/lang/invoke/MemberName;");
-			} else {
-				mv.visitFieldInsn(GETSTATIC, bridgeInternalName, "MN", "Ljava/lang/Object;");
-				mv.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
-			}
-
-			StringBuilder linkToDesc = new StringBuilder("(Ljava/lang/Object;");
-			for (int i = 0; i < arity; i++) {
-				if (paramTypes[i].isPrimitive()) {
-					linkToDesc.append(Type.getDescriptor(paramTypes[i]));
-				} else {
-					linkToDesc.append("Ljava/lang/Object;");
-				}
-			}
-			linkToDesc.append("Ljava/lang/invoke/MemberName;)V");
-
-			mv.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandle", "linkToSpecial", linkToDesc.toString(), false);
-			mv.visitInsn(ARETURN);
-			mv.visitMaxs(0, 0);
-			mv.visitEnd();
-
-			if (visible) {
-				byte refKind = 7; // REF_invokeSpecial for constructor
-				String ctorDesc = Type.getConstructorDescriptor(targetCtor);
-
-				MethodVisitor clinit = bw.visitMethod(ACC_STATIC, "<clinit>", "()V", null, null);
-				clinit.visitCode();
-
-				clinit.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MemberName", "getFactory", "()Ljava/lang/invoke/MemberName$Factory;", false);
-				clinit.visitIntInsn(BIPUSH, refKind);
-				clinit.visitTypeInsn(NEW, "java/lang/invoke/MemberName");
-				clinit.visitInsn(DUP);
-
-				emitPushClassForBootstrap(clinit, clazz);
-				clinit.visitLdcInsn("<init>");
-				clinit.visitLdcInsn(ctorDesc);
-				clinit.visitMethodInsn(INVOKESTATIC, "java/lang/ClassLoader", "getSystemClassLoader", "()Ljava/lang/ClassLoader;", false);
-				clinit.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodType", "fromMethodDescriptorString",
-					"(Ljava/lang/String;Ljava/lang/ClassLoader;)Ljava/lang/invoke/MethodType;", false);
-
-				clinit.visitIntInsn(BIPUSH, refKind);
-				clinit.visitMethodInsn(INVOKESPECIAL, "java/lang/invoke/MemberName", "<init>",
-					"(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;B)V", false);
-
-				clinit.visitInsn(ACONST_NULL);
-				clinit.visitInsn(ICONST_M1);
-				clinit.visitLdcInsn(Type.getType(NoSuchMethodException.class));
-				clinit.visitMethodInsn(INVOKEVIRTUAL, "java/lang/invoke/MemberName$Factory", "resolveOrFail",
-					"(BLjava/lang/invoke/MemberName;Ljava/lang/Class;ILjava/lang/Class;)Ljava/lang/invoke/MemberName;", false);
-				clinit.visitFieldInsn(PUTSTATIC, bridgeInternalName, "MN", "Ljava/lang/invoke/MemberName;");
-
-				clinit.visitInsn(RETURN);
-				clinit.visitMaxs(0, 0);
-				clinit.visitEnd();
-			}
-
-			bw.visitEnd();
-
-			Class<?> bridgeClass = Magic.defineClass(null, bw.toByteArray());
-			if (!visible) {
-				Field mnField = bridgeClass.getDeclaredField("MN");
-				Magic.unsafe.putObject(Magic.unsafe.staticFieldBase(mnField), Magic.unsafe.staticFieldOffset(mnField), fallbackMn);
-			}
-
-			String invokerClassName = "hope/magic/gen/MagicLinkToCtorInvoker_" + COUNTER.incrementAndGet();
-			ClassWriter iw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+			String      invokerClassName = "hope/magic/gen/MagicLinkToCtorInvoker_" + COUNTER.incrementAndGet();
+			ClassWriter iw               = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 			iw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
-				new String[]{Type.getInternalName(MagicConstructorInvoker.class)});
+			 new String[]{Type.getInternalName(MagicConstructorInvoker.class)});
 
-			FieldVisitor tfv = iw.visitField(ACC_PUBLIC | ACC_STATIC, "TARGET_CLS", "Ljava/lang/Class;", null, null);
+			FieldVisitor tfv = iw.visitField(ACC_PUBLIC | ACC_STATIC | ACC_FINAL, "TARGET_CLS", "Ljava/lang/Class;", null, null);
 			tfv.visitEnd();
 
-			MethodVisitor initMv = iw.visitMethod(ACC_PUBLIC, "<init>", "()V", null, null);
-			initMv.visitCode();
-			initMv.visitVarInsn(ALOAD, 0);
-			initMv.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
-			initMv.visitInsn(RETURN);
-			initMv.visitMaxs(0, 0);
-			initMv.visitEnd();
+			FieldVisitor mfv = iw.visitField(ACC_PUBLIC | ACC_STATIC | ACC_FINAL, "MN", "Ljava/lang/Object;", null, null);
+			mfv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
+			mfv.visitEnd();
+
+			MethodVisitor clinit = iw.visitMethod(ACC_STATIC, "<clinit>", "()V", null, null);
+			clinit.visitCode();
+			pushInt(clinit, 0);
+			clinit.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/MagicJIT", "getPendingInit", "(I)Ljava/lang/Object;", false);
+			clinit.visitFieldInsn(PUTSTATIC, invokerClassName, "MN", "Ljava/lang/Object;");
+
+			pushInt(clinit, 1);
+			clinit.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/MagicJIT", "getPendingInit", "(I)Ljava/lang/Object;", false);
+			clinit.visitTypeInsn(CHECKCAST, "java/lang/Class");
+			clinit.visitFieldInsn(PUTSTATIC, invokerClassName, "TARGET_CLS", "Ljava/lang/Class;");
+
+			clinit.visitInsn(RETURN);
+			clinit.visitMaxs(0, 0);
+			clinit.visitEnd();
 
 			MethodVisitor newMv = iw.visitMethod(ACC_PUBLIC, "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
 			newMv.visitCode();
@@ -1405,6 +1522,7 @@ public class MagicJIT implements Opcodes {
 				pushInt(newMv, i);
 				newMv.visitInsn(AALOAD);
 			}
+			newMv.visitFieldInsn(GETSTATIC, invokerClassName, "MN", "Ljava/lang/Object;");
 			newMv.visitMethodInsn(INVOKESTATIC, bridgeInternalName, "newInstance", bridgeDesc.toString(), false);
 			newMv.visitInsn(ARETURN);
 			newMv.visitMaxs(0, 0);
@@ -1414,6 +1532,7 @@ public class MagicJIT implements Opcodes {
 				MethodVisitor n0 = iw.visitMethod(ACC_PUBLIC, "newInstance0", "()Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
 				n0.visitCode();
 				n0.visitFieldInsn(GETSTATIC, invokerClassName, "TARGET_CLS", "Ljava/lang/Class;");
+				n0.visitFieldInsn(GETSTATIC, invokerClassName, "MN", "Ljava/lang/Object;");
 				n0.visitMethodInsn(INVOKESTATIC, bridgeInternalName, "newInstance", bridgeDesc.toString(), false);
 				n0.visitInsn(ARETURN);
 				n0.visitMaxs(0, 0);
@@ -1423,6 +1542,7 @@ public class MagicJIT implements Opcodes {
 				n1.visitCode();
 				n1.visitFieldInsn(GETSTATIC, invokerClassName, "TARGET_CLS", "Ljava/lang/Class;");
 				n1.visitVarInsn(ALOAD, 1);
+				n1.visitFieldInsn(GETSTATIC, invokerClassName, "MN", "Ljava/lang/Object;");
 				n1.visitMethodInsn(INVOKESTATIC, bridgeInternalName, "newInstance", bridgeDesc.toString(), false);
 				n1.visitInsn(ARETURN);
 				n1.visitMaxs(0, 0);
@@ -1433,6 +1553,7 @@ public class MagicJIT implements Opcodes {
 				n2.visitFieldInsn(GETSTATIC, invokerClassName, "TARGET_CLS", "Ljava/lang/Class;");
 				n2.visitVarInsn(ALOAD, 1);
 				n2.visitVarInsn(ALOAD, 2);
+				n2.visitFieldInsn(GETSTATIC, invokerClassName, "MN", "Ljava/lang/Object;");
 				n2.visitMethodInsn(INVOKESTATIC, bridgeInternalName, "newInstance", bridgeDesc.toString(), false);
 				n2.visitInsn(ARETURN);
 				n2.visitMaxs(0, 0);
@@ -1444,30 +1565,23 @@ public class MagicJIT implements Opcodes {
 				n3.visitVarInsn(ALOAD, 1);
 				n3.visitVarInsn(ALOAD, 2);
 				n3.visitVarInsn(ALOAD, 3);
+				n3.visitFieldInsn(GETSTATIC, invokerClassName, "MN", "Ljava/lang/Object;");
 				n3.visitMethodInsn(INVOKESTATIC, bridgeInternalName, "newInstance", bridgeDesc.toString(), false);
 				n3.visitInsn(ARETURN);
 				n3.visitMaxs(0, 0);
 				n3.visitEnd();
 			}
-
-			iw.visitEnd();
-			ClassLoader loader = clazz.getClassLoader() != null ? clazz.getClassLoader() : MagicJIT.class.getClassLoader();
-			Class<?> invokerClass = Magic.defineClass(loader, iw.toByteArray());
-			invokerClass.getField("TARGET_CLS").set(null, clazz);
-			return (MagicConstructorInvoker) invokerClass.getDeclaredConstructor().newInstance();
+			PENDING_INIT.set(new Object[]{mn, clazz});
+			try {
+				ClassLoader loader       = clazz.getClassLoader() != null ? clazz.getClassLoader() : MagicJIT.class.getClassLoader();
+				Class<?>    invokerClass = Magic.defineClass(loader, iw.toByteArray());
+				return (MagicConstructorInvoker) Magic.unsafe.allocateInstance(invokerClass);
+			} finally {
+				PENDING_INIT.remove();
+			}
 		} catch (Throwable t) {
 			return null;
 		}
-	}
-
-	private static void createMagicInitMethod(ClassWriter cw) {
-		MethodVisitor initMv = cw.visitMethod(ACC_PUBLIC, "<init>", "()V", null, null);
-		initMv.visitCode();
-		initMv.visitVarInsn(ALOAD, 0);
-		initMv.visitMethodInsn(INVOKESPECIAL, "hope/magic/runtime/MAGICIMPL", "<init>", "()V", false);
-		initMv.visitInsn(RETURN);
-		initMv.visitMaxs(0, 0);
-		initMv.visitEnd();
 	}
 
 	public static Field getDeclaredFieldRecursive(Class<?> clazz, String fieldName) {

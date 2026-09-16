@@ -18,6 +18,13 @@ dependencies {
 
 test {
 	useJUnitPlatform()
+	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
+		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
+	}
+	jvmArgs(
+		'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
+		'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED'
+	)
 }
 
 tasks.register('soakTest', Test) {
@@ -25,7 +32,12 @@ tasks.register('soakTest', Test) {
 	classpath = sourceSets.test.runtimeClasspath
 	useJUnitPlatform()
 	include '**/PolyMorphicSoakTest.*'
+	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
+		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
+	}
 	jvmArgs = [
+		'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
+		'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED',
 		'-Xcheck:jni',
 		'-XX:+UnlockDiagnosticVMOptions',
 		'-XX:+VerifyBeforeGC',

@@ -15,6 +15,7 @@ public class Magic {
 	public static final Lookup lookup = getLookup();
 
 	private static volatile boolean installed = false;
+	private static volatile boolean magicAccessorInstalled = false;
 	private static volatile boolean moduleOpened = false;
 
 	static {
@@ -45,6 +46,14 @@ public class Magic {
 			moduleOpened = true;
 		} catch (Throwable ignored) {
 		}
+	}
+
+	public static boolean isInstalled() {
+		return installed;
+	}
+
+	public static boolean isMagicAccessorInstalled() {
+		return magicAccessorInstalled;
 	}
 
 	/**
@@ -90,7 +99,9 @@ public class Magic {
 					);
 					defineClass(null, apzMagicImplBytes);
 				}
+				magicAccessorInstalled = true;
 			} catch (Throwable ignored) {
+				magicAccessorInstalled = false;
 			}
 
 			installed = true;

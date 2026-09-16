@@ -189,4 +189,41 @@ flowchart TD
 - [`magic-accessor/magic-js/src/test/java/hope/magic/js/test/MagicJITLinkToBenchmarkTest.java`](file:///E:/Users/ASUS/Desktop/Mods/mod-tools136/magic-accessor/magic-js/src/test/java/hope/magic/js/test/MagicJITLinkToBenchmarkTest.java)
   - 包含零装箱、多 AccessMode 对比、构造器创建等完整压测基准。
 - [`magic-accessor/magic-js/src/test/java/hope/magic/js/test/ClassValueUnloadTest.java`](file:///E:/Users/ASUS/Desktop/Mods/mod-tools136/magic-accessor/magic-js/src/test/java/hope/magic/js/test/ClassValueUnloadTest.java)
-  - 维护类加载器生命周期与 Bridge 缓存复用测试。
+  - 维护类加载器生命周期与 Bridge 缓存复用测试，增加方案 B (HiddenClass Invoker) 原型与卸载验证测试。
+- [`magic-accessor/annotations/src/main/java/hope/magic/runtime/MagicBootstrapInvoker.java`](file:///E:/Users/ASUS/Desktop/Mods/mod-tools136/magic-accessor/annotations/src/main/java/hope/magic/runtime/MagicBootstrapInvoker.java)
+  - 核心运行时模块中新增 Bootstrap 级调用器通用接口。
+
+---
+
+## 7. 进阶探索：借鉴 LambdaForm.vmentry 与 Hidden Class（方案 B）实测报告
+
+### 7.1 理论矛盾回顾
+- **方案 1 优势**：使用具名类的 `@Stable public static final MN`，C2 在字节码解析阶段无条件常量折叠，达到极限 **3.47 ms**（144 万 ops/ms）；
+- **方案 1 代价**：具名类在 Bootstrap ClassLoader 字典中永久常驻，若直接用于自定义插件类加载器，会导致 `Bridge.MN -> MemberName.clazz -> PluginClassLoader` 发生 Metaspace 内存泄漏（当前通过双轨制，使插件类回退至 `MAGIC_ACCESSOR` 解决）。
+
+### 7.2 方案 B 原型机制
+借鉴 OpenJDK `LambdaForm.vmentry` 与 `InvokerBytecodeGenerator`，将 Invoker 生成为 HotSpot 非强引用 **Hidden Class (隐藏类)**：
+1. **Bootstrap 统一接口**：在 Bootstrap ClassLoader 中动态定义 `java.lang.invoke.MagicInvokerBootstrap`；
+2. **Hidden Class 嵌入常量**：在 `java.lang.invoke` 包下通过 `Lookup.defineHiddenClass` 定义隐式调用器 `PlanBHiddenInvoker`，直接嵌入 `@Stable public static final Object MN` 并直连 `MethodHandle.linkToVirtual`；
+3. **消除跨模块隔离**：调用 `Module.implAddReadsAllUnnamed` 使 `java.base` 读取未命名模块；
+4. **App 委托包装器**：由目标类加载器下的 `PlanBAppInvoker` 持有 `@Stable final MagicInvokerBootstrap delegate` 进行接口直分发。
+
+### 7.3 实机基准压测与卸载验证（1000万次调用）
+
+| 方案 | 耗时 (ms) | 吞吐量 (ops/ms) | ClassLoader 卸载率 | 说明 |
+| :--- | :--- | :--- | :--- | :--- |
+| **原生直接调用** | **3.47** | 1,440,922 | 100% | 理论硬件极限基准 |
+| **方案 1 (专用静态 Bridge)** | **3.47** | 1,440,009 | 0% (永久类静态常驻) | 系统类/永久类最高性能选择 |
+| **方案 B (HiddenClass Invoker)** | **15.88** | **629,560** | **100% (完全回收)** | 隐式类无类字典锁定，随堆实例 100% 回收，比动态 linkTo 快 3 倍 |
+| **MAGIC_ACCESSOR (ASM 原生直调)** | **5.05** | 990,099 | **100% (完全回收)** | 插件类在常规方法下的极速最佳平衡点 |
+| **原生动态 `linkToVirtual`** | 45.34 | 220,556 | 100% | 间接未内联分发 |
+
+**GC 探测结果**：
+```text
+PLAN B (HiddenClass + Invoker) invokeInt2: 15.88 ms (629560 ops/ms)
+PluginClassLoader after GC: null
+HiddenClass after GC: null
+Invoker after GC: null
+```
+验证确认方案 B 在完全打破 Bootstrap 静态锁定的同时，实现了 **100% Metaspace 垃圾回收**与近 3 倍性能提升。
+

@@ -6,6 +6,7 @@ import java.lang.invoke.MethodType;
 /**
  * 运行期模块权限开放工具。
  */
+@SuppressWarnings("removal")
 public class ModuleOpen {
 	private static final MethodHandle OPEN_MODULE;
 

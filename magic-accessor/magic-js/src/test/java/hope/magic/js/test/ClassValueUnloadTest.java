@@ -11,6 +11,9 @@ import java.lang.reflect.*;
 import java.util.List;
 
 public class ClassValueUnloadTest {
+	static {
+		Magic.install();
+	}
 
 	private static class SimpleClassLoader extends ClassLoader {
 		public SimpleClassLoader(ClassLoader parent) {
@@ -279,6 +282,258 @@ public class ClassValueUnloadTest {
 			Assertions.assertEquals(mbBefore, MagicJIT.getMethodBridgeCacheSize(), "Method bridge must be cached and reused for same method");
 			Assertions.assertEquals(cbBefore, MagicJIT.getCtorBridgeCacheSize(), "Ctor bridge must be cached and reused for same ctor");
 		}
+	}
+
+	private static Class<?> getOrCreateBootstrapInvokerInterface() throws Throwable {
+		String name = "java.lang.invoke.MagicInvokerBootstrap";
+		try {
+			return Class.forName(name, false, null);
+		} catch (ClassNotFoundException e) {
+			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+			cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_INTERFACE | Opcodes.ACC_ABSTRACT,
+				name.replace('.', '/'), null, "java/lang/Object", null);
+
+			cw.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_ABSTRACT, "invokeInt2",
+				"(Ljava/lang/Object;II)I", null, new String[]{"java/lang/Throwable"}).visitEnd();
+
+			cw.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_ABSTRACT, "invoke2",
+				"(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"}).visitEnd();
+
+			cw.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_ABSTRACT, "invoke",
+				"(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"}).visitEnd();
+
+			cw.visitEnd();
+			return Magic.defineClass(null, cw.toByteArray());
+		}
+	}
+
+	private WeakReference<?>[] exercisePlanB() throws Throwable {
+		Class<?> bootIface = getOrCreateBootstrapInvokerInterface();
+		String bootIfaceInternal = org.objectweb.asm.Type.getInternalName(bootIface);
+
+		// Target class in custom ClassLoader
+		SimpleClassLoader pluginLoader = new SimpleClassLoader(getClass().getClassLoader());
+		ClassWriter targetCw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+		targetCw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC, "hope/magic/test/PluginTarget", null, "java/lang/Object", null);
+
+		MethodVisitor initMv = targetCw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+		initMv.visitCode();
+		initMv.visitVarInsn(Opcodes.ALOAD, 0);
+		initMv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+		initMv.visitInsn(Opcodes.RETURN);
+		initMv.visitMaxs(1, 1);
+		initMv.visitEnd();
+
+		MethodVisitor mulMv = targetCw.visitMethod(Opcodes.ACC_PUBLIC, "multiply", "(II)I", null, null);
+		mulMv.visitCode();
+		mulMv.visitVarInsn(Opcodes.ILOAD, 1);
+		mulMv.visitVarInsn(Opcodes.ILOAD, 2);
+		mulMv.visitInsn(Opcodes.IMUL);
+		mulMv.visitInsn(Opcodes.IRETURN);
+		mulMv.visitMaxs(2, 3);
+		mulMv.visitEnd();
+		targetCw.visitEnd();
+
+		Class<?> pluginClass = pluginLoader.define("hope.magic.test.PluginTarget", targetCw.toByteArray());
+		Object pluginInstance = pluginClass.getDeclaredConstructor().newInstance();
+		Method multiplyMethod = pluginClass.getMethod("multiply", int.class, int.class);
+
+		java.lang.invoke.MethodHandle mh = Magic.lookup.unreflect(multiplyMethod);
+		Object mn = hope.magic.runtime.LinkerHelper.extractMemberName(mh);
+
+		// 1. Generate Hidden Class in java.lang.invoke implementing MagicInvokerBootstrap
+		String hiddenClassName = "java/lang/invoke/PlanBHiddenInvoker";
+		ClassWriter hw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+		hw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, hiddenClassName, null, "java/lang/Object",
+			new String[]{ bootIfaceInternal });
+
+		FieldVisitor fv = hw.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL, "MN", "Ljava/lang/Object;", null, null);
+		fv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
+		fv.visitEnd();
+
+		MethodVisitor hInit = hw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+		hInit.visitCode();
+		hInit.visitVarInsn(Opcodes.ALOAD, 0);
+		hInit.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+		hInit.visitInsn(Opcodes.RETURN);
+		hInit.visitMaxs(1, 1);
+		hInit.visitEnd();
+
+		// invokeInt2: GETSTATIC MN -> linkToVirtual
+		MethodVisitor hInvoke = hw.visitMethod(Opcodes.ACC_PUBLIC, "invokeInt2", "(Ljava/lang/Object;II)I", null, new String[]{"java/lang/Throwable"});
+		hInvoke.visitAnnotation("Ljdk/internal/vm/annotation/ForceInline;", true).visitEnd();
+		hInvoke.visitCode();
+		hInvoke.visitVarInsn(Opcodes.ALOAD, 1);
+		hInvoke.visitVarInsn(Opcodes.ILOAD, 2);
+		hInvoke.visitVarInsn(Opcodes.ILOAD, 3);
+		hInvoke.visitFieldInsn(Opcodes.GETSTATIC, hiddenClassName, "MN", "Ljava/lang/Object;");
+		hInvoke.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/invoke/MethodHandle", "linkToVirtual",
+			"(Ljava/lang/Object;IILjava/lang/invoke/MemberName;)I", false);
+		hInvoke.visitInsn(Opcodes.IRETURN);
+		hInvoke.visitMaxs(4, 4);
+		hInvoke.visitEnd();
+
+		// invoke2
+		MethodVisitor hInvoke2 = hw.visitMethod(Opcodes.ACC_PUBLIC, "invoke2", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+		hInvoke2.visitCode();
+		hInvoke2.visitVarInsn(Opcodes.ALOAD, 0);
+		hInvoke2.visitVarInsn(Opcodes.ALOAD, 1);
+		hInvoke2.visitVarInsn(Opcodes.ALOAD, 2);
+		hInvoke2.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Number");
+		hInvoke2.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Number", "intValue", "()I", false);
+		hInvoke2.visitVarInsn(Opcodes.ALOAD, 3);
+		hInvoke2.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Number");
+		hInvoke2.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Number", "intValue", "()I", false);
+		hInvoke2.visitMethodInsn(Opcodes.INVOKEVIRTUAL, hiddenClassName, "invokeInt2", "(Ljava/lang/Object;II)I", false);
+		hInvoke2.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+		hInvoke2.visitInsn(Opcodes.ARETURN);
+		hInvoke2.visitMaxs(4, 4);
+		hInvoke2.visitEnd();
+
+		// invoke
+		MethodVisitor hInvokeArr = hw.visitMethod(Opcodes.ACC_PUBLIC, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+		hInvokeArr.visitCode();
+		hInvokeArr.visitVarInsn(Opcodes.ALOAD, 0);
+		hInvokeArr.visitVarInsn(Opcodes.ALOAD, 1);
+		hInvokeArr.visitVarInsn(Opcodes.ALOAD, 2);
+		hInvokeArr.visitInsn(Opcodes.ICONST_0);
+		hInvokeArr.visitInsn(Opcodes.AALOAD);
+		hInvokeArr.visitVarInsn(Opcodes.ALOAD, 2);
+		hInvokeArr.visitInsn(Opcodes.ICONST_1);
+		hInvokeArr.visitInsn(Opcodes.AALOAD);
+		hInvokeArr.visitMethodInsn(Opcodes.INVOKEVIRTUAL, hiddenClassName, "invoke2", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
+		hInvokeArr.visitInsn(Opcodes.ARETURN);
+		hInvokeArr.visitMaxs(5, 3);
+		hInvokeArr.visitEnd();
+		hw.visitEnd();
+
+		java.lang.invoke.MethodHandles.Lookup invokeLookup = java.lang.invoke.MethodHandles.privateLookupIn(
+			java.lang.invoke.MethodHandle.class, Magic.lookup
+		);
+		java.lang.invoke.MethodHandles.Lookup hiddenLookup = invokeLookup.defineHiddenClass(hw.toByteArray(), true);
+		Class<?> hiddenClass = hiddenLookup.lookupClass();
+
+		Field mnField = hiddenClass.getDeclaredField("MN");
+		jdk.internal.misc.Unsafe jdkUnsafe = jdk.internal.misc.Unsafe.getUnsafe();
+		long offset = jdkUnsafe.staticFieldOffset(mnField);
+		Object base = jdkUnsafe.staticFieldBase(mnField);
+		jdkUnsafe.putReference(base, offset, mn);
+
+		Object rawHiddenInvoker = hiddenClass.getDeclaredConstructor().newInstance();
+
+		// 2. Generate MagicInvoker in pluginLoader (or AppClassLoader) delegating to rawHiddenInvoker
+		String appInvokerName = "hope/magic/test/PlanBAppInvoker";
+		ClassWriter aw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+		aw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, appInvokerName, null, "java/lang/Object",
+			new String[]{ org.objectweb.asm.Type.getInternalName(MagicJIT.MagicInvoker.class) });
+
+		FieldVisitor afv = aw.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, "delegate", "L" + bootIfaceInternal + ";", null, null);
+		afv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
+		afv.visitEnd();
+
+		MethodVisitor aInit = aw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "(L" + bootIfaceInternal + ";)V", null, null);
+		aInit.visitCode();
+		aInit.visitVarInsn(Opcodes.ALOAD, 0);
+		aInit.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+		aInit.visitVarInsn(Opcodes.ALOAD, 0);
+		aInit.visitVarInsn(Opcodes.ALOAD, 1);
+		aInit.visitFieldInsn(Opcodes.PUTFIELD, appInvokerName, "delegate", "L" + bootIfaceInternal + ";");
+		aInit.visitInsn(Opcodes.RETURN);
+		aInit.visitMaxs(2, 2);
+		aInit.visitEnd();
+
+		// invokeInt2: delegate.invokeInt2
+		MethodVisitor aInvoke = aw.visitMethod(Opcodes.ACC_PUBLIC, "invokeInt2", "(Ljava/lang/Object;II)I", null, new String[]{"java/lang/Throwable"});
+		aInvoke.visitAnnotation("Ljdk/internal/vm/annotation/ForceInline;", true).visitEnd();
+		aInvoke.visitCode();
+		aInvoke.visitVarInsn(Opcodes.ALOAD, 0);
+		aInvoke.visitFieldInsn(Opcodes.GETFIELD, appInvokerName, "delegate", "L" + bootIfaceInternal + ";");
+		aInvoke.visitVarInsn(Opcodes.ALOAD, 1);
+		aInvoke.visitVarInsn(Opcodes.ILOAD, 2);
+		aInvoke.visitVarInsn(Opcodes.ILOAD, 3);
+		aInvoke.visitMethodInsn(Opcodes.INVOKEINTERFACE, bootIfaceInternal, "invokeInt2", "(Ljava/lang/Object;II)I", true);
+		aInvoke.visitInsn(Opcodes.IRETURN);
+		aInvoke.visitMaxs(4, 4);
+		aInvoke.visitEnd();
+
+		// invoke2: delegate.invoke2
+		MethodVisitor aInvoke2 = aw.visitMethod(Opcodes.ACC_PUBLIC, "invoke2", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+		aInvoke2.visitCode();
+		aInvoke2.visitVarInsn(Opcodes.ALOAD, 0);
+		aInvoke2.visitFieldInsn(Opcodes.GETFIELD, appInvokerName, "delegate", "L" + bootIfaceInternal + ";");
+		aInvoke2.visitVarInsn(Opcodes.ALOAD, 1);
+		aInvoke2.visitVarInsn(Opcodes.ALOAD, 2);
+		aInvoke2.visitVarInsn(Opcodes.ALOAD, 3);
+		aInvoke2.visitMethodInsn(Opcodes.INVOKEINTERFACE, bootIfaceInternal, "invoke2", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true);
+		aInvoke2.visitInsn(Opcodes.ARETURN);
+		aInvoke2.visitMaxs(4, 4);
+		aInvoke2.visitEnd();
+
+		// invoke: delegate.invoke
+		MethodVisitor aInvokeArr = aw.visitMethod(Opcodes.ACC_PUBLIC, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+		aInvokeArr.visitCode();
+		aInvokeArr.visitVarInsn(Opcodes.ALOAD, 0);
+		aInvokeArr.visitFieldInsn(Opcodes.GETFIELD, appInvokerName, "delegate", "L" + bootIfaceInternal + ";");
+		aInvokeArr.visitVarInsn(Opcodes.ALOAD, 1);
+		aInvokeArr.visitVarInsn(Opcodes.ALOAD, 2);
+		aInvokeArr.visitMethodInsn(Opcodes.INVOKEINTERFACE, bootIfaceInternal, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", true);
+		aInvokeArr.visitInsn(Opcodes.ARETURN);
+		aInvokeArr.visitMaxs(3, 3);
+		aInvokeArr.visitEnd();
+		aw.visitEnd();
+
+		Class<?> appInvokerClass = pluginLoader.define("hope.magic.test.PlanBAppInvoker", aw.toByteArray());
+		Constructor<?> appCtor = appInvokerClass.getConstructor(bootIface);
+		MagicJIT.MagicInvoker invoker = (MagicJIT.MagicInvoker) appCtor.newInstance(rawHiddenInvoker);
+
+		int res = invoker.invokeInt2(pluginInstance, 6, 7);
+		Assertions.assertEquals(42, res);
+
+		// Benchmark C2 inline performance!
+		for (int i = 0; i < 200_000; i++) {
+			invoker.invokeInt2(pluginInstance, i, 2);
+		}
+		int iterations = 10_000_000;
+		long start = System.nanoTime();
+		long sum = 0;
+		for (int i = 0; i < iterations; i++) {
+			sum += invoker.invokeInt2(pluginInstance, i, 2);
+		}
+		double timeMs = (System.nanoTime() - start) / 1_000_000.0;
+		System.out.printf("PLAN B (HiddenClass + Invoker) invokeInt2: %.2f ms (%.0f ops/ms)%n",
+			timeMs, iterations / timeMs);
+
+		return new WeakReference<?>[]{
+			new WeakReference<>(pluginLoader),
+			new WeakReference<>(pluginClass),
+			new WeakReference<>(hiddenClass),
+			new WeakReference<>(invoker)
+		};
+	}
+
+	@Test
+	public void testPlanBHiddenClassInvoker() throws Throwable {
+		WeakReference<?>[] refs = exercisePlanB();
+		WeakReference<?> loaderRef = refs[0];
+		WeakReference<?> classRef = refs[1];
+		WeakReference<?> hiddenRef = refs[2];
+		WeakReference<?> invokerRef = refs[3];
+
+		boolean collected = false;
+		for (int i = 0; i < 50; i++) {
+			System.gc();
+			if (loaderRef.get() == null && hiddenRef.get() == null) {
+				collected = true;
+				break;
+			}
+			Thread.sleep(20);
+		}
+
+		System.out.println("PluginClassLoader after GC: " + loaderRef.get());
+		System.out.println("HiddenClass after GC: " + hiddenRef.get());
+		System.out.println("Invoker after GC: " + invokerRef.get());
+
+		Assertions.assertTrue(collected, "Both PluginClassLoader and HiddenClass must be collected by GC!");
 	}
 
 	public static class Point {

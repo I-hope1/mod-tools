@@ -10,6 +10,7 @@ import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
+@SuppressWarnings("removal")
 public class Magic {
 	public static final Unsafe unsafe = getUnsafe();
 	public static final Lookup lookup = getLookup();
@@ -148,6 +149,30 @@ public class Magic {
 				magicAccessorInstalled = true;
 			} catch (Throwable ignored) {
 				magicAccessorInstalled = false;
+			}
+
+			// 注入 Bootstrap 直调接口 MagicBootstrapInvoker 并为 java.base 开放未命名模块读取权限
+			try {
+				try {
+					Class.forName("hope.magic.runtime.MagicBootstrapInvoker", false, null);
+				} catch (ClassNotFoundException e) {
+					try (java.io.InputStream in = MagicBootstrapInvoker.class.getResourceAsStream("/hope/magic/runtime/MagicBootstrapInvoker.class")) {
+						if (in != null) {
+							byte[] invokerBytes = in.readAllBytes();
+							defineClass(null, invokerBytes);
+						}
+					}
+				}
+				if (!LinkerHelper.IS_ANDROID) {
+					try {
+						java.lang.invoke.MethodHandle addReadsMh = lookup.findVirtual(
+							Module.class, "implAddReadsAllUnnamed", java.lang.invoke.MethodType.methodType(void.class)
+						);
+						addReadsMh.invokeExact(Object.class.getModule());
+					} catch (Throwable ignored) {
+					}
+				}
+			} catch (Throwable ignored) {
 			}
 
 			installed = true;

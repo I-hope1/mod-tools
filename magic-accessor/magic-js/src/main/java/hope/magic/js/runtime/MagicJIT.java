@@ -826,9 +826,9 @@ public class MagicJIT implements Opcodes {
 			mv.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
 
 			StringBuilder linkToDesc = new StringBuilder("(Ljava/lang/Object;");
-			for (int i = 0; i < arity; i++) {
-				if (paramTypes[i].isPrimitive()) {
-					linkToDesc.append(Type.getDescriptor(paramTypes[i]));
+			for (Class<?> paramType : paramTypes) {
+				if (paramType.isPrimitive()) {
+					linkToDesc.append(Type.getDescriptor(paramType));
 				} else {
 					linkToDesc.append("Ljava/lang/Object;");
 				}
@@ -1068,9 +1068,9 @@ public class MagicJIT implements Opcodes {
 			if (!isStatic) {
 				linkToDesc.append("Ljava/lang/Object;");
 			}
-			for (int i = 0; i < arity; i++) {
-				if (paramTypes[i].isPrimitive()) {
-					linkToDesc.append(Type.getDescriptor(paramTypes[i]));
+			for (Class<?> paramType : paramTypes) {
+				if (paramType.isPrimitive()) {
+					linkToDesc.append(Type.getDescriptor(paramType));
 				} else {
 					linkToDesc.append("Ljava/lang/Object;");
 				}
@@ -1523,7 +1523,7 @@ public class MagicJIT implements Opcodes {
 				newMv.visitInsn(AALOAD);
 			}
 			newMv.visitFieldInsn(GETSTATIC, invokerClassName, "MN", "Ljava/lang/Object;");
-			newMv.visitMethodInsn(INVOKESTATIC, bridgeInternalName, "newInstance", bridgeDesc.toString(), false);
+			newMv.visitMethodInsn(INVOKESTATIC, bridgeInternalName, "newInstance", bridgeDesc, false);
 			newMv.visitInsn(ARETURN);
 			newMv.visitMaxs(0, 0);
 			newMv.visitEnd();
@@ -1533,7 +1533,7 @@ public class MagicJIT implements Opcodes {
 				n0.visitCode();
 				n0.visitFieldInsn(GETSTATIC, invokerClassName, "TARGET_CLS", "Ljava/lang/Class;");
 				n0.visitFieldInsn(GETSTATIC, invokerClassName, "MN", "Ljava/lang/Object;");
-				n0.visitMethodInsn(INVOKESTATIC, bridgeInternalName, "newInstance", bridgeDesc.toString(), false);
+				n0.visitMethodInsn(INVOKESTATIC, bridgeInternalName, "newInstance", bridgeDesc, false);
 				n0.visitInsn(ARETURN);
 				n0.visitMaxs(0, 0);
 				n0.visitEnd();
@@ -1543,7 +1543,7 @@ public class MagicJIT implements Opcodes {
 				n1.visitFieldInsn(GETSTATIC, invokerClassName, "TARGET_CLS", "Ljava/lang/Class;");
 				n1.visitVarInsn(ALOAD, 1);
 				n1.visitFieldInsn(GETSTATIC, invokerClassName, "MN", "Ljava/lang/Object;");
-				n1.visitMethodInsn(INVOKESTATIC, bridgeInternalName, "newInstance", bridgeDesc.toString(), false);
+				n1.visitMethodInsn(INVOKESTATIC, bridgeInternalName, "newInstance", bridgeDesc, false);
 				n1.visitInsn(ARETURN);
 				n1.visitMaxs(0, 0);
 				n1.visitEnd();
@@ -1554,7 +1554,7 @@ public class MagicJIT implements Opcodes {
 				n2.visitVarInsn(ALOAD, 1);
 				n2.visitVarInsn(ALOAD, 2);
 				n2.visitFieldInsn(GETSTATIC, invokerClassName, "MN", "Ljava/lang/Object;");
-				n2.visitMethodInsn(INVOKESTATIC, bridgeInternalName, "newInstance", bridgeDesc.toString(), false);
+				n2.visitMethodInsn(INVOKESTATIC, bridgeInternalName, "newInstance", bridgeDesc, false);
 				n2.visitInsn(ARETURN);
 				n2.visitMaxs(0, 0);
 				n2.visitEnd();
@@ -1566,7 +1566,7 @@ public class MagicJIT implements Opcodes {
 				n3.visitVarInsn(ALOAD, 2);
 				n3.visitVarInsn(ALOAD, 3);
 				n3.visitFieldInsn(GETSTATIC, invokerClassName, "MN", "Ljava/lang/Object;");
-				n3.visitMethodInsn(INVOKESTATIC, bridgeInternalName, "newInstance", bridgeDesc.toString(), false);
+				n3.visitMethodInsn(INVOKESTATIC, bridgeInternalName, "newInstance", bridgeDesc, false);
 				n3.visitInsn(ARETURN);
 				n3.visitMaxs(0, 0);
 				n3.visitEnd();

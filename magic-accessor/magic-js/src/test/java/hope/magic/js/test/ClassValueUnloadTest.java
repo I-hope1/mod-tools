@@ -489,7 +489,7 @@ public class ClassValueUnloadTest {
 		int res = invoker.invokeInt2(pluginInstance, 6, 7);
 		Assertions.assertEquals(42, res);
 
-		// Benchmark C2 inline performance!
+		// Benchmark C2 inline performance with wrapper!
 		for (int i = 0; i < 200_000; i++) {
 			invoker.invokeInt2(pluginInstance, i, 2);
 		}
@@ -500,8 +500,56 @@ public class ClassValueUnloadTest {
 			sum += invoker.invokeInt2(pluginInstance, i, 2);
 		}
 		double timeMs = (System.nanoTime() - start) / 1_000_000.0;
-		System.out.printf("PLAN B (HiddenClass + Invoker) invokeInt2: %.2f ms (%.0f ops/ms)%n",
+		System.out.printf("PLAN B (Wrapper Invoker) invokeInt2: %.2f ms (%.0f ops/ms)%n",
 			timeMs, iterations / timeMs);
+
+		// Benchmark direct invocation on rawHiddenInvoker via MagicInvokerBootstrap directly!
+		String callerName = "hope/magic/test/DirectBootstrapCaller";
+		ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+		cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC, callerName, null, "java/lang/Object", null);
+		MethodVisitor cmv = cw.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "runBenchmark",
+			"(Ljava/lang/Object;Ljava/lang/Object;I)J", null, new String[]{"java/lang/Throwable"});
+		cmv.visitCode();
+		cmv.visitVarInsn(Opcodes.ALOAD, 0);
+		cmv.visitTypeInsn(Opcodes.CHECKCAST, bootIfaceInternal);
+		cmv.visitVarInsn(Opcodes.ASTORE, 3);
+		cmv.visitInsn(Opcodes.LCONST_0);
+		cmv.visitVarInsn(Opcodes.LSTORE, 4);
+		cmv.visitInsn(Opcodes.ICONST_0);
+		cmv.visitVarInsn(Opcodes.ISTORE, 6);
+		org.objectweb.asm.Label loopStart = new org.objectweb.asm.Label();
+		org.objectweb.asm.Label loopEnd = new org.objectweb.asm.Label();
+		cmv.visitLabel(loopStart);
+		cmv.visitVarInsn(Opcodes.ILOAD, 6);
+		cmv.visitVarInsn(Opcodes.ILOAD, 2);
+		cmv.visitJumpInsn(Opcodes.IF_ICMPGE, loopEnd);
+		cmv.visitVarInsn(Opcodes.LLOAD, 4);
+		cmv.visitVarInsn(Opcodes.ALOAD, 3);
+		cmv.visitVarInsn(Opcodes.ALOAD, 1);
+		cmv.visitVarInsn(Opcodes.ILOAD, 6);
+		cmv.visitInsn(Opcodes.ICONST_2);
+		cmv.visitMethodInsn(Opcodes.INVOKEINTERFACE, bootIfaceInternal, "invokeInt2", "(Ljava/lang/Object;II)I", true);
+		cmv.visitInsn(Opcodes.I2L);
+		cmv.visitInsn(Opcodes.LADD);
+		cmv.visitVarInsn(Opcodes.LSTORE, 4);
+		cmv.visitIincInsn(6, 1);
+		cmv.visitJumpInsn(Opcodes.GOTO, loopStart);
+		cmv.visitLabel(loopEnd);
+		cmv.visitVarInsn(Opcodes.LLOAD, 4);
+		cmv.visitInsn(Opcodes.LRETURN);
+		cmv.visitMaxs(5, 7);
+		cmv.visitEnd();
+		cw.visitEnd();
+
+		Class<?> callerClass = pluginLoader.define("hope.magic.test.DirectBootstrapCaller", cw.toByteArray());
+		Method runM = callerClass.getMethod("runBenchmark", Object.class, Object.class, int.class);
+		// Warmup
+		runM.invoke(null, rawHiddenInvoker, pluginInstance, 200_000);
+		long dStart = System.nanoTime();
+		runM.invoke(null, rawHiddenInvoker, pluginInstance, iterations);
+		double dTimeMs = (System.nanoTime() - dStart) / 1_000_000.0;
+		System.out.printf("PLAN B (Direct Bootstrap Interface) invokeInt2: %.2f ms (%.0f ops/ms)%n",
+			dTimeMs, iterations / dTimeMs);
 
 		return new WeakReference<?>[]{
 			new WeakReference<>(pluginLoader),

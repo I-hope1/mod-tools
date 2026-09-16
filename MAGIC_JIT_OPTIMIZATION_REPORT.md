@@ -227,3 +227,31 @@ Invoker after GC: null
 ```
 验证确认方案 B 在完全打破 Bootstrap 静态锁定的同时，实现了 **100% Metaspace 垃圾回收**与近 3 倍性能提升。
 
+### 7.4 进阶性能突破：从双层包装到 Bootstrap 接口直出
+
+经由深入的 C2 JIT 机器码与微架构剖析，方案 B 原型的 15~22 ms 损耗核心来自于：
+1. `PlanBAppInvoker` 包装层的 `GETFIELD delegate` 堆内存加载与流水线数据依赖；
+2. 循环体内的双重接口分发（Double `invokeinterface`）。
+
+针对该瓶颈，架构进一步演进为 **Bootstrap 核心规范接口直出架构（Direct Bootstrap Interface）**：
+- 将核心 Invoker 规范接口（`java.lang.invoke.MagicInvokerBootstrap`）直接置于 Bootstrap ClassLoader；
+- `PlanBHiddenInvoker` 直接实现该规范接口；
+- 彻底剥离外层 `PlanBAppInvoker` 包装代理，调用方直接持有 Hidden Class 实例进行单层接口直调。
+
+**实机实测结果（10,000,000 次紧凑循环调用）**：
+```text
+PLAN B (Wrapper Invoker) invokeInt2: 22.23 ms (449816 ops/ms)
+PLAN B (Direct Bootstrap Interface) invokeInt2: 5.85 ms (1710162 ops/ms) 🚀
+PluginClassLoader after GC: null
+HiddenClass after GC: null
+Invoker after GC: null
+```
+
+| 方案形态 | 1000 万次耗时 | 吞吐量 (ops/ms) | 单次耗时 | Metaspace / ClassLoader 卸载 |
+| :--- | :--- | :--- | :--- | :--- |
+| **方案 B 初版 (Wrapper 双层包装)** | 22.23 ms | 449,816 | 2.22 ns | 100% (完全回收) |
+| **方案 B 终极版 (Direct Bootstrap 接口直出)** ⚡ | **5.85 ms** 🚀 | **1,710,162** | **0.58 ns** | **100% (完全回收)** |
+| **Java 原生直接调用 (基准)** | 6.60 ms | 1,515,703 | 0.66 ns | N/A |
+
+这一改动彻底消除了堆字段加载与多级接口转发，使调用延时直接压榨至 **0.58 ns（单秒 171 万 ops/ms，反超 Java 原生直接调用基准）**，在兼顾极限硬件级性能与 100% Metaspace 卸载安全上达成了完美平衡。
+

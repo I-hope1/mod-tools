@@ -12,7 +12,7 @@ import java.text.DecimalFormat;
 public class MagicJITLinkToBenchmarkTest {
 
 	public static final class BenchmarkTarget {
-		private final int id;
+		private final int    id;
 		private final String name;
 
 		public BenchmarkTarget() {
@@ -41,7 +41,7 @@ public class MagicJITLinkToBenchmarkTest {
 		}
 	}
 
-	private static final DecimalFormat DF = new DecimalFormat("#,##0.00");
+	private static final DecimalFormat DF     = new DecimalFormat("#,##0.00");
 	private static final DecimalFormat DF_INT = new DecimalFormat("#,##0");
 
 	@Test
@@ -62,11 +62,11 @@ public class MagicJITLinkToBenchmarkTest {
 
 	private void warmup() throws Throwable {
 		BenchmarkTarget target = new BenchmarkTarget(1, "warmup");
-		Method m = BenchmarkTarget.class.getDeclaredMethod("multiply", int.class, int.class);
+		Method          m      = BenchmarkTarget.class.getDeclaredMethod("multiply", int.class, int.class);
 		m.setAccessible(true);
-		MethodHandle mh = Magic.lookup.unreflect(m);
-		MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(BenchmarkTarget.class, "multiply", 2, false);
-		MagicJIT.MagicConstructorInvoker ctor = MagicJIT.getConstructorInvoker(BenchmarkTarget.class, 2);
+		MethodHandle                     mh      = Magic.lookup.unreflect(m);
+		MagicJIT.MagicInvoker            invoker = MagicJIT.getMethodInvoker(BenchmarkTarget.class, "multiply", 2, false);
+		MagicJIT.MagicConstructorInvoker ctor    = MagicJIT.getConstructorInvoker(BenchmarkTarget.class, 2);
 
 		for (int i = 0; i < 200_000; i++) {
 			m.invoke(target, i, 2);
@@ -88,14 +88,14 @@ public class MagicJITLinkToBenchmarkTest {
 		System.out.printf("%-42s | %-12s | %-16s | %-10s%n", "调用方式", "耗时 (ms)", "吞吐量 (ops/ms)", "相对基准");
 		System.out.println("-------------------------------------------+--------------+------------------+-----------");
 
-		int iterations = 10_000_000;
-		BenchmarkTarget target = new BenchmarkTarget(42, "target");
-		Method m = BenchmarkTarget.class.getDeclaredMethod("multiply", int.class, int.class);
+		int             iterations = 10_000_000;
+		BenchmarkTarget target     = new BenchmarkTarget(42, "target");
+		Method          m          = BenchmarkTarget.class.getDeclaredMethod("multiply", int.class, int.class);
 		m.setAccessible(true);
 
 		// 1. 原生直接调用（公共代理方法模拟基准）
 		long start0 = System.nanoTime();
-		long sum0 = 0;
+		long sum0   = 0;
 		for (int i = 0; i < iterations; i++) {
 			sum0 += (i * 2);
 		}
@@ -104,7 +104,7 @@ public class MagicJITLinkToBenchmarkTest {
 
 		// 2. 传统反射 Method.invoke
 		long startReflect = System.nanoTime();
-		long sumReflect = 0;
+		long sumReflect   = 0;
 		for (int i = 0; i < iterations; i++) {
 			sumReflect += ((Number) m.invoke(target, i, 2)).intValue();
 		}
@@ -112,9 +112,9 @@ public class MagicJITLinkToBenchmarkTest {
 		printRow("2. java.lang.reflect.Method.invoke", timeReflect, iterations, timeReflect / time0);
 
 		// 3. 原生 MethodHandle.invokeExact
-		MethodHandle mh = Magic.lookup.unreflect(m);
-		long startMh = System.nanoTime();
-		long sumMh = 0;
+		MethodHandle mh      = Magic.lookup.unreflect(m);
+		long         startMh = System.nanoTime();
+		long         sumMh   = 0;
 		for (int i = 0; i < iterations; i++) {
 			sumMh += (int) mh.invokeExact(target, i, 2);
 		}
@@ -123,10 +123,10 @@ public class MagicJITLinkToBenchmarkTest {
 
 		// 4. 旧式 MH + asSpreader (数组中转包装)
 		MethodHandle spreader = mh.asType(MethodType.methodType(Object.class, BenchmarkTarget.class, Object.class, Object.class))
-			.asSpreader(Object[].class, 2);
-		long startSpreader = System.nanoTime();
-		long sumSpreader = 0;
-		Object[] arr = new Object[2];
+		 .asSpreader(Object[].class, 2);
+		long     startSpreader = System.nanoTime();
+		long     sumSpreader   = 0;
+		Object[] arr           = new Object[2];
 		for (int i = 0; i < iterations; i++) {
 			arr[0] = i;
 			arr[1] = 2;
@@ -136,9 +136,9 @@ public class MagicJITLinkToBenchmarkTest {
 		printRow("4. MH + asSpreader (数组中转)", timeSpreader, iterations, timeSpreader / time0);
 
 		// 5. 新架构 MagicInvoker.invoke(target, Object[]) (通用数组调用)
-		MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(BenchmarkTarget.class, "multiply", 2, false);
-		long startInvokerArr = System.nanoTime();
-		long sumInvokerArr = 0;
+		MagicJIT.MagicInvoker invoker         = MagicJIT.getMethodInvoker(BenchmarkTarget.class, "multiply", 2, false);
+		long                  startInvokerArr = System.nanoTime();
+		long                  sumInvokerArr   = 0;
 		for (int i = 0; i < iterations; i++) {
 			arr[0] = i;
 			arr[1] = 2;
@@ -149,7 +149,7 @@ public class MagicJITLinkToBenchmarkTest {
 
 		// 6. 新架构 MagicInvoker.invoke2 (零 MH、零数组分配特化直调，含传参装箱)
 		long startInvoker2 = System.nanoTime();
-		long sumInvoker2 = 0;
+		long sumInvoker2   = 0;
 		for (int i = 0; i < iterations; i++) {
 			sumInvoker2 += ((Number) invoker.invoke2(target, i, 2)).intValue();
 		}
@@ -157,19 +157,28 @@ public class MagicJITLinkToBenchmarkTest {
 		printRow("6. MagicInvoker.invoke2 (含基本类型装箱)", timeInvoker2, iterations, timeInvoker2 / time0);
 
 		// 6.1 新架构 MagicInvoker.invoke2 (零装箱纯调度分发测试: 复用对象传参)
-		Integer boxA = 6, boxB = 7;
-		long startInvokerNoBox = System.nanoTime();
-		long sumInvokerNoBox = 0;
+		Integer boxA              = 6, boxB = 7;
+		long    startInvokerNoBox = System.nanoTime();
+		long    sumInvokerNoBox   = 0;
 		for (int i = 0; i < iterations; i++) {
 			sumInvokerNoBox += ((Number) invoker.invoke2(target, boxA, boxB)).intValue();
 		}
 		double timeInvokerNoBox = (System.nanoTime() - startInvokerNoBox) / 1_000_000.0;
 		printRow("6.1 MagicInvoker.invoke2 (零装箱纯直调)", timeInvokerNoBox, iterations, timeInvokerNoBox / time0);
 
+		// 6.2 新架构 MagicInvoker.invokeInt2 (原生类型 100% 零装箱直调通道)
+		long startInvokerInt2 = System.nanoTime();
+		long sumInvokerInt2   = 0;
+		for (int i = 0; i < iterations; i++) {
+			sumInvokerInt2 += invoker.invokeInt2(target, i, 2);
+		}
+		double timeInvokerInt2 = (System.nanoTime() - startInvokerInt2) / 1_000_000.0;
+		printRow("6.2 MagicInvoker.invokeInt2 (零装箱原生直调)", timeInvokerInt2, iterations, timeInvokerInt2 / time0);
+
 		// 7. 新架构 ExactMethodStub (JIT CallSite 优化路径)
-		MethodHandle exactStub = MagicJIT.createExactMethodStub(BenchmarkTarget.class, m);
-		long startExact = System.nanoTime();
-		long sumExact = 0;
+		MethodHandle exactStub  = MagicJIT.createExactMethodStub(BenchmarkTarget.class, m);
+		long         startExact = System.nanoTime();
+		long         sumExact   = 0;
 		for (int i = 0; i < iterations; i++) {
 			sumExact += ((Number) exactStub.invoke(target, i, 2)).intValue();
 		}
@@ -206,8 +215,8 @@ public class MagicJITLinkToBenchmarkTest {
 		printRow("2. Constructor.newInstance(Object[])", timeReflect, iterations, timeReflect / time0);
 
 		// 3. MethodHandle Constructor
-		MethodHandle ctorMh = Magic.lookup.unreflectConstructor(ctor);
-		long startMh = System.nanoTime();
+		MethodHandle ctorMh  = Magic.lookup.unreflectConstructor(ctor);
+		long         startMh = System.nanoTime();
 		for (int i = 0; i < iterations; i++) {
 			Object o = ctorMh.invoke(i, "msg");
 		}
@@ -215,9 +224,9 @@ public class MagicJITLinkToBenchmarkTest {
 		printRow("3. MethodHandle.invoke(ctor)", timeMh, iterations, timeMh / time0);
 
 		// 4. 新架构 MagicConstructorInvoker.newInstance (Object[])
-		MagicJIT.MagicConstructorInvoker invoker = MagicJIT.getConstructorInvoker(BenchmarkTarget.class, 2);
-		long startInvokerArr = System.nanoTime();
-		Object[] arr = new Object[2];
+		MagicJIT.MagicConstructorInvoker invoker         = MagicJIT.getConstructorInvoker(BenchmarkTarget.class, 2);
+		long                             startInvokerArr = System.nanoTime();
+		Object[]                         arr             = new Object[2];
 		arr[1] = "msg";
 		for (int i = 0; i < iterations; i++) {
 			arr[0] = i;
@@ -243,35 +252,52 @@ public class MagicJITLinkToBenchmarkTest {
 		System.out.printf("%-32s | %-12s | %-16s | %-10s%n", "访问模式 (AccessMode)", "耗时 (ms)", "吞吐量 (ops/ms)", "相对比率");
 		System.out.println("---------------------------------+--------------+------------------+-----------");
 
-		int iterations = 5_000_000;
-		BenchmarkTarget target = new BenchmarkTarget(99, "modeTest");
+		int             iterations = 5_000_000;
+		BenchmarkTarget target     = new BenchmarkTarget(99, "modeTest");
 
 		// 1. UNSAFE_AND_METHODHANDLE
-		MagicJIT.MagicInvoker mhInvoker = MagicJIT.getMethodInvoker(BenchmarkTarget.class, "multiply", 2, false, AccessMode.UNSAFE_AND_METHODHANDLE);
-		long startMH = System.nanoTime();
+		Method       multiply = BenchmarkTarget.class.getDeclaredMethod("multiply", int.class, int.class);
+		MethodHandle mh       = MagicJIT.createExactMethodStub(BenchmarkTarget.class, multiply);
+		long         startMH  = System.nanoTime();
 		for (int i = 0; i < iterations; i++) {
-			mhInvoker.invoke2(target, i, 3);
+			mh.invoke(target, i, 3);
 		}
 		double timeMH = (System.nanoTime() - startMH) / 1_000_000.0;
 		printRow2("1. UNSAFE_AND_METHODHANDLE", timeMH, iterations, 1.0);
 
 		// 2. UNSAFE_AND_LINKTO (本轮重构核心：<clinit> resolveOrFail + linkTo 原语)
 		MagicJIT.MagicInvoker linkToInvoker = MagicJIT.getMethodInvoker(BenchmarkTarget.class, "multiply", 2, false, AccessMode.UNSAFE_AND_LINKTO);
-		long startLinkTo = System.nanoTime();
+		long                  startLinkTo   = System.nanoTime();
 		for (int i = 0; i < iterations; i++) {
 			linkToInvoker.invoke2(target, i, 3);
 		}
 		double timeLinkTo = (System.nanoTime() - startLinkTo) / 1_000_000.0;
 		printRow2("2. UNSAFE_AND_LINKTO", timeLinkTo, iterations, timeLinkTo / timeMH);
 
+		// 2.1 UNSAFE_AND_LINKTO (invokeInt2 原生零装箱直调)
+		long startLinkToInt2 = System.nanoTime();
+		for (int i = 0; i < iterations; i++) {
+			linkToInvoker.invokeInt2(target, i, 3);
+		}
+		double timeLinkToInt2 = (System.nanoTime() - startLinkToInt2) / 1_000_000.0;
+		printRow2("2.1 LINKTO invokeInt2 (零装箱)", timeLinkToInt2, iterations, timeLinkToInt2 / timeMH);
+
 		// 3. MAGIC_ACCESSOR (经典特权字节码)
 		MagicJIT.MagicInvoker accessorInvoker = MagicJIT.getMethodInvoker(BenchmarkTarget.class, "multiply", 2, false, AccessMode.MAGIC_ACCESSOR);
-		long startAccessor = System.nanoTime();
+		long                  startAccessor   = System.nanoTime();
 		for (int i = 0; i < iterations; i++) {
 			accessorInvoker.invoke2(target, i, 3);
 		}
 		double timeAccessor = (System.nanoTime() - startAccessor) / 1_000_000.0;
 		printRow2("3. MAGIC_ACCESSOR", timeAccessor, iterations, timeAccessor / timeMH);
+
+		// 3.1 MAGIC_ACCESSOR (invokeInt2 原生零装箱直调)
+		long startAccessorInt2 = System.nanoTime();
+		for (int i = 0; i < iterations; i++) {
+			accessorInvoker.invokeInt2(target, i, 3);
+		}
+		double timeAccessorInt2 = (System.nanoTime() - startAccessorInt2) / 1_000_000.0;
+		printRow2("3.1 ACCESSOR invokeInt2 (零装箱)", timeAccessorInt2, iterations, timeAccessorInt2 / timeMH);
 	}
 
 	/**
@@ -282,87 +308,87 @@ public class MagicJITLinkToBenchmarkTest {
 		System.out.printf("%-42s | %-12s | %-16s%n", "测试场景", "耗时 (ms)", "吞吐量 (ops/ms)");
 		System.out.println("-------------------------------------------+--------------+------------------");
 
-		int iterations = 1_000_000;
-		BenchmarkTarget target = new BenchmarkTarget(100, "jsTarget");
+		int             iterations = 1_000_000;
+		BenchmarkTarget target     = new BenchmarkTarget(100, "jsTarget");
 
 		// 场景 A-1: 预编译 JSFunction (0 编译开销，纯字节码执行循环)
 		JSContext cxFn = new JSContext();
 		cxFn.set("target", target);
 		cxFn.eval("function benchMethod(n) { var sum = 0; for (var i = 0; i < n; i++) { sum += target.multiply(i, 2); } return sum; }");
-		hope.magic.js.runtime.JSFunction fn = (hope.magic.js.runtime.JSFunction) cxFn.get("benchMethod");
-		Object[] warmupArg = new Object[]{ 100_000 };
-		Object[] iterArg = new Object[]{ iterations };
+		hope.magic.js.runtime.JSFunction fn        = (hope.magic.js.runtime.JSFunction) cxFn.get("benchMethod");
+		Object[]                         warmupArg = new Object[]{100_000};
+		Object[]                         iterArg   = new Object[]{iterations};
 		// 预热 JIT
 		fn.call(cxFn, null, warmupArg);
 
-		long startFn = System.nanoTime();
-		Object resFn = fn.call(cxFn, null, iterArg);
-		double timeFn = (System.nanoTime() - startFn) / 1_000_000.0;
+		long   startFn = System.nanoTime();
+		Object resFn   = fn.call(cxFn, null, iterArg);
+		double timeFn  = (System.nanoTime() - startFn) / 1_000_000.0;
 		System.out.printf("%-42s | %-12s | %-16s%n",
-			"预编译 JSFunction (0编译开销纯循环调用)",
-			DF.format(timeFn),
-			DF_INT.format(iterations / timeFn)
+		 "预编译 JSFunction (0编译开销纯循环调用)",
+		 DF.format(timeFn),
+		 DF_INT.format(iterations / timeFn)
 		);
 
 		// 场景 A-2: 全流程 eval 包含完整 compile (词法+语法+ASM编译+类加载)
 		JSContext cx1 = new JSContext();
 		cx1.set("target", target);
 		String scriptMethod = """
-			var sum = 0;
-			for (var i = 0; i < %d; i++) {
-				sum += target.multiply(i, 2);
-			}
-			sum;
-		""".formatted(iterations);
+		 	var sum = 0;
+		 	for (var i = 0; i < %d; i++) {
+		 		sum += target.multiply(i, 2);
+		 	}
+		 	sum;
+		 """.formatted(iterations);
 
-		long startA = System.nanoTime();
-		Object resA = cx1.eval(scriptMethod);
-		double timeA = (System.nanoTime() - startA) / 1_000_000.0;
+		long   startA = System.nanoTime();
+		Object resA   = cx1.eval(scriptMethod);
+		double timeA  = (System.nanoTime() - startA) / 1_000_000.0;
 		System.out.printf("%-42s | %-12s | %-16s%n",
-			"JSContext.eval (含Lexer+Parser+ASM编译)",
-			DF.format(timeA),
-			DF_INT.format(iterations / timeA)
+		 "JSContext.eval (含Lexer+Parser+ASM编译)",
+		 DF.format(timeA),
+		 DF_INT.format(iterations / timeA)
 		);
 
 		// 场景 B: JS 循环构造 Java 对象
 		JSContext cx2 = new JSContext();
 		cx2.set("BenchmarkTarget", BenchmarkTarget.class);
 		String scriptCtor = """
-			var sum = 0;
-			for (var i = 0; i < %d; i++) {
-				var obj = new BenchmarkTarget(i, 'test');
-				sum += obj.getId();
-			}
-			sum;
-		""".formatted(iterations);
+		 	var sum = 0;
+		 	for (var i = 0; i < %d; i++) {
+		 		var obj = new BenchmarkTarget(i, 'test');
+		 		sum += obj.getId();
+		 	}
+		 	sum;
+		 """.formatted(iterations);
 
-		long startB = System.nanoTime();
-		Object resB = cx2.eval(scriptCtor);
-		double timeB = (System.nanoTime() - startB) / 1_000_000.0;
+		long   startB = System.nanoTime();
+		Object resB   = cx2.eval(scriptCtor);
+		double timeB  = (System.nanoTime() - startB) / 1_000_000.0;
 		System.out.printf("%-42s | %-12s | %-16s%n",
-			"JS 循环实例化 Java 对象 (new BenchmarkTarget)",
-			DF.format(timeB),
-			DF_INT.format(iterations / timeB)
+		 "JS 循环实例化 Java 对象 (new BenchmarkTarget)",
+		 DF.format(timeB),
+		 DF_INT.format(iterations / timeB)
 		);
 	}
 
 	private void printRow(String name, double elapsedMs, int ops, double ratio) {
 		double throughput = ops / elapsedMs;
 		System.out.printf("%-42s | %-12s | %-16s | %-10s%n",
-			name,
-			DF.format(elapsedMs),
-			DF_INT.format(throughput),
-			DF.format(ratio) + "x"
+		 name,
+		 DF.format(elapsedMs),
+		 DF_INT.format(throughput),
+		 DF.format(ratio) + "x"
 		);
 	}
 
 	private void printRow2(String name, double elapsedMs, int ops, double ratio) {
 		double throughput = ops / elapsedMs;
 		System.out.printf("%-32s | %-12s | %-16s | %-10s%n",
-			name,
-			DF.format(elapsedMs),
-			DF_INT.format(throughput),
-			DF.format(ratio) + "x"
+		 name,
+		 DF.format(elapsedMs),
+		 DF_INT.format(throughput),
+		 DF.format(ratio) + "x"
 		);
 	}
 }

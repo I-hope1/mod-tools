@@ -1725,7 +1725,7 @@ public class JSLinker {
 		Class<?> targetClass = target.getClass();
 
 		// 1. 尝试匹配 Java 字段 (私有/公有字段通过 MAGICIMPL 字节码直读或 Unsafe 偏移直读)
-		if (STRATEGY == InvocationStrategy.MAGIC_ACCESSOR) {
+		if (STRATEGY != InvocationStrategy.SPREADER) {
 			try {
 				MethodHandle exactGetter = MagicJIT.getFieldGetterStub(targetClass, propName);
 				if (exactGetter != null) {
@@ -1925,7 +1925,7 @@ public class JSLinker {
 		Class<?> targetClass = target.getClass();
 
 		// 1. 尝试通过 MAGICIMPL 直写字段或 Unsafe 偏移直写
-		if (STRATEGY == InvocationStrategy.MAGIC_ACCESSOR) {
+		if (STRATEGY != InvocationStrategy.SPREADER) {
 			try {
 				MethodHandle exactSetter = MagicJIT.getFieldSetterStub(targetClass, propName);
 				if (exactSetter != null) {
@@ -2540,8 +2540,7 @@ public class JSLinker {
 		if (targetMethod != null) {
 			targetMethod.setAccessible(true);
 
-			boolean preferMagicAccessor = (STRATEGY == InvocationStrategy.MAGIC_ACCESSOR)
-			                              || (STRATEGY == InvocationStrategy.HYBRID && hasComplexParameters(targetMethod));
+			boolean preferMagicAccessor = (STRATEGY != InvocationStrategy.SPREADER);
 
 			if (preferMagicAccessor) {
 				try {
@@ -2986,7 +2985,7 @@ public class JSLinker {
 	public static Object newFallback(ChainedCallSite site, Object ctor, Object[] args) throws Throwable {
 		int arity = args.length;
 		if (ctor instanceof Class<?> clazz) {
-			if (STRATEGY == InvocationStrategy.MAGIC_ACCESSOR) {
+			if (STRATEGY != InvocationStrategy.SPREADER) {
 				try {
 					MagicJIT.MagicConstructorInvoker ctorInvoker = MagicJIT.getConstructorInvoker(clazz, arity);
 					if (ctorInvoker != null) {
@@ -3775,7 +3774,7 @@ public class JSLinker {
 		Class<?> clazz    = (target instanceof Class<?>) ? (Class<?>) target : target.getClass();
 		boolean  isStatic = (target instanceof Class<?>);
 
-		if (STRATEGY == InvocationStrategy.MAGIC_ACCESSOR) {
+		if (STRATEGY != InvocationStrategy.SPREADER) {
 			try {
 				int arity = args.length;
 				MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(clazz, methodName, arity, isStatic);

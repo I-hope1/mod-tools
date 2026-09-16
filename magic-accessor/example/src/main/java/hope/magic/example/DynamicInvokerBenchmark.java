@@ -3,6 +3,7 @@ package hope.magic.example;
 import hope.magic.js.runtime.JSLinker;
 import hope.magic.runtime.LinkerHelper;
 import hope.magic.runtime.Magic;
+import org.objectweb.asm.Opcodes;
 import org.openjdk.jmh.annotations.*;
 
 import java.lang.invoke.MethodHandle;
@@ -67,8 +68,8 @@ public class DynamicInvokerBenchmark {
 		org.objectweb.asm.ClassWriter cw = new org.objectweb.asm.ClassWriter(org.objectweb.asm.ClassWriter.COMPUTE_FRAMES);
 		String className = "hope/magic/gen/MagicInvoker_" + System.nanoTime();
 		cw.visit(
-			org.objectweb.asm.Opcodes.V1_8,
-			org.objectweb.asm.Opcodes.ACC_PUBLIC | org.objectweb.asm.Opcodes.ACC_FINAL,
+			Opcodes.V1_8,
+			Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL,
 			className,
 			null,
 			"hope/magic/runtime/MAGICIMPL",
@@ -76,51 +77,51 @@ public class DynamicInvokerBenchmark {
 		);
 
 		// <init>
-		org.objectweb.asm.MethodVisitor initMv = cw.visitMethod(org.objectweb.asm.Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+		org.objectweb.asm.MethodVisitor initMv = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
 		initMv.visitCode();
-		initMv.visitVarInsn(org.objectweb.asm.Opcodes.ALOAD, 0);
-		initMv.visitMethodInsn(org.objectweb.asm.Opcodes.INVOKESPECIAL, "hope/magic/runtime/MAGICIMPL", "<init>", "()V", false);
-		initMv.visitInsn(org.objectweb.asm.Opcodes.RETURN);
+		initMv.visitVarInsn(Opcodes.ALOAD, 0);
+		initMv.visitMethodInsn(Opcodes.INVOKESPECIAL, "hope/magic/runtime/MAGICIMPL", "<init>", "()V", false);
+		initMv.visitInsn(Opcodes.RETURN);
 		initMv.visitMaxs(0, 0);
 		initMv.visitEnd();
 
 		// Object invoke(Object target, Object[] args)
 		org.objectweb.asm.MethodVisitor invokeMv = cw.visitMethod(
-			org.objectweb.asm.Opcodes.ACC_PUBLIC,
+			Opcodes.ACC_PUBLIC,
 			"invoke",
 			"(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
 			null,
 			null
 		);
 		invokeMv.visitCode();
-		invokeMv.visitVarInsn(org.objectweb.asm.Opcodes.ALOAD, 1);
-		invokeMv.visitTypeInsn(org.objectweb.asm.Opcodes.CHECKCAST, "hope/magic/example/TargetObject");
+		invokeMv.visitVarInsn(Opcodes.ALOAD, 1);
+		invokeMv.visitTypeInsn(Opcodes.CHECKCAST, "hope/magic/example/TargetObject");
 
 		// arg 0 -> int
-		invokeMv.visitVarInsn(org.objectweb.asm.Opcodes.ALOAD, 2);
-		invokeMv.visitInsn(org.objectweb.asm.Opcodes.ICONST_0);
-		invokeMv.visitInsn(org.objectweb.asm.Opcodes.AALOAD);
-		invokeMv.visitTypeInsn(org.objectweb.asm.Opcodes.CHECKCAST, "java/lang/Number");
-		invokeMv.visitMethodInsn(org.objectweb.asm.Opcodes.INVOKEVIRTUAL, "java/lang/Number", "intValue", "()I", false);
+		invokeMv.visitVarInsn(Opcodes.ALOAD, 2);
+		invokeMv.visitInsn(Opcodes.ICONST_0);
+		invokeMv.visitInsn(Opcodes.AALOAD);
+		invokeMv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Number");
+		invokeMv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Number", "intValue", "()I", false);
 
 		// arg 1 -> int
-		invokeMv.visitVarInsn(org.objectweb.asm.Opcodes.ALOAD, 2);
-		invokeMv.visitInsn(org.objectweb.asm.Opcodes.ICONST_1);
-		invokeMv.visitInsn(org.objectweb.asm.Opcodes.AALOAD);
-		invokeMv.visitTypeInsn(org.objectweb.asm.Opcodes.CHECKCAST, "java/lang/Number");
-		invokeMv.visitMethodInsn(org.objectweb.asm.Opcodes.INVOKEVIRTUAL, "java/lang/Number", "intValue", "()I", false);
+		invokeMv.visitVarInsn(Opcodes.ALOAD, 2);
+		invokeMv.visitInsn(Opcodes.ICONST_1);
+		invokeMv.visitInsn(Opcodes.AALOAD);
+		invokeMv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Number");
+		invokeMv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Number", "intValue", "()I", false);
 
 		// 原生 invokespecial 直调私有方法 multiply(II)I
 		invokeMv.visitMethodInsn(
-			org.objectweb.asm.Opcodes.INVOKESPECIAL,
+			Opcodes.INVOKESPECIAL,
 			"hope/magic/example/TargetObject",
 			"multiply",
 			"(II)I",
 			false
 		);
 
-		invokeMv.visitMethodInsn(org.objectweb.asm.Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
-		invokeMv.visitInsn(org.objectweb.asm.Opcodes.ARETURN);
+		invokeMv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+		invokeMv.visitInsn(Opcodes.ARETURN);
 		invokeMv.visitMaxs(0, 0);
 		invokeMv.visitEnd();
 

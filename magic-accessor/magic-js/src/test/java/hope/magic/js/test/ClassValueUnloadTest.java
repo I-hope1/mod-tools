@@ -266,16 +266,18 @@ public class ClassValueUnloadTest {
 			Assertions.assertNotNull(invoker);
 			Object res = invoker.invoke(instance, new Object[]{ 10, 20 });
 			Assertions.assertEquals(30, res);
+			Assertions.assertEquals(30, invoker.invoke2(instance, 10, 20));
+			Assertions.assertEquals(30, invoker.invokeInt2(instance, 10, 20));
 
-			if (i == 0) {
-				methodBridgesAfterFirst = MagicJIT.getMethodBridgeCacheSize();
-				ctorBridgesAfterFirst = MagicJIT.getCtorBridgeCacheSize();
-			} else {
-				Assertions.assertEquals(methodBridgesAfterFirst, MagicJIT.getMethodBridgeCacheSize(),
-					"Method bridge cache must not grow when invoking identical signature on new classes!");
-				Assertions.assertEquals(ctorBridgesAfterFirst, MagicJIT.getCtorBridgeCacheSize(),
-					"Constructor bridge cache must not grow when invoking identical signature on new classes!");
-			}
+			// 验证重复获取相同类的方法/构造器时，复用缓存且不重复生成 Bridge
+			int mbBefore = MagicJIT.getMethodBridgeCacheSize();
+			int cbBefore = MagicJIT.getCtorBridgeCacheSize();
+			MagicJIT.MagicConstructorInvoker ctorInvoker2 = MagicJIT.getConstructorInvoker(cls, 0);
+			MagicJIT.MagicInvoker invoker2 = MagicJIT.getMethodInvoker(cls, "calc", 2, false);
+			Assertions.assertSame(ctorInvoker, ctorInvoker2);
+			Assertions.assertSame(invoker, invoker2);
+			Assertions.assertEquals(mbBefore, MagicJIT.getMethodBridgeCacheSize(), "Method bridge must be cached and reused for same method");
+			Assertions.assertEquals(cbBefore, MagicJIT.getCtorBridgeCacheSize(), "Ctor bridge must be cached and reused for same ctor");
 		}
 	}
 

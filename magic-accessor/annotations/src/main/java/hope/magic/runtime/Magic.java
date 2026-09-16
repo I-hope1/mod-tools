@@ -18,12 +18,58 @@ public class Magic {
 	private static volatile boolean magicAccessorInstalled = false;
 	private static volatile boolean moduleOpened = false;
 
+	private static final java.lang.invoke.MethodHandle DEFINE_HIDDEN_CLASS_MH;
+	private static final Object EMPTY_CLASS_OPTIONS;
+	private static final Method DEFINE_ANON_CLASS_METHOD;
+	private static final long ALLOWED_MODES_OFFSET;
+	private static final long PREV_LOOKUP_CLASS_OFFSET;
+
 	static {
 		if (!LinkerHelper.IS_ANDROID) {
 			openModule();
 		} else {
 			bypassHiddenApi();
 		}
+
+		java.lang.invoke.MethodHandle dhc = null;
+		Object emptyOpts = null;
+		Method dac = null;
+		long amo = -1;
+		long plco = -1;
+
+		if (!LinkerHelper.IS_ANDROID) {
+			try {
+				Field modesField = Lookup.class.getDeclaredField("allowedModes");
+				amo = unsafe.objectFieldOffset(modesField);
+			} catch (Throwable ignored) {
+			}
+
+			try {
+				Field plcField = Lookup.class.getDeclaredField("prevLookupClass");
+				plco = unsafe.objectFieldOffset(plcField);
+			} catch (Throwable ignored) {
+			}
+
+			try {
+				Class<?> classOptionClass = Class.forName("java.lang.invoke.MethodHandles$Lookup$ClassOption");
+				emptyOpts = java.lang.reflect.Array.newInstance(classOptionClass, 0);
+				java.lang.invoke.MethodType mt = java.lang.invoke.MethodType.methodType(Lookup.class, byte[].class, boolean.class, emptyOpts.getClass());
+				dhc = lookup.findVirtual(Lookup.class, "defineHiddenClass", mt).asFixedArity();
+			} catch (Throwable ignored) {
+			}
+
+			try {
+				dac = Unsafe.class.getMethod("defineAnonymousClass", Class.class, byte[].class, Object[].class);
+				dac.setAccessible(true);
+			} catch (Throwable ignored) {
+			}
+		}
+
+		DEFINE_HIDDEN_CLASS_MH = dhc;
+		EMPTY_CLASS_OPTIONS = emptyOpts;
+		DEFINE_ANON_CLASS_METHOD = dac;
+		ALLOWED_MODES_OFFSET = amo;
+		PREV_LOOKUP_CLASS_OFFSET = plco;
 	}
 
 	public static synchronized void bypassHiddenApi() {
@@ -176,6 +222,67 @@ public class Magic {
 				throw new RuntimeException("Failed to define class into JVM", t1);
 			}
 		}
+	}
+
+	/**
+	 * 自适应轻量级动态类定义：
+	 * 1. 高版本 (JDK 15+): 优先使用 {@code MethodHandles.Lookup.defineHiddenClass} (无 ClassLoader 字典锁，支持 Metaspace 独立 GC 卸载)
+	 * 2. 低版本 (JDK 8~14): 使用 {@code Unsafe.defineAnonymousClass} (轻量级 VM 宿主匿名类，支持独立卸载)
+	 * 3. 兜底策略 (Android ART 或环境受限): 回退至标准 {@link #defineClass(ClassLoader, byte[])}
+	 *
+	 * @param hostClass   宿主类 (决定隐藏类的包名空间与类加载器)
+	 * @param bytes       类字节码 (字节码内的包名需与宿主类包名一致，或由系统自动适配)
+	 * @param initialize  是否立即执行静态初始化方法 (&lt;clinit&gt;)
+	 * @return 定义成功生成的 Class 对象
+	 */
+	public static Class<?> defineHiddenOrAnonymousClass(Class<?> hostClass, byte[] bytes, boolean initialize) {
+		if (hostClass == null) {
+			hostClass = Magic.class;
+		}
+
+		// 1. JDK 15+: Lookup.defineHiddenClass
+		if (DEFINE_HIDDEN_CLASS_MH != null) {
+			try {
+				Lookup hostLookup = lookup.in(hostClass);
+				if (ALLOWED_MODES_OFFSET >= 0) {
+					unsafe.putInt(hostLookup, ALLOWED_MODES_OFFSET, -1);
+				}
+				if (PREV_LOOKUP_CLASS_OFFSET >= 0) {
+					unsafe.putObject(hostLookup, PREV_LOOKUP_CLASS_OFFSET, null);
+				}
+				Lookup hiddenLookup = (Lookup) DEFINE_HIDDEN_CLASS_MH.invoke(hostLookup, bytes, initialize, EMPTY_CLASS_OPTIONS);
+				return hiddenLookup.lookupClass();
+			} catch (Throwable ignored) {
+			}
+		}
+
+		// 2. JDK 8~14: Unsafe.defineAnonymousClass
+		if (DEFINE_ANON_CLASS_METHOD != null) {
+			try {
+				Class<?> clazz = (Class<?>) DEFINE_ANON_CLASS_METHOD.invoke(unsafe, hostClass, bytes, null);
+				if (initialize) {
+					try {
+						lookup.ensureInitialized(clazz);
+					} catch (Throwable t) {
+						try {
+							Method m = Unsafe.class.getMethod("ensureClassInitialized", Class.class);
+							m.invoke(unsafe, clazz);
+						} catch (Throwable ignored) {
+						}
+					}
+				}
+				return clazz;
+			} catch (Throwable ignored) {
+			}
+		}
+
+		// 3. Fallback: Unsafe.defineClass
+		ClassLoader loader = hostClass.getClassLoader();
+		return defineClass(loader, bytes);
+	}
+
+	public static Class<?> defineHiddenOrAnonymousClass(Class<?> hostClass, byte[] bytes) {
+		return defineHiddenOrAnonymousClass(hostClass, bytes, true);
 	}
 
 	/**

@@ -1870,13 +1870,6 @@ public class MagicJIT implements Opcodes {
 	 *   <li><b>极度扁平指令序列，易于 C2 深度内联与逃逸分析标量替换 (Scalar Replacement)。</b></li>
 	 * </ul>
 	 */
-	/**
-	 * 动态生成基于 {@code linkToSpecial} 与 {@code Unsafe.allocateInstance} 方案的 {@link MagicConstructorInvoker}
-	 * （Mono-Class：单类直通与 BootLoader 隐藏类防泄漏架构）。
-	 * <p>直接在 {@code java.lang.invoke} 包下以 {@code MethodHandle.class} 为宿主生成实现 {@link MagicBootstrapCtorInvoker} 的隐式类，
-	 * 通过 {@code Unsafe.allocateInstance} 分配未初始化的堆对象，并直接通过 {@code linkToSpecial(<init>)} 原生原语调用构造器，
-	 * 消除旧版双类中转与静态跳转损耗，获得 HotSpot C2 完全常量折叠特权与 100% Metaspace 卸载安全。</p>
-	 */
 	private static MagicConstructorInvoker generateLinkToConstructorInvoker(Class<?> clazz, int arity) {
 		if (MEMBER_NAME_CLASS == null || LinkerHelper.IS_ANDROID) return null;
 		Constructor<?> targetCtor = MethodResolver.findConstructor(clazz, arity);

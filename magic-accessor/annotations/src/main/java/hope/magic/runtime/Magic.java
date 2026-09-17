@@ -5,6 +5,7 @@ import sun.misc.Unsafe;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.reflect.Field;
@@ -15,16 +16,16 @@ public class Magic {
 	public static final Unsafe unsafe = getUnsafe();
 	public static final Lookup lookup = getLookup();
 
-	private static volatile boolean installed = false;
+	private static volatile boolean installed              = false;
 	private static volatile boolean magicAccessorInstalled = false;
-	private static volatile boolean moduleOpened = false;
+	private static volatile boolean moduleOpened           = false;
 
-	private static final java.lang.invoke.MethodHandle DEFINE_HIDDEN_CLASS_MH;
-	private static final Object EMPTY_CLASS_OPTIONS;
-	private static final Object NESTMATE_CLASS_OPTIONS;
-	private static final Method DEFINE_ANON_CLASS_METHOD;
-	private static final long ALLOWED_MODES_OFFSET;
-	private static final long PREV_LOOKUP_CLASS_OFFSET;
+	private static final MethodHandle DEFINE_HIDDEN_CLASS_MH;
+	private static final Object       EMPTY_CLASS_OPTIONS;
+	private static final Object       NESTMATE_CLASS_OPTIONS;
+	private static final Method       DEFINE_ANON_CLASS_METHOD;
+	private static final long         ALLOWED_MODES_OFFSET;
+	private static final long         PREV_LOOKUP_CLASS_OFFSET;
 
 	static {
 		if (!LinkerHelper.IS_ANDROID) {
@@ -33,12 +34,12 @@ public class Magic {
 			bypassHiddenApi();
 		}
 
-		java.lang.invoke.MethodHandle dhc = null;
-		Object emptyOpts = null;
-		Object nestmateOpts = null;
-		Method dac = null;
-		long amo = -1;
-		long plco = -1;
+		MethodHandle dhc          = null;
+		Object       emptyOpts    = null;
+		Object       nestmateOpts = null;
+		Method       dac          = null;
+		long         amo          = -1;
+		long         plco         = -1;
 
 		if (!LinkerHelper.IS_ANDROID) {
 			try {
@@ -85,8 +86,8 @@ public class Magic {
 	public static synchronized void bypassHiddenApi() {
 		if (LinkerHelper.IS_ANDROID) {
 			try {
-				Class<?> hiddenApiBypass = Class.forName("org.lsposed.hiddenapibypass.HiddenApiBypass");
-				Method setHiddenApiExemptions = hiddenApiBypass.getMethod("setHiddenApiExemptions", String[].class);
+				Class<?> hiddenApiBypass        = Class.forName("org.lsposed.hiddenapibypass.HiddenApiBypass");
+				Method   setHiddenApiExemptions = hiddenApiBypass.getMethod("setHiddenApiExemptions", String[].class);
 				setHiddenApiExemptions.invoke(null, (Object) new String[]{"L"});
 			} catch (Throwable ignored) {
 			}
@@ -184,8 +185,8 @@ public class Magic {
 				}
 				if (!LinkerHelper.IS_ANDROID) {
 					try {
-						java.lang.invoke.MethodHandle addReadsMh = lookup.findVirtual(
-							Module.class, "implAddReadsAllUnnamed", java.lang.invoke.MethodType.methodType(void.class)
+						MethodHandle addReadsMh = lookup.findVirtual(
+						 Module.class, "implAddReadsAllUnnamed", java.lang.invoke.MethodType.methodType(void.class)
 						);
 						addReadsMh.invokeExact(Object.class.getModule());
 					} catch (Throwable ignored) {
@@ -241,7 +242,7 @@ public class Magic {
 		byte[] bytes;
 		try {
 			byte[] candidate = rawBytesOrBase64.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
-			if (candidate.length >= 4 && candidate[0] == (byte)0xCA && candidate[1] == (byte)0xFE && candidate[2] == (byte)0xBA && candidate[3] == (byte)0xBE) {
+			if (candidate.length >= 4 && candidate[0] == (byte) 0xCA && candidate[1] == (byte) 0xFE && candidate[2] == (byte) 0xBA && candidate[3] == (byte) 0xBE) {
 				bytes = candidate; // 0 Base64 损耗的 ISO_8859_1 原生字节码直传
 			} else {
 				bytes = java.util.Base64.getDecoder().decode(rawBytesOrBase64);
@@ -273,10 +274,9 @@ public class Magic {
 	 * 1. 高版本 (JDK 15+): 优先使用 {@code MethodHandles.Lookup.defineHiddenClass} (无 ClassLoader 字典锁，支持 Metaspace 独立 GC 卸载)
 	 * 2. 低版本 (JDK 8~14): 使用 {@code Unsafe.defineAnonymousClass} (轻量级 VM 宿主匿名类，支持独立卸载)
 	 * 3. 兜底策略 (Android ART 或环境受限): 回退至标准 {@link #defineClass(ClassLoader, byte[])}
-	 *
-	 * @param hostClass   宿主类 (决定隐藏类的包名空间与类加载器)
-	 * @param bytes       类字节码 (字节码内的包名需与宿主类包名一致，或由系统自动适配)
-	 * @param initialize  是否立即执行静态初始化方法 (&lt;clinit&gt;)
+	 * @param hostClass  宿主类 (决定隐藏类的包名空间与类加载器)
+	 * @param bytes      类字节码 (字节码内的包名需与宿主类包名一致，或由系统自动适配)
+	 * @param initialize 是否立即执行静态初始化方法 (&lt;clinit&gt;)
 	 * @return 定义成功生成的 Class 对象
 	 */
 	public static Class<?> defineHiddenOrAnonymousClass(Class<?> hostClass, byte[] bytes, boolean initialize) {
@@ -287,18 +287,7 @@ public class Magic {
 		// 1. JDK 15+: Lookup.defineHiddenClass
 		if (DEFINE_HIDDEN_CLASS_MH != null) {
 			try {
-				Lookup hostLookup;
-				try {
-					hostLookup = MethodHandles.privateLookupIn(hostClass, lookup);
-				} catch (Throwable t) {
-					hostLookup = lookup.in(hostClass);
-					if (ALLOWED_MODES_OFFSET >= 0) {
-						unsafe.putInt(hostLookup, ALLOWED_MODES_OFFSET, -1);
-					}
-					if (PREV_LOOKUP_CLASS_OFFSET >= 0) {
-						unsafe.putObject(hostLookup, PREV_LOOKUP_CLASS_OFFSET, null);
-					}
-				}
+				Lookup hostLookup   = privateLookupIn(hostClass);
 				Lookup hiddenLookup = (Lookup) DEFINE_HIDDEN_CLASS_MH.invoke(hostLookup, bytes, initialize, EMPTY_CLASS_OPTIONS);
 				return hiddenLookup.lookupClass();
 			} catch (Throwable ignored) {
@@ -347,10 +336,9 @@ public class Magic {
 	 * <p>在 JDK 15+ 使用携带 {@code ClassOption.NESTMATE} 的 {@code Lookup.defineHiddenClass}，
 	 * 赋予生成的类访问 {@code hostClass} 的私有成员的特权；在 JDK 8~14 降级为 {@code Unsafe.defineAnonymousClass}
 	 * （VM 匿名类天然具有宿主类的私有访问特权）。</p>
-	 *
-	 * @param hostClass   巢元宿主类（通常为声明私有成员的目标类）
-	 * @param bytes       待加载类的字节码数组
-	 * @param initialize  是否立即执行静态初始化方法 (&lt;clinit&gt;)
+	 * @param hostClass  巢元宿主类（通常为声明私有成员的目标类）
+	 * @param bytes      待加载类的字节码数组
+	 * @param initialize 是否立即执行静态初始化方法 (&lt;clinit&gt;)
 	 * @return 定义成功生成的 Class 对象
 	 */
 	public static Class<?> defineNestmateHiddenClass(Class<?> hostClass, byte[] bytes, boolean initialize) {
@@ -361,18 +349,7 @@ public class Magic {
 		// 1. JDK 15+: Lookup.defineHiddenClass with NESTMATE
 		if (DEFINE_HIDDEN_CLASS_MH != null && NESTMATE_CLASS_OPTIONS != null) {
 			try {
-				Lookup hostLookup;
-				try {
-					hostLookup = MethodHandles.privateLookupIn(hostClass, lookup);
-				} catch (Throwable t) {
-					hostLookup = lookup.in(hostClass);
-					if (ALLOWED_MODES_OFFSET >= 0) {
-						unsafe.putInt(hostLookup, ALLOWED_MODES_OFFSET, -1);
-					}
-					if (PREV_LOOKUP_CLASS_OFFSET >= 0) {
-						unsafe.putObject(hostLookup, PREV_LOOKUP_CLASS_OFFSET, null);
-					}
-				}
+				Lookup hostLookup   = privateLookupIn(hostClass);
 				Lookup hiddenLookup = (Lookup) DEFINE_HIDDEN_CLASS_MH.invoke(hostLookup, bytes, initialize, NESTMATE_CLASS_OPTIONS);
 				return hiddenLookup.lookupClass();
 			} catch (Throwable ignored) {
@@ -401,6 +378,20 @@ public class Magic {
 
 		// 3. Fallback: 普通隐藏类或标准 defineClass
 		return defineHiddenOrAnonymousClass(hostClass, bytes, initialize);
+	}
+	private static Lookup privateLookupIn(Class<?> hostClass) {
+		try {
+			return MethodHandles.privateLookupIn(hostClass, lookup);
+		} catch (Throwable t) {
+			Lookup hostLookup = lookup.in(hostClass);
+			if (!hostLookup.hasFullPrivilegeAccess() && ALLOWED_MODES_OFFSET >= 0) {
+				unsafe.putInt(hostLookup, ALLOWED_MODES_OFFSET, -1);
+			}
+			if (hostLookup.previousLookupClass() != null && PREV_LOOKUP_CLASS_OFFSET >= 0) {
+				unsafe.putObject(hostLookup, PREV_LOOKUP_CLASS_OFFSET, null);
+			}
+			return hostLookup;
+		}
 	}
 
 	public static Class<?> defineNestmateHiddenClass(Class<?> hostClass, byte[] bytes) {

@@ -567,47 +567,77 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
+	public static final String BOOT_INVOKER_INTERNAL_NAME      = "java/lang/invoke/MagicInvoker";
+	public static final String BOOT_CTOR_INVOKER_INTERNAL_NAME = "java/lang/invoke/MagicConstructorInvoker";
+
 	private static volatile Constructor<?> BOOT_INVOKER_ADAPTER_CTOR = null;
 	private static volatile Constructor<?> BOOT_CTOR_ADAPTER_CTOR    = null;
 
+	private static byte[] dumpMagicInvokerInterfaceBytes() {
+		ClassWriter cw = new ClassWriter(0);
+		cw.visit(V1_8, ACC_PUBLIC | ACC_ABSTRACT | ACC_INTERFACE, BOOT_INVOKER_INTERNAL_NAME, null, "java/lang/Object", null);
+
+		// Object invoke(Object target, Object[] args) throws Throwable;
+		cw.visitMethod(ACC_PUBLIC | ACC_ABSTRACT, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"}).visitEnd();
+
+		// invoke0 ~ invoke3
+		cw.visitMethod(ACC_PUBLIC | ACC_ABSTRACT, "invoke0", "(Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"}).visitEnd();
+		cw.visitMethod(ACC_PUBLIC | ACC_ABSTRACT, "invoke1", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"}).visitEnd();
+		cw.visitMethod(ACC_PUBLIC | ACC_ABSTRACT, "invoke2", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"}).visitEnd();
+		cw.visitMethod(ACC_PUBLIC | ACC_ABSTRACT, "invoke3", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"}).visitEnd();
+
+		// Zero-boxing primitive channels
+		cw.visitMethod(ACC_PUBLIC | ACC_ABSTRACT, "invokeInt0", "(Ljava/lang/Object;)I", null, new String[]{"java/lang/Throwable"}).visitEnd();
+		cw.visitMethod(ACC_PUBLIC | ACC_ABSTRACT, "invokeInt1", "(Ljava/lang/Object;I)I", null, new String[]{"java/lang/Throwable"}).visitEnd();
+		cw.visitMethod(ACC_PUBLIC | ACC_ABSTRACT, "invokeInt2", "(Ljava/lang/Object;II)I", null, new String[]{"java/lang/Throwable"}).visitEnd();
+		cw.visitMethod(ACC_PUBLIC | ACC_ABSTRACT, "invokeLong2", "(Ljava/lang/Object;JJ)J", null, new String[]{"java/lang/Throwable"}).visitEnd();
+		cw.visitMethod(ACC_PUBLIC | ACC_ABSTRACT, "invokeDouble2", "(Ljava/lang/Object;DD)D", null, new String[]{"java/lang/Throwable"}).visitEnd();
+
+		cw.visitEnd();
+		return cw.toByteArray();
+	}
+
+	private static byte[] dumpMagicCtorInvokerInterfaceBytes() {
+		ClassWriter cw = new ClassWriter(0);
+		cw.visit(V1_8, ACC_PUBLIC | ACC_ABSTRACT | ACC_INTERFACE, BOOT_CTOR_INVOKER_INTERNAL_NAME, null, "java/lang/Object", null);
+
+		// Object newInstance(Object[] args) throws Throwable;
+		cw.visitMethod(ACC_PUBLIC | ACC_ABSTRACT, "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"}).visitEnd();
+
+		// newInstance0 ~ newInstance3
+		cw.visitMethod(ACC_PUBLIC | ACC_ABSTRACT, "newInstance0", "()Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"}).visitEnd();
+		cw.visitMethod(ACC_PUBLIC | ACC_ABSTRACT, "newInstance1", "(Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"}).visitEnd();
+		cw.visitMethod(ACC_PUBLIC | ACC_ABSTRACT, "newInstance2", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"}).visitEnd();
+		cw.visitMethod(ACC_PUBLIC | ACC_ABSTRACT, "newInstance3", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"}).visitEnd();
+
+		cw.visitEnd();
+		return cw.toByteArray();
+	}
+
 	private static synchronized Class<?> getOrCreateBootInvokerInterface() {
-		String name = "java.lang.invoke.MagicBootstrapInvoker";
+		String name = BOOT_INVOKER_INTERNAL_NAME.replace('/', '.');
 		try {
 			return Class.forName(name, false, null);
 		} catch (ClassNotFoundException e) {
-			try (java.io.InputStream in = MagicJIT.class.getResourceAsStream("/hope/magic/runtime/MagicBootstrapInvoker.class")) {
-				if (in == null) throw new IllegalStateException("Missing MagicBootstrapInvoker.class");
-				ClassReader cr = new ClassReader(in);
-				ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
-				org.objectweb.asm.commons.ClassRemapper remapper = new org.objectweb.asm.commons.ClassRemapper(
-					cw,
-					new org.objectweb.asm.commons.SimpleRemapper("hope/magic/runtime/MagicBootstrapInvoker", "java/lang/invoke/MagicBootstrapInvoker")
-				);
-				cr.accept(remapper, 0);
-				return Magic.defineClass(null, cw.toByteArray());
+			try {
+				byte[] bytes = dumpMagicInvokerInterfaceBytes();
+				return Magic.defineClass(null, bytes);
 			} catch (Throwable t) {
-				throw new RuntimeException("Failed to define java.lang.invoke.MagicBootstrapInvoker into BootLoader", t);
+				throw new RuntimeException("Failed to define " + name + " into BootLoader", t);
 			}
 		}
 	}
 
 	private static synchronized Class<?> getOrCreateBootCtorInvokerInterface() {
-		String name = "java.lang.invoke.MagicBootstrapCtorInvoker";
+		String name = BOOT_CTOR_INVOKER_INTERNAL_NAME.replace('/', '.');
 		try {
 			return Class.forName(name, false, null);
 		} catch (ClassNotFoundException e) {
-			try (java.io.InputStream in = MagicJIT.class.getResourceAsStream("/hope/magic/runtime/MagicBootstrapCtorInvoker.class")) {
-				if (in == null) throw new IllegalStateException("Missing MagicBootstrapCtorInvoker.class");
-				ClassReader cr = new ClassReader(in);
-				ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
-				org.objectweb.asm.commons.ClassRemapper remapper = new org.objectweb.asm.commons.ClassRemapper(
-					cw,
-					new org.objectweb.asm.commons.SimpleRemapper("hope/magic/runtime/MagicBootstrapCtorInvoker", "java/lang/invoke/MagicBootstrapCtorInvoker")
-				);
-				cr.accept(remapper, 0);
-				return Magic.defineClass(null, cw.toByteArray());
+			try {
+				byte[] bytes = dumpMagicCtorInvokerInterfaceBytes();
+				return Magic.defineClass(null, bytes);
 			} catch (Throwable t) {
-				throw new RuntimeException("Failed to define java.lang.invoke.MagicBootstrapCtorInvoker into BootLoader", t);
+				throw new RuntimeException("Failed to define " + name + " into BootLoader", t);
 			}
 		}
 	}
@@ -2918,12 +2948,11 @@ public class MagicJIT implements Opcodes {
 			String simpleName       = "MagicLinkToHostInvoker_" + COUNTER.incrementAndGet();
 			String invokerClassName = "java/lang/invoke/" + simpleName;
 
-			Class<?> bootIface     = getOrCreateBootInvokerInterface();
-			String   bootIfaceName = Type.getInternalName(bootIface);
+			getOrCreateBootInvokerInterface();
 
 			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 			cw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
-				new String[]{bootIfaceName});
+				new String[]{BOOT_INVOKER_INTERNAL_NAME});
 
 			int n = validMethods.size();
 			for (int i = 0; i < n; i++) {
@@ -3160,12 +3189,11 @@ public class MagicJIT implements Opcodes {
 			String simpleName       = "MagicLinkToHostCtorInvoker_" + COUNTER.incrementAndGet();
 			String invokerClassName = "java/lang/invoke/" + simpleName;
 
-			Class<?> bootCtorIface     = getOrCreateBootCtorInvokerInterface();
-			String   bootCtorIfaceName = Type.getInternalName(bootCtorIface);
+			getOrCreateBootCtorInvokerInterface();
 
 			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 			cw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
-				new String[]{bootCtorIfaceName});
+				new String[]{BOOT_CTOR_INVOKER_INTERNAL_NAME});
 
 			FieldVisitor cfv = cw.visitField(ACC_PUBLIC | ACC_STATIC | ACC_FINAL, "TARGET_CLS", "Ljava/lang/Class;", null, null);
 			cfv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
@@ -3702,56 +3730,28 @@ public class MagicJIT implements Opcodes {
 
 	private static MagicInvoker generateSingleLinkToMethodInvoker(Class<?> clazz, Method targetMethod) {
 		if (MEMBER_NAME_CLASS == null || LinkerHelper.IS_ANDROID) return null;
-		int        arity       = targetMethod.getParameterCount();
-		boolean    isStatic    = Modifier.isStatic(targetMethod.getModifiers());
-		boolean    isSpecial   = Modifier.isPrivate(targetMethod.getModifiers());
-		boolean    isInterface = clazz.isInterface();
-		Class<?>[] paramTypes  = targetMethod.getParameterTypes();
-		Class<?>   retType     = targetMethod.getReturnType();
-
-		String linkToName;
-		byte   refKind;
-		if (isStatic) {
-			linkToName = "linkToStatic";
-			refKind = 6;
-		} else if (isSpecial) {
-			linkToName = "linkToSpecial";
-			refKind = 7;
-		} else if (isInterface) {
-			linkToName = "linkToInterface";
-			refKind = 9;
-		} else {
-			linkToName = "linkToVirtual";
-			refKind = 5;
-		}
-
-		Object mn = null;
-		try {
-			MethodType mt = MethodType.methodType(retType, paramTypes);
-			mn = resolveOrFail(refKind, clazz, targetMethod.getName(), mt);
-		} catch (Throwable ignored) {
-		}
-		if (mn == null) {
-			try {
-				targetMethod.setAccessible(true);
-				MethodHandle raw = Magic.lookup.unreflect(targetMethod);
-				mn = LinkerHelper.extractMemberName(raw);
-			} catch (Throwable ignored) {
-			}
-		}
+		Class<?> declClass = targetMethod.getDeclaringClass();
+		Object mn = resolveMemberName(declClass, targetMethod);
 		if (mn == null) return null;
+
+		int        arity      = targetMethod.getParameterCount();
+		boolean    isStatic   = Modifier.isStatic(targetMethod.getModifiers());
+		Class<?>[] paramTypes = targetMethod.getParameterTypes();
+		Class<?>   retType    = targetMethod.getReturnType();
+
+		String linkToName = getLinkToName(declClass, targetMethod);
+		String linkToDesc = getLinkToDesc(declClass, targetMethod);
 
 		try {
 			Magic.install();
 			String simpleName       = "MagicLinkToInvoker_" + COUNTER.incrementAndGet();
 			String invokerClassName = "java/lang/invoke/" + simpleName;
 
-			Class<?> bootIface = getOrCreateBootInvokerInterface();
-			String bootIfaceName = Type.getInternalName(bootIface);
+			getOrCreateBootInvokerInterface();
 
 			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 			cw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
-				new String[]{bootIfaceName});
+				new String[]{BOOT_INVOKER_INTERNAL_NAME});
 
 			FieldVisitor fv = cw.visitField(ACC_PUBLIC | ACC_STATIC | ACC_FINAL, "MN", "Ljava/lang/Object;", null, null);
 			fv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
@@ -3765,26 +3765,6 @@ public class MagicJIT implements Opcodes {
 			initMv.visitInsn(RETURN);
 			initMv.visitMaxs(1, 1);
 			initMv.visitEnd();
-
-			StringBuilder linkToDesc = new StringBuilder("(");
-			if (!isStatic) {
-				linkToDesc.append("Ljava/lang/Object;");
-			}
-			for (Class<?> p : paramTypes) {
-				if (p.isPrimitive()) {
-					linkToDesc.append(Type.getDescriptor(p));
-				} else {
-					linkToDesc.append("Ljava/lang/Object;");
-				}
-			}
-			linkToDesc.append("Ljava/lang/invoke/MemberName;)");
-			if (retType == void.class) {
-				linkToDesc.append("V");
-			} else if (retType.isPrimitive()) {
-				linkToDesc.append(Type.getDescriptor(retType));
-			} else {
-				linkToDesc.append("Ljava/lang/Object;");
-			}
 
 			// 1. invoke(Object target, Object[] args)
 			MethodVisitor invMv = cw.visitMethod(ACC_PUBLIC, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
@@ -4283,36 +4263,24 @@ public class MagicJIT implements Opcodes {
 	private static MagicConstructorInvoker generateSingleLinkToConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor) {
 		if (MEMBER_NAME_CLASS == null || LinkerHelper.IS_ANDROID) return null;
 		if (targetCtor == null) return null;
-		int arity = targetCtor.getParameterCount();
-		Class<?>[] paramTypes = targetCtor.getParameterTypes();
-
-		Object mn = null;
-		try {
-			MethodType mt = MethodType.methodType(void.class, paramTypes);
-			mn = resolveOrFail((byte) 7, clazz, "<init>", mt);
-		} catch (Throwable ignored) {
-		}
-		if (mn == null) {
-			try {
-				targetCtor.setAccessible(true);
-				MethodHandle rawCtor = Magic.lookup.unreflectConstructor(targetCtor);
-				mn = LinkerHelper.extractMemberName(rawCtor);
-			} catch (Throwable ignored) {
-			}
-		}
+		Class<?> declClass = targetCtor.getDeclaringClass();
+		Object mn = resolveCtorMemberName(declClass, targetCtor);
 		if (mn == null) return null;
+
+		int        arity      = targetCtor.getParameterCount();
+		Class<?>[] paramTypes = targetCtor.getParameterTypes();
+		String     linkToDesc = getLinkToCtorDesc(targetCtor);
 
 		try {
 			Magic.install();
 			String simpleName       = "MagicLinkToCtorInvoker_" + COUNTER.incrementAndGet();
 			String invokerClassName = "java/lang/invoke/" + simpleName;
 
-			Class<?> bootCtorIface = getOrCreateBootCtorInvokerInterface();
-			String bootCtorIfaceName = Type.getInternalName(bootCtorIface);
+			getOrCreateBootCtorInvokerInterface();
 
 			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 			cw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
-				new String[]{bootCtorIfaceName});
+				new String[]{BOOT_CTOR_INVOKER_INTERNAL_NAME});
 
 			FieldVisitor cfv = cw.visitField(ACC_PUBLIC | ACC_STATIC | ACC_FINAL, "TARGET_CLS", "Ljava/lang/Class;", null, null);
 			cfv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
@@ -4330,16 +4298,6 @@ public class MagicJIT implements Opcodes {
 			initMv.visitInsn(RETURN);
 			initMv.visitMaxs(1, 1);
 			initMv.visitEnd();
-
-			StringBuilder linkToDesc = new StringBuilder("(Ljava/lang/Object;");
-			for (Class<?> p : paramTypes) {
-				if (p.isPrimitive()) {
-					linkToDesc.append(Type.getDescriptor(p));
-				} else {
-					linkToDesc.append("Ljava/lang/Object;");
-				}
-			}
-			linkToDesc.append("Ljava/lang/invoke/MemberName;)V");
 
 			// newInstance(Object[] args)
 			MethodVisitor newMv = cw.visitMethod(ACC_PUBLIC, "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});

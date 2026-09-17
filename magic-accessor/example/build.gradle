@@ -173,6 +173,28 @@ tasks.register('jmhInvoker', JavaExec) {
 	}
 }
 
+tasks.register('jmhJIT', JavaExec) {
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'org.openjdk.jmh.Main'
+	args = [
+			'hope.magic.example.MagicJITBenchmark',
+			'-f', '1',
+			'-wi', '2',
+			'-i', '3',
+			'-bm', 'thrpt',
+			'-tu', 'ms'
+	]
+	jvmArgs(
+			'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
+			'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED',
+			'--add-opens=java.base/java.lang=ALL-UNNAMED',
+			'--add-opens=java.base/java.lang.invoke=ALL-UNNAMED',
+	)
+	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
+		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
+	}
+}
+
 tasks.register('coldJS', JavaExec) {
 	classpath = sourceSets.main.runtimeClasspath
 	mainClass = 'hope.magic.example.MagicJSColdStartBenchmark'

@@ -21,6 +21,7 @@ public class Magic {
 
 	private static final java.lang.invoke.MethodHandle DEFINE_HIDDEN_CLASS_MH;
 	private static final Object EMPTY_CLASS_OPTIONS;
+	private static final Object NESTMATE_CLASS_OPTIONS;
 	private static final Method DEFINE_ANON_CLASS_METHOD;
 	private static final long ALLOWED_MODES_OFFSET;
 	private static final long PREV_LOOKUP_CLASS_OFFSET;
@@ -34,6 +35,7 @@ public class Magic {
 
 		java.lang.invoke.MethodHandle dhc = null;
 		Object emptyOpts = null;
+		Object nestmateOpts = null;
 		Method dac = null;
 		long amo = -1;
 		long plco = -1;
@@ -56,6 +58,12 @@ public class Magic {
 				emptyOpts = java.lang.reflect.Array.newInstance(classOptionClass, 0);
 				java.lang.invoke.MethodType mt = java.lang.invoke.MethodType.methodType(Lookup.class, byte[].class, boolean.class, emptyOpts.getClass());
 				dhc = lookup.findVirtual(Lookup.class, "defineHiddenClass", mt).asFixedArity();
+
+				@SuppressWarnings({"unchecked", "rawtypes"})
+				Object nestmateEnum = Enum.valueOf((Class<Enum>) classOptionClass, "NESTMATE");
+				Object arr = java.lang.reflect.Array.newInstance(classOptionClass, 1);
+				java.lang.reflect.Array.set(arr, 0, nestmateEnum);
+				nestmateOpts = arr;
 			} catch (Throwable ignored) {
 			}
 
@@ -68,6 +76,7 @@ public class Magic {
 
 		DEFINE_HIDDEN_CLASS_MH = dhc;
 		EMPTY_CLASS_OPTIONS = emptyOpts;
+		NESTMATE_CLASS_OPTIONS = nestmateOpts;
 		DEFINE_ANON_CLASS_METHOD = dac;
 		ALLOWED_MODES_OFFSET = amo;
 		PREV_LOOKUP_CLASS_OFFSET = plco;
@@ -151,7 +160,7 @@ public class Magic {
 				magicAccessorInstalled = false;
 			}
 
-			// 注入 Bootstrap 直调接口 MagicBootstrapInvoker 并为 java.base 开放未命名模块读取权限
+			// 注入 Bootstrap 直调接口 MagicBootstrapInvoker 与 MagicBootstrapCtorInvoker 并为 java.base 开放未命名模块读取权限
 			try {
 				try {
 					Class.forName("hope.magic.runtime.MagicBootstrapInvoker", false, null);
@@ -160,6 +169,16 @@ public class Magic {
 						if (in != null) {
 							byte[] invokerBytes = in.readAllBytes();
 							defineClass(null, invokerBytes);
+						}
+					}
+				}
+				try {
+					Class.forName("hope.magic.runtime.MagicBootstrapCtorInvoker", false, null);
+				} catch (ClassNotFoundException e) {
+					try (java.io.InputStream in = MagicBootstrapCtorInvoker.class.getResourceAsStream("/hope/magic/runtime/MagicBootstrapCtorInvoker.class")) {
+						if (in != null) {
+							byte[] ctorBytes = in.readAllBytes();
+							defineClass(null, ctorBytes);
 						}
 					}
 				}
@@ -308,6 +327,79 @@ public class Magic {
 
 	public static Class<?> defineHiddenOrAnonymousClass(Class<?> hostClass, byte[] bytes) {
 		return defineHiddenOrAnonymousClass(hostClass, bytes, true);
+	}
+
+	public static boolean supportsHiddenClasses() {
+		return DEFINE_HIDDEN_CLASS_MH != null;
+	}
+
+	public static boolean supportsNestmateClasses() {
+		return DEFINE_HIDDEN_CLASS_MH != null && NESTMATE_CLASS_OPTIONS != null;
+	}
+
+	/**
+	 * 定义具有同巢 (Nestmate) 权限的隐藏类或 VM 匿名类。
+	 * <p>在 JDK 15+ 使用携带 {@code ClassOption.NESTMATE} 的 {@code Lookup.defineHiddenClass}，
+	 * 赋予生成的类访问 {@code hostClass} 的私有成员的特权；在 JDK 8~14 降级为 {@code Unsafe.defineAnonymousClass}
+	 * （VM 匿名类天然具有宿主类的私有访问特权）。</p>
+	 *
+	 * @param hostClass   巢元宿主类（通常为声明私有成员的目标类）
+	 * @param bytes       待加载类的字节码数组
+	 * @param initialize  是否立即执行静态初始化方法 (&lt;clinit&gt;)
+	 * @return 定义成功生成的 Class 对象
+	 */
+	public static Class<?> defineNestmateHiddenClass(Class<?> hostClass, byte[] bytes, boolean initialize) {
+		if (hostClass == null) {
+			hostClass = Magic.class;
+		}
+
+		// 1. JDK 15+: Lookup.defineHiddenClass with NESTMATE
+		if (DEFINE_HIDDEN_CLASS_MH != null && NESTMATE_CLASS_OPTIONS != null) {
+			try {
+				Lookup hostLookup;
+				try {
+					hostLookup = MethodHandles.privateLookupIn(hostClass, lookup);
+				} catch (Throwable t) {
+					hostLookup = lookup.in(hostClass);
+					if (ALLOWED_MODES_OFFSET >= 0) {
+						unsafe.putInt(hostLookup, ALLOWED_MODES_OFFSET, -1);
+					}
+					if (PREV_LOOKUP_CLASS_OFFSET >= 0) {
+						unsafe.putObject(hostLookup, PREV_LOOKUP_CLASS_OFFSET, null);
+					}
+				}
+				Lookup hiddenLookup = (Lookup) DEFINE_HIDDEN_CLASS_MH.invoke(hostLookup, bytes, initialize, NESTMATE_CLASS_OPTIONS);
+				return hiddenLookup.lookupClass();
+			} catch (Throwable ignored) {
+			}
+		}
+
+		// 2. JDK 8~14: Unsafe.defineAnonymousClass (VM anonymous class naturally shares host nest/private access!)
+		if (DEFINE_ANON_CLASS_METHOD != null) {
+			try {
+				Class<?> clazz = (Class<?>) DEFINE_ANON_CLASS_METHOD.invoke(unsafe, hostClass, bytes, null);
+				if (initialize) {
+					try {
+						lookup.ensureInitialized(clazz);
+					} catch (Throwable t) {
+						try {
+							Method m = Unsafe.class.getMethod("ensureClassInitialized", Class.class);
+							m.invoke(unsafe, clazz);
+						} catch (Throwable ignored) {
+						}
+					}
+				}
+				return clazz;
+			} catch (Throwable ignored) {
+			}
+		}
+
+		// 3. Fallback: 普通隐藏类或标准 defineClass
+		return defineHiddenOrAnonymousClass(hostClass, bytes, initialize);
+	}
+
+	public static Class<?> defineNestmateHiddenClass(Class<?> hostClass, byte[] bytes) {
+		return defineNestmateHiddenClass(hostClass, bytes, true);
 	}
 
 	/**

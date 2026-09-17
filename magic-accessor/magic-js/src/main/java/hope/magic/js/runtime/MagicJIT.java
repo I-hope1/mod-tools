@@ -69,6 +69,9 @@ public class MagicJIT implements Opcodes {
 	public static AccessMode getEffectiveMode() {
 		AccessMode m = currentMode;
 		if (m == AccessMode.AUTO) {
+			if (Magic.supportsNestmateClasses() && !LinkerHelper.IS_ANDROID) {
+				return AccessMode.NESTMATE;
+			}
 			if (MEMBER_NAME_CLASS != null && !LinkerHelper.IS_ANDROID) {
 				return AccessMode.UNSAFE_AND_LINKTO;
 			}
@@ -240,7 +243,7 @@ public class MagicJIT implements Opcodes {
 	};
 
 	@FunctionalInterface
-	public interface MagicInvoker {
+	public interface MagicInvoker extends hope.magic.runtime.MagicBootstrapInvoker {
 		Object invoke(Object target, Object[] args) throws Throwable;
 
 		default Object invoke0(Object target) throws Throwable {
@@ -282,7 +285,7 @@ public class MagicJIT implements Opcodes {
 	}
 
 	@FunctionalInterface
-	public interface MagicConstructorInvoker {
+	public interface MagicConstructorInvoker extends hope.magic.runtime.MagicBootstrapCtorInvoker {
 		Object newInstance(Object[] args) throws Throwable;
 
 		default Object newInstance0() throws Throwable {
@@ -436,6 +439,31 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
+	private static final class MagicBootstrapAdapter implements MagicInvoker {
+		private final MagicBootstrapInvoker delegate;
+		MagicBootstrapAdapter(MagicBootstrapInvoker delegate) { this.delegate = delegate; }
+		@Override public Object invoke(Object target, Object[] args) throws Throwable { return delegate.invoke(target, args); }
+		@Override public Object invoke0(Object target) throws Throwable { return delegate.invoke0(target); }
+		@Override public Object invoke1(Object target, Object a0) throws Throwable { return delegate.invoke1(target, a0); }
+		@Override public Object invoke2(Object target, Object a0, Object a1) throws Throwable { return delegate.invoke2(target, a0, a1); }
+		@Override public Object invoke3(Object target, Object a0, Object a1, Object a2) throws Throwable { return delegate.invoke3(target, a0, a1, a2); }
+		@Override public int invokeInt0(Object target) throws Throwable { return delegate.invokeInt0(target); }
+		@Override public int invokeInt1(Object target, int a0) throws Throwable { return delegate.invokeInt1(target, a0); }
+		@Override public int invokeInt2(Object target, int a0, int a1) throws Throwable { return delegate.invokeInt2(target, a0, a1); }
+		@Override public long invokeLong2(Object target, long a0, long a1) throws Throwable { return delegate.invokeLong2(target, a0, a1); }
+		@Override public double invokeDouble2(Object target, double a0, double a1) throws Throwable { return delegate.invokeDouble2(target, a0, a1); }
+	}
+
+	private static final class MagicBootstrapCtorAdapter implements MagicConstructorInvoker {
+		private final MagicBootstrapCtorInvoker delegate;
+		MagicBootstrapCtorAdapter(MagicBootstrapCtorInvoker delegate) { this.delegate = delegate; }
+		@Override public Object newInstance(Object[] args) throws Throwable { return delegate.newInstance(args); }
+		@Override public Object newInstance0() throws Throwable { return delegate.newInstance0(); }
+		@Override public Object newInstance1(Object a0) throws Throwable { return delegate.newInstance1(a0); }
+		@Override public Object newInstance2(Object a0, Object a1) throws Throwable { return delegate.newInstance2(a0, a1); }
+		@Override public Object newInstance3(Object a0, Object a1, Object a2) throws Throwable { return delegate.newInstance3(a0, a1, a2); }
+	}
+
 	public static MagicInvoker getMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic) {
 		return getMethodInvoker(clazz, methodName, arity, isStatic, getEffectiveMode());
 	}
@@ -478,7 +506,14 @@ public class MagicJIT implements Opcodes {
 		if (targetMethod == null) return null;
 		targetMethod.setAccessible(true);
 		try {
-			if (mode == AccessMode.MAGIC_ACCESSOR) {
+			if (mode == AccessMode.NESTMATE) {
+				if (canUseNestmate(clazz, targetMethod)) {
+					MagicInvoker nestmateInvoker = generateNestmateMethodInvoker(clazz, targetMethod);
+					if (nestmateInvoker != null) return nestmateInvoker;
+				}
+				MagicInvoker linkToInvoker = generateLinkToMethodInvoker(clazz, targetMethod);
+				if (linkToInvoker != null) return linkToInvoker;
+			} else if (mode == AccessMode.MAGIC_ACCESSOR) {
 				if (!Magic.isInstalled()) Magic.install();
 				if (Magic.isMagicAccessorInstalled()) {
 					MagicInvoker invoker = generateAsmMethodInvoker(clazz, targetMethod);
@@ -517,23 +552,29 @@ public class MagicJIT implements Opcodes {
 
 	public static MagicConstructorInvoker createConstructorInvoker(Class<?> clazz, int arity, AccessMode mode) {
 		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
-		if (mode == AccessMode.MAGIC_ACCESSOR) {
-			if (!Magic.isInstalled()) Magic.install();
-			if (Magic.isMagicAccessorInstalled()) {
-				MagicConstructorInvoker asmInvoker = generateAsmConstructorInvoker(clazz, arity);
-				if (asmInvoker != null) return asmInvoker;
-			}
-			MagicConstructorInvoker linkToCtor = generateLinkToConstructorInvoker(clazz, arity);
-			if (linkToCtor != null) return linkToCtor;
-		} else if (mode == AccessMode.UNSAFE_AND_LINKTO) {
-			MagicConstructorInvoker linkToCtor = generateLinkToConstructorInvoker(clazz, arity);
-			if (linkToCtor != null) return linkToCtor;
-		}
-
 		Constructor<?> targetCtor = MethodResolver.findConstructor(clazz, arity);
 		if (targetCtor == null) return null;
 		targetCtor.setAccessible(true);
 		try {
+			if (mode == AccessMode.NESTMATE) {
+				if (canUseNestmateCtor(clazz, targetCtor)) {
+					MagicConstructorInvoker nestmateCtor = generateNestmateConstructorInvoker(clazz, arity);
+					if (nestmateCtor != null) return nestmateCtor;
+				}
+				MagicConstructorInvoker linkToCtor = generateLinkToConstructorInvoker(clazz, arity);
+				if (linkToCtor != null) return linkToCtor;
+			} else if (mode == AccessMode.MAGIC_ACCESSOR) {
+				if (!Magic.isInstalled()) Magic.install();
+				if (Magic.isMagicAccessorInstalled()) {
+					MagicConstructorInvoker asmInvoker = generateAsmConstructorInvoker(clazz, arity);
+					if (asmInvoker != null) return asmInvoker;
+				}
+				MagicConstructorInvoker linkToCtor = generateLinkToConstructorInvoker(clazz, arity);
+				if (linkToCtor != null) return linkToCtor;
+			} else if (mode == AccessMode.UNSAFE_AND_LINKTO) {
+				MagicConstructorInvoker linkToCtor = generateLinkToConstructorInvoker(clazz, arity);
+				if (linkToCtor != null) return linkToCtor;
+			}
 			MethodHandle ctorMh     = Magic.lookup.unreflectConstructor(targetCtor);
 			Class<?>[]   paramTypes = targetCtor.getParameterTypes();
 			for (int i = 0; i < arity; i++) {
@@ -1196,6 +1237,356 @@ public class MagicJIT implements Opcodes {
 			TOTAL_METHOD_BRIDGES.incrementAndGet();
 			String actualInternalName = Type.getInternalName(bridgeClass);
 			return new LinkToBridgeInfo(bridgeClass, actualInternalName, bridgeDesc.toString(), linkToName);
+		} catch (Throwable t) {
+			return null;
+		}
+	}
+
+	public static boolean canUseNestmate(Class<?> clazz, Method targetMethod) {
+		if (!Magic.supportsNestmateClasses()) return false;
+		if (clazz == null || targetMethod == null) return false;
+		Class<?> decl = targetMethod.getDeclaringClass();
+		if (decl.isArray() || decl.isPrimitive()) return false;
+		if (decl.getClassLoader() == null || isSystemClass(decl)) return false;
+		return true;
+	}
+
+	public static boolean canUseNestmateCtor(Class<?> clazz, Constructor<?> targetCtor) {
+		if (!Magic.supportsNestmateClasses()) return false;
+		if (clazz == null || targetCtor == null) return false;
+		Class<?> decl = targetCtor.getDeclaringClass();
+		if (decl.isArray() || decl.isPrimitive() || Modifier.isAbstract(decl.getModifiers())) return false;
+		if (decl.getClassLoader() == null || isSystemClass(decl)) return false;
+		return true;
+	}
+
+	/**
+	 * 动态生成基于 Nestmate Hidden Class（方案 C：同巢隐藏类）的 {@link MagicInvoker} 实例。
+	 * <p>直接将动态生成的调用器类以 {@code ClassOption.NESTMATE} 挂载到宿主类（{@code targetMethod.getDeclaringClass()}），
+	 * 享有原生私有成员访问权限，消除对 {@code linkTo*} 与 {@code MemberName} 的依赖，
+	 * 通过原生 {@code invokevirtual / invokespecial / invokestatic} 直调，并享有随类加载器 100% 干净卸载能力。</p>
+	 */
+	private static MagicInvoker generateNestmateMethodInvoker(Class<?> clazz, Method targetMethod) {
+		if (!Magic.supportsNestmateClasses()) return null;
+		int        arity      = targetMethod.getParameterCount();
+		boolean    isStatic   = Modifier.isStatic(targetMethod.getModifiers());
+		Class<?>[] paramTypes = targetMethod.getParameterTypes();
+		Class<?>   retType    = targetMethod.getReturnType();
+		Class<?>   declClass  = targetMethod.getDeclaringClass();
+		Class<?>   hostClass  = getHostClass(declClass);
+
+		try {
+			boolean canSeeMagicInvoker;
+			try {
+				Class<?> loaded = Class.forName(MagicInvoker.class.getName(), false, hostClass.getClassLoader());
+				canSeeMagicInvoker = (loaded == MagicInvoker.class);
+			} catch (Throwable t) {
+				canSeeMagicInvoker = false;
+			}
+
+			String ifaceName = canSeeMagicInvoker ?
+				Type.getInternalName(MagicInvoker.class) :
+				"hope/magic/runtime/MagicBootstrapInvoker";
+
+			String      owner            = Type.getInternalName(declClass);
+			String      invokerClassName = owner + "$$MagicNestmateInvoker_" + COUNTER.incrementAndGet();
+			ClassWriter cw               = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+			cw.visit(V17, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
+				new String[]{ifaceName});
+
+			// Default constructor <init>()
+			MethodVisitor initMv = cw.visitMethod(ACC_PUBLIC, "<init>", "()V", null, null);
+			initMv.visitCode();
+			initMv.visitVarInsn(ALOAD, 0);
+			initMv.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+			initMv.visitInsn(RETURN);
+			initMv.visitMaxs(1, 1);
+			initMv.visitEnd();
+
+			String methodDesc = Type.getMethodDescriptor(targetMethod);
+
+			// 1. invoke(Object target, Object[] args)
+			MethodVisitor invMv = cw.visitMethod(ACC_PUBLIC, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			invMv.visitCode();
+			if (!isStatic) {
+				invMv.visitVarInsn(ALOAD, 1);
+				invMv.visitTypeInsn(CHECKCAST, owner);
+			}
+			for (int i = 0; i < arity; i++) {
+				invMv.visitVarInsn(ALOAD, 2);
+				pushInt(invMv, i);
+				invMv.visitInsn(AALOAD);
+				emitArgumentCast(invMv, paramTypes[i]);
+			}
+			emitInvokeTarget(invMv, declClass, targetMethod, owner, methodDesc, isStatic);
+			emitReturnBox(invMv, retType);
+			invMv.visitInsn(ARETURN);
+			invMv.visitMaxs(0, 0);
+			invMv.visitEnd();
+
+			if (arity == 0) {
+				MethodVisitor m0 = cw.visitMethod(ACC_PUBLIC, "invoke0", "(Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+				m0.visitCode();
+				if (!isStatic) {
+					m0.visitVarInsn(ALOAD, 1);
+					m0.visitTypeInsn(CHECKCAST, owner);
+				}
+				emitInvokeTarget(m0, declClass, targetMethod, owner, methodDesc, isStatic);
+				emitReturnBox(m0, retType);
+				m0.visitInsn(ARETURN);
+				m0.visitMaxs(0, 0);
+				m0.visitEnd();
+			} else if (arity == 1) {
+				MethodVisitor m1 = cw.visitMethod(ACC_PUBLIC, "invoke1", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+				m1.visitCode();
+				if (!isStatic) {
+					m1.visitVarInsn(ALOAD, 1);
+					m1.visitTypeInsn(CHECKCAST, owner);
+				}
+				m1.visitVarInsn(ALOAD, 2);
+				emitArgumentCast(m1, paramTypes[0]);
+				emitInvokeTarget(m1, declClass, targetMethod, owner, methodDesc, isStatic);
+				emitReturnBox(m1, retType);
+				m1.visitInsn(ARETURN);
+				m1.visitMaxs(0, 0);
+				m1.visitEnd();
+			} else if (arity == 2) {
+				MethodVisitor m2 = cw.visitMethod(ACC_PUBLIC, "invoke2", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+				m2.visitCode();
+				if (!isStatic) {
+					m2.visitVarInsn(ALOAD, 1);
+					m2.visitTypeInsn(CHECKCAST, owner);
+				}
+				m2.visitVarInsn(ALOAD, 2);
+				emitArgumentCast(m2, paramTypes[0]);
+				m2.visitVarInsn(ALOAD, 3);
+				emitArgumentCast(m2, paramTypes[1]);
+				emitInvokeTarget(m2, declClass, targetMethod, owner, methodDesc, isStatic);
+				emitReturnBox(m2, retType);
+				m2.visitInsn(ARETURN);
+				m2.visitMaxs(0, 0);
+				m2.visitEnd();
+			} else if (arity == 3) {
+				MethodVisitor m3 = cw.visitMethod(ACC_PUBLIC, "invoke3", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+				m3.visitCode();
+				if (!isStatic) {
+					m3.visitVarInsn(ALOAD, 1);
+					m3.visitTypeInsn(CHECKCAST, owner);
+				}
+				m3.visitVarInsn(ALOAD, 2);
+				emitArgumentCast(m3, paramTypes[0]);
+				m3.visitVarInsn(ALOAD, 3);
+				emitArgumentCast(m3, paramTypes[1]);
+				m3.visitVarInsn(ALOAD, 4);
+				emitArgumentCast(m3, paramTypes[2]);
+				emitInvokeTarget(m3, declClass, targetMethod, owner, methodDesc, isStatic);
+				emitReturnBox(m3, retType);
+				m3.visitInsn(ARETURN);
+				m3.visitMaxs(0, 0);
+				m3.visitEnd();
+			}
+
+			// Primitive Fast-Path Overrides (100% Zero-Boxing direct call)
+			if (retType == int.class && arity == 2 && paramTypes[0] == int.class && paramTypes[1] == int.class) {
+				MethodVisitor mi2 = cw.visitMethod(ACC_PUBLIC, "invokeInt2", "(Ljava/lang/Object;II)I", null, new String[]{"java/lang/Throwable"});
+				mi2.visitCode();
+				if (!isStatic) {
+					mi2.visitVarInsn(ALOAD, 1);
+					mi2.visitTypeInsn(CHECKCAST, owner);
+				}
+				mi2.visitVarInsn(ILOAD, 2);
+				mi2.visitVarInsn(ILOAD, 3);
+				emitInvokeTarget(mi2, declClass, targetMethod, owner, methodDesc, isStatic);
+				mi2.visitInsn(IRETURN);
+				mi2.visitMaxs(0, 0);
+				mi2.visitEnd();
+			}
+			if (retType == int.class && arity == 0) {
+				MethodVisitor mi0 = cw.visitMethod(ACC_PUBLIC, "invokeInt0", "(Ljava/lang/Object;)I", null, new String[]{"java/lang/Throwable"});
+				mi0.visitCode();
+				if (!isStatic) {
+					mi0.visitVarInsn(ALOAD, 1);
+					mi0.visitTypeInsn(CHECKCAST, owner);
+				}
+				emitInvokeTarget(mi0, declClass, targetMethod, owner, methodDesc, isStatic);
+				mi0.visitInsn(IRETURN);
+				mi0.visitMaxs(0, 0);
+				mi0.visitEnd();
+			}
+			if (retType == int.class && arity == 1 && paramTypes[0] == int.class) {
+				MethodVisitor mi1 = cw.visitMethod(ACC_PUBLIC, "invokeInt1", "(Ljava/lang/Object;I)I", null, new String[]{"java/lang/Throwable"});
+				mi1.visitCode();
+				if (!isStatic) {
+					mi1.visitVarInsn(ALOAD, 1);
+					mi1.visitTypeInsn(CHECKCAST, owner);
+				}
+				mi1.visitVarInsn(ILOAD, 2);
+				emitInvokeTarget(mi1, declClass, targetMethod, owner, methodDesc, isStatic);
+				mi1.visitInsn(IRETURN);
+				mi1.visitMaxs(0, 0);
+				mi1.visitEnd();
+			}
+			if (retType == long.class && arity == 2 && paramTypes[0] == long.class && paramTypes[1] == long.class) {
+				MethodVisitor ml2 = cw.visitMethod(ACC_PUBLIC, "invokeLong2", "(Ljava/lang/Object;JJ)J", null, new String[]{"java/lang/Throwable"});
+				ml2.visitCode();
+				if (!isStatic) {
+					ml2.visitVarInsn(ALOAD, 1);
+					ml2.visitTypeInsn(CHECKCAST, owner);
+				}
+				ml2.visitVarInsn(LLOAD, 2);
+				ml2.visitVarInsn(LLOAD, 4);
+				emitInvokeTarget(ml2, declClass, targetMethod, owner, methodDesc, isStatic);
+				ml2.visitInsn(LRETURN);
+				ml2.visitMaxs(0, 0);
+				ml2.visitEnd();
+			}
+			if (retType == double.class && arity == 2 && paramTypes[0] == double.class && paramTypes[1] == double.class) {
+				MethodVisitor md2 = cw.visitMethod(ACC_PUBLIC, "invokeDouble2", "(Ljava/lang/Object;DD)D", null, new String[]{"java/lang/Throwable"});
+				md2.visitCode();
+				if (!isStatic) {
+					md2.visitVarInsn(ALOAD, 1);
+					md2.visitTypeInsn(CHECKCAST, owner);
+				}
+				md2.visitVarInsn(DLOAD, 2);
+				md2.visitVarInsn(DLOAD, 4);
+				emitInvokeTarget(md2, declClass, targetMethod, owner, methodDesc, isStatic);
+				md2.visitInsn(DRETURN);
+				md2.visitMaxs(0, 0);
+				md2.visitEnd();
+			}
+
+			cw.visitEnd();
+			Class<?> genClass = Magic.defineNestmateHiddenClass(declClass, cw.toByteArray(), true);
+			if (canSeeMagicInvoker) {
+				return (MagicInvoker) Magic.unsafe.allocateInstance(genClass);
+			} else {
+				MagicBootstrapInvoker bi = (MagicBootstrapInvoker) Magic.unsafe.allocateInstance(genClass);
+				return new MagicBootstrapAdapter(bi);
+			}
+		} catch (Throwable t) {
+			return null;
+		}
+	}
+
+	/**
+	 * 动态生成基于 Nestmate Hidden Class（方案 C：同巢隐藏类）的 {@link MagicConstructorInvoker} 实例。
+	 * <p>直接以宿主类同巢成员身份下发 {@code NEW; DUP; INVOKESPECIAL <init>} 指令序列，
+	 * 享有原生私有构造器访问权限，无需 {@code allocateInstance} 与 {@code linkToSpecial}，
+	 * 由 JIT 编译器在 TLAB 中内联极速分配，并随宿主类加载器 100% 干净卸载。</p>
+	 */
+	private static MagicConstructorInvoker generateNestmateConstructorInvoker(Class<?> clazz, int arity) {
+		if (!Magic.supportsNestmateClasses()) return null;
+		Constructor<?> targetCtor = MethodResolver.findConstructor(clazz, arity);
+		if (targetCtor == null) return null;
+		Class<?> declClass = targetCtor.getDeclaringClass();
+		if (Modifier.isAbstract(declClass.getModifiers())) return null;
+		Class<?> hostClass = getHostClass(declClass);
+
+		try {
+			boolean canSeeCtorInvoker;
+			try {
+				Class<?> loaded = Class.forName(MagicConstructorInvoker.class.getName(), false, hostClass.getClassLoader());
+				canSeeCtorInvoker = (loaded == MagicConstructorInvoker.class);
+			} catch (Throwable t) {
+				canSeeCtorInvoker = false;
+			}
+
+			String ifaceName = canSeeCtorInvoker ?
+				Type.getInternalName(MagicConstructorInvoker.class) :
+				"hope/magic/runtime/MagicBootstrapCtorInvoker";
+
+			String      targetOwner      = Type.getInternalName(declClass);
+			String      invokerClassName = targetOwner + "$$MagicNestmateCtor_" + COUNTER.incrementAndGet();
+			ClassWriter cw               = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+			cw.visit(V17, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
+				new String[]{ifaceName});
+
+			// Default constructor <init>()
+			MethodVisitor initMv = cw.visitMethod(ACC_PUBLIC, "<init>", "()V", null, null);
+			initMv.visitCode();
+			initMv.visitVarInsn(ALOAD, 0);
+			initMv.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+			initMv.visitInsn(RETURN);
+			initMv.visitMaxs(1, 1);
+			initMv.visitEnd();
+
+			String     ctorDesc   = Type.getConstructorDescriptor(targetCtor);
+			Class<?>[] paramTypes = targetCtor.getParameterTypes();
+
+			// newInstance(Object[] args)
+			MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			mv.visitCode();
+			mv.visitTypeInsn(NEW, targetOwner);
+			mv.visitInsn(DUP);
+			for (int i = 0; i < arity; i++) {
+				mv.visitVarInsn(ALOAD, 1);
+				pushInt(mv, i);
+				mv.visitInsn(AALOAD);
+				emitArgumentCast(mv, paramTypes[i]);
+			}
+			mv.visitMethodInsn(INVOKESPECIAL, targetOwner, "<init>", ctorDesc, false);
+			mv.visitInsn(ARETURN);
+			mv.visitMaxs(0, 0);
+			mv.visitEnd();
+
+			if (arity == 0) {
+				MethodVisitor n0 = cw.visitMethod(ACC_PUBLIC, "newInstance0", "()Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+				n0.visitCode();
+				n0.visitTypeInsn(NEW, targetOwner);
+				n0.visitInsn(DUP);
+				n0.visitMethodInsn(INVOKESPECIAL, targetOwner, "<init>", "()V", false);
+				n0.visitInsn(ARETURN);
+				n0.visitMaxs(0, 0);
+				n0.visitEnd();
+			} else if (arity == 1) {
+				MethodVisitor n1 = cw.visitMethod(ACC_PUBLIC, "newInstance1", "(Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+				n1.visitCode();
+				n1.visitTypeInsn(NEW, targetOwner);
+				n1.visitInsn(DUP);
+				n1.visitVarInsn(ALOAD, 1);
+				emitArgumentCast(n1, paramTypes[0]);
+				n1.visitMethodInsn(INVOKESPECIAL, targetOwner, "<init>", ctorDesc, false);
+				n1.visitInsn(ARETURN);
+				n1.visitMaxs(0, 0);
+				n1.visitEnd();
+			} else if (arity == 2) {
+				MethodVisitor n2 = cw.visitMethod(ACC_PUBLIC, "newInstance2", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+				n2.visitCode();
+				n2.visitTypeInsn(NEW, targetOwner);
+				n2.visitInsn(DUP);
+				n2.visitVarInsn(ALOAD, 1);
+				emitArgumentCast(n2, paramTypes[0]);
+				n2.visitVarInsn(ALOAD, 2);
+				emitArgumentCast(n2, paramTypes[1]);
+				n2.visitMethodInsn(INVOKESPECIAL, targetOwner, "<init>", ctorDesc, false);
+				n2.visitInsn(ARETURN);
+				n2.visitMaxs(0, 0);
+				n2.visitEnd();
+			} else if (arity == 3) {
+				MethodVisitor n3 = cw.visitMethod(ACC_PUBLIC, "newInstance3", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+				n3.visitCode();
+				n3.visitTypeInsn(NEW, targetOwner);
+				n3.visitInsn(DUP);
+				n3.visitVarInsn(ALOAD, 1);
+				emitArgumentCast(n3, paramTypes[0]);
+				n3.visitVarInsn(ALOAD, 2);
+				emitArgumentCast(n3, paramTypes[1]);
+				n3.visitVarInsn(ALOAD, 3);
+				emitArgumentCast(n3, paramTypes[2]);
+				n3.visitMethodInsn(INVOKESPECIAL, targetOwner, "<init>", ctorDesc, false);
+				n3.visitInsn(ARETURN);
+				n3.visitMaxs(0, 0);
+				n3.visitEnd();
+			}
+
+			cw.visitEnd();
+			Class<?> genClass = Magic.defineNestmateHiddenClass(declClass, cw.toByteArray(), true);
+			if (canSeeCtorInvoker) {
+				return (MagicConstructorInvoker) Magic.unsafe.allocateInstance(genClass);
+			} else {
+				MagicBootstrapCtorInvoker bi = (MagicBootstrapCtorInvoker) Magic.unsafe.allocateInstance(genClass);
+				return new MagicBootstrapCtorAdapter(bi);
+			}
 		} catch (Throwable t) {
 			return null;
 		}

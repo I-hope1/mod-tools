@@ -75,5 +75,14 @@ public enum AccessMode {
 	 * 利用 ASM 生成继承自 {@code MagicAccessorImpl} 的辅助类直接执行私有字节码指令。
 	 * <p><b>适用平台：</b>JDK &le; 21（在 JDK 22+ 已移除）。</p>
 	 */
-	MAGIC_ACCESSOR
+	MAGIC_ACCESSOR,
+
+	/**
+	 * Nestmate 隐藏类方案（Plan C）：
+	 * 利用 JEP 181 (Nest-Based Access Control) 与 JEP 371 (Hidden Classes)，
+	 * 在目标类的巢元作用域中动态定义同巢隐藏类，直接通过原生字节码指令
+	 * (invokevirtual / invokespecial / invokestatic) 直调私有成员，达成极致单态内联与 100% 类加载器安全卸载。
+	 * <p><b>适用平台：</b>HotSpot JVM（JDK 15+ 首选；JDK 8~14 降级为 VM 匿名类）。</p>
+	 */
+	NESTMATE
 }

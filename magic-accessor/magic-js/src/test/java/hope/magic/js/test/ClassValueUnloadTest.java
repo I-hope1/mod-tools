@@ -584,6 +584,153 @@ public class ClassValueUnloadTest {
 		Assertions.assertTrue(collected, "Both PluginClassLoader and HiddenClass must be collected by GC!");
 	}
 
+	private WeakReference<?>[] exercisePlanC() throws Throwable {
+		// Target class in custom ClassLoader with a PRIVATE method
+		SimpleClassLoader pluginLoader = new SimpleClassLoader(getClass().getClassLoader());
+		ClassWriter targetCw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+		targetCw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC, "hope/magic/test/NestmateTarget", null, "java/lang/Object", null);
+
+		MethodVisitor initMv = targetCw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+		initMv.visitCode();
+		initMv.visitVarInsn(Opcodes.ALOAD, 0);
+		initMv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+		initMv.visitInsn(Opcodes.RETURN);
+		initMv.visitMaxs(1, 1);
+		initMv.visitEnd();
+
+		// PRIVATE method!
+		MethodVisitor mulMv = targetCw.visitMethod(Opcodes.ACC_PRIVATE, "multiply", "(II)I", null, null);
+		mulMv.visitCode();
+		mulMv.visitVarInsn(Opcodes.ILOAD, 1);
+		mulMv.visitVarInsn(Opcodes.ILOAD, 2);
+		mulMv.visitInsn(Opcodes.IMUL);
+		mulMv.visitInsn(Opcodes.IRETURN);
+		mulMv.visitMaxs(2, 3);
+		mulMv.visitEnd();
+		targetCw.visitEnd();
+
+		Class<?> pluginClass = pluginLoader.define("hope.magic.test.NestmateTarget", targetCw.toByteArray());
+		Object pluginInstance = pluginClass.getDeclaredConstructor().newInstance();
+
+		// Generate Hidden Class as NESTMATE of pluginClass
+		// It directly calls private multiply using native invokevirtual!
+		String hiddenClassName = "hope/magic/test/NestmateTarget$$NestmateInvoker";
+		ClassWriter hw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+		hw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, hiddenClassName, null, "java/lang/Object",
+			new String[]{ org.objectweb.asm.Type.getInternalName(MagicJIT.MagicInvoker.class) });
+
+		MethodVisitor hInit = hw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+		hInit.visitCode();
+		hInit.visitVarInsn(Opcodes.ALOAD, 0);
+		hInit.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+		hInit.visitInsn(Opcodes.RETURN);
+		hInit.visitMaxs(1, 1);
+		hInit.visitEnd();
+
+		// invokeInt2: native direct invokevirtual on private method of nestmate!
+		MethodVisitor hInvoke = hw.visitMethod(Opcodes.ACC_PUBLIC, "invokeInt2", "(Ljava/lang/Object;II)I", null, new String[]{"java/lang/Throwable"});
+		hInvoke.visitCode();
+		hInvoke.visitVarInsn(Opcodes.ALOAD, 1);
+		hInvoke.visitTypeInsn(Opcodes.CHECKCAST, "hope/magic/test/NestmateTarget");
+		hInvoke.visitVarInsn(Opcodes.ILOAD, 2);
+		hInvoke.visitVarInsn(Opcodes.ILOAD, 3);
+		hInvoke.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "hope/magic/test/NestmateTarget", "multiply", "(II)I", false);
+		hInvoke.visitInsn(Opcodes.IRETURN);
+		hInvoke.visitMaxs(3, 4);
+		hInvoke.visitEnd();
+
+		// invoke2
+		MethodVisitor hInvoke2 = hw.visitMethod(Opcodes.ACC_PUBLIC, "invoke2", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+		hInvoke2.visitCode();
+		hInvoke2.visitVarInsn(Opcodes.ALOAD, 0);
+		hInvoke2.visitVarInsn(Opcodes.ALOAD, 1);
+		hInvoke2.visitVarInsn(Opcodes.ALOAD, 2);
+		hInvoke2.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Number");
+		hInvoke2.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Number", "intValue", "()I", false);
+		hInvoke2.visitVarInsn(Opcodes.ALOAD, 3);
+		hInvoke2.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Number");
+		hInvoke2.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Number", "intValue", "()I", false);
+		hInvoke2.visitMethodInsn(Opcodes.INVOKEVIRTUAL, hiddenClassName, "invokeInt2", "(Ljava/lang/Object;II)I", false);
+		hInvoke2.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+		hInvoke2.visitInsn(Opcodes.ARETURN);
+		hInvoke2.visitMaxs(4, 4);
+		hInvoke2.visitEnd();
+
+		// invoke
+		MethodVisitor hInvokeArr = hw.visitMethod(Opcodes.ACC_PUBLIC, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+		hInvokeArr.visitCode();
+		hInvokeArr.visitVarInsn(Opcodes.ALOAD, 0);
+		hInvokeArr.visitVarInsn(Opcodes.ALOAD, 1);
+		hInvokeArr.visitVarInsn(Opcodes.ALOAD, 2);
+		hInvokeArr.visitInsn(Opcodes.ICONST_0);
+		hInvokeArr.visitInsn(Opcodes.AALOAD);
+		hInvokeArr.visitVarInsn(Opcodes.ALOAD, 2);
+		hInvokeArr.visitInsn(Opcodes.ICONST_1);
+		hInvokeArr.visitInsn(Opcodes.AALOAD);
+		hInvokeArr.visitMethodInsn(Opcodes.INVOKEVIRTUAL, hiddenClassName, "invoke2", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
+		hInvokeArr.visitInsn(Opcodes.ARETURN);
+		hInvokeArr.visitMaxs(5, 3);
+		hInvokeArr.visitEnd();
+		hw.visitEnd();
+
+		// Define as NESTMATE of pluginClass!
+		java.lang.invoke.MethodHandles.Lookup targetLookup = java.lang.invoke.MethodHandles.privateLookupIn(pluginClass, Magic.lookup);
+		java.lang.invoke.MethodHandles.Lookup nestmateLookup = targetLookup.defineHiddenClass(hw.toByteArray(), true,
+			java.lang.invoke.MethodHandles.Lookup.ClassOption.NESTMATE);
+		Class<?> nestmateHiddenClass = nestmateLookup.lookupClass();
+
+		MagicJIT.MagicInvoker invoker = (MagicJIT.MagicInvoker) nestmateHiddenClass.getDeclaredConstructor().newInstance();
+
+		int res = invoker.invokeInt2(pluginInstance, 6, 7);
+		Assertions.assertEquals(42, res);
+
+		// Benchmark C2 inline performance!
+		for (int i = 0; i < 200_000; i++) {
+			invoker.invokeInt2(pluginInstance, i, 2);
+		}
+		int iterations = 10_000_000;
+		long start = System.nanoTime();
+		long sum = 0;
+		for (int i = 0; i < iterations; i++) {
+			sum += invoker.invokeInt2(pluginInstance, i, 2);
+		}
+		double timeMs = (System.nanoTime() - start) / 1_000_000.0;
+		System.out.printf("PLAN C (Nestmate HiddenClass) invokeInt2: %.2f ms (%.0f ops/ms)%n",
+			timeMs, iterations / timeMs);
+
+		return new WeakReference<?>[]{
+			new WeakReference<>(pluginLoader),
+			new WeakReference<>(pluginClass),
+			new WeakReference<>(nestmateHiddenClass),
+			new WeakReference<>(invoker)
+		};
+	}
+
+	@Test
+	public void testPlanCNestmateHiddenClass() throws Throwable {
+		WeakReference<?>[] refs = exercisePlanC();
+		WeakReference<?> loaderRef = refs[0];
+		WeakReference<?> classRef = refs[1];
+		WeakReference<?> hiddenRef = refs[2];
+		WeakReference<?> invokerRef = refs[3];
+
+		boolean collected = false;
+		for (int i = 0; i < 50; i++) {
+			System.gc();
+			if (loaderRef.get() == null && hiddenRef.get() == null) {
+				collected = true;
+				break;
+			}
+			Thread.sleep(20);
+		}
+
+		System.out.println("Plan C PluginClassLoader after GC: " + loaderRef.get());
+		System.out.println("Plan C HiddenClass after GC: " + hiddenRef.get());
+		System.out.println("Plan C Invoker after GC: " + invokerRef.get());
+
+		Assertions.assertTrue(collected, "Both PluginClassLoader and Nestmate HiddenClass must be collected by GC!");
+	}
+
 	public static class Point {
 		public int x;
 		public int y;

@@ -172,12 +172,107 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
+	private static final class HostMethodGroup {
+		final Class<?> invokerClass;
+		final Constructor<?> ctor;
+		final Map<Method, Integer> slotMap;
+		final boolean isBoot;
+
+		HostMethodGroup(Class<?> invokerClass, Constructor<?> ctor, Map<Method, Integer> slotMap, boolean isBoot) {
+			this.invokerClass = invokerClass;
+			this.ctor = ctor;
+			this.slotMap = slotMap;
+			this.isBoot = isBoot;
+		}
+
+		MagicInvoker createInvoker(Method method) {
+			if (ctor == null || slotMap == null) return null;
+			Integer slot = slotMap.get(method);
+			if (slot == null) {
+				for (Map.Entry<Method, Integer> entry : slotMap.entrySet()) {
+					Method m = entry.getKey();
+					if (m.getName().equals(method.getName()) && Arrays.equals(m.getParameterTypes(), method.getParameterTypes())) {
+						slot = entry.getValue();
+						break;
+					}
+				}
+			}
+			if (slot == null) return null;
+			try {
+				Object raw = ctor.newInstance(slot);
+				if (isBoot) {
+					return wrapBootInvoker(raw);
+				} else {
+					if (raw instanceof MagicInvoker mi) {
+						return mi;
+					} else {
+						return wrapBootInvoker(raw);
+					}
+				}
+			} catch (Throwable t) {
+				return null;
+			}
+		}
+	}
+
+	private static final class HostCtorGroup {
+		final Class<?> invokerClass;
+		final Constructor<?> ctor;
+		final Map<Constructor<?>, Integer> slotMap;
+		final boolean isBoot;
+
+		HostCtorGroup(Class<?> invokerClass, Constructor<?> ctor, Map<Constructor<?>, Integer> slotMap, boolean isBoot) {
+			this.invokerClass = invokerClass;
+			this.ctor = ctor;
+			this.slotMap = slotMap;
+			this.isBoot = isBoot;
+		}
+
+		MagicConstructorInvoker createCtorInvoker(Constructor<?> targetCtor) {
+			if (ctor == null || slotMap == null) return null;
+			Integer slot = slotMap.get(targetCtor);
+			if (slot == null) {
+				for (Map.Entry<Constructor<?>, Integer> entry : slotMap.entrySet()) {
+					Constructor<?> c = entry.getKey();
+					if (Arrays.equals(c.getParameterTypes(), targetCtor.getParameterTypes())) {
+						slot = entry.getValue();
+						break;
+					}
+				}
+			}
+			if (slot == null) return null;
+			try {
+				Object raw = ctor.newInstance(slot);
+				if (isBoot) {
+					return wrapBootCtorInvoker(raw);
+				} else {
+					if (raw instanceof MagicConstructorInvoker mci) {
+						return mci;
+					} else {
+						return wrapBootCtorInvoker(raw);
+					}
+				}
+			} catch (Throwable t) {
+				return null;
+			}
+		}
+	}
+
+	private static final HostMethodGroup EMPTY_METHOD_GROUP = new HostMethodGroup(null, null, Collections.emptyMap(), false);
+	private static final HostCtorGroup EMPTY_CTOR_GROUP = new HostCtorGroup(null, null, Collections.emptyMap(), false);
+
+
 	private static final class ClassJITData {
 		final Map<InvokerLookupKey, MagicInvoker>         invokerCache     = new ConcurrentHashMap<>();
 		final Map<CtorLookupKey, MagicConstructorInvoker> ctorCache        = new ConcurrentHashMap<>();
 		final Map<String, MethodHandle>                   getterCache      = new ConcurrentHashMap<>();
 		final Map<String, MethodHandle>                   setterCache      = new ConcurrentHashMap<>();
 		final Map<ExactMethodKey, MethodHandle>           exactMethodCache = new ConcurrentHashMap<>();
+
+		volatile HostMethodGroup nestmateMethodGroup;
+		volatile HostCtorGroup   nestmateCtorGroup;
+		volatile HostMethodGroup linkToMethodGroup;
+		volatile HostCtorGroup   linkToCtorGroup;
 	}
 
 	private static final ClassValue<ClassJITData> JIT_DATA = new ClassValue<>() {
@@ -870,10 +965,10 @@ public class MagicJIT implements Opcodes {
 		try {
 			if (mode == AccessMode.NESTMATE) {
 				if (canUseNestmateCtor(clazz, targetCtor)) {
-					MagicConstructorInvoker nestmateCtor = generateNestmateConstructorInvoker(clazz, arity);
+					MagicConstructorInvoker nestmateCtor = generateNestmateConstructorInvoker(clazz, targetCtor);
 					if (nestmateCtor != null) return nestmateCtor;
 				}
-				MagicConstructorInvoker linkToCtor = generateLinkToConstructorInvoker(clazz, arity);
+				MagicConstructorInvoker linkToCtor = generateLinkToConstructorInvoker(clazz, targetCtor);
 				if (linkToCtor != null) return linkToCtor;
 			} else if (mode == AccessMode.MAGIC_ACCESSOR) {
 				if (!Magic.isInstalled()) Magic.install();
@@ -881,10 +976,10 @@ public class MagicJIT implements Opcodes {
 					MagicConstructorInvoker asmInvoker = generateAsmConstructorInvoker(clazz, arity);
 					if (asmInvoker != null) return asmInvoker;
 				}
-				MagicConstructorInvoker linkToCtor = generateLinkToConstructorInvoker(clazz, arity);
+				MagicConstructorInvoker linkToCtor = generateLinkToConstructorInvoker(clazz, targetCtor);
 				if (linkToCtor != null) return linkToCtor;
 			} else if (mode == AccessMode.UNSAFE_AND_LINKTO) {
-				MagicConstructorInvoker linkToCtor = generateLinkToConstructorInvoker(clazz, arity);
+				MagicConstructorInvoker linkToCtor = generateLinkToConstructorInvoker(clazz, targetCtor);
 				if (linkToCtor != null) return linkToCtor;
 			}
 			MethodHandle ctorMh     = Magic.lookup.unreflectConstructor(targetCtor);
@@ -1255,6 +1350,1922 @@ public class MagicJIT implements Opcodes {
 		return resolveOrFail(refKind, refc, name, (Object) type);
 	}
 
+	private static Object resolveMemberName(Class<?> declClass, Method m) {
+		int        arity       = m.getParameterCount();
+		boolean    isStatic    = Modifier.isStatic(m.getModifiers());
+		boolean    isSpecial   = Modifier.isPrivate(m.getModifiers());
+		boolean    isInterface = declClass.isInterface();
+		Class<?>[] paramTypes  = m.getParameterTypes();
+		Class<?>   retType     = m.getReturnType();
+
+		byte refKind = isStatic ? (byte) 6 : (isSpecial ? (byte) 7 : (isInterface ? (byte) 9 : (byte) 5));
+		Object mn = null;
+		try {
+			MethodType mt = MethodType.methodType(retType, paramTypes);
+			mn = resolveOrFail(refKind, declClass, m.getName(), mt);
+		} catch (Throwable ignored) {
+		}
+		if (mn == null) {
+			try {
+				m.setAccessible(true);
+				MethodHandle raw = Magic.lookup.unreflect(m);
+				mn = LinkerHelper.extractMemberName(raw);
+			} catch (Throwable ignored) {
+			}
+		}
+		return mn;
+	}
+
+	private static Object resolveCtorMemberName(Class<?> declClass, Constructor<?> c) {
+		Class<?>[] paramTypes = c.getParameterTypes();
+		Object mn = null;
+		try {
+			MethodType mt = MethodType.methodType(void.class, paramTypes);
+			mn = resolveOrFail((byte) 7, declClass, "<init>", mt);
+		} catch (Throwable ignored) {
+		}
+		if (mn == null) {
+			try {
+				c.setAccessible(true);
+				MethodHandle rawCtor = Magic.lookup.unreflectConstructor(c);
+				mn = LinkerHelper.extractMemberName(rawCtor);
+			} catch (Throwable ignored) {
+			}
+		}
+		return mn;
+	}
+
+	private static String getLinkToName(Class<?> declClass, Method m) {
+		if (Modifier.isStatic(m.getModifiers())) return "linkToStatic";
+		if (Modifier.isPrivate(m.getModifiers())) return "linkToSpecial";
+		if (declClass.isInterface()) return "linkToInterface";
+		return "linkToVirtual";
+	}
+
+	private static String getLinkToDesc(Class<?> declClass, Method m) {
+		boolean    isStatic   = Modifier.isStatic(m.getModifiers());
+		Class<?>[] paramTypes = m.getParameterTypes();
+		Class<?>   retType    = m.getReturnType();
+		StringBuilder sb = new StringBuilder("(");
+		if (!isStatic) {
+			sb.append("Ljava/lang/Object;");
+		}
+		for (Class<?> p : paramTypes) {
+			if (p.isPrimitive()) {
+				sb.append(Type.getDescriptor(p));
+			} else {
+				sb.append("Ljava/lang/Object;");
+			}
+		}
+		sb.append("Ljava/lang/invoke/MemberName;)");
+		if (retType == void.class) {
+			sb.append("V");
+		} else if (retType.isPrimitive()) {
+			sb.append(Type.getDescriptor(retType));
+		} else {
+			sb.append("Ljava/lang/Object;");
+		}
+		return sb.toString();
+	}
+
+	private static String getLinkToCtorDesc(Constructor<?> c) {
+		Class<?>[] paramTypes = c.getParameterTypes();
+		StringBuilder sb = new StringBuilder("(Ljava/lang/Object;");
+		for (Class<?> p : paramTypes) {
+			if (p.isPrimitive()) {
+				sb.append(Type.getDescriptor(p));
+			} else {
+				sb.append("Ljava/lang/Object;");
+			}
+		}
+		sb.append("Ljava/lang/invoke/MemberName;)V");
+		return sb.toString();
+	}
+
+	private static void emitNestmateArityFastPaths(ClassWriter cw, String invokerClassName, String owner,
+	                                               Class<?> declClass, List<Method> methods) {
+		// invoke0
+		List<Integer> slots0 = new ArrayList<>();
+		for (int i = 0; i < methods.size(); i++) {
+			if (methods.get(i).getParameterCount() == 0) slots0.add(i);
+		}
+		if (!slots0.isEmpty()) {
+			MethodVisitor m0 = cw.visitMethod(ACC_PUBLIC, "invoke0", "(Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			m0.visitCode();
+			m0.visitVarInsn(ALOAD, 0);
+			m0.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slots0.size()];
+			Label[] labels = new Label[slots0.size()];
+			for (int k = 0; k < slots0.size(); k++) {
+				keys[k] = slots0.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			m0.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slots0.size(); k++) {
+				m0.visitLabel(labels[k]);
+				Method m = methods.get(slots0.get(k));
+				boolean isStatic = Modifier.isStatic(m.getModifiers());
+				if (!isStatic) {
+					m0.visitVarInsn(ALOAD, 1);
+					m0.visitTypeInsn(CHECKCAST, owner);
+				}
+				emitInvokeTarget(m0, declClass, m, owner, Type.getMethodDescriptor(m), isStatic);
+				emitReturnBox(m0, m.getReturnType());
+				m0.visitInsn(ARETURN);
+			}
+			m0.visitLabel(dflt);
+			m0.visitVarInsn(ALOAD, 0);
+			m0.visitVarInsn(ALOAD, 1);
+			m0.visitInsn(ICONST_0);
+			m0.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+			m0.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+			m0.visitInsn(ARETURN);
+			m0.visitMaxs(0, 0);
+			m0.visitEnd();
+		}
+
+		// invoke1
+		List<Integer> slots1 = new ArrayList<>();
+		for (int i = 0; i < methods.size(); i++) {
+			if (methods.get(i).getParameterCount() == 1) slots1.add(i);
+		}
+		if (!slots1.isEmpty()) {
+			MethodVisitor m1 = cw.visitMethod(ACC_PUBLIC, "invoke1", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			m1.visitCode();
+			m1.visitVarInsn(ALOAD, 0);
+			m1.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slots1.size()];
+			Label[] labels = new Label[slots1.size()];
+			for (int k = 0; k < slots1.size(); k++) {
+				keys[k] = slots1.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			m1.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slots1.size(); k++) {
+				m1.visitLabel(labels[k]);
+				Method m = methods.get(slots1.get(k));
+				boolean isStatic = Modifier.isStatic(m.getModifiers());
+				if (!isStatic) {
+					m1.visitVarInsn(ALOAD, 1);
+					m1.visitTypeInsn(CHECKCAST, owner);
+				}
+				m1.visitVarInsn(ALOAD, 2);
+				emitArgumentCast(m1, m.getParameterTypes()[0]);
+				emitInvokeTarget(m1, declClass, m, owner, Type.getMethodDescriptor(m), isStatic);
+				emitReturnBox(m1, m.getReturnType());
+				m1.visitInsn(ARETURN);
+			}
+			m1.visitLabel(dflt);
+			m1.visitVarInsn(ALOAD, 0);
+			m1.visitVarInsn(ALOAD, 1);
+			m1.visitInsn(ICONST_1);
+			m1.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+			m1.visitInsn(DUP);
+			m1.visitInsn(ICONST_0);
+			m1.visitVarInsn(ALOAD, 2);
+			m1.visitInsn(AASTORE);
+			m1.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+			m1.visitInsn(ARETURN);
+			m1.visitMaxs(0, 0);
+			m1.visitEnd();
+		}
+
+		// invoke2
+		List<Integer> slots2 = new ArrayList<>();
+		for (int i = 0; i < methods.size(); i++) {
+			if (methods.get(i).getParameterCount() == 2) slots2.add(i);
+		}
+		if (!slots2.isEmpty()) {
+			MethodVisitor m2 = cw.visitMethod(ACC_PUBLIC, "invoke2", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			m2.visitCode();
+			m2.visitVarInsn(ALOAD, 0);
+			m2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slots2.size()];
+			Label[] labels = new Label[slots2.size()];
+			for (int k = 0; k < slots2.size(); k++) {
+				keys[k] = slots2.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			m2.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slots2.size(); k++) {
+				m2.visitLabel(labels[k]);
+				Method m = methods.get(slots2.get(k));
+				boolean isStatic = Modifier.isStatic(m.getModifiers());
+				if (!isStatic) {
+					m2.visitVarInsn(ALOAD, 1);
+					m2.visitTypeInsn(CHECKCAST, owner);
+				}
+				m2.visitVarInsn(ALOAD, 2);
+				emitArgumentCast(m2, m.getParameterTypes()[0]);
+				m2.visitVarInsn(ALOAD, 3);
+				emitArgumentCast(m2, m.getParameterTypes()[1]);
+				emitInvokeTarget(m2, declClass, m, owner, Type.getMethodDescriptor(m), isStatic);
+				emitReturnBox(m2, m.getReturnType());
+				m2.visitInsn(ARETURN);
+			}
+			m2.visitLabel(dflt);
+			m2.visitVarInsn(ALOAD, 0);
+			m2.visitVarInsn(ALOAD, 1);
+			m2.visitInsn(ICONST_2);
+			m2.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+			m2.visitInsn(DUP);
+			m2.visitInsn(ICONST_0);
+			m2.visitVarInsn(ALOAD, 2);
+			m2.visitInsn(AASTORE);
+			m2.visitInsn(DUP);
+			m2.visitInsn(ICONST_1);
+			m2.visitVarInsn(ALOAD, 3);
+			m2.visitInsn(AASTORE);
+			m2.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+			m2.visitInsn(ARETURN);
+			m2.visitMaxs(0, 0);
+			m2.visitEnd();
+		}
+
+		// invoke3
+		List<Integer> slots3 = new ArrayList<>();
+		for (int i = 0; i < methods.size(); i++) {
+			if (methods.get(i).getParameterCount() == 3) slots3.add(i);
+		}
+		if (!slots3.isEmpty()) {
+			MethodVisitor m3 = cw.visitMethod(ACC_PUBLIC, "invoke3", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			m3.visitCode();
+			m3.visitVarInsn(ALOAD, 0);
+			m3.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slots3.size()];
+			Label[] labels = new Label[slots3.size()];
+			for (int k = 0; k < slots3.size(); k++) {
+				keys[k] = slots3.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			m3.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slots3.size(); k++) {
+				m3.visitLabel(labels[k]);
+				Method m = methods.get(slots3.get(k));
+				boolean isStatic = Modifier.isStatic(m.getModifiers());
+				if (!isStatic) {
+					m3.visitVarInsn(ALOAD, 1);
+					m3.visitTypeInsn(CHECKCAST, owner);
+				}
+				m3.visitVarInsn(ALOAD, 2);
+				emitArgumentCast(m3, m.getParameterTypes()[0]);
+				m3.visitVarInsn(ALOAD, 3);
+				emitArgumentCast(m3, m.getParameterTypes()[1]);
+				m3.visitVarInsn(ALOAD, 4);
+				emitArgumentCast(m3, m.getParameterTypes()[2]);
+				emitInvokeTarget(m3, declClass, m, owner, Type.getMethodDescriptor(m), isStatic);
+				emitReturnBox(m3, m.getReturnType());
+				m3.visitInsn(ARETURN);
+			}
+			m3.visitLabel(dflt);
+			m3.visitVarInsn(ALOAD, 0);
+			m3.visitVarInsn(ALOAD, 1);
+			m3.visitInsn(ICONST_3);
+			m3.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+			m3.visitInsn(DUP);
+			m3.visitInsn(ICONST_0);
+			m3.visitVarInsn(ALOAD, 2);
+			m3.visitInsn(AASTORE);
+			m3.visitInsn(DUP);
+			m3.visitInsn(ICONST_1);
+			m3.visitVarInsn(ALOAD, 3);
+			m3.visitInsn(AASTORE);
+			m3.visitInsn(DUP);
+			m3.visitInsn(ICONST_2);
+			m3.visitVarInsn(ALOAD, 4);
+			m3.visitInsn(AASTORE);
+			m3.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+			m3.visitInsn(ARETURN);
+			m3.visitMaxs(0, 0);
+			m3.visitEnd();
+		}
+	}
+
+	private static void emitNestmatePrimitiveFastPaths(ClassWriter cw, String invokerClassName, String owner,
+	                                                   Class<?> declClass, List<Method> methods) {
+		// invokeInt0
+		List<Integer> slotsI0 = new ArrayList<>();
+		for (int i = 0; i < methods.size(); i++) {
+			Method m = methods.get(i);
+			if (m.getReturnType() == int.class && m.getParameterCount() == 0) slotsI0.add(i);
+		}
+		if (!slotsI0.isEmpty()) {
+			MethodVisitor mi0 = cw.visitMethod(ACC_PUBLIC, "invokeInt0", "(Ljava/lang/Object;)I", null, new String[]{"java/lang/Throwable"});
+			mi0.visitCode();
+			mi0.visitVarInsn(ALOAD, 0);
+			mi0.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slotsI0.size()];
+			Label[] labels = new Label[slotsI0.size()];
+			for (int k = 0; k < slotsI0.size(); k++) {
+				keys[k] = slotsI0.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			mi0.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slotsI0.size(); k++) {
+				mi0.visitLabel(labels[k]);
+				Method m = methods.get(slotsI0.get(k));
+				boolean isStatic = Modifier.isStatic(m.getModifiers());
+				if (!isStatic) {
+					mi0.visitVarInsn(ALOAD, 1);
+					mi0.visitTypeInsn(CHECKCAST, owner);
+				}
+				emitInvokeTarget(mi0, declClass, m, owner, Type.getMethodDescriptor(m), isStatic);
+				mi0.visitInsn(IRETURN);
+			}
+			mi0.visitLabel(dflt);
+			mi0.visitVarInsn(ALOAD, 0);
+			mi0.visitVarInsn(ALOAD, 1);
+			mi0.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "invoke0", "(Ljava/lang/Object;)Ljava/lang/Object;", false);
+			mi0.visitTypeInsn(CHECKCAST, "java/lang/Number");
+			mi0.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Number", "intValue", "()I", false);
+			mi0.visitInsn(IRETURN);
+			mi0.visitMaxs(0, 0);
+			mi0.visitEnd();
+		}
+
+		// invokeInt1
+		List<Integer> slotsI1 = new ArrayList<>();
+		for (int i = 0; i < methods.size(); i++) {
+			Method m = methods.get(i);
+			if (m.getReturnType() == int.class && m.getParameterCount() == 1 && m.getParameterTypes()[0] == int.class) slotsI1.add(i);
+		}
+		if (!slotsI1.isEmpty()) {
+			MethodVisitor mi1 = cw.visitMethod(ACC_PUBLIC, "invokeInt1", "(Ljava/lang/Object;I)I", null, new String[]{"java/lang/Throwable"});
+			mi1.visitCode();
+			mi1.visitVarInsn(ALOAD, 0);
+			mi1.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slotsI1.size()];
+			Label[] labels = new Label[slotsI1.size()];
+			for (int k = 0; k < slotsI1.size(); k++) {
+				keys[k] = slotsI1.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			mi1.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slotsI1.size(); k++) {
+				mi1.visitLabel(labels[k]);
+				Method m = methods.get(slotsI1.get(k));
+				boolean isStatic = Modifier.isStatic(m.getModifiers());
+				if (!isStatic) {
+					mi1.visitVarInsn(ALOAD, 1);
+					mi1.visitTypeInsn(CHECKCAST, owner);
+				}
+				mi1.visitVarInsn(ILOAD, 2);
+				emitInvokeTarget(mi1, declClass, m, owner, Type.getMethodDescriptor(m), isStatic);
+				mi1.visitInsn(IRETURN);
+			}
+			mi1.visitLabel(dflt);
+			mi1.visitVarInsn(ALOAD, 0);
+			mi1.visitVarInsn(ALOAD, 1);
+			mi1.visitVarInsn(ILOAD, 2);
+			mi1.visitMethodInsn(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+			mi1.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "invoke1", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
+			mi1.visitTypeInsn(CHECKCAST, "java/lang/Number");
+			mi1.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Number", "intValue", "()I", false);
+			mi1.visitInsn(IRETURN);
+			mi1.visitMaxs(0, 0);
+			mi1.visitEnd();
+		}
+
+		// invokeInt2
+		List<Integer> slotsI2 = new ArrayList<>();
+		for (int i = 0; i < methods.size(); i++) {
+			Method m = methods.get(i);
+			if (m.getReturnType() == int.class && m.getParameterCount() == 2 && m.getParameterTypes()[0] == int.class && m.getParameterTypes()[1] == int.class) {
+				slotsI2.add(i);
+			}
+		}
+		if (!slotsI2.isEmpty()) {
+			MethodVisitor mi2 = cw.visitMethod(ACC_PUBLIC, "invokeInt2", "(Ljava/lang/Object;II)I", null, new String[]{"java/lang/Throwable"});
+			mi2.visitCode();
+			mi2.visitVarInsn(ALOAD, 0);
+			mi2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slotsI2.size()];
+			Label[] labels = new Label[slotsI2.size()];
+			for (int k = 0; k < slotsI2.size(); k++) {
+				keys[k] = slotsI2.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			mi2.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slotsI2.size(); k++) {
+				mi2.visitLabel(labels[k]);
+				Method m = methods.get(slotsI2.get(k));
+				boolean isStatic = Modifier.isStatic(m.getModifiers());
+				if (!isStatic) {
+					mi2.visitVarInsn(ALOAD, 1);
+					mi2.visitTypeInsn(CHECKCAST, owner);
+				}
+				mi2.visitVarInsn(ILOAD, 2);
+				mi2.visitVarInsn(ILOAD, 3);
+				emitInvokeTarget(mi2, declClass, m, owner, Type.getMethodDescriptor(m), isStatic);
+				mi2.visitInsn(IRETURN);
+			}
+			mi2.visitLabel(dflt);
+			mi2.visitVarInsn(ALOAD, 0);
+			mi2.visitVarInsn(ALOAD, 1);
+			mi2.visitVarInsn(ILOAD, 2);
+			mi2.visitMethodInsn(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+			mi2.visitVarInsn(ILOAD, 3);
+			mi2.visitMethodInsn(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+			mi2.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "invoke2", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
+			mi2.visitTypeInsn(CHECKCAST, "java/lang/Number");
+			mi2.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Number", "intValue", "()I", false);
+			mi2.visitInsn(IRETURN);
+			mi2.visitMaxs(0, 0);
+			mi2.visitEnd();
+		}
+
+		// invokeLong2
+		List<Integer> slotsL2 = new ArrayList<>();
+		for (int i = 0; i < methods.size(); i++) {
+			Method m = methods.get(i);
+			if (m.getReturnType() == long.class && m.getParameterCount() == 2 && m.getParameterTypes()[0] == long.class && m.getParameterTypes()[1] == long.class) {
+				slotsL2.add(i);
+			}
+		}
+		if (!slotsL2.isEmpty()) {
+			MethodVisitor ml2 = cw.visitMethod(ACC_PUBLIC, "invokeLong2", "(Ljava/lang/Object;JJ)J", null, new String[]{"java/lang/Throwable"});
+			ml2.visitCode();
+			ml2.visitVarInsn(ALOAD, 0);
+			ml2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slotsL2.size()];
+			Label[] labels = new Label[slotsL2.size()];
+			for (int k = 0; k < slotsL2.size(); k++) {
+				keys[k] = slotsL2.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			ml2.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slotsL2.size(); k++) {
+				ml2.visitLabel(labels[k]);
+				Method m = methods.get(slotsL2.get(k));
+				boolean isStatic = Modifier.isStatic(m.getModifiers());
+				if (!isStatic) {
+					ml2.visitVarInsn(ALOAD, 1);
+					ml2.visitTypeInsn(CHECKCAST, owner);
+				}
+				ml2.visitVarInsn(LLOAD, 2);
+				ml2.visitVarInsn(LLOAD, 4);
+				emitInvokeTarget(ml2, declClass, m, owner, Type.getMethodDescriptor(m), isStatic);
+				ml2.visitInsn(LRETURN);
+			}
+			ml2.visitLabel(dflt);
+			ml2.visitVarInsn(ALOAD, 0);
+			ml2.visitVarInsn(ALOAD, 1);
+			ml2.visitVarInsn(LLOAD, 2);
+			ml2.visitMethodInsn(INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
+			ml2.visitVarInsn(LLOAD, 4);
+			ml2.visitMethodInsn(INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
+			ml2.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "invoke2", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
+			ml2.visitTypeInsn(CHECKCAST, "java/lang/Number");
+			ml2.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Number", "longValue", "()J", false);
+			ml2.visitInsn(LRETURN);
+			ml2.visitMaxs(0, 0);
+			ml2.visitEnd();
+		}
+
+		// invokeDouble2
+		List<Integer> slotsD2 = new ArrayList<>();
+		for (int i = 0; i < methods.size(); i++) {
+			Method m = methods.get(i);
+			if (m.getReturnType() == double.class && m.getParameterCount() == 2 && m.getParameterTypes()[0] == double.class && m.getParameterTypes()[1] == double.class) {
+				slotsD2.add(i);
+			}
+		}
+		if (!slotsD2.isEmpty()) {
+			MethodVisitor md2 = cw.visitMethod(ACC_PUBLIC, "invokeDouble2", "(Ljava/lang/Object;DD)D", null, new String[]{"java/lang/Throwable"});
+			md2.visitCode();
+			md2.visitVarInsn(ALOAD, 0);
+			md2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slotsD2.size()];
+			Label[] labels = new Label[slotsD2.size()];
+			for (int k = 0; k < slotsD2.size(); k++) {
+				keys[k] = slotsD2.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			md2.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slotsD2.size(); k++) {
+				md2.visitLabel(labels[k]);
+				Method m = methods.get(slotsD2.get(k));
+				boolean isStatic = Modifier.isStatic(m.getModifiers());
+				if (!isStatic) {
+					md2.visitVarInsn(ALOAD, 1);
+					md2.visitTypeInsn(CHECKCAST, owner);
+				}
+				md2.visitVarInsn(DLOAD, 2);
+				md2.visitVarInsn(DLOAD, 4);
+				emitInvokeTarget(md2, declClass, m, owner, Type.getMethodDescriptor(m), isStatic);
+				md2.visitInsn(DRETURN);
+			}
+			md2.visitLabel(dflt);
+			md2.visitVarInsn(ALOAD, 0);
+			md2.visitVarInsn(ALOAD, 1);
+			md2.visitVarInsn(DLOAD, 2);
+			md2.visitMethodInsn(INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+			md2.visitVarInsn(DLOAD, 4);
+			md2.visitMethodInsn(INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+			md2.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "invoke2", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
+			md2.visitTypeInsn(CHECKCAST, "java/lang/Number");
+			md2.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Number", "doubleValue", "()D", false);
+			md2.visitInsn(DRETURN);
+			md2.visitMaxs(0, 0);
+			md2.visitEnd();
+		}
+	}
+
+	private static void emitLinkToArityFastPaths(ClassWriter cw, String invokerClassName,
+	                                             List<Method> methods, List<String> linkToNames, List<String> linkToDescs) {
+		// invoke0
+		List<Integer> slots0 = new ArrayList<>();
+		for (int i = 0; i < methods.size(); i++) {
+			if (methods.get(i).getParameterCount() == 0) slots0.add(i);
+		}
+		if (!slots0.isEmpty()) {
+			MethodVisitor m0 = cw.visitMethod(ACC_PUBLIC, "invoke0", "(Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			m0.visitCode();
+			m0.visitVarInsn(ALOAD, 0);
+			m0.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slots0.size()];
+			Label[] labels = new Label[slots0.size()];
+			for (int k = 0; k < slots0.size(); k++) {
+				keys[k] = slots0.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			m0.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slots0.size(); k++) {
+				m0.visitLabel(labels[k]);
+				int idx = slots0.get(k);
+				Method m = methods.get(idx);
+				boolean isStatic = Modifier.isStatic(m.getModifiers());
+				if (!isStatic) {
+					m0.visitVarInsn(ALOAD, 1);
+				}
+				m0.visitFieldInsn(GETSTATIC, invokerClassName, "MN_" + idx, "Ljava/lang/Object;");
+				m0.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
+				m0.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandle", linkToNames.get(idx), linkToDescs.get(idx), false);
+				emitBootReturnBox(m0, m.getReturnType());
+				m0.visitInsn(ARETURN);
+			}
+			m0.visitLabel(dflt);
+			m0.visitVarInsn(ALOAD, 0);
+			m0.visitVarInsn(ALOAD, 1);
+			m0.visitInsn(ICONST_0);
+			m0.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+			m0.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+			m0.visitInsn(ARETURN);
+			m0.visitMaxs(0, 0);
+			m0.visitEnd();
+		}
+
+		// invoke1
+		List<Integer> slots1 = new ArrayList<>();
+		for (int i = 0; i < methods.size(); i++) {
+			if (methods.get(i).getParameterCount() == 1) slots1.add(i);
+		}
+		if (!slots1.isEmpty()) {
+			MethodVisitor m1 = cw.visitMethod(ACC_PUBLIC, "invoke1", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			m1.visitCode();
+			m1.visitVarInsn(ALOAD, 0);
+			m1.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slots1.size()];
+			Label[] labels = new Label[slots1.size()];
+			for (int k = 0; k < slots1.size(); k++) {
+				keys[k] = slots1.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			m1.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slots1.size(); k++) {
+				m1.visitLabel(labels[k]);
+				int idx = slots1.get(k);
+				Method m = methods.get(idx);
+				boolean isStatic = Modifier.isStatic(m.getModifiers());
+				if (!isStatic) {
+					m1.visitVarInsn(ALOAD, 1);
+				}
+				m1.visitVarInsn(ALOAD, 2);
+				emitBootArgumentCast(m1, m.getParameterTypes()[0]);
+				m1.visitFieldInsn(GETSTATIC, invokerClassName, "MN_" + idx, "Ljava/lang/Object;");
+				m1.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
+				m1.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandle", linkToNames.get(idx), linkToDescs.get(idx), false);
+				emitBootReturnBox(m1, m.getReturnType());
+				m1.visitInsn(ARETURN);
+			}
+			m1.visitLabel(dflt);
+			m1.visitVarInsn(ALOAD, 0);
+			m1.visitVarInsn(ALOAD, 1);
+			m1.visitInsn(ICONST_1);
+			m1.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+			m1.visitInsn(DUP);
+			m1.visitInsn(ICONST_0);
+			m1.visitVarInsn(ALOAD, 2);
+			m1.visitInsn(AASTORE);
+			m1.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+			m1.visitInsn(ARETURN);
+			m1.visitMaxs(0, 0);
+			m1.visitEnd();
+		}
+
+		// invoke2
+		List<Integer> slots2 = new ArrayList<>();
+		for (int i = 0; i < methods.size(); i++) {
+			if (methods.get(i).getParameterCount() == 2) slots2.add(i);
+		}
+		if (!slots2.isEmpty()) {
+			MethodVisitor m2 = cw.visitMethod(ACC_PUBLIC, "invoke2", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			m2.visitCode();
+			m2.visitVarInsn(ALOAD, 0);
+			m2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slots2.size()];
+			Label[] labels = new Label[slots2.size()];
+			for (int k = 0; k < slots2.size(); k++) {
+				keys[k] = slots2.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			m2.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slots2.size(); k++) {
+				m2.visitLabel(labels[k]);
+				int idx = slots2.get(k);
+				Method m = methods.get(idx);
+				boolean isStatic = Modifier.isStatic(m.getModifiers());
+				if (!isStatic) {
+					m2.visitVarInsn(ALOAD, 1);
+				}
+				m2.visitVarInsn(ALOAD, 2);
+				emitBootArgumentCast(m2, m.getParameterTypes()[0]);
+				m2.visitVarInsn(ALOAD, 3);
+				emitBootArgumentCast(m2, m.getParameterTypes()[1]);
+				m2.visitFieldInsn(GETSTATIC, invokerClassName, "MN_" + idx, "Ljava/lang/Object;");
+				m2.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
+				m2.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandle", linkToNames.get(idx), linkToDescs.get(idx), false);
+				emitBootReturnBox(m2, m.getReturnType());
+				m2.visitInsn(ARETURN);
+			}
+			m2.visitLabel(dflt);
+			m2.visitVarInsn(ALOAD, 0);
+			m2.visitVarInsn(ALOAD, 1);
+			m2.visitInsn(ICONST_2);
+			m2.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+			m2.visitInsn(DUP);
+			m2.visitInsn(ICONST_0);
+			m2.visitVarInsn(ALOAD, 2);
+			m2.visitInsn(AASTORE);
+			m2.visitInsn(DUP);
+			m2.visitInsn(ICONST_1);
+			m2.visitVarInsn(ALOAD, 3);
+			m2.visitInsn(AASTORE);
+			m2.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+			m2.visitInsn(ARETURN);
+			m2.visitMaxs(0, 0);
+			m2.visitEnd();
+		}
+
+		// invoke3
+		List<Integer> slots3 = new ArrayList<>();
+		for (int i = 0; i < methods.size(); i++) {
+			if (methods.get(i).getParameterCount() == 3) slots3.add(i);
+		}
+		if (!slots3.isEmpty()) {
+			MethodVisitor m3 = cw.visitMethod(ACC_PUBLIC, "invoke3", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			m3.visitCode();
+			m3.visitVarInsn(ALOAD, 0);
+			m3.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slots3.size()];
+			Label[] labels = new Label[slots3.size()];
+			for (int k = 0; k < slots3.size(); k++) {
+				keys[k] = slots3.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			m3.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slots3.size(); k++) {
+				m3.visitLabel(labels[k]);
+				int idx = slots3.get(k);
+				Method m = methods.get(idx);
+				boolean isStatic = Modifier.isStatic(m.getModifiers());
+				if (!isStatic) {
+					m3.visitVarInsn(ALOAD, 1);
+				}
+				m3.visitVarInsn(ALOAD, 2);
+				emitBootArgumentCast(m3, m.getParameterTypes()[0]);
+				m3.visitVarInsn(ALOAD, 3);
+				emitBootArgumentCast(m3, m.getParameterTypes()[1]);
+				m3.visitVarInsn(ALOAD, 4);
+				emitBootArgumentCast(m3, m.getParameterTypes()[2]);
+				m3.visitFieldInsn(GETSTATIC, invokerClassName, "MN_" + idx, "Ljava/lang/Object;");
+				m3.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
+				m3.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandle", linkToNames.get(idx), linkToDescs.get(idx), false);
+				emitBootReturnBox(m3, m.getReturnType());
+				m3.visitInsn(ARETURN);
+			}
+			m3.visitLabel(dflt);
+			m3.visitVarInsn(ALOAD, 0);
+			m3.visitVarInsn(ALOAD, 1);
+			m3.visitInsn(ICONST_3);
+			m3.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+			m3.visitInsn(DUP);
+			m3.visitInsn(ICONST_0);
+			m3.visitVarInsn(ALOAD, 2);
+			m3.visitInsn(AASTORE);
+			m3.visitInsn(DUP);
+			m3.visitInsn(ICONST_1);
+			m3.visitVarInsn(ALOAD, 3);
+			m3.visitInsn(AASTORE);
+			m3.visitInsn(DUP);
+			m3.visitInsn(ICONST_2);
+			m3.visitVarInsn(ALOAD, 4);
+			m3.visitInsn(AASTORE);
+			m3.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+			m3.visitInsn(ARETURN);
+			m3.visitMaxs(0, 0);
+			m3.visitEnd();
+		}
+	}
+
+	private static void emitLinkToPrimitiveFastPaths(ClassWriter cw, String invokerClassName,
+	                                                 List<Method> methods, List<String> linkToNames, List<String> linkToDescs) {
+		// invokeInt0
+		List<Integer> slotsI0 = new ArrayList<>();
+		for (int i = 0; i < methods.size(); i++) {
+			Method m = methods.get(i);
+			if (m.getReturnType() == int.class && m.getParameterCount() == 0) slotsI0.add(i);
+		}
+		if (!slotsI0.isEmpty()) {
+			MethodVisitor mi0 = cw.visitMethod(ACC_PUBLIC, "invokeInt0", "(Ljava/lang/Object;)I", null, new String[]{"java/lang/Throwable"});
+			mi0.visitCode();
+			mi0.visitVarInsn(ALOAD, 0);
+			mi0.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slotsI0.size()];
+			Label[] labels = new Label[slotsI0.size()];
+			for (int k = 0; k < slotsI0.size(); k++) {
+				keys[k] = slotsI0.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			mi0.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slotsI0.size(); k++) {
+				mi0.visitLabel(labels[k]);
+				int idx = slotsI0.get(k);
+				Method m = methods.get(idx);
+				boolean isStatic = Modifier.isStatic(m.getModifiers());
+				if (!isStatic) {
+					mi0.visitVarInsn(ALOAD, 1);
+				}
+				mi0.visitFieldInsn(GETSTATIC, invokerClassName, "MN_" + idx, "Ljava/lang/Object;");
+				mi0.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
+				mi0.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandle", linkToNames.get(idx), linkToDescs.get(idx), false);
+				mi0.visitInsn(IRETURN);
+			}
+			mi0.visitLabel(dflt);
+			mi0.visitVarInsn(ALOAD, 0);
+			mi0.visitVarInsn(ALOAD, 1);
+			mi0.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "invoke0", "(Ljava/lang/Object;)Ljava/lang/Object;", false);
+			mi0.visitTypeInsn(CHECKCAST, "java/lang/Number");
+			mi0.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Number", "intValue", "()I", false);
+			mi0.visitInsn(IRETURN);
+			mi0.visitMaxs(0, 0);
+			mi0.visitEnd();
+		}
+
+		// invokeInt1
+		List<Integer> slotsI1 = new ArrayList<>();
+		for (int i = 0; i < methods.size(); i++) {
+			Method m = methods.get(i);
+			if (m.getReturnType() == int.class && m.getParameterCount() == 1 && m.getParameterTypes()[0] == int.class) slotsI1.add(i);
+		}
+		if (!slotsI1.isEmpty()) {
+			MethodVisitor mi1 = cw.visitMethod(ACC_PUBLIC, "invokeInt1", "(Ljava/lang/Object;I)I", null, new String[]{"java/lang/Throwable"});
+			mi1.visitCode();
+			mi1.visitVarInsn(ALOAD, 0);
+			mi1.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slotsI1.size()];
+			Label[] labels = new Label[slotsI1.size()];
+			for (int k = 0; k < slotsI1.size(); k++) {
+				keys[k] = slotsI1.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			mi1.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slotsI1.size(); k++) {
+				mi1.visitLabel(labels[k]);
+				int idx = slotsI1.get(k);
+				Method m = methods.get(idx);
+				boolean isStatic = Modifier.isStatic(m.getModifiers());
+				if (!isStatic) {
+					mi1.visitVarInsn(ALOAD, 1);
+				}
+				mi1.visitVarInsn(ILOAD, 2);
+				mi1.visitFieldInsn(GETSTATIC, invokerClassName, "MN_" + idx, "Ljava/lang/Object;");
+				mi1.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
+				mi1.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandle", linkToNames.get(idx), linkToDescs.get(idx), false);
+				mi1.visitInsn(IRETURN);
+			}
+			mi1.visitLabel(dflt);
+			mi1.visitVarInsn(ALOAD, 0);
+			mi1.visitVarInsn(ALOAD, 1);
+			mi1.visitVarInsn(ILOAD, 2);
+			mi1.visitMethodInsn(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+			mi1.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "invoke1", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
+			mi1.visitTypeInsn(CHECKCAST, "java/lang/Number");
+			mi1.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Number", "intValue", "()I", false);
+			mi1.visitInsn(IRETURN);
+			mi1.visitMaxs(0, 0);
+			mi1.visitEnd();
+		}
+
+		// invokeInt2
+		List<Integer> slotsI2 = new ArrayList<>();
+		for (int i = 0; i < methods.size(); i++) {
+			Method m = methods.get(i);
+			if (m.getReturnType() == int.class && m.getParameterCount() == 2 && m.getParameterTypes()[0] == int.class && m.getParameterTypes()[1] == int.class) {
+				slotsI2.add(i);
+			}
+		}
+		if (!slotsI2.isEmpty()) {
+			MethodVisitor mi2 = cw.visitMethod(ACC_PUBLIC, "invokeInt2", "(Ljava/lang/Object;II)I", null, new String[]{"java/lang/Throwable"});
+			mi2.visitCode();
+			mi2.visitVarInsn(ALOAD, 0);
+			mi2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slotsI2.size()];
+			Label[] labels = new Label[slotsI2.size()];
+			for (int k = 0; k < slotsI2.size(); k++) {
+				keys[k] = slotsI2.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			mi2.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slotsI2.size(); k++) {
+				mi2.visitLabel(labels[k]);
+				int idx = slotsI2.get(k);
+				Method m = methods.get(idx);
+				boolean isStatic = Modifier.isStatic(m.getModifiers());
+				if (!isStatic) {
+					mi2.visitVarInsn(ALOAD, 1);
+				}
+				mi2.visitVarInsn(ILOAD, 2);
+				mi2.visitVarInsn(ILOAD, 3);
+				mi2.visitFieldInsn(GETSTATIC, invokerClassName, "MN_" + idx, "Ljava/lang/Object;");
+				mi2.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
+				mi2.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandle", linkToNames.get(idx), linkToDescs.get(idx), false);
+				mi2.visitInsn(IRETURN);
+			}
+			mi2.visitLabel(dflt);
+			mi2.visitVarInsn(ALOAD, 0);
+			mi2.visitVarInsn(ALOAD, 1);
+			mi2.visitVarInsn(ILOAD, 2);
+			mi2.visitMethodInsn(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+			mi2.visitVarInsn(ILOAD, 3);
+			mi2.visitMethodInsn(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+			mi2.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "invoke2", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
+			mi2.visitTypeInsn(CHECKCAST, "java/lang/Number");
+			mi2.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Number", "intValue", "()I", false);
+			mi2.visitInsn(IRETURN);
+			mi2.visitMaxs(0, 0);
+			mi2.visitEnd();
+		}
+
+		// invokeLong2
+		List<Integer> slotsL2 = new ArrayList<>();
+		for (int i = 0; i < methods.size(); i++) {
+			Method m = methods.get(i);
+			if (m.getReturnType() == long.class && m.getParameterCount() == 2 && m.getParameterTypes()[0] == long.class && m.getParameterTypes()[1] == long.class) {
+				slotsL2.add(i);
+			}
+		}
+		if (!slotsL2.isEmpty()) {
+			MethodVisitor ml2 = cw.visitMethod(ACC_PUBLIC, "invokeLong2", "(Ljava/lang/Object;JJ)J", null, new String[]{"java/lang/Throwable"});
+			ml2.visitCode();
+			ml2.visitVarInsn(ALOAD, 0);
+			ml2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slotsL2.size()];
+			Label[] labels = new Label[slotsL2.size()];
+			for (int k = 0; k < slotsL2.size(); k++) {
+				keys[k] = slotsL2.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			ml2.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slotsL2.size(); k++) {
+				ml2.visitLabel(labels[k]);
+				int idx = slotsL2.get(k);
+				Method m = methods.get(idx);
+				boolean isStatic = Modifier.isStatic(m.getModifiers());
+				if (!isStatic) {
+					ml2.visitVarInsn(ALOAD, 1);
+				}
+				ml2.visitVarInsn(LLOAD, 2);
+				ml2.visitVarInsn(LLOAD, 4);
+				ml2.visitFieldInsn(GETSTATIC, invokerClassName, "MN_" + idx, "Ljava/lang/Object;");
+				ml2.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
+				ml2.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandle", linkToNames.get(idx), linkToDescs.get(idx), false);
+				ml2.visitInsn(LRETURN);
+			}
+			ml2.visitLabel(dflt);
+			ml2.visitVarInsn(ALOAD, 0);
+			ml2.visitVarInsn(ALOAD, 1);
+			ml2.visitVarInsn(LLOAD, 2);
+			ml2.visitMethodInsn(INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
+			ml2.visitVarInsn(LLOAD, 4);
+			ml2.visitMethodInsn(INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
+			ml2.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "invoke2", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
+			ml2.visitTypeInsn(CHECKCAST, "java/lang/Number");
+			ml2.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Number", "longValue", "()J", false);
+			ml2.visitInsn(LRETURN);
+			ml2.visitMaxs(0, 0);
+			ml2.visitEnd();
+		}
+
+		// invokeDouble2
+		List<Integer> slotsD2 = new ArrayList<>();
+		for (int i = 0; i < methods.size(); i++) {
+			Method m = methods.get(i);
+			if (m.getReturnType() == double.class && m.getParameterCount() == 2 && m.getParameterTypes()[0] == double.class && m.getParameterTypes()[1] == double.class) {
+				slotsD2.add(i);
+			}
+		}
+		if (!slotsD2.isEmpty()) {
+			MethodVisitor md2 = cw.visitMethod(ACC_PUBLIC, "invokeDouble2", "(Ljava/lang/Object;DD)D", null, new String[]{"java/lang/Throwable"});
+			md2.visitCode();
+			md2.visitVarInsn(ALOAD, 0);
+			md2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slotsD2.size()];
+			Label[] labels = new Label[slotsD2.size()];
+			for (int k = 0; k < slotsD2.size(); k++) {
+				keys[k] = slotsD2.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			md2.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slotsD2.size(); k++) {
+				md2.visitLabel(labels[k]);
+				int idx = slotsD2.get(k);
+				Method m = methods.get(idx);
+				boolean isStatic = Modifier.isStatic(m.getModifiers());
+				if (!isStatic) {
+					md2.visitVarInsn(ALOAD, 1);
+				}
+				md2.visitVarInsn(DLOAD, 2);
+				md2.visitVarInsn(DLOAD, 4);
+				md2.visitFieldInsn(GETSTATIC, invokerClassName, "MN_" + idx, "Ljava/lang/Object;");
+				md2.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
+				md2.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandle", linkToNames.get(idx), linkToDescs.get(idx), false);
+				md2.visitInsn(DRETURN);
+			}
+			md2.visitLabel(dflt);
+			md2.visitVarInsn(ALOAD, 0);
+			md2.visitVarInsn(ALOAD, 1);
+			md2.visitVarInsn(DLOAD, 2);
+			md2.visitMethodInsn(INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+			md2.visitVarInsn(DLOAD, 4);
+			md2.visitMethodInsn(INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+			md2.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "invoke2", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
+			md2.visitTypeInsn(CHECKCAST, "java/lang/Number");
+			md2.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Number", "doubleValue", "()D", false);
+			md2.visitInsn(DRETURN);
+			md2.visitMaxs(0, 0);
+			md2.visitEnd();
+		}
+	}
+
+	private static void emitNestmateCtorArityFastPaths(ClassWriter cw, String invokerClassName, String targetOwner,
+	                                                   List<Constructor<?>> ctors) {
+		// newInstance0
+		List<Integer> slots0 = new ArrayList<>();
+		for (int i = 0; i < ctors.size(); i++) {
+			if (ctors.get(i).getParameterCount() == 0) slots0.add(i);
+		}
+		if (!slots0.isEmpty()) {
+			MethodVisitor n0 = cw.visitMethod(ACC_PUBLIC, "newInstance0", "()Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			n0.visitCode();
+			n0.visitVarInsn(ALOAD, 0);
+			n0.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slots0.size()];
+			Label[] labels = new Label[slots0.size()];
+			for (int k = 0; k < slots0.size(); k++) {
+				keys[k] = slots0.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			n0.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slots0.size(); k++) {
+				n0.visitLabel(labels[k]);
+				Constructor<?> c = ctors.get(slots0.get(k));
+				n0.visitTypeInsn(NEW, targetOwner);
+				n0.visitInsn(DUP);
+				n0.visitMethodInsn(INVOKESPECIAL, targetOwner, "<init>", "()V", false);
+				n0.visitInsn(ARETURN);
+			}
+			n0.visitLabel(dflt);
+			n0.visitVarInsn(ALOAD, 0);
+			n0.visitInsn(ICONST_0);
+			n0.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+			n0.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", false);
+			n0.visitInsn(ARETURN);
+			n0.visitMaxs(0, 0);
+			n0.visitEnd();
+		}
+
+		// newInstance1
+		List<Integer> slots1 = new ArrayList<>();
+		for (int i = 0; i < ctors.size(); i++) {
+			if (ctors.get(i).getParameterCount() == 1) slots1.add(i);
+		}
+		if (!slots1.isEmpty()) {
+			MethodVisitor n1 = cw.visitMethod(ACC_PUBLIC, "newInstance1", "(Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			n1.visitCode();
+			n1.visitVarInsn(ALOAD, 0);
+			n1.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slots1.size()];
+			Label[] labels = new Label[slots1.size()];
+			for (int k = 0; k < slots1.size(); k++) {
+				keys[k] = slots1.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			n1.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slots1.size(); k++) {
+				n1.visitLabel(labels[k]);
+				Constructor<?> c = ctors.get(slots1.get(k));
+				n1.visitTypeInsn(NEW, targetOwner);
+				n1.visitInsn(DUP);
+				n1.visitVarInsn(ALOAD, 1);
+				emitArgumentCast(n1, c.getParameterTypes()[0]);
+				n1.visitMethodInsn(INVOKESPECIAL, targetOwner, "<init>", Type.getConstructorDescriptor(c), false);
+				n1.visitInsn(ARETURN);
+			}
+			n1.visitLabel(dflt);
+			n1.visitVarInsn(ALOAD, 0);
+			n1.visitInsn(ICONST_1);
+			n1.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+			n1.visitInsn(DUP);
+			n1.visitInsn(ICONST_0);
+			n1.visitVarInsn(ALOAD, 1);
+			n1.visitInsn(AASTORE);
+			n1.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", false);
+			n1.visitInsn(ARETURN);
+			n1.visitMaxs(0, 0);
+			n1.visitEnd();
+		}
+
+		// newInstance2
+		List<Integer> slots2 = new ArrayList<>();
+		for (int i = 0; i < ctors.size(); i++) {
+			if (ctors.get(i).getParameterCount() == 2) slots2.add(i);
+		}
+		if (!slots2.isEmpty()) {
+			MethodVisitor n2 = cw.visitMethod(ACC_PUBLIC, "newInstance2", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			n2.visitCode();
+			n2.visitVarInsn(ALOAD, 0);
+			n2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slots2.size()];
+			Label[] labels = new Label[slots2.size()];
+			for (int k = 0; k < slots2.size(); k++) {
+				keys[k] = slots2.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			n2.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slots2.size(); k++) {
+				n2.visitLabel(labels[k]);
+				Constructor<?> c = ctors.get(slots2.get(k));
+				n2.visitTypeInsn(NEW, targetOwner);
+				n2.visitInsn(DUP);
+				n2.visitVarInsn(ALOAD, 1);
+				emitArgumentCast(n2, c.getParameterTypes()[0]);
+				n2.visitVarInsn(ALOAD, 2);
+				emitArgumentCast(n2, c.getParameterTypes()[1]);
+				n2.visitMethodInsn(INVOKESPECIAL, targetOwner, "<init>", Type.getConstructorDescriptor(c), false);
+				n2.visitInsn(ARETURN);
+			}
+			n2.visitLabel(dflt);
+			n2.visitVarInsn(ALOAD, 0);
+			n2.visitInsn(ICONST_2);
+			n2.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+			n2.visitInsn(DUP);
+			n2.visitInsn(ICONST_0);
+			n2.visitVarInsn(ALOAD, 1);
+			n2.visitInsn(AASTORE);
+			n2.visitInsn(DUP);
+			n2.visitInsn(ICONST_1);
+			n2.visitVarInsn(ALOAD, 2);
+			n2.visitInsn(AASTORE);
+			n2.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", false);
+			n2.visitInsn(ARETURN);
+			n2.visitMaxs(0, 0);
+			n2.visitEnd();
+		}
+
+		// newInstance3
+		List<Integer> slots3 = new ArrayList<>();
+		for (int i = 0; i < ctors.size(); i++) {
+			if (ctors.get(i).getParameterCount() == 3) slots3.add(i);
+		}
+		if (!slots3.isEmpty()) {
+			MethodVisitor n3 = cw.visitMethod(ACC_PUBLIC, "newInstance3", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			n3.visitCode();
+			n3.visitVarInsn(ALOAD, 0);
+			n3.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slots3.size()];
+			Label[] labels = new Label[slots3.size()];
+			for (int k = 0; k < slots3.size(); k++) {
+				keys[k] = slots3.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			n3.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slots3.size(); k++) {
+				n3.visitLabel(labels[k]);
+				Constructor<?> c = ctors.get(slots3.get(k));
+				n3.visitTypeInsn(NEW, targetOwner);
+				n3.visitInsn(DUP);
+				n3.visitVarInsn(ALOAD, 1);
+				emitArgumentCast(n3, c.getParameterTypes()[0]);
+				n3.visitVarInsn(ALOAD, 2);
+				emitArgumentCast(n3, c.getParameterTypes()[1]);
+				n3.visitVarInsn(ALOAD, 3);
+				emitArgumentCast(n3, c.getParameterTypes()[2]);
+				n3.visitMethodInsn(INVOKESPECIAL, targetOwner, "<init>", Type.getConstructorDescriptor(c), false);
+				n3.visitInsn(ARETURN);
+			}
+			n3.visitLabel(dflt);
+			n3.visitVarInsn(ALOAD, 0);
+			n3.visitInsn(ICONST_3);
+			n3.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+			n3.visitInsn(DUP);
+			n3.visitInsn(ICONST_0);
+			n3.visitVarInsn(ALOAD, 1);
+			n3.visitInsn(AASTORE);
+			n3.visitInsn(DUP);
+			n3.visitInsn(ICONST_1);
+			n3.visitVarInsn(ALOAD, 2);
+			n3.visitInsn(AASTORE);
+			n3.visitInsn(DUP);
+			n3.visitInsn(ICONST_2);
+			n3.visitVarInsn(ALOAD, 3);
+			n3.visitInsn(AASTORE);
+			n3.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", false);
+			n3.visitInsn(ARETURN);
+			n3.visitMaxs(0, 0);
+			n3.visitEnd();
+		}
+	}
+
+	private static void emitLinkToCtorArityFastPaths(ClassWriter cw, String invokerClassName,
+	                                                 List<Constructor<?>> ctors, List<String> linkToDescs) {
+		// newInstance0
+		List<Integer> slots0 = new ArrayList<>();
+		for (int i = 0; i < ctors.size(); i++) {
+			if (ctors.get(i).getParameterCount() == 0) slots0.add(i);
+		}
+		if (!slots0.isEmpty()) {
+			MethodVisitor n0 = cw.visitMethod(ACC_PUBLIC, "newInstance0", "()Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			n0.visitCode();
+			n0.visitVarInsn(ALOAD, 0);
+			n0.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slots0.size()];
+			Label[] labels = new Label[slots0.size()];
+			for (int k = 0; k < slots0.size(); k++) {
+				keys[k] = slots0.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			n0.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slots0.size(); k++) {
+				n0.visitLabel(labels[k]);
+				int idx = slots0.get(k);
+				n0.visitMethodInsn(INVOKESTATIC, "jdk/internal/misc/Unsafe", "getUnsafe", "()Ljdk/internal/misc/Unsafe;", false);
+				n0.visitFieldInsn(GETSTATIC, invokerClassName, "TARGET_CLS", "Ljava/lang/Class;");
+				n0.visitMethodInsn(INVOKEVIRTUAL, "jdk/internal/misc/Unsafe", "allocateInstance", "(Ljava/lang/Class;)Ljava/lang/Object;", false);
+				n0.visitInsn(DUP);
+				n0.visitFieldInsn(GETSTATIC, invokerClassName, "MN_" + idx, "Ljava/lang/Object;");
+				n0.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
+				n0.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandle", "linkToSpecial", linkToDescs.get(idx), false);
+				n0.visitInsn(ARETURN);
+			}
+			n0.visitLabel(dflt);
+			n0.visitVarInsn(ALOAD, 0);
+			n0.visitInsn(ICONST_0);
+			n0.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+			n0.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", false);
+			n0.visitInsn(ARETURN);
+			n0.visitMaxs(0, 0);
+			n0.visitEnd();
+		}
+
+		// newInstance1
+		List<Integer> slots1 = new ArrayList<>();
+		for (int i = 0; i < ctors.size(); i++) {
+			if (ctors.get(i).getParameterCount() == 1) slots1.add(i);
+		}
+		if (!slots1.isEmpty()) {
+			MethodVisitor n1 = cw.visitMethod(ACC_PUBLIC, "newInstance1", "(Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			n1.visitCode();
+			n1.visitVarInsn(ALOAD, 0);
+			n1.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slots1.size()];
+			Label[] labels = new Label[slots1.size()];
+			for (int k = 0; k < slots1.size(); k++) {
+				keys[k] = slots1.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			n1.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slots1.size(); k++) {
+				n1.visitLabel(labels[k]);
+				int idx = slots1.get(k);
+				Constructor<?> c = ctors.get(idx);
+				n1.visitMethodInsn(INVOKESTATIC, "jdk/internal/misc/Unsafe", "getUnsafe", "()Ljdk/internal/misc/Unsafe;", false);
+				n1.visitFieldInsn(GETSTATIC, invokerClassName, "TARGET_CLS", "Ljava/lang/Class;");
+				n1.visitMethodInsn(INVOKEVIRTUAL, "jdk/internal/misc/Unsafe", "allocateInstance", "(Ljava/lang/Class;)Ljava/lang/Object;", false);
+				n1.visitInsn(DUP);
+				n1.visitVarInsn(ALOAD, 1);
+				emitBootArgumentCast(n1, c.getParameterTypes()[0]);
+				n1.visitFieldInsn(GETSTATIC, invokerClassName, "MN_" + idx, "Ljava/lang/Object;");
+				n1.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
+				n1.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandle", "linkToSpecial", linkToDescs.get(idx), false);
+				n1.visitInsn(ARETURN);
+			}
+			n1.visitLabel(dflt);
+			n1.visitVarInsn(ALOAD, 0);
+			n1.visitInsn(ICONST_1);
+			n1.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+			n1.visitInsn(DUP);
+			n1.visitInsn(ICONST_0);
+			n1.visitVarInsn(ALOAD, 1);
+			n1.visitInsn(AASTORE);
+			n1.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", false);
+			n1.visitInsn(ARETURN);
+			n1.visitMaxs(0, 0);
+			n1.visitEnd();
+		}
+
+		// newInstance2
+		List<Integer> slots2 = new ArrayList<>();
+		for (int i = 0; i < ctors.size(); i++) {
+			if (ctors.get(i).getParameterCount() == 2) slots2.add(i);
+		}
+		if (!slots2.isEmpty()) {
+			MethodVisitor n2 = cw.visitMethod(ACC_PUBLIC, "newInstance2", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			n2.visitCode();
+			n2.visitVarInsn(ALOAD, 0);
+			n2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slots2.size()];
+			Label[] labels = new Label[slots2.size()];
+			for (int k = 0; k < slots2.size(); k++) {
+				keys[k] = slots2.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			n2.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slots2.size(); k++) {
+				n2.visitLabel(labels[k]);
+				int idx = slots2.get(k);
+				Constructor<?> c = ctors.get(idx);
+				n2.visitMethodInsn(INVOKESTATIC, "jdk/internal/misc/Unsafe", "getUnsafe", "()Ljdk/internal/misc/Unsafe;", false);
+				n2.visitFieldInsn(GETSTATIC, invokerClassName, "TARGET_CLS", "Ljava/lang/Class;");
+				n2.visitMethodInsn(INVOKEVIRTUAL, "jdk/internal/misc/Unsafe", "allocateInstance", "(Ljava/lang/Class;)Ljava/lang/Object;", false);
+				n2.visitInsn(DUP);
+				n2.visitVarInsn(ALOAD, 1);
+				emitBootArgumentCast(n2, c.getParameterTypes()[0]);
+				n2.visitVarInsn(ALOAD, 2);
+				emitBootArgumentCast(n2, c.getParameterTypes()[1]);
+				n2.visitFieldInsn(GETSTATIC, invokerClassName, "MN_" + idx, "Ljava/lang/Object;");
+				n2.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
+				n2.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandle", "linkToSpecial", linkToDescs.get(idx), false);
+				n2.visitInsn(ARETURN);
+			}
+			n2.visitLabel(dflt);
+			n2.visitVarInsn(ALOAD, 0);
+			n2.visitInsn(ICONST_2);
+			n2.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+			n2.visitInsn(DUP);
+			n2.visitInsn(ICONST_0);
+			n2.visitVarInsn(ALOAD, 1);
+			n2.visitInsn(AASTORE);
+			n2.visitInsn(DUP);
+			n2.visitInsn(ICONST_1);
+			n2.visitVarInsn(ALOAD, 2);
+			n2.visitInsn(AASTORE);
+			n2.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", false);
+			n2.visitInsn(ARETURN);
+			n2.visitMaxs(0, 0);
+			n2.visitEnd();
+		}
+
+		// newInstance3
+		List<Integer> slots3 = new ArrayList<>();
+		for (int i = 0; i < ctors.size(); i++) {
+			if (ctors.get(i).getParameterCount() == 3) slots3.add(i);
+		}
+		if (!slots3.isEmpty()) {
+			MethodVisitor n3 = cw.visitMethod(ACC_PUBLIC, "newInstance3", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			n3.visitCode();
+			n3.visitVarInsn(ALOAD, 0);
+			n3.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			int[] keys = new int[slots3.size()];
+			Label[] labels = new Label[slots3.size()];
+			for (int k = 0; k < slots3.size(); k++) {
+				keys[k] = slots3.get(k);
+				labels[k] = new Label();
+			}
+			Label dflt = new Label();
+			n3.visitLookupSwitchInsn(dflt, keys, labels);
+
+			for (int k = 0; k < slots3.size(); k++) {
+				n3.visitLabel(labels[k]);
+				int idx = slots3.get(k);
+				Constructor<?> c = ctors.get(idx);
+				n3.visitMethodInsn(INVOKESTATIC, "jdk/internal/misc/Unsafe", "getUnsafe", "()Ljdk/internal/misc/Unsafe;", false);
+				n3.visitFieldInsn(GETSTATIC, invokerClassName, "TARGET_CLS", "Ljava/lang/Class;");
+				n3.visitMethodInsn(INVOKEVIRTUAL, "jdk/internal/misc/Unsafe", "allocateInstance", "(Ljava/lang/Class;)Ljava/lang/Object;", false);
+				n3.visitInsn(DUP);
+				n3.visitVarInsn(ALOAD, 1);
+				emitBootArgumentCast(n3, c.getParameterTypes()[0]);
+				n3.visitVarInsn(ALOAD, 2);
+				emitBootArgumentCast(n3, c.getParameterTypes()[1]);
+				n3.visitVarInsn(ALOAD, 3);
+				emitBootArgumentCast(n3, c.getParameterTypes()[2]);
+				n3.visitFieldInsn(GETSTATIC, invokerClassName, "MN_" + idx, "Ljava/lang/Object;");
+				n3.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
+				n3.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandle", "linkToSpecial", linkToDescs.get(idx), false);
+				n3.visitInsn(ARETURN);
+			}
+			n3.visitLabel(dflt);
+			n3.visitVarInsn(ALOAD, 0);
+			n3.visitInsn(ICONST_3);
+			n3.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+			n3.visitInsn(DUP);
+			n3.visitInsn(ICONST_0);
+			n3.visitVarInsn(ALOAD, 1);
+			n3.visitInsn(AASTORE);
+			n3.visitInsn(DUP);
+			n3.visitInsn(ICONST_1);
+			n3.visitVarInsn(ALOAD, 2);
+			n3.visitInsn(AASTORE);
+			n3.visitInsn(DUP);
+			n3.visitInsn(ICONST_2);
+			n3.visitVarInsn(ALOAD, 3);
+			n3.visitInsn(AASTORE);
+			n3.visitMethodInsn(INVOKEVIRTUAL, invokerClassName, "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", false);
+			n3.visitInsn(ARETURN);
+			n3.visitMaxs(0, 0);
+			n3.visitEnd();
+		}
+	}
+
+	private static HostMethodGroup buildPerHostNestmateMethodGroup(Class<?> declClass) {
+		if (!Magic.supportsNestmateClasses()) return null;
+		if (declClass.getClassLoader() == null || isSystemClass(declClass)) return null;
+		Class<?> hostClass = getHostClass(declClass);
+
+		Method[] allMethods = declClass.getDeclaredMethods();
+		if (allMethods.length == 0 || allMethods.length > 64) return null;
+
+		List<Method> methods = new ArrayList<>(allMethods.length);
+		for (Method m : allMethods) {
+			m.setAccessible(true);
+			methods.add(m);
+		}
+		if (methods.isEmpty()) return null;
+
+		try {
+			boolean canSeeMagicInvoker;
+			try {
+				Class<?> loaded = Class.forName(MagicInvoker.class.getName(), false, hostClass.getClassLoader());
+				canSeeMagicInvoker = (loaded == MagicInvoker.class);
+			} catch (Throwable t) {
+				canSeeMagicInvoker = false;
+			}
+
+			String ifaceName = canSeeMagicInvoker ?
+				Type.getInternalName(MagicInvoker.class) :
+				Type.getInternalName(getOrCreateBootInvokerInterface());
+
+			String      owner            = Type.getInternalName(declClass);
+			String      invokerClassName = owner + "$$MagicNestmateHostInvoker_" + COUNTER.incrementAndGet();
+			ClassWriter cw               = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+			cw.visit(V17, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
+				new String[]{ifaceName});
+
+			// slot field
+			cw.visitField(ACC_PUBLIC | ACC_FINAL, "slot", "I", null, null).visitEnd();
+
+			// Constructor <init>(I)V
+			MethodVisitor initMv = cw.visitMethod(ACC_PUBLIC, "<init>", "(I)V", null, null);
+			initMv.visitCode();
+			initMv.visitVarInsn(ALOAD, 0);
+			initMv.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+			initMv.visitVarInsn(ALOAD, 0);
+			initMv.visitVarInsn(ILOAD, 1);
+			initMv.visitFieldInsn(PUTFIELD, invokerClassName, "slot", "I");
+			initMv.visitInsn(RETURN);
+			initMv.visitMaxs(2, 2);
+			initMv.visitEnd();
+
+			int n = methods.size();
+
+			// 1. invoke(Object target, Object[] args)
+			MethodVisitor invMv = cw.visitMethod(ACC_PUBLIC, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			invMv.visitCode();
+			invMv.visitVarInsn(ALOAD, 0);
+			invMv.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			Label[] labels = new Label[n];
+			for (int i = 0; i < n; i++) labels[i] = new Label();
+			Label defLabel = new Label();
+
+			invMv.visitTableSwitchInsn(0, n - 1, defLabel, labels);
+
+			for (int i = 0; i < n; i++) {
+				invMv.visitLabel(labels[i]);
+				Method     m          = methods.get(i);
+				int        arity      = m.getParameterCount();
+				boolean    isStatic   = Modifier.isStatic(m.getModifiers());
+				Class<?>[] paramTypes = m.getParameterTypes();
+				Class<?>   retType    = m.getReturnType();
+				String     methodDesc = Type.getMethodDescriptor(m);
+
+				if (!isStatic) {
+					invMv.visitVarInsn(ALOAD, 1);
+					invMv.visitTypeInsn(CHECKCAST, owner);
+				}
+				for (int j = 0; j < arity; j++) {
+					invMv.visitVarInsn(ALOAD, 2);
+					pushInt(invMv, j);
+					invMv.visitInsn(AALOAD);
+					emitArgumentCast(invMv, paramTypes[j]);
+				}
+				emitInvokeTarget(invMv, declClass, m, owner, methodDesc, isStatic);
+				emitReturnBox(invMv, retType);
+				invMv.visitInsn(ARETURN);
+			}
+
+			invMv.visitLabel(defLabel);
+			invMv.visitTypeInsn(NEW, "java/lang/IllegalArgumentException");
+			invMv.visitInsn(DUP);
+			invMv.visitLdcInsn("Invalid method slot");
+			invMv.visitMethodInsn(INVOKESPECIAL, "java/lang/IllegalArgumentException", "<init>", "(Ljava/lang/String;)V", false);
+			invMv.visitInsn(ATHROW);
+			invMv.visitMaxs(0, 0);
+			invMv.visitEnd();
+
+			emitNestmateArityFastPaths(cw, invokerClassName, owner, declClass, methods);
+			emitNestmatePrimitiveFastPaths(cw, invokerClassName, owner, declClass, methods);
+
+			cw.visitEnd();
+			byte[] bytes = cw.toByteArray();
+			if (CLASS_DUMP_HOOK != null) {
+				CLASS_DUMP_HOOK.accept(invokerClassName, bytes);
+			}
+			Class<?> genClass = Magic.defineNestmateHiddenClass(declClass, bytes, true);
+			TOTAL_METHOD_BRIDGES.incrementAndGet();
+
+			Constructor<?> ctor = genClass.getDeclaredConstructor(int.class);
+			ctor.setAccessible(true);
+			Map<Method, Integer> slotMap = new HashMap<>(n);
+			for (int i = 0; i < n; i++) {
+				slotMap.put(methods.get(i), i);
+			}
+			return new HostMethodGroup(genClass, ctor, slotMap, !canSeeMagicInvoker);
+		} catch (Throwable t) {
+			return null;
+		}
+	}
+
+	private static HostMethodGroup buildPerHostLinkToMethodGroup(Class<?> declClass) {
+		if (MEMBER_NAME_CLASS == null || LinkerHelper.IS_ANDROID) return null;
+		Method[] allMethods = declClass.getDeclaredMethods();
+		if (allMethods.length == 0 || allMethods.length > 64) return null;
+
+		List<Method> validMethods = new ArrayList<>();
+		List<Object> memberNames  = new ArrayList<>();
+		List<String> linkToNames  = new ArrayList<>();
+		List<String> linkToDescs  = new ArrayList<>();
+
+		for (Method m : allMethods) {
+			Object mn = resolveMemberName(declClass, m);
+			if (mn != null) {
+				validMethods.add(m);
+				memberNames.add(mn);
+				linkToNames.add(getLinkToName(declClass, m));
+				linkToDescs.add(getLinkToDesc(declClass, m));
+			}
+		}
+		if (validMethods.isEmpty()) return null;
+
+		try {
+			Magic.install();
+			String simpleName       = "MagicLinkToHostInvoker_" + COUNTER.incrementAndGet();
+			String invokerClassName = "java/lang/invoke/" + simpleName;
+
+			Class<?> bootIface     = getOrCreateBootInvokerInterface();
+			String   bootIfaceName = Type.getInternalName(bootIface);
+
+			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+			cw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
+				new String[]{bootIfaceName});
+
+			int n = validMethods.size();
+			for (int i = 0; i < n; i++) {
+				FieldVisitor fv = cw.visitField(ACC_PUBLIC | ACC_STATIC | ACC_FINAL, "MN_" + i, "Ljava/lang/Object;", null, null);
+				fv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
+				fv.visitEnd();
+			}
+
+			// slot field
+			cw.visitField(ACC_PUBLIC | ACC_FINAL, "slot", "I", null, null).visitEnd();
+
+			// Constructor <init>(I)V
+			MethodVisitor initMv = cw.visitMethod(ACC_PUBLIC, "<init>", "(I)V", null, null);
+			initMv.visitCode();
+			initMv.visitVarInsn(ALOAD, 0);
+			initMv.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+			initMv.visitVarInsn(ALOAD, 0);
+			initMv.visitVarInsn(ILOAD, 1);
+			initMv.visitFieldInsn(PUTFIELD, invokerClassName, "slot", "I");
+			initMv.visitInsn(RETURN);
+			initMv.visitMaxs(2, 2);
+			initMv.visitEnd();
+
+			// 1. invoke(Object target, Object[] args)
+			MethodVisitor invMv = cw.visitMethod(ACC_PUBLIC, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			invMv.visitCode();
+			invMv.visitVarInsn(ALOAD, 0);
+			invMv.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			Label[] labels = new Label[n];
+			for (int i = 0; i < n; i++) labels[i] = new Label();
+			Label defLabel = new Label();
+
+			invMv.visitTableSwitchInsn(0, n - 1, defLabel, labels);
+
+			for (int i = 0; i < n; i++) {
+				invMv.visitLabel(labels[i]);
+				Method     m          = validMethods.get(i);
+				int        arity      = m.getParameterCount();
+				boolean    isStatic   = Modifier.isStatic(m.getModifiers());
+				Class<?>[] paramTypes = m.getParameterTypes();
+				Class<?>   retType    = m.getReturnType();
+
+				if (!isStatic) {
+					invMv.visitVarInsn(ALOAD, 1);
+				}
+				for (int j = 0; j < arity; j++) {
+					invMv.visitVarInsn(ALOAD, 2);
+					pushInt(invMv, j);
+					invMv.visitInsn(AALOAD);
+					emitBootArgumentCast(invMv, paramTypes[j]);
+				}
+				invMv.visitFieldInsn(GETSTATIC, invokerClassName, "MN_" + i, "Ljava/lang/Object;");
+				invMv.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
+				invMv.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandle", linkToNames.get(i), linkToDescs.get(i), false);
+				emitBootReturnBox(invMv, retType);
+				invMv.visitInsn(ARETURN);
+			}
+
+			invMv.visitLabel(defLabel);
+			invMv.visitTypeInsn(NEW, "java/lang/IllegalArgumentException");
+			invMv.visitInsn(DUP);
+			invMv.visitLdcInsn("Invalid method slot");
+			invMv.visitMethodInsn(INVOKESPECIAL, "java/lang/IllegalArgumentException", "<init>", "(Ljava/lang/String;)V", false);
+			invMv.visitInsn(ATHROW);
+			invMv.visitMaxs(0, 0);
+			invMv.visitEnd();
+
+			emitLinkToArityFastPaths(cw, invokerClassName, validMethods, linkToNames, linkToDescs);
+			emitLinkToPrimitiveFastPaths(cw, invokerClassName, validMethods, linkToNames, linkToDescs);
+
+			cw.visitEnd();
+			byte[] bytes = cw.toByteArray();
+			if (CLASS_DUMP_HOOK != null) {
+				CLASS_DUMP_HOOK.accept(invokerClassName, bytes);
+			}
+			Class<?> invokerClass = defineBootLinkToClass(bytes);
+
+			for (int i = 0; i < n; i++) {
+				Field mnField = invokerClass.getDeclaredField("MN_" + i);
+				setStaticField(mnField, memberNames.get(i));
+			}
+
+			TOTAL_METHOD_BRIDGES.incrementAndGet();
+			Constructor<?> ctor = invokerClass.getDeclaredConstructor(int.class);
+			ctor.setAccessible(true);
+			Map<Method, Integer> slotMap = new HashMap<>(n);
+			for (int i = 0; i < n; i++) {
+				slotMap.put(validMethods.get(i), i);
+			}
+			return new HostMethodGroup(invokerClass, ctor, slotMap, true);
+		} catch (Throwable t) {
+			return null;
+		}
+	}
+
+	private static HostCtorGroup buildPerHostNestmateCtorGroup(Class<?> declClass) {
+		if (!Magic.supportsNestmateClasses()) return null;
+		if (declClass.getClassLoader() == null || isSystemClass(declClass)) return null;
+		if (Modifier.isAbstract(declClass.getModifiers()) || declClass.isInterface()) return null;
+		Class<?> hostClass = getHostClass(declClass);
+
+		Constructor<?>[] allCtors = declClass.getDeclaredConstructors();
+		if (allCtors.length == 0 || allCtors.length > 32) return null;
+
+		List<Constructor<?>> validCtors = new ArrayList<>(allCtors.length);
+		for (Constructor<?> c : allCtors) {
+			c.setAccessible(true);
+			validCtors.add(c);
+		}
+		if (validCtors.isEmpty()) return null;
+
+		try {
+			boolean canSeeCtorInvoker;
+			try {
+				Class<?> loaded = Class.forName(MagicConstructorInvoker.class.getName(), false, hostClass.getClassLoader());
+				canSeeCtorInvoker = (loaded == MagicConstructorInvoker.class);
+			} catch (Throwable t) {
+				canSeeCtorInvoker = false;
+			}
+
+			String ifaceName = canSeeCtorInvoker ?
+				Type.getInternalName(MagicConstructorInvoker.class) :
+				Type.getInternalName(getOrCreateBootCtorInvokerInterface());
+
+			String      targetOwner      = Type.getInternalName(declClass);
+			String      invokerClassName = targetOwner + "$$MagicNestmateHostCtor_" + COUNTER.incrementAndGet();
+			ClassWriter cw               = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+			cw.visit(V17, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
+				new String[]{ifaceName});
+
+			// slot field
+			cw.visitField(ACC_PUBLIC | ACC_FINAL, "slot", "I", null, null).visitEnd();
+
+			// Constructor <init>(I)V
+			MethodVisitor initMv = cw.visitMethod(ACC_PUBLIC, "<init>", "(I)V", null, null);
+			initMv.visitCode();
+			initMv.visitVarInsn(ALOAD, 0);
+			initMv.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+			initMv.visitVarInsn(ALOAD, 0);
+			initMv.visitVarInsn(ILOAD, 1);
+			initMv.visitFieldInsn(PUTFIELD, invokerClassName, "slot", "I");
+			initMv.visitInsn(RETURN);
+			initMv.visitMaxs(2, 2);
+			initMv.visitEnd();
+
+			int n = validCtors.size();
+
+			// newInstance(Object[] args)
+			MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			mv.visitCode();
+			mv.visitVarInsn(ALOAD, 0);
+			mv.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			Label[] labels = new Label[n];
+			for (int i = 0; i < n; i++) labels[i] = new Label();
+			Label defLabel = new Label();
+
+			mv.visitTableSwitchInsn(0, n - 1, defLabel, labels);
+
+			for (int i = 0; i < n; i++) {
+				mv.visitLabel(labels[i]);
+				Constructor<?> c          = validCtors.get(i);
+				int            arity      = c.getParameterCount();
+				Class<?>[]     paramTypes = c.getParameterTypes();
+				String         ctorDesc   = Type.getConstructorDescriptor(c);
+
+				mv.visitTypeInsn(NEW, targetOwner);
+				mv.visitInsn(DUP);
+				for (int j = 0; j < arity; j++) {
+					mv.visitVarInsn(ALOAD, 1);
+					pushInt(mv, j);
+					mv.visitInsn(AALOAD);
+					emitArgumentCast(mv, paramTypes[j]);
+				}
+				mv.visitMethodInsn(INVOKESPECIAL, targetOwner, "<init>", ctorDesc, false);
+				mv.visitInsn(ARETURN);
+			}
+
+			mv.visitLabel(defLabel);
+			mv.visitTypeInsn(NEW, "java/lang/IllegalArgumentException");
+			mv.visitInsn(DUP);
+			mv.visitLdcInsn("Invalid constructor slot");
+			mv.visitMethodInsn(INVOKESPECIAL, "java/lang/IllegalArgumentException", "<init>", "(Ljava/lang/String;)V", false);
+			mv.visitInsn(ATHROW);
+			mv.visitMaxs(0, 0);
+			mv.visitEnd();
+
+			emitNestmateCtorArityFastPaths(cw, invokerClassName, targetOwner, validCtors);
+
+			cw.visitEnd();
+			byte[] bytes = cw.toByteArray();
+			if (CLASS_DUMP_HOOK != null) {
+				CLASS_DUMP_HOOK.accept(invokerClassName, bytes);
+			}
+			Class<?> genClass = Magic.defineNestmateHiddenClass(declClass, bytes, true);
+			TOTAL_CTOR_BRIDGES.incrementAndGet();
+
+			Constructor<?> ctor = genClass.getDeclaredConstructor(int.class);
+			ctor.setAccessible(true);
+			Map<Constructor<?>, Integer> slotMap = new HashMap<>(n);
+			for (int i = 0; i < n; i++) {
+				slotMap.put(validCtors.get(i), i);
+			}
+			return new HostCtorGroup(genClass, ctor, slotMap, !canSeeCtorInvoker);
+		} catch (Throwable t) {
+			return null;
+		}
+	}
+
+	private static HostCtorGroup buildPerHostLinkToCtorGroup(Class<?> declClass) {
+		if (MEMBER_NAME_CLASS == null || LinkerHelper.IS_ANDROID) return null;
+		if (Modifier.isAbstract(declClass.getModifiers()) || declClass.isInterface()) return null;
+
+		Constructor<?>[] allCtors = declClass.getDeclaredConstructors();
+		if (allCtors.length == 0 || allCtors.length > 32) return null;
+
+		List<Constructor<?>> validCtors  = new ArrayList<>();
+		List<Object>         memberNames = new ArrayList<>();
+		List<String>         linkToDescs = new ArrayList<>();
+
+		for (Constructor<?> c : allCtors) {
+			Object mn = resolveCtorMemberName(declClass, c);
+			if (mn != null) {
+				validCtors.add(c);
+				memberNames.add(mn);
+				linkToDescs.add(getLinkToCtorDesc(c));
+			}
+		}
+		if (validCtors.isEmpty()) return null;
+
+		try {
+			Magic.install();
+			String simpleName       = "MagicLinkToHostCtorInvoker_" + COUNTER.incrementAndGet();
+			String invokerClassName = "java/lang/invoke/" + simpleName;
+
+			Class<?> bootCtorIface     = getOrCreateBootCtorInvokerInterface();
+			String   bootCtorIfaceName = Type.getInternalName(bootCtorIface);
+
+			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+			cw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
+				new String[]{bootCtorIfaceName});
+
+			FieldVisitor cfv = cw.visitField(ACC_PUBLIC | ACC_STATIC | ACC_FINAL, "TARGET_CLS", "Ljava/lang/Class;", null, null);
+			cfv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
+			cfv.visitEnd();
+
+			int n = validCtors.size();
+			for (int i = 0; i < n; i++) {
+				FieldVisitor mfv = cw.visitField(ACC_PUBLIC | ACC_STATIC | ACC_FINAL, "MN_" + i, "Ljava/lang/Object;", null, null);
+				mfv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
+				mfv.visitEnd();
+			}
+
+			// slot field
+			cw.visitField(ACC_PUBLIC | ACC_FINAL, "slot", "I", null, null).visitEnd();
+
+			// Constructor <init>(I)V
+			MethodVisitor initMv = cw.visitMethod(ACC_PUBLIC, "<init>", "(I)V", null, null);
+			initMv.visitCode();
+			initMv.visitVarInsn(ALOAD, 0);
+			initMv.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+			initMv.visitVarInsn(ALOAD, 0);
+			initMv.visitVarInsn(ILOAD, 1);
+			initMv.visitFieldInsn(PUTFIELD, invokerClassName, "slot", "I");
+			initMv.visitInsn(RETURN);
+			initMv.visitMaxs(2, 2);
+			initMv.visitEnd();
+
+			// newInstance(Object[] args)
+			MethodVisitor newMv = cw.visitMethod(ACC_PUBLIC, "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"});
+			newMv.visitCode();
+			newMv.visitVarInsn(ALOAD, 0);
+			newMv.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
+
+			Label[] labels = new Label[n];
+			for (int i = 0; i < n; i++) labels[i] = new Label();
+			Label defLabel = new Label();
+
+			newMv.visitTableSwitchInsn(0, n - 1, defLabel, labels);
+
+			for (int i = 0; i < n; i++) {
+				newMv.visitLabel(labels[i]);
+				Constructor<?> c          = validCtors.get(i);
+				int            arity      = c.getParameterCount();
+				Class<?>[]     paramTypes = c.getParameterTypes();
+
+				newMv.visitMethodInsn(INVOKESTATIC, "jdk/internal/misc/Unsafe", "getUnsafe", "()Ljdk/internal/misc/Unsafe;", false);
+				newMv.visitFieldInsn(GETSTATIC, invokerClassName, "TARGET_CLS", "Ljava/lang/Class;");
+				newMv.visitMethodInsn(INVOKEVIRTUAL, "jdk/internal/misc/Unsafe", "allocateInstance", "(Ljava/lang/Class;)Ljava/lang/Object;", false);
+				newMv.visitInsn(DUP);
+				for (int j = 0; j < arity; j++) {
+					newMv.visitVarInsn(ALOAD, 1);
+					pushInt(newMv, j);
+					newMv.visitInsn(AALOAD);
+					emitBootArgumentCast(newMv, paramTypes[j]);
+				}
+				newMv.visitFieldInsn(GETSTATIC, invokerClassName, "MN_" + i, "Ljava/lang/Object;");
+				newMv.visitTypeInsn(CHECKCAST, "java/lang/invoke/MemberName");
+				newMv.visitMethodInsn(INVOKESTATIC, "java/lang/invoke/MethodHandle", "linkToSpecial", linkToDescs.get(i), false);
+				newMv.visitInsn(ARETURN);
+			}
+
+			newMv.visitLabel(defLabel);
+			newMv.visitTypeInsn(NEW, "java/lang/IllegalArgumentException");
+			newMv.visitInsn(DUP);
+			newMv.visitLdcInsn("Invalid constructor slot");
+			newMv.visitMethodInsn(INVOKESPECIAL, "java/lang/IllegalArgumentException", "<init>", "(Ljava/lang/String;)V", false);
+			newMv.visitInsn(ATHROW);
+			newMv.visitMaxs(0, 0);
+			newMv.visitEnd();
+
+			emitLinkToCtorArityFastPaths(cw, invokerClassName, validCtors, linkToDescs);
+
+			cw.visitEnd();
+			byte[] bytes = cw.toByteArray();
+			if (CLASS_DUMP_HOOK != null) {
+				CLASS_DUMP_HOOK.accept(invokerClassName, bytes);
+			}
+			Class<?> invokerClass = defineBootLinkToClass(bytes);
+
+			Field targetClsField = invokerClass.getDeclaredField("TARGET_CLS");
+			setStaticField(targetClsField, declClass);
+
+			for (int i = 0; i < n; i++) {
+				Field mnField = invokerClass.getDeclaredField("MN_" + i);
+				setStaticField(mnField, memberNames.get(i));
+			}
+
+			TOTAL_CTOR_BRIDGES.incrementAndGet();
+			Constructor<?> ctor = invokerClass.getDeclaredConstructor(int.class);
+			ctor.setAccessible(true);
+			Map<Constructor<?>, Integer> slotMap = new HashMap<>(n);
+			for (int i = 0; i < n; i++) {
+				slotMap.put(validCtors.get(i), i);
+			}
+			return new HostCtorGroup(invokerClass, ctor, slotMap, true);
+		} catch (Throwable t) {
+			return null;
+		}
+	}
+
 
 
 	public static boolean canUseNestmate(Class<?> clazz, Method targetMethod) {
@@ -1282,6 +3293,27 @@ public class MagicJIT implements Opcodes {
 	 * 通过原生 {@code invokevirtual / invokespecial / invokestatic} 直调，并享有随类加载器 100% 干净卸载能力。</p>
 	 */
 	private static MagicInvoker generateNestmateMethodInvoker(Class<?> clazz, Method targetMethod) {
+		if (!Magic.supportsNestmateClasses()) return null;
+		Class<?> declClass = targetMethod.getDeclaringClass();
+		ClassJITData jitData = JIT_DATA.get(declClass);
+		HostMethodGroup group = jitData.nestmateMethodGroup;
+		if (group == null) {
+			synchronized (jitData) {
+				group = jitData.nestmateMethodGroup;
+				if (group == null) {
+					HostMethodGroup built = buildPerHostNestmateMethodGroup(declClass);
+					jitData.nestmateMethodGroup = group = (built != null ? built : EMPTY_METHOD_GROUP);
+				}
+			}
+		}
+		if (group != null && group != EMPTY_METHOD_GROUP) {
+			MagicInvoker invoker = group.createInvoker(targetMethod);
+			if (invoker != null) return invoker;
+		}
+		return generateSingleNestmateMethodInvoker(clazz, targetMethod);
+	}
+
+	private static MagicInvoker generateSingleNestmateMethodInvoker(Class<?> clazz, Method targetMethod) {
 		if (!Magic.supportsNestmateClasses()) return null;
 		int        arity      = targetMethod.getParameterCount();
 		boolean    isStatic   = Modifier.isStatic(targetMethod.getModifiers());
@@ -1494,9 +3526,35 @@ public class MagicJIT implements Opcodes {
 	 * 由 JIT 编译器在 TLAB 中内联极速分配，并随宿主类加载器 100% 干净卸载。</p>
 	 */
 	private static MagicConstructorInvoker generateNestmateConstructorInvoker(Class<?> clazz, int arity) {
-		if (!Magic.supportsNestmateClasses()) return null;
 		Constructor<?> targetCtor = MethodResolver.findConstructor(clazz, arity);
+		return targetCtor == null ? null : generateNestmateConstructorInvoker(clazz, targetCtor);
+	}
+
+	private static MagicConstructorInvoker generateNestmateConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor) {
+		if (!Magic.supportsNestmateClasses()) return null;
+		Class<?> declClass = targetCtor.getDeclaringClass();
+		ClassJITData jitData = JIT_DATA.get(declClass);
+		HostCtorGroup group = jitData.nestmateCtorGroup;
+		if (group == null) {
+			synchronized (jitData) {
+				group = jitData.nestmateCtorGroup;
+				if (group == null) {
+					HostCtorGroup built = buildPerHostNestmateCtorGroup(declClass);
+					jitData.nestmateCtorGroup = group = (built != null ? built : EMPTY_CTOR_GROUP);
+				}
+			}
+		}
+		if (group != null && group != EMPTY_CTOR_GROUP) {
+			MagicConstructorInvoker invoker = group.createCtorInvoker(targetCtor);
+			if (invoker != null) return invoker;
+		}
+		return generateSingleNestmateConstructorInvoker(clazz, targetCtor);
+	}
+
+	private static MagicConstructorInvoker generateSingleNestmateConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor) {
+		if (!Magic.supportsNestmateClasses()) return null;
 		if (targetCtor == null) return null;
+		int arity = targetCtor.getParameterCount();
 		Class<?> declClass = targetCtor.getDeclaringClass();
 		if (Modifier.isAbstract(declClass.getModifiers())) return null;
 		Class<?> hostClass = getHostClass(declClass);
@@ -1622,6 +3680,27 @@ public class MagicJIT implements Opcodes {
 	 * 消除旧版双类中转与静态跳转损耗，获得 HotSpot C2 完全常量折叠特权与 100% Metaspace 卸载安全。</p>
 	 */
 	private static MagicInvoker generateLinkToMethodInvoker(Class<?> clazz, Method targetMethod) {
+		if (MEMBER_NAME_CLASS == null || LinkerHelper.IS_ANDROID) return null;
+		Class<?> declClass = targetMethod.getDeclaringClass();
+		ClassJITData jitData = JIT_DATA.get(declClass);
+		HostMethodGroup group = jitData.linkToMethodGroup;
+		if (group == null) {
+			synchronized (jitData) {
+				group = jitData.linkToMethodGroup;
+				if (group == null) {
+					HostMethodGroup built = buildPerHostLinkToMethodGroup(declClass);
+					jitData.linkToMethodGroup = group = (built != null ? built : EMPTY_METHOD_GROUP);
+				}
+			}
+		}
+		if (group != null && group != EMPTY_METHOD_GROUP) {
+			MagicInvoker invoker = group.createInvoker(targetMethod);
+			if (invoker != null) return invoker;
+		}
+		return generateSingleLinkToMethodInvoker(clazz, targetMethod);
+	}
+
+	private static MagicInvoker generateSingleLinkToMethodInvoker(Class<?> clazz, Method targetMethod) {
 		if (MEMBER_NAME_CLASS == null || LinkerHelper.IS_ANDROID) return null;
 		int        arity       = targetMethod.getParameterCount();
 		boolean    isStatic    = Modifier.isStatic(targetMethod.getModifiers());
@@ -2176,10 +4255,35 @@ public class MagicJIT implements Opcodes {
 	 * </ul>
 	 */
 	private static MagicConstructorInvoker generateLinkToConstructorInvoker(Class<?> clazz, int arity) {
-		if (MEMBER_NAME_CLASS == null || LinkerHelper.IS_ANDROID) return null;
 		Constructor<?> targetCtor = MethodResolver.findConstructor(clazz, arity);
-		if (targetCtor == null) return null;
+		return targetCtor == null ? null : generateLinkToConstructorInvoker(clazz, targetCtor);
+	}
 
+	private static MagicConstructorInvoker generateLinkToConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor) {
+		if (MEMBER_NAME_CLASS == null || LinkerHelper.IS_ANDROID) return null;
+		Class<?> declClass = targetCtor.getDeclaringClass();
+		ClassJITData jitData = JIT_DATA.get(declClass);
+		HostCtorGroup group = jitData.linkToCtorGroup;
+		if (group == null) {
+			synchronized (jitData) {
+				group = jitData.linkToCtorGroup;
+				if (group == null) {
+					HostCtorGroup built = buildPerHostLinkToCtorGroup(declClass);
+					jitData.linkToCtorGroup = group = (built != null ? built : EMPTY_CTOR_GROUP);
+				}
+			}
+		}
+		if (group != null && group != EMPTY_CTOR_GROUP) {
+			MagicConstructorInvoker invoker = group.createCtorInvoker(targetCtor);
+			if (invoker != null) return invoker;
+		}
+		return generateSingleLinkToConstructorInvoker(clazz, targetCtor);
+	}
+
+	private static MagicConstructorInvoker generateSingleLinkToConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor) {
+		if (MEMBER_NAME_CLASS == null || LinkerHelper.IS_ANDROID) return null;
+		if (targetCtor == null) return null;
+		int arity = targetCtor.getParameterCount();
 		Class<?>[] paramTypes = targetCtor.getParameterTypes();
 
 		Object mn = null;

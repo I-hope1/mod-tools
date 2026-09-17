@@ -287,12 +287,17 @@ public class Magic {
 		// 1. JDK 15+: Lookup.defineHiddenClass
 		if (DEFINE_HIDDEN_CLASS_MH != null) {
 			try {
-				Lookup hostLookup = lookup.in(hostClass);
-				if (ALLOWED_MODES_OFFSET >= 0) {
-					unsafe.putInt(hostLookup, ALLOWED_MODES_OFFSET, -1);
-				}
-				if (PREV_LOOKUP_CLASS_OFFSET >= 0) {
-					unsafe.putObject(hostLookup, PREV_LOOKUP_CLASS_OFFSET, null);
+				Lookup hostLookup;
+				try {
+					hostLookup = MethodHandles.privateLookupIn(hostClass, lookup);
+				} catch (Throwable t) {
+					hostLookup = lookup.in(hostClass);
+					if (ALLOWED_MODES_OFFSET >= 0) {
+						unsafe.putInt(hostLookup, ALLOWED_MODES_OFFSET, -1);
+					}
+					if (PREV_LOOKUP_CLASS_OFFSET >= 0) {
+						unsafe.putObject(hostLookup, PREV_LOOKUP_CLASS_OFFSET, null);
+					}
 				}
 				Lookup hiddenLookup = (Lookup) DEFINE_HIDDEN_CLASS_MH.invoke(hostLookup, bytes, initialize, EMPTY_CLASS_OPTIONS);
 				return hiddenLookup.lookupClass();

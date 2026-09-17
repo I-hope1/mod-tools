@@ -1762,8 +1762,7 @@ public class MagicJIT implements Opcodes {
 	                                     String methodDesc, boolean isStatic) {
 		int opcode = isStatic ? INVOKESTATIC :
 		 clazz.isInterface() ? INVOKEINTERFACE :
-		  Modifier.isPrivate(targetMethod.getModifiers()) ? INVOKESPECIAL :
-		   INVOKEVIRTUAL;
+		  INVOKEVIRTUAL;
 		mv.visitMethodInsn(opcode, owner, targetMethod.getName(), methodDesc, clazz.isInterface());
 	}
 

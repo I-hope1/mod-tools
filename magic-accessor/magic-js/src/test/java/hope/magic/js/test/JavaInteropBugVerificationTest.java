@@ -550,6 +550,50 @@ public class JavaInteropBugVerificationTest {
 		Assertions.assertInstanceOf(int[].class, javaArrFromTo);
 		Assertions.assertArrayEquals(new int[]{10, 20, 30}, (int[]) javaArrFromTo);
 	}
+
+	public static class StaticTarget {
+		public static int intField = 42;
+		public static String strField = "hello_static";
+		public static double doubleField = 3.14159;
+
+		public static String staticMethod(String name) {
+			return "greeting:" + name;
+		}
+	}
+
+	/**
+	 * 验证缺陷 11:
+	 * 在 getPropFallback / setPropFallback 等属性读写方法中，
+	 * 当 target 为 Class<?> (如 StaticTarget.class 或 Math.class) 时，
+	 * 错误使用 target.getClass() 导致 targetClass 变成了 java.lang.Class.class，
+	 * 进而导致静态字段读取 (StaticTarget.intField / Math.PI)、静态字段写入以及静态方法撕脱 (StaticTarget.staticMethod) 全部失效返回 undefined。
+	 */
+	@Test
+	public void testBug11_StaticFieldAndMethodTearOff() {
+		JSContext cx = new JSContext();
+		cx.set("StaticTarget", StaticTarget.class);
+
+		// 1. 静态字段读取
+		Object rInt = cx.eval("StaticTarget.intField");
+		Assertions.assertEquals(42, rInt, "StaticTarget.intField must return 42");
+
+		Object rStr = cx.eval("StaticTarget.strField");
+		Assertions.assertEquals("hello_static", rStr, "StaticTarget.strField must return hello_static");
+
+		Object rDouble = cx.eval("StaticTarget.doubleField");
+		Assertions.assertEquals(3.14159, rDouble, "StaticTarget.doubleField must return 3.14159");
+
+		Object rPi = cx.eval("java.lang.Math.PI");
+		Assertions.assertEquals(Math.PI, rPi, "java.lang.Math.PI must return Math.PI");
+
+		// 2. 静态字段写入
+		cx.eval("StaticTarget.intField = 99;");
+		Assertions.assertEquals(99, StaticTarget.intField, "StaticTarget.intField must be updated to 99");
+
+		// 3. 静态方法撕脱 (Method Tear-off)
+		Object rMethodTearOff = cx.eval("const fn = StaticTarget.staticMethod; fn('antigravity');");
+		Assertions.assertEquals("greeting:antigravity", rMethodTearOff, "Static method tear-off must be callable");
+	}
 }
 
 

@@ -1556,21 +1556,41 @@ public class JSLinker {
 			return (double) java.lang.reflect.Array.getLength(target);
 		}
 
-		Class<?> targetClass = target.getClass();
+		boolean isStatic = false;
+		Class<?> targetClass;
+		if (target instanceof Class<?> c) {
+			targetClass = c;
+			isStatic = true;
+		} else {
+			targetClass = target.getClass();
+		}
 
 		l:
 		try {
 			Field field = MagicJIT.getDeclaredFieldRecursive(targetClass, propName);
 			if (field == null) break l;
 			field.setAccessible(true);
-			return field.get(target);
+			if (isStatic) {
+				if (Modifier.isStatic(field.getModifiers())) {
+					return field.get(null);
+				}
+			} else {
+				return field.get(target);
+			}
 		} catch (Throwable ignored) {
 		}
 
 		Method getterMethod = MethodResolver.findGetterMethod(targetClass, propName);
 		if (getterMethod != null) {
 			try {
-				return getterMethod.invoke(target);
+				getterMethod.setAccessible(true);
+				if (isStatic) {
+					if (Modifier.isStatic(getterMethod.getModifiers())) {
+						return getterMethod.invoke(null);
+					}
+				} else {
+					return getterMethod.invoke(target);
+				}
 			} catch (Throwable ignored) {
 			}
 		}
@@ -1578,7 +1598,9 @@ public class JSLinker {
 		try {
 			for (Method m : targetClass.getMethods()) {
 				if (m.getName().equals(propName)) {
-					return (JSFunction) (cx, thisObj, args) -> invokeJavaMethod(target, propName, args);
+					if (!isStatic || Modifier.isStatic(m.getModifiers())) {
+						return (JSFunction) (cx, thisObj, args) -> invokeJavaMethod(target, propName, args);
+					}
 				}
 			}
 		} catch (Throwable ignored) {
@@ -1612,15 +1634,29 @@ public class JSLinker {
 			return;
 		}
 
-		Class<?> targetClass = target.getClass();
+		boolean isStatic = false;
+		Class<?> targetClass;
+		if (target instanceof Class<?> c) {
+			targetClass = c;
+			isStatic = true;
+		} else {
+			targetClass = target.getClass();
+		}
 
 		l:
 		try {
 			Field field = MagicJIT.getDeclaredFieldRecursive(targetClass, propName);
 			if (field == null) break l;
 			field.setAccessible(true);
-			FastAccessor.setFieldDirect(target, field, value);
-			return;
+			if (isStatic) {
+				if (Modifier.isStatic(field.getModifiers())) {
+					field.set(null, JSOps.castValue(value, field.getType()));
+					return;
+				}
+			} else {
+				FastAccessor.setFieldDirect(target, field, value);
+				return;
+			}
 		} catch (Throwable ignored) {
 		}
 
@@ -1630,8 +1666,15 @@ public class JSLinker {
 				try {
 					m.setAccessible(true);
 					Object casted = JSOps.castValue(value, m.getParameterTypes()[0]);
-					m.invoke(target, casted);
-					return;
+					if (isStatic) {
+						if (Modifier.isStatic(m.getModifiers())) {
+							m.invoke(null, casted);
+							return;
+						}
+					} else {
+						m.invoke(target, casted);
+						return;
+					}
 				} catch (Throwable ignored) {
 				}
 			}
@@ -1770,14 +1813,55 @@ public class JSLinker {
 			}
 		}
 
-		Class<?> targetClass = target.getClass();
+		boolean isStatic = false;
+		Class<?> targetClass;
+		if (target instanceof Class<?> c) {
+			targetClass = c;
+			isStatic = true;
+		} else {
+			targetClass = target.getClass();
+		}
+
+		MethodHandle test = isStatic ? MH_IS_SAME_OBJECT.bindTo(target) : MH_IS_EXACT_CLASS.bindTo(targetClass);
+
+		if (isStatic) {
+			Field field = MagicJIT.getDeclaredFieldRecursive(targetClass, propName);
+			if (field != null && Modifier.isStatic(field.getModifiers())) {
+				try {
+					field.setAccessible(true);
+					MethodHandle mh = Magic.lookup.unreflectGetter(field);
+					MethodHandle directGetter = MethodHandles.dropArguments(mh, 0, Object.class).asType(site.type());
+					site.installGuardOrSwitchMegamorphic(test, directGetter);
+					return field.get(null);
+				} catch (Throwable ignored) {
+				}
+			}
+
+			Method getterMethod = MethodResolver.findGetterMethod(targetClass, propName);
+			if (getterMethod != null && Modifier.isStatic(getterMethod.getModifiers())) {
+				try {
+					getterMethod.setAccessible(true);
+					MethodHandle mh = Magic.lookup.unreflect(getterMethod);
+					MethodHandle directGetter = MethodHandles.dropArguments(mh, 0, Object.class).asType(site.type());
+					site.installGuardOrSwitchMegamorphic(test, directGetter);
+					return directGetter.invoke(target);
+				} catch (Throwable ignored) {
+				}
+			}
+
+			List<Method> candidates = MethodResolver.findCandidateMethods(targetClass, propName);
+			if (!candidates.isEmpty() && candidates.stream().anyMatch(m -> Modifier.isStatic(m.getModifiers()))) {
+				return (JSFunction) (cx, thisObj, args) -> invokeJavaMethod(target, propName, args);
+			}
+
+			return JSUndefined.INSTANCE;
+		}
 
 		// 1. 尝试匹配 Java 字段 (私有/公有字段通过 MAGICIMPL 字节码直读或 Unsafe 偏移直读)
 		if (STRATEGY != InvocationStrategy.SPREADER) {
 			try {
 				MethodHandle exactGetter = MagicJIT.getFieldGetterStub(targetClass, propName);
 				if (exactGetter != null) {
-					MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
 					site.installGuardOrSwitchMegamorphic(test, exactGetter);
 					return exactGetter.invokeExact(target);
 				}
@@ -1793,7 +1877,6 @@ public class JSLinker {
 			MethodHandle directGetter = buildDirectFieldGetter(targetClass, field, offset);
 
 			// 构造单态/多态内联缓存
-			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
 			site.installGuardOrSwitchMegamorphic(test, directGetter);
 			return directGetter.invoke(target);
 		} catch (Throwable ignored) {
@@ -1806,7 +1889,6 @@ public class JSLinker {
 				getterMethod.setAccessible(true);
 				MethodHandle mh           = Magic.lookup.unreflect(getterMethod);
 				MethodHandle directGetter = mh.asType(site.type());
-				MethodHandle test         = MH_IS_EXACT_CLASS.bindTo(targetClass);
 				site.installGuardOrSwitchMegamorphic(test, directGetter);
 				return directGetter.invoke(target);
 			} catch (Throwable ignored) {
@@ -1974,16 +2056,64 @@ public class JSLinker {
 			return;
 		}
 
-		Class<?> targetClass = target.getClass();
+		boolean isStatic = false;
+		Class<?> targetClass;
+		if (target instanceof Class<?> c) {
+			targetClass = c;
+			isStatic = true;
+		} else {
+			targetClass = target.getClass();
+		}
+
+		MethodHandle test = isStatic ? MH_IS_SAME_OBJECT.bindTo(target) : MH_IS_EXACT_CLASS.bindTo(targetClass);
+		if (site.type().parameterCount() > 1) {
+			test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+		}
+
+		if (isStatic) {
+			Field field = MagicJIT.getDeclaredFieldRecursive(targetClass, propName);
+			if (field != null && Modifier.isStatic(field.getModifiers())) {
+				try {
+					field.setAccessible(true);
+					MethodHandle unreflectSetter = Magic.lookup.unreflectSetter(field);
+					Class<?> fType = field.getType();
+					MethodHandle filter = getArgumentFilter(fType);
+					if (filter != null) {
+						unreflectSetter = MethodHandles.filterArguments(unreflectSetter, 0, filter);
+					}
+					MethodHandle directSetter = MethodHandles.dropArguments(unreflectSetter, 0, Object.class).asType(site.type());
+					site.installGuardOrSwitchMegamorphic(test, directSetter);
+					field.set(null, JSOps.castValue(value, fType));
+					return;
+				} catch (Throwable ignored) {
+				}
+			}
+			Method setterMethod = MethodResolver.findSetterMethod(targetClass, propName);
+			if (setterMethod != null && Modifier.isStatic(setterMethod.getModifiers())) {
+				try {
+					setterMethod.setAccessible(true);
+					MethodHandle unreflectSetter = Magic.lookup.unreflect(setterMethod);
+					Class<?> pType = setterMethod.getParameterTypes()[0];
+					MethodHandle filter = getArgumentFilter(pType);
+					if (filter != null) {
+						unreflectSetter = MethodHandles.filterArguments(unreflectSetter, 0, filter);
+					}
+					MethodHandle directSetter = MethodHandles.dropArguments(unreflectSetter, 0, Object.class).asType(site.type());
+					site.installGuardOrSwitchMegamorphic(test, directSetter);
+					setterMethod.invoke(null, JSOps.castValue(value, pType));
+					return;
+				} catch (Throwable ignored) {
+				}
+			}
+			setPropGeneric(target, value, propName);
+			return;
+		}
 
 		// 1. 尝试通过 MAGICIMPL 直写字段或 Unsafe 偏移直写
 		if (STRATEGY != InvocationStrategy.SPREADER) {
 			try {
 				MethodHandle exactSetter = MagicJIT.getFieldSetterStub(targetClass, propName);
 				if (exactSetter != null) {
-					MethodHandle test = findStatic("isExactClass", MethodType.methodType(boolean.class, Class.class, Object.class))
-					 .bindTo(targetClass);
-					test = MethodHandles.dropArguments(test, 1, Object.class);
 					site.installGuardOrSwitchMegamorphic(test, exactSetter);
 					exactSetter.invokeExact(target, value);
 					return;
@@ -1999,9 +2129,6 @@ public class JSLinker {
 			long         offset       = LinkerHelper.getFieldOffset(field);
 			MethodHandle directSetter = buildDirectFieldSetter(targetClass, field, offset);
 
-			MethodHandle test = findStatic("isExactClass", MethodType.methodType(boolean.class, Class.class, Object.class))
-			 .bindTo(targetClass);
-			test = MethodHandles.dropArguments(test, 1, Object.class);
 			site.installGuardOrSwitchMegamorphic(test, directSetter);
 			directSetter.invoke(target, value);
 			return;
@@ -2020,10 +2147,6 @@ public class JSLinker {
 					mh = MethodHandles.filterArguments(mh, 1, filter);
 				}
 				MethodHandle directSetter = mh.asType(site.type());
-				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
-				if (site.type().parameterCount() > 1) {
-					test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
-				}
 				site.installGuardOrSwitchMegamorphic(test, directSetter);
 				directSetter.invoke(target, value);
 				return;
@@ -2152,17 +2275,64 @@ public class JSLinker {
 			return;
 		}
 
-		Class<?> targetClass = target.getClass();
+		boolean isStatic = false;
+		Class<?> targetClass;
+		if (target instanceof Class<?> c) {
+			targetClass = c;
+			isStatic = true;
+		} else {
+			targetClass = target.getClass();
+		}
+
+		MethodHandle test = isStatic ? MH_IS_SAME_OBJECT.bindTo(target) : MH_IS_EXACT_CLASS.bindTo(targetClass);
+		if (site.type().parameterCount() > 1) {
+			test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+		}
+
+		if (isStatic) {
+			Field field = MagicJIT.getDeclaredFieldRecursive(targetClass, propName);
+			if (field != null && Modifier.isStatic(field.getModifiers())) {
+				try {
+					field.setAccessible(true);
+					MethodHandle unreflectSetter = Magic.lookup.unreflectSetter(field);
+					Class<?> fType = field.getType();
+					MethodHandle filter = getArgumentFilter(fType);
+					if (filter != null) {
+						unreflectSetter = MethodHandles.filterArguments(unreflectSetter, 0, filter);
+					}
+					MethodHandle directSetter = MethodHandles.dropArguments(unreflectSetter, 0, Object.class).asType(site.type());
+					site.installGuardOrSwitchMegamorphic(test, directSetter);
+					field.set(null, JSOps.castValue(value, fType));
+					return;
+				} catch (Throwable ignored) {
+				}
+			}
+			Method setterMethod = MethodResolver.findSetterMethod(targetClass, propName);
+			if (setterMethod != null && Modifier.isStatic(setterMethod.getModifiers())) {
+				try {
+					setterMethod.setAccessible(true);
+					MethodHandle unreflectSetter = Magic.lookup.unreflect(setterMethod);
+					Class<?> pType = setterMethod.getParameterTypes()[0];
+					MethodHandle filter = getArgumentFilter(pType);
+					if (filter != null) {
+						unreflectSetter = MethodHandles.filterArguments(unreflectSetter, 0, filter);
+					}
+					MethodHandle directSetter = MethodHandles.dropArguments(unreflectSetter, 0, Object.class).asType(site.type());
+					site.installGuardOrSwitchMegamorphic(test, directSetter);
+					setterMethod.invoke(null, JSOps.castValue(value, pType));
+					return;
+				} catch (Throwable ignored) {
+				}
+			}
+			setPropDoubleGeneric(target, value, propName);
+			return;
+		}
 
 		// 1. 尝试通过 MAGICIMPL 直写字段或 Unsafe 偏移直写
 		if (STRATEGY != InvocationStrategy.SPREADER) {
 			try {
 				MethodHandle exactSetter = MagicJIT.getFieldSetterStub(targetClass, propName);
 				if (exactSetter != null) {
-					MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
-					if (site.type().parameterCount() > 1) {
-						test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
-					}
 					MethodHandle directSetter = exactSetter.asType(site.type());
 					site.installGuardOrSwitchMegamorphic(test, directSetter);
 					directSetter.invoke(target, value);
@@ -2183,10 +2353,6 @@ public class JSLinker {
 			}
 			MethodHandle directSetter = rawSetter.asType(site.type());
 
-			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
-			if (site.type().parameterCount() > 1) {
-				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
-			}
 			site.installGuardOrSwitchMegamorphic(test, directSetter);
 			directSetter.invoke(target, value);
 			return;
@@ -2207,10 +2373,6 @@ public class JSLinker {
 					}
 				}
 				MethodHandle directSetter = mh.asType(site.type());
-				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
-				if (site.type().parameterCount() > 1) {
-					test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
-				}
 				site.installGuardOrSwitchMegamorphic(test, directSetter);
 				directSetter.invoke(target, value);
 				return;
@@ -3818,7 +3980,48 @@ public class JSLinker {
 			} catch (Throwable ignored) { }
 			return java.lang.reflect.Array.getLength(target);
 		}
-		Class<?> targetClass = target.getClass();
+		boolean isStatic = false;
+		Class<?> targetClass;
+		if (target instanceof Class<?> c) {
+			targetClass = c;
+			isStatic = true;
+		} else {
+			targetClass = target.getClass();
+		}
+
+		MethodHandle test = isStatic ? MH_IS_SAME_OBJECT.bindTo(target) : MH_IS_EXACT_CLASS.bindTo(targetClass);
+
+		if (isStatic) {
+			Field field = MagicJIT.getDeclaredFieldRecursive(targetClass, propName);
+			if (field != null && Modifier.isStatic(field.getModifiers())) {
+				try {
+					field.setAccessible(true);
+					MethodHandle mh = Magic.lookup.unreflectGetter(field);
+					if (field.getType() != int.class) {
+						mh = MethodHandles.filterReturnValue(mh, MH_TO_INT);
+					}
+					MethodHandle directGetter = MethodHandles.dropArguments(mh, 0, Object.class).asType(site.type());
+					site.installGuardOrSwitchMegamorphic(test, directGetter);
+					return ((Number) field.get(null)).intValue();
+				} catch (Throwable ignored) {
+				}
+			}
+			Method getterMethod = MethodResolver.findGetterMethod(targetClass, propName);
+			if (getterMethod != null && Modifier.isStatic(getterMethod.getModifiers())) {
+				try {
+					getterMethod.setAccessible(true);
+					MethodHandle mh = Magic.lookup.unreflect(getterMethod);
+					if (getterMethod.getReturnType() != int.class) {
+						mh = MethodHandles.filterReturnValue(mh, MH_TO_INT);
+					}
+					MethodHandle directGetter = MethodHandles.dropArguments(mh, 0, Object.class).asType(site.type());
+					site.installGuardOrSwitchMegamorphic(test, directGetter);
+					return (int) mh.invoke();
+				} catch (Throwable ignored) {
+				}
+			}
+			return getPropIntGeneric(target, propName);
+		}
 
 		l:
 		try {
@@ -3826,7 +4029,6 @@ public class JSLinker {
 			if (field == null) break l;
 			long         offset       = LinkerHelper.getFieldOffset(field);
 			MethodHandle directGetter = buildPrimFieldGetter(targetClass, field, offset, int.class);
-			MethodHandle test         = MH_IS_EXACT_CLASS.bindTo(targetClass);
 			site.installGuardOrSwitchMegamorphic(test, directGetter);
 			return (int) directGetter.invokeExact(target);
 		} catch (Throwable ignored) {
@@ -3839,7 +4041,6 @@ public class JSLinker {
 				if (getterMethod.getReturnType() != int.class) {
 					mh = MethodHandles.filterReturnValue(mh, MH_TO_INT);
 				}
-				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
 				site.installGuardOrSwitchMegamorphic(test, mh.asType(site.type()));
 				return (int) mh.invoke(target);
 			} catch (Throwable ignored) {
@@ -3912,7 +4113,48 @@ public class JSLinker {
 			return (double) Array.getLength(target);
 		}
 
-		Class<?> targetClass = target.getClass();
+		boolean isStatic = false;
+		Class<?> targetClass;
+		if (target instanceof Class<?> c) {
+			targetClass = c;
+			isStatic = true;
+		} else {
+			targetClass = target.getClass();
+		}
+
+		MethodHandle test = isStatic ? MH_IS_SAME_OBJECT.bindTo(target) : MH_IS_EXACT_CLASS.bindTo(targetClass);
+
+		if (isStatic) {
+			Field field = MagicJIT.getDeclaredFieldRecursive(targetClass, propName);
+			if (field != null && Modifier.isStatic(field.getModifiers())) {
+				try {
+					field.setAccessible(true);
+					MethodHandle mh = Magic.lookup.unreflectGetter(field);
+					if (field.getType() != double.class) {
+						mh = MethodHandles.filterReturnValue(mh, MH_TO_DOUBLE);
+					}
+					MethodHandle directGetter = MethodHandles.dropArguments(mh, 0, Object.class).asType(site.type());
+					site.installGuardOrSwitchMegamorphic(test, directGetter);
+					return ((Number) field.get(null)).doubleValue();
+				} catch (Throwable ignored) {
+				}
+			}
+			Method getterMethod = MethodResolver.findGetterMethod(targetClass, propName);
+			if (getterMethod != null && Modifier.isStatic(getterMethod.getModifiers())) {
+				try {
+					getterMethod.setAccessible(true);
+					MethodHandle mh = Magic.lookup.unreflect(getterMethod);
+					if (getterMethod.getReturnType() != double.class) {
+						mh = MethodHandles.filterReturnValue(mh, MH_TO_DOUBLE);
+					}
+					MethodHandle directGetter = MethodHandles.dropArguments(mh, 0, Object.class).asType(site.type());
+					site.installGuardOrSwitchMegamorphic(test, directGetter);
+					return (double) mh.invoke();
+				} catch (Throwable ignored) {
+				}
+			}
+			return getPropDoubleGeneric(target, propName);
+		}
 
 		l:
 		try {
@@ -3920,7 +4162,6 @@ public class JSLinker {
 			if (field == null) break l;
 			long         offset       = LinkerHelper.getFieldOffset(field);
 			MethodHandle directGetter = buildPrimFieldGetter(targetClass, field, offset, double.class);
-			MethodHandle test         = MH_IS_EXACT_CLASS.bindTo(targetClass);
 			site.installGuardOrSwitchMegamorphic(test, directGetter);
 			return (double) directGetter.invokeExact(target);
 		} catch (Throwable ignored) {
@@ -3934,7 +4175,6 @@ public class JSLinker {
 				if (getterMethod.getReturnType() != double.class) {
 					mh = MethodHandles.filterReturnValue(mh, MH_TO_DOUBLE);
 				}
-				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
 				site.installGuardOrSwitchMegamorphic(test, mh.asType(site.type()));
 				return (double) mh.invoke(target);
 			} catch (Throwable ignored) {
@@ -3992,7 +4232,48 @@ public class JSLinker {
 			} catch (Throwable ignored) { }
 			return Array.getLength(target);
 		}
-		Class<?> targetClass = target.getClass();
+		boolean isStatic = false;
+		Class<?> targetClass;
+		if (target instanceof Class<?> c) {
+			targetClass = c;
+			isStatic = true;
+		} else {
+			targetClass = target.getClass();
+		}
+
+		MethodHandle test = isStatic ? MH_IS_SAME_OBJECT.bindTo(target) : MH_IS_EXACT_CLASS.bindTo(targetClass);
+
+		if (isStatic) {
+			Field field = MagicJIT.getDeclaredFieldRecursive(targetClass, propName);
+			if (field != null && Modifier.isStatic(field.getModifiers())) {
+				try {
+					field.setAccessible(true);
+					MethodHandle mh = Magic.lookup.unreflectGetter(field);
+					if (field.getType() != long.class) {
+						mh = MethodHandles.filterReturnValue(mh, MH_TO_LONG);
+					}
+					MethodHandle directGetter = MethodHandles.dropArguments(mh, 0, Object.class).asType(site.type());
+					site.installGuardOrSwitchMegamorphic(test, directGetter);
+					return ((Number) field.get(null)).longValue();
+				} catch (Throwable ignored) {
+				}
+			}
+			Method getterMethod = MethodResolver.findGetterMethod(targetClass, propName);
+			if (getterMethod != null && Modifier.isStatic(getterMethod.getModifiers())) {
+				try {
+					getterMethod.setAccessible(true);
+					MethodHandle mh = Magic.lookup.unreflect(getterMethod);
+					if (getterMethod.getReturnType() != long.class) {
+						mh = MethodHandles.filterReturnValue(mh, MH_TO_LONG);
+					}
+					MethodHandle directGetter = MethodHandles.dropArguments(mh, 0, Object.class).asType(site.type());
+					site.installGuardOrSwitchMegamorphic(test, directGetter);
+					return (long) mh.invoke();
+				} catch (Throwable ignored) {
+				}
+			}
+			return getPropLongGeneric(target, propName);
+		}
 
 		l:
 		try {
@@ -4000,7 +4281,6 @@ public class JSLinker {
 			if (field == null) break l;
 			long         offset       = LinkerHelper.getFieldOffset(field);
 			MethodHandle directGetter = buildPrimFieldGetter(targetClass, field, offset, long.class);
-			MethodHandle test         = MH_IS_EXACT_CLASS.bindTo(targetClass);
 			site.installGuardOrSwitchMegamorphic(test, directGetter);
 			return (long) directGetter.invokeExact(target);
 		} catch (Throwable ignored) {
@@ -4013,7 +4293,6 @@ public class JSLinker {
 				if (getterMethod.getReturnType() != long.class) {
 					mh = MethodHandles.filterReturnValue(mh, MH_TO_LONG);
 				}
-				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
 				site.installGuardOrSwitchMegamorphic(test, mh.asType(site.type()));
 				return (long) mh.invoke(target);
 			} catch (Throwable ignored) {

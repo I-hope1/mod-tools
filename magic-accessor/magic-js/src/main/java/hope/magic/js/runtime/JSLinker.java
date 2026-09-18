@@ -55,6 +55,19 @@ public class JSLinker {
 	public static final MethodHandle MH_GET_INDEX_LIST;
 	public static final MethodHandle MH_GET_INDEX_OBJECT_ARRAY;
 	public static final MethodHandle MH_GET_INDEX_PRIMITIVE_ARRAY;
+	public static final MethodHandle MH_GET_INDEX_INT_ARRAY;
+	public static final MethodHandle MH_GET_INDEX_DOUBLE_ARRAY;
+	public static final MethodHandle MH_GET_INDEX_LONG_ARRAY;
+	public static final MethodHandle MH_GET_INDEX_MAP;
+
+	public static final MethodHandle MH_SET_INDEX_JS_ARRAY;
+	public static final MethodHandle MH_SET_INDEX_LIST;
+	public static final MethodHandle MH_SET_INDEX_OBJECT_ARRAY;
+	public static final MethodHandle MH_SET_INDEX_INT_ARRAY;
+	public static final MethodHandle MH_SET_INDEX_DOUBLE_ARRAY;
+	public static final MethodHandle MH_SET_INDEX_LONG_ARRAY;
+	public static final MethodHandle MH_SET_INDEX_PRIMITIVE_ARRAY;
+	public static final MethodHandle MH_SET_INDEX_MAP;
 	public static final MethodHandle MH_NEW_ARRAY_0;
 	public static final MethodHandle MH_NEW_ARRAY_1;
 	public static final MethodHandle MH_NEW_ARRAY_N;
@@ -89,6 +102,19 @@ public class JSLinker {
 			MH_GET_INDEX_LIST = LOOKUP.findStatic(JSLinker.class, "getIndexList", MethodType.methodType(Object.class, Object.class, Object.class));
 			MH_GET_INDEX_OBJECT_ARRAY = LOOKUP.findStatic(JSLinker.class, "getIndexObjectArray", MethodType.methodType(Object.class, Object.class, Object.class));
 			MH_GET_INDEX_PRIMITIVE_ARRAY = LOOKUP.findStatic(JSLinker.class, "getIndexPrimitiveArray", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_GET_INDEX_INT_ARRAY = LOOKUP.findStatic(JSLinker.class, "getIndexIntArray", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_GET_INDEX_DOUBLE_ARRAY = LOOKUP.findStatic(JSLinker.class, "getIndexDoubleArray", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_GET_INDEX_LONG_ARRAY = LOOKUP.findStatic(JSLinker.class, "getIndexLongArray", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_GET_INDEX_MAP = LOOKUP.findStatic(JSLinker.class, "getIndexMap", MethodType.methodType(Object.class, Object.class, Object.class));
+
+			MH_SET_INDEX_JS_ARRAY = LOOKUP.findStatic(JSLinker.class, "setIndexJSArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
+			MH_SET_INDEX_LIST = LOOKUP.findStatic(JSLinker.class, "setIndexList", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
+			MH_SET_INDEX_OBJECT_ARRAY = LOOKUP.findStatic(JSLinker.class, "setIndexObjectArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
+			MH_SET_INDEX_INT_ARRAY = LOOKUP.findStatic(JSLinker.class, "setIndexIntArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
+			MH_SET_INDEX_DOUBLE_ARRAY = LOOKUP.findStatic(JSLinker.class, "setIndexDoubleArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
+			MH_SET_INDEX_LONG_ARRAY = LOOKUP.findStatic(JSLinker.class, "setIndexLongArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
+			MH_SET_INDEX_PRIMITIVE_ARRAY = LOOKUP.findStatic(JSLinker.class, "setIndexPrimitiveArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
+			MH_SET_INDEX_MAP = LOOKUP.findStatic(JSLinker.class, "setIndexMap", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
 			MH_NEW_ARRAY_0 = LOOKUP.findStatic(JSLinker.class, "newArrayInstance0", MethodType.methodType(Object.class, Class.class));
 			MH_NEW_ARRAY_1 = LOOKUP.findStatic(JSLinker.class, "newArrayInstance1", MethodType.methodType(Object.class, Class.class, Object.class));
 			MH_NEW_ARRAY_N = LOOKUP.findStatic(JSLinker.class, "newArrayInstanceN", MethodType.methodType(Object.class, Class.class, Object[].class));
@@ -1160,7 +1186,14 @@ public class JSLinker {
 	 String name,
 	 MethodType type
 	) {
-		return new ConstantCallSite(IndexMH.SET.asType(type));
+		ChainedCallSite site = new ChainedCallSite(type, IndexMH.SET.asType(type));
+
+		// 绑定 Fallback 处理器
+		MethodHandle fallback = IndexMH.SET_FALLBACK.bindTo(site).asType(type);
+
+		site.setInitialFallback(fallback);
+		site.setTarget(fallback);
+		return site;
 	}
 	//endregion
 
@@ -1259,12 +1292,160 @@ public class JSLinker {
 			if (site.type().parameterCount() > 1) {
 				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
 			}
-			MethodHandle directTarget = (target instanceof Object[]) ? MH_GET_INDEX_OBJECT_ARRAY : MH_GET_INDEX_PRIMITIVE_ARRAY;
+			MethodHandle directTarget;
+			if (target instanceof Object[]) directTarget = MH_GET_INDEX_OBJECT_ARRAY;
+			else if (target instanceof int[]) directTarget = MH_GET_INDEX_INT_ARRAY;
+			else if (target instanceof double[]) directTarget = MH_GET_INDEX_DOUBLE_ARRAY;
+			else if (target instanceof long[]) directTarget = MH_GET_INDEX_LONG_ARRAY;
+			else directTarget = MH_GET_INDEX_PRIMITIVE_ARRAY;
+
 			site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
-			return (target instanceof Object[]) ? getIndexObjectArray(target, index) : getIndexPrimitiveArray(target, index);
+			if (target instanceof Object[]) return getIndexObjectArray(target, index);
+			if (target instanceof int[]) return getIndexIntArray(target, index);
+			if (target instanceof double[]) return getIndexDoubleArray(target, index);
+			if (target instanceof long[]) return getIndexLongArray(target, index);
+			return getIndexPrimitiveArray(target, index);
+		}
+		if (target instanceof Map) {
+			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
+			if (site.type().parameterCount() > 1) {
+				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+			}
+			site.installGuardOrSwitchMegamorphic(test, MH_GET_INDEX_MAP.asType(site.type()));
+			return getIndexMap(target, index);
 		}
 		// 降级走原有的全量查找
 		return getIndex(target, index);
+	}
+
+	/** 动态对象索引写入的通用 Fallback 入口 */
+	public static void setIndexDynamicFallback(ChainedCallSite site, Object target, Object index, Object value) throws Throwable {
+		if (target == null || target == JSUndefined.INSTANCE) return;
+		if (target instanceof JSContext.JSGlobalThis globalThis) {
+			globalThis.put(toPropertyKey(index), value);
+			return;
+		}
+		if (target instanceof JSObject jsObj) {
+			if (index instanceof String strKey) {
+				JSShape s      = jsObj.shape;
+				int     offset = s.getOffset(strKey);
+
+				if (offset >= 0 && (!s.hasAccessors || !s.isAccessor(offset)) && s.isWritable(offset) && site.getChainDepth() < 3) {
+					byte type = s.getSlotType(offset);
+					byte currentBaseType = (byte) (type & JSShape.TYPE_MASK);
+					byte newBaseType = (value instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
+					if (currentBaseType == newBaseType) {
+						boolean isDouble = currentBaseType == JSShape.TYPE_DOUBLE;
+						MethodHandle test = LOOKUP.findStatic(
+							JSLinker.class,
+							"isExactShapeAndStringKey",
+							MethodType.methodType(boolean.class, JSShape.class, String.class, Object.class, Object.class)
+						).bindTo(s).bindTo(strKey);
+						test = MethodHandles.dropArguments(test, 2, Object.class);
+
+						MethodHandle directSlotSetter;
+						if (offset < 8) {
+							directSlotSetter = isDouble ? MH_SET_SLOT_DOUBLE_AS_OBJ[offset] : MH_SET_SLOT_OBJECT[offset];
+						} else {
+							directSlotSetter = isDouble
+								? MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT_DOUBLE_AS_OBJ, 0, offset)
+								: MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT, 0, offset);
+						}
+						MethodHandle directTarget = MethodHandles.dropArguments(directSlotSetter, 1, Object.class);
+						site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
+						if (isDouble) {
+							jsObj.setDoubleSlot(offset, JSOps.toDouble(value));
+						} else {
+							jsObj.setSlot(offset, value);
+						}
+						return;
+					}
+				}
+			} else if (index instanceof JSSymbol symKey) {
+				JSShape s      = jsObj.shape;
+				int     offset = s.getOffset(symKey.getSymbolId());
+
+				if (offset >= 0 && (!s.hasAccessors || !s.isAccessor(offset)) && s.isWritable(offset) && site.getChainDepth() < 3) {
+					byte type = s.getSlotType(offset);
+					byte currentBaseType = (byte) (type & JSShape.TYPE_MASK);
+					byte newBaseType = (value instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
+					if (currentBaseType == newBaseType) {
+						boolean isDouble = currentBaseType == JSShape.TYPE_DOUBLE;
+						MethodHandle test = LOOKUP.findStatic(
+							JSLinker.class,
+							"isExactShapeAndSymbol",
+							MethodType.methodType(boolean.class, JSShape.class, JSSymbol.class, Object.class, Object.class)
+						).bindTo(s).bindTo(symKey);
+						test = MethodHandles.dropArguments(test, 2, Object.class);
+
+						MethodHandle directSlotSetter;
+						if (offset < 8) {
+							directSlotSetter = isDouble ? MH_SET_SLOT_DOUBLE_AS_OBJ[offset] : MH_SET_SLOT_OBJECT[offset];
+						} else {
+							directSlotSetter = isDouble
+								? MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT_DOUBLE_AS_OBJ, 0, offset)
+								: MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT, 0, offset);
+						}
+						MethodHandle directTarget = MethodHandles.dropArguments(directSlotSetter, 1, Object.class);
+						site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
+						if (isDouble) {
+							jsObj.setDoubleSlot(offset, JSOps.toDouble(value));
+						} else {
+							jsObj.setSlot(offset, value);
+						}
+						return;
+					}
+				}
+			}
+		}
+		if (target instanceof JSArray) {
+			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
+			if (site.type().parameterCount() > 1) {
+				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+			}
+			site.installGuardOrSwitchMegamorphic(test, MH_SET_INDEX_JS_ARRAY.asType(site.type()));
+			setIndexJSArray(target, index, value);
+			return;
+		}
+		if (target instanceof List) {
+			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
+			if (site.type().parameterCount() > 1) {
+				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+			}
+			site.installGuardOrSwitchMegamorphic(test, MH_SET_INDEX_LIST.asType(site.type()));
+			setIndexList(target, index, value);
+			return;
+		}
+		if (target != null && target.getClass().isArray()) {
+			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
+			if (site.type().parameterCount() > 1) {
+				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+			}
+			MethodHandle directTarget;
+			if (target instanceof Object[]) directTarget = MH_SET_INDEX_OBJECT_ARRAY;
+			else if (target instanceof int[]) directTarget = MH_SET_INDEX_INT_ARRAY;
+			else if (target instanceof double[]) directTarget = MH_SET_INDEX_DOUBLE_ARRAY;
+			else if (target instanceof long[]) directTarget = MH_SET_INDEX_LONG_ARRAY;
+			else directTarget = MH_SET_INDEX_PRIMITIVE_ARRAY;
+
+			site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
+			if (target instanceof Object[]) setIndexObjectArray(target, index, value);
+			else if (target instanceof int[]) setIndexIntArray(target, index, value);
+			else if (target instanceof double[]) setIndexDoubleArray(target, index, value);
+			else if (target instanceof long[]) setIndexLongArray(target, index, value);
+			else setIndexPrimitiveArray(target, index, value);
+			return;
+		}
+		if (target instanceof Map) {
+			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
+			if (site.type().parameterCount() > 1) {
+				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+			}
+			site.installGuardOrSwitchMegamorphic(test, MH_SET_INDEX_MAP.asType(site.type()));
+			setIndexMap(target, index, value);
+			return;
+		}
+		setIndex(target, index, value);
 	}
 
 	public static Object getPropMegamorphic(ChainedCallSite site, Object target, String propName) {
@@ -3952,6 +4133,221 @@ public class JSLinker {
 			return getArrayElement(target, idx);
 		}
 		return JSUndefined.INSTANCE;
+	}
+
+	public static Object getIndexIntArray(Object target, Object index) {
+		int[] a = (int[]) target;
+		int idx = -1;
+		if (index instanceof Integer i) {
+			idx = i.intValue();
+		} else if (index instanceof Double d) {
+			double val = d.doubleValue();
+			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
+				idx = (int) val;
+			}
+		} else {
+			Integer validIdx = JSArray.toValidJavaArrayIndex(index);
+			if (validIdx != null) idx = validIdx;
+		}
+		return (idx >= 0 && idx < a.length) ? (double) a[idx] : JSUndefined.INSTANCE;
+	}
+
+	public static Object getIndexDoubleArray(Object target, Object index) {
+		double[] a = (double[]) target;
+		int idx = -1;
+		if (index instanceof Integer i) {
+			idx = i.intValue();
+		} else if (index instanceof Double d) {
+			double val = d.doubleValue();
+			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
+				idx = (int) val;
+			}
+		} else {
+			Integer validIdx = JSArray.toValidJavaArrayIndex(index);
+			if (validIdx != null) idx = validIdx;
+		}
+		return (idx >= 0 && idx < a.length) ? a[idx] : JSUndefined.INSTANCE;
+	}
+
+	public static Object getIndexLongArray(Object target, Object index) {
+		long[] a = (long[]) target;
+		int idx = -1;
+		if (index instanceof Integer i) {
+			idx = i.intValue();
+		} else if (index instanceof Double d) {
+			double val = d.doubleValue();
+			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
+				idx = (int) val;
+			}
+		} else {
+			Integer validIdx = JSArray.toValidJavaArrayIndex(index);
+			if (validIdx != null) idx = validIdx;
+		}
+		return (idx >= 0 && idx < a.length) ? (double) a[idx] : JSUndefined.INSTANCE;
+	}
+
+	public static Object getIndexMap(Object target, Object index) {
+		Map<?, ?> map = (Map<?, ?>) target;
+		Object val = map.get(index);
+		if (val == null && !map.containsKey(index)) {
+			val = map.get(toPropertyKey(index));
+		}
+		return val == null && !map.containsKey(index) ? JSUndefined.INSTANCE : val;
+	}
+
+	public static void setIndexJSArray(Object target, Object index, Object value) {
+		JSArray jsArr = (JSArray) target;
+		if (index instanceof Integer i) {
+			int val = i.intValue();
+			if (val >= 0) {
+				jsArr.setElement(val, value);
+				return;
+			}
+		} else if (index instanceof Double d) {
+			double val = d.doubleValue();
+			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
+				jsArr.setElement((int) val, value);
+				return;
+			}
+		}
+		Long idx = JSArray.toValidArrayIndex(index);
+		if (idx != null) {
+			jsArr.setElement(idx, value);
+			return;
+		}
+		jsArr.put(JSArray.toPropertyKey(index), value);
+	}
+
+	public static void setIndexList(Object target, Object index, Object value) {
+		List<Object> list = (List<Object>) target;
+		int idx = -1;
+		if (index instanceof Integer i) {
+			idx = i.intValue();
+		} else if (index instanceof Double d) {
+			double val = d.doubleValue();
+			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
+				idx = (int) val;
+			}
+		} else {
+			Integer validIdx = JSArray.toValidJavaArrayIndex(index);
+			if (validIdx != null) idx = validIdx;
+		}
+		if (idx >= 0) {
+			if (idx < list.size()) {
+				list.set(idx, value);
+			} else if (idx <= list.size() + 1024 && idx < 65536) {
+				while (list.size() <= idx) list.add(null);
+				list.set(idx, value);
+			}
+		}
+	}
+
+	public static void setIndexObjectArray(Object target, Object index, Object value) {
+		Object[] a = (Object[]) target;
+		int idx = -1;
+		if (index instanceof Integer i) {
+			idx = i.intValue();
+		} else if (index instanceof Double d) {
+			double val = d.doubleValue();
+			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
+				idx = (int) val;
+			}
+		} else {
+			Integer validIdx = JSArray.toValidJavaArrayIndex(index);
+			if (validIdx != null) idx = validIdx;
+		}
+		if (idx >= 0 && idx < a.length) {
+			a[idx] = value;
+		}
+	}
+
+	public static void setIndexIntArray(Object target, Object index, Object value) {
+		int[] a = (int[]) target;
+		int idx = -1;
+		if (index instanceof Integer i) {
+			idx = i.intValue();
+		} else if (index instanceof Double d) {
+			double val = d.doubleValue();
+			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
+				idx = (int) val;
+			}
+		} else {
+			Integer validIdx = JSArray.toValidJavaArrayIndex(index);
+			if (validIdx != null) idx = validIdx;
+		}
+		if (idx >= 0 && idx < a.length) {
+			a[idx] = JSOps.toInt(value);
+		}
+	}
+
+	public static void setIndexDoubleArray(Object target, Object index, Object value) {
+		double[] a = (double[]) target;
+		int idx = -1;
+		if (index instanceof Integer i) {
+			idx = i.intValue();
+		} else if (index instanceof Double d) {
+			double val = d.doubleValue();
+			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
+				idx = (int) val;
+			}
+		} else {
+			Integer validIdx = JSArray.toValidJavaArrayIndex(index);
+			if (validIdx != null) idx = validIdx;
+		}
+		if (idx >= 0 && idx < a.length) {
+			a[idx] = JSOps.toDouble(value);
+		}
+	}
+
+	public static void setIndexLongArray(Object target, Object index, Object value) {
+		long[] a = (long[]) target;
+		int idx = -1;
+		if (index instanceof Integer i) {
+			idx = i.intValue();
+		} else if (index instanceof Double d) {
+			double val = d.doubleValue();
+			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
+				idx = (int) val;
+			}
+		} else {
+			Integer validIdx = JSArray.toValidJavaArrayIndex(index);
+			if (validIdx != null) idx = validIdx;
+		}
+		if (idx >= 0 && idx < a.length) {
+			a[idx] = JSOps.toLong(value);
+		}
+	}
+
+	public static void setIndexPrimitiveArray(Object target, Object index, Object value) {
+		int idx = -1;
+		if (index instanceof Integer i) {
+			idx = i.intValue();
+		} else if (index instanceof Double d) {
+			double val = d.doubleValue();
+			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
+				idx = (int) val;
+			}
+		} else {
+			Integer validIdx = JSArray.toValidJavaArrayIndex(index);
+			if (validIdx != null) idx = validIdx;
+		}
+		if (idx >= 0) {
+			setArrayElement(target, idx, value);
+		}
+	}
+
+	public static void setIndexMap(Object target, Object index, Object value) {
+		Map<Object, Object> map = (Map<Object, Object>) target;
+		if (map.containsKey(index)) {
+			map.put(index, value);
+			return;
+		}
+		String strKey = toPropertyKey(index);
+		if (map.containsKey(strKey)) {
+			map.put(strKey, value);
+			return;
+		}
+		map.put(index, value);
 	}
 
 	@SuppressWarnings("RedundantIfStatement")

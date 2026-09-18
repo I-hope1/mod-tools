@@ -6,7 +6,10 @@ import hope.magic.js.runtime.JSUndefined;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.lang.invoke.CallSite;
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 
 /**
@@ -132,9 +135,9 @@ public class JavaInteropBugVerificationTest {
 		Assertions.assertInstanceOf(SimpleConstructorTarget.class, created);
 
 		// 直接测试 bootstrapNew 返回的 CallSite 在 newFallback 执行后的守卫安装情况
-		java.lang.invoke.MethodType type = java.lang.invoke.MethodType.methodType(Object.class, Object.class);
+		MethodType type = MethodType.methodType(Object.class, Object.class);
 		hope.magic.js.runtime.ChainedCallSite site = (hope.magic.js.runtime.ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapNew(
-			java.lang.invoke.MethodHandles.lookup(), "new", type
+			MethodHandles.lookup(), "new", type
 		);
 		Assertions.assertEquals(0, site.getChainDepth(), "Initial chainDepth must be 0");
 		// 首次调用 new SimpleConstructorTarget()
@@ -151,9 +154,9 @@ public class JavaInteropBugVerificationTest {
 	@Test
 	public void testBug2_2_JavaBeanGetterSetterMissingGuard() throws Throwable {
 		BeanTarget bean = new BeanTarget();
-		java.lang.invoke.MethodType getterType = java.lang.invoke.MethodType.methodType(Object.class, Object.class);
+		MethodType getterType = MethodType.methodType(Object.class, Object.class);
 		hope.magic.js.runtime.ChainedCallSite getSite = (hope.magic.js.runtime.ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapGetProp(
-			java.lang.invoke.MethodHandles.lookup(), "getProp", getterType, "displayName"
+			MethodHandles.lookup(), "getProp", getterType, "displayName"
 		);
 		Assertions.assertEquals(0, getSite.getChainDepth());
 		Object val = getSite.getTarget().invokeExact((Object) bean);
@@ -162,9 +165,9 @@ public class JavaInteropBugVerificationTest {
 		System.out.println("[Bug 2.2 现象] getSite.getChainDepth()=" + getSite.getChainDepth());
 		Assertions.assertTrue(getSite.getChainDepth() > 0, "JavaBean getter CallSite must install Guard!");
 
-		java.lang.invoke.MethodType setterType = java.lang.invoke.MethodType.methodType(void.class, Object.class, Object.class);
+		MethodType setterType = MethodType.methodType(void.class, Object.class, Object.class);
 		hope.magic.js.runtime.ChainedCallSite setSite = (hope.magic.js.runtime.ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapSetProp(
-			java.lang.invoke.MethodHandles.lookup(), "setProp", setterType, "displayName"
+			MethodHandles.lookup(), "setProp", setterType, "displayName"
 		);
 		Assertions.assertEquals(0, setSite.getChainDepth());
 		setSite.getTarget().invokeExact((Object) bean, (Object) "updated");
@@ -239,9 +242,9 @@ public class JavaInteropBugVerificationTest {
 	@Test
 	public void testBug4_1_JavaArrayLengthCallSiteGuardMissing() throws Throwable {
 		String[] arr = new String[]{"a", "b", "c"};
-		java.lang.invoke.MethodType getterType = java.lang.invoke.MethodType.methodType(Object.class, Object.class);
+		MethodType getterType = MethodType.methodType(Object.class, Object.class);
 		ChainedCallSite site = (ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapGetProp(
-			java.lang.invoke.MethodHandles.lookup(), "getProp", getterType, "length"
+			MethodHandles.lookup(), "getProp", getterType, "length"
 		);
 		Assertions.assertEquals(0, site.getChainDepth(), "Initial chainDepth must be 0");
 		Object len = site.getTarget().invokeExact((Object) arr);
@@ -255,12 +258,12 @@ public class JavaInteropBugVerificationTest {
 	 */
 	@Test
 	public void testBug4_2_JavaCollectionAndArrayIndexGuardMissing() throws Throwable {
-		java.lang.invoke.MethodType indexType = java.lang.invoke.MethodType.methodType(Object.class, Object.class, Object.class);
+		MethodType indexType = MethodType.methodType(Object.class, Object.class, Object.class);
 
 		// 1. 测试 List 索引
 		java.util.List<String> list = java.util.List.of("x", "y", "z");
 		ChainedCallSite listSite = (ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapGetIndex(
-			java.lang.invoke.MethodHandles.lookup(), "getIndex", indexType
+			MethodHandles.lookup(), "getIndex", indexType
 		);
 		Assertions.assertEquals(0, listSite.getChainDepth(), "Initial list site chainDepth must be 0");
 		Object item = listSite.getTarget().invokeExact((Object) list, (Object) 1);
@@ -271,7 +274,7 @@ public class JavaInteropBugVerificationTest {
 		// 2. 测试 Java 原生数组索引
 		int[] intArr = new int[]{10, 20, 30};
 		ChainedCallSite arrSite = (ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapGetIndex(
-			java.lang.invoke.MethodHandles.lookup(), "getIndex", indexType
+			MethodHandles.lookup(), "getIndex", indexType
 		);
 		Assertions.assertEquals(0, arrSite.getChainDepth(), "Initial arr site chainDepth must be 0");
 		Object arrItem = arrSite.getTarget().invokeExact((Object) intArr, (Object) 2);
@@ -349,9 +352,9 @@ public class JavaInteropBugVerificationTest {
 		NumericBeanTarget bean = new NumericBeanTarget();
 
 		// 1. 测试 JavaBean double setter
-		java.lang.invoke.MethodType setterType = java.lang.invoke.MethodType.methodType(void.class, Object.class, double.class);
+		MethodType setterType = MethodType.methodType(void.class, Object.class, double.class);
 		ChainedCallSite propSite = (ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapSetPropDouble(
-			java.lang.invoke.MethodHandles.lookup(), "setProp", setterType, "price"
+			MethodHandles.lookup(), "setProp", setterType, "price"
 		);
 		Assertions.assertEquals(0, propSite.getChainDepth(), "Initial chainDepth must be 0");
 		propSite.getTarget().invokeExact((Object) bean, 99.5);
@@ -361,7 +364,7 @@ public class JavaInteropBugVerificationTest {
 
 		// 2. 测试 Java double field
 		ChainedCallSite fieldSite = (ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapSetPropDouble(
-			java.lang.invoke.MethodHandles.lookup(), "setProp", setterType, "amount"
+			MethodHandles.lookup(), "setProp", setterType, "amount"
 		);
 		Assertions.assertEquals(0, fieldSite.getChainDepth(), "Initial chainDepth must be 0");
 		fieldSite.getTarget().invokeExact((Object) bean, 123.45);
@@ -393,9 +396,9 @@ public class JavaInteropBugVerificationTest {
 	public void testBug7_VoidOrRegularMethodMistakenAsGetter() throws Throwable {
 		ActionTarget target = new ActionTarget();
 
-		java.lang.invoke.MethodType getterType = java.lang.invoke.MethodType.methodType(Object.class, Object.class);
+		MethodType getterType = MethodType.methodType(Object.class, Object.class);
 		ChainedCallSite site = (ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapGetProp(
-			java.lang.invoke.MethodHandles.lookup(), "getProp", getterType, "execute"
+			MethodHandles.lookup(), "getProp", getterType, "execute"
 		);
 
 		// 1. 仅仅读取属性 "execute"，不应立即执行 void execute() 方法！
@@ -411,7 +414,7 @@ public class JavaInteropBugVerificationTest {
 
 		// 3. 验证标准 JavaBean getter 正常工作
 		ChainedCallSite infoSite = (ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapGetProp(
-			java.lang.invoke.MethodHandles.lookup(), "getProp", getterType, "info"
+			MethodHandles.lookup(), "getProp", getterType, "info"
 		);
 		Object infoVal = infoSite.getTarget().invokeExact((Object) target);
 		Assertions.assertEquals("valid-info", infoVal);
@@ -419,7 +422,7 @@ public class JavaInteropBugVerificationTest {
 		// 4. 验证 Record 类组件属性正常作为 getter 工作
 		SampleRecord record = new SampleRecord("hello-record", 42);
 		ChainedCallSite recordSite = (ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapGetProp(
-			java.lang.invoke.MethodHandles.lookup(), "getProp", getterType, "title"
+			MethodHandles.lookup(), "getProp", getterType, "title"
 		);
 		Object titleVal = recordSite.getTarget().invokeExact((Object) record);
 		Assertions.assertEquals("hello-record", titleVal);
@@ -481,9 +484,9 @@ public class JavaInteropBugVerificationTest {
 	 */
 	@Test
 	public void testBug9_StaticMethodCallSiteGuardAlwaysFails() throws Throwable {
-		java.lang.invoke.MethodType type = java.lang.invoke.MethodType.methodType(Object.class, Object.class, Object.class, Object.class);
+		MethodType type = MethodType.methodType(Object.class, Object.class, Object.class, Object.class);
 		ChainedCallSite site = (ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapInvoke(
-			java.lang.invoke.MethodHandles.lookup(), "invoke", type, "max"
+			MethodHandles.lookup(), "invoke", type, "max"
 		);
 		Assertions.assertEquals(0, site.getChainDepth(), "Initial chainDepth must be 0");
 
@@ -665,6 +668,70 @@ public class JavaInteropBugVerificationTest {
 			op.applyAsInt(4, 2);
 		""");
 		Assertions.assertEquals(42, ((Number) primRes).intValue());
+	}
+
+	/**
+	 * 验证缺陷 13: setIndex 静态退化为 ConstantCallSite 且缺少 Inline Cache 守卫：
+	 * 1. bootstrapSetIndex 返回 ConstantCallSite 而非 ChainedCallSite，导致无法内联缓存；
+	 * 2. 密集写入数组与集合（如 int[]、Object[]、List、JSArray、Map）时无法单态/多态特化；
+	 * 3. getIndex 缺少 Map 的特化内联缓存守卫。
+	 */
+	@Test
+	public void testBug13_SetIndexInlineCacheAndPerformance() throws Throwable {
+		MethodType setType = MethodType.methodType(void.class, Object.class, Object.class, Object.class);
+		MethodType getType = MethodType.methodType(Object.class, Object.class, Object.class);
+
+		// 1. 验证 bootstrapSetIndex 返回的是可演化的 ChainedCallSite
+		CallSite rawSetSite = hope.magic.js.runtime.JSLinker.bootstrapSetIndex(
+			MethodHandles.lookup(), "setIndex", setType
+		);
+		Assertions.assertTrue(rawSetSite instanceof ChainedCallSite,
+			"bootstrapSetIndex must return ChainedCallSite instead of ConstantCallSite!");
+
+		ChainedCallSite setSite = (ChainedCallSite) rawSetSite;
+		Assertions.assertEquals(0, setSite.getChainDepth(), "Initial chainDepth of setIndex site must be 0");
+
+		// 2. 验证原生 int[] 写入特化并挂载 Guard
+		int[] intArr = new int[5];
+		setSite.getTarget().invokeExact((Object) intArr, (Object) 0, (Object) 42);
+		Assertions.assertEquals(42, intArr[0]);
+		Assertions.assertTrue(setSite.getChainDepth() > 0, "setIndex CallSite must install Guard for int[]!");
+
+		// 3. 验证 List 写入特化并挂载 Guard
+		java.util.List<Object> list = new java.util.ArrayList<>(java.util.List.of("a", "b"));
+		setSite.getTarget().invokeExact((Object) list, (Object) 1, (Object) "updated");
+		Assertions.assertEquals("updated", list.get(1));
+		Assertions.assertTrue(setSite.getChainDepth() >= 2, "setIndex CallSite must install Guard for List!");
+
+		// 4. 验证 Map 写入特化并挂载 Guard
+		java.util.Map<String, Object> map = new java.util.HashMap<>();
+		setSite.getTarget().invokeExact((Object) map, (Object) "key1", (Object) "val1");
+		Assertions.assertEquals("val1", map.get("key1"));
+
+		// 5. 验证 getIndex 对 Map 挂载 Guard
+		CallSite rawGetSite = hope.magic.js.runtime.JSLinker.bootstrapGetIndex(
+			MethodHandles.lookup(), "getIndex", getType
+		);
+		Assertions.assertTrue(rawGetSite instanceof ChainedCallSite, "bootstrapGetIndex must return ChainedCallSite");
+		ChainedCallSite getSite = (ChainedCallSite) rawGetSite;
+		Object mapVal = getSite.getTarget().invokeExact((Object) map, (Object) "key1");
+		Assertions.assertEquals("val1", mapVal);
+		Assertions.assertTrue(getSite.getChainDepth() > 0, "getIndex CallSite must install Guard for Map!");
+
+		// 6. 验证在 JSContext 中执行高频数组循环读写正确性
+		JSContext cx = new JSContext();
+		Object sum = cx.eval("""
+			var arr = new (Java.type("int[]"))(100);
+			for (var i = 0; i < 100; i++) {
+				arr[i] = i * 2;
+			}
+			var s = 0;
+			for (var i = 0; i < 100; i++) {
+				s += arr[i];
+			}
+			s;
+		""");
+		Assertions.assertEquals(9900.0, ((Number) sum).doubleValue());
 	}
 }
 

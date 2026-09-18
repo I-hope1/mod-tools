@@ -985,6 +985,74 @@ public class JavaInteropBugVerificationTest {
 		Object tornOff2 = site.getTarget().invokeExact((Object) testList);
 		Assertions.assertInstanceOf(JSFunction.class, tornOff2);
 	}
+
+	@Test
+	public void testBug17_JavaCollectionAndStreamIterationInterop() throws Throwable {
+		JSContext cx = new JSContext();
+
+		// 1. 验证 Java Map 的 for..of 解构迭代 ([k, v] of map) 与 Map.Entry 索引访问
+		cx.eval("""
+			const map = new (Java.type('java.util.LinkedHashMap'))();
+			map.put("alpha", 100);
+			map.put("beta", 200);
+
+			const keys = [];
+			const values = [];
+			for (const [k, v] of map) {
+				keys.push(k);
+				values.push(v);
+			}
+
+			const entry = map.entrySet().iterator().next();
+			const entryIdx0 = entry[0];
+			const entryIdx1 = entry[1];
+			const entryLen = entry.length;
+			const entryKey = entry.key;
+			const entryVal = entry.value;
+		""");
+
+		Assertions.assertEquals("alpha", cx.eval("keys[0]"));
+		Assertions.assertEquals("beta", cx.eval("keys[1]"));
+		Assertions.assertEquals(100.0, ((Number) cx.eval("values[0]")).doubleValue());
+		Assertions.assertEquals(200.0, ((Number) cx.eval("values[1]")).doubleValue());
+		Assertions.assertEquals("alpha", cx.get("entryIdx0"));
+		Assertions.assertEquals(100.0, ((Number) cx.get("entryIdx1")).doubleValue());
+		Assertions.assertEquals(2.0, ((Number) cx.get("entryLen")).doubleValue());
+		Assertions.assertEquals("alpha", cx.get("entryKey"));
+		Assertions.assertEquals(100.0, ((Number) cx.get("entryVal")).doubleValue());
+
+		// 2. 验证 Java Stream 直接在 for..of 中迭代
+		cx.eval("""
+			const list = new (Java.type('java.util.ArrayList'))();
+			list.add("apple");
+			list.add("banana");
+			list.add("cherry");
+			list.add("avocado");
+
+			const streamRes = [];
+			for (const s of list.stream().filter(x => x.startsWith("a"))) {
+				streamRes.push(s);
+			}
+		""");
+		Assertions.assertEquals(2, ((Number) cx.eval("streamRes.length")).intValue());
+		Assertions.assertEquals("apple", cx.eval("streamRes[0]"));
+		Assertions.assertEquals("avocado", cx.eval("streamRes[1]"));
+
+		// 3. 验证 Java Enumeration 直接在 for..of 中迭代
+		cx.eval("""
+			const vector = new (Java.type('java.util.Vector'))();
+			vector.add("first");
+			vector.add("second");
+
+			const enumRes = [];
+			for (const item of vector.elements()) {
+				enumRes.push(item);
+			}
+		""");
+		Assertions.assertEquals(2, ((Number) cx.eval("enumRes.length")).intValue());
+		Assertions.assertEquals("first", cx.eval("enumRes[0]"));
+		Assertions.assertEquals("second", cx.eval("enumRes[1]"));
+	}
 }
 
 

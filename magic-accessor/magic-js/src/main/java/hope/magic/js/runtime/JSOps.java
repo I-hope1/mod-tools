@@ -778,6 +778,18 @@ public class JSOps {
 		if (target instanceof java.util.Map<?, ?> map) {
 			return map.entrySet().iterator();
 		}
+		if (target instanceof java.util.Map.Entry<?, ?> entry) {
+			return java.util.List.of(entry.getKey(), entry.getValue()).iterator();
+		}
+		if (target instanceof java.util.stream.BaseStream<?, ?> stream) {
+			return stream.iterator();
+		}
+		if (target instanceof java.util.Enumeration<?> en) {
+			return en.asIterator();
+		}
+		if (target instanceof java.util.Optional<?> opt) {
+			return opt.stream().iterator();
+		}
 
 		throw JSContext.makeTypeError(toStr(target) + " is not iterable");
 	}

@@ -106,7 +106,7 @@ public final class MethodResolver {
 			}
 		}
 
-		return bestMethod;
+		return getAccessibleMethod(bestMethod);
 	}
 	public static final class MethodKey {
 		public final Class<?> clazz;
@@ -230,6 +230,50 @@ public final class MethodResolver {
 		}
 	}
 
+	public static Method getAccessibleMethod(Method method) {
+		if (method == null) return null;
+		if (Modifier.isPublic(method.getModifiers()) && Modifier.isPublic(method.getDeclaringClass().getModifiers())) {
+			return method;
+		}
+		Class<?> declaringClass = method.getDeclaringClass();
+		String methodName = method.getName();
+		Class<?>[] paramTypes = method.getParameterTypes();
+
+		Method m = getAccessibleMethodFromInterfaceNest(declaringClass, methodName, paramTypes);
+		if (m != null) return m;
+
+		Class<?> curr = declaringClass.getSuperclass();
+		while (curr != null) {
+			if (Modifier.isPublic(curr.getModifiers())) {
+				try {
+					Method candidate = curr.getMethod(methodName, paramTypes);
+					if (Modifier.isPublic(candidate.getModifiers())) {
+						return candidate;
+					}
+				} catch (NoSuchMethodException ignored) {
+				}
+			}
+			curr = curr.getSuperclass();
+		}
+		return method;
+	}
+
+	private static Method getAccessibleMethodFromInterfaceNest(Class<?> targetClass, String methodName, Class<?>[] paramTypes) {
+		for (Class<?> curr = targetClass; curr != null; curr = curr.getSuperclass()) {
+			for (Class<?> iface : curr.getInterfaces()) {
+				if (Modifier.isPublic(iface.getModifiers())) {
+					try {
+						return iface.getMethod(methodName, paramTypes);
+					} catch (NoSuchMethodException ignored) {
+					}
+					Method m = getAccessibleMethodFromInterfaceNest(iface, methodName, paramTypes);
+					if (m != null) return m;
+				}
+			}
+		}
+		return null;
+	}
+
 	/**
 	 * 按类、方法名与参数个数精确查找方法（优先 declared，后 public，匹配 static/instance 语义）。
 	 */
@@ -307,14 +351,19 @@ public final class MethodResolver {
 		for (Method m : clazz.getMethods()) {
 			if (m.getName().equals(methodName)) {
 				trySetAccessible(m);
-				list.add(m);
+				Method accessible = getAccessibleMethod(m);
+				if (!list.contains(accessible)) {
+					list.add(accessible);
+				}
 			}
 		}
 		try {
 			for (Method m : clazz.getDeclaredMethods()) {
-				if (m.getName().equals(methodName) && !list.contains(m)) {
-					if (trySetAccessible(m)) {
-						list.add(m);
+				if (m.getName().equals(methodName)) {
+					trySetAccessible(m);
+					Method accessible = getAccessibleMethod(m);
+					if (!list.contains(accessible)) {
+						list.add(accessible);
 					}
 				}
 			}
@@ -545,6 +594,7 @@ public final class MethodResolver {
 			} catch (Throwable ignored) {}
 		}
 		if (found != null) {
+			found = getAccessibleMethod(found);
 			data.getterCache.put(propName, found);
 		}
 		return found;
@@ -592,6 +642,7 @@ public final class MethodResolver {
 			} catch (Throwable ignored) {}
 		}
 		if (found != null) {
+			found = getAccessibleMethod(found);
 			data.setterCache.put(propName, found);
 		}
 		return found;

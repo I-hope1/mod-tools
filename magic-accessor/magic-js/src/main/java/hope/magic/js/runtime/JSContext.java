@@ -631,6 +631,27 @@ public class JSContext {
 					}
 					return obj;
 				}
+				if (arg instanceof Map.Entry<?, ?> entry) {
+					JSArray jsArr = new JSArray(2);
+					jsArr.push(entry.getKey());
+					jsArr.push(entry.getValue());
+					return jsArr;
+				}
+				if (arg instanceof java.util.stream.BaseStream<?, ?> stream) {
+					JSArray jsArr = new JSArray();
+					java.util.Iterator<?> it = stream.iterator();
+					while (it.hasNext()) {
+						jsArr.push(it.next());
+					}
+					return jsArr;
+				}
+				if (arg instanceof java.util.Enumeration<?> en) {
+					JSArray jsArr = new JSArray();
+					while (en.hasMoreElements()) {
+						jsArr.push(en.nextElement());
+					}
+					return jsArr;
+				}
 				return arg;
 			});
 

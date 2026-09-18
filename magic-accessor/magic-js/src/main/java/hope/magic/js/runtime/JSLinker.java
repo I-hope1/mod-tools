@@ -1738,6 +1738,12 @@ public class JSLinker {
 			return v == null ? JSUndefined.INSTANCE : v;
 		}
 
+		if (target instanceof Map.Entry<?, ?> entry) {
+			if ("length".equals(propName) || "size".equals(propName)) return 2.0;
+			if ("0".equals(propName) || "key".equals(propName)) return entry.getKey();
+			if ("1".equals(propName) || "value".equals(propName)) return entry.getValue();
+		}
+
 		if (target.getClass().isArray() && "length".equals(propName)) {
 			return (double) java.lang.reflect.Array.getLength(target);
 		}
@@ -1992,6 +1998,12 @@ public class JSLinker {
 		if (target instanceof Map) {
 			Object v = ((Map<?, ?>) target).get(propName);
 			return v == null ? JSUndefined.INSTANCE : v;
+		}
+
+		if (target instanceof Map.Entry<?, ?> entry) {
+			if ("length".equals(propName) || "size".equals(propName)) return 2.0;
+			if ("0".equals(propName) || "key".equals(propName)) return entry.getKey();
+			if ("1".equals(propName) || "value".equals(propName)) return entry.getValue();
 		}
 
 		if (target.getClass().isArray()) {
@@ -2916,7 +2928,10 @@ public class JSLinker {
 	}
 
 	private static Object invokeMatchedMethod(Object target, Method targetMethod, Object[] args, Class<?> clazz, String methodName) throws Throwable {
-		targetMethod.setAccessible(true);
+		try {
+			targetMethod.setAccessible(true);
+		} catch (Throwable ignored) {
+		}
 		Class<?>[] paramTypes = targetMethod.getParameterTypes();
 		boolean isVoid = (targetMethod.getReturnType() == void.class);
 
@@ -3131,7 +3146,10 @@ public class JSLinker {
 		Method targetMethod = MethodResolver.findBestMatchingMethod(clazz, methodName, args);
 
 		if (targetMethod != null) {
-			targetMethod.setAccessible(true);
+			try {
+				targetMethod.setAccessible(true);
+			} catch (Throwable ignored) {
+			}
 
 			int sameArityCandidates = 0;
 			for (Method m : MethodResolver.findCandidateMethods(clazz, methodName)) {
@@ -3989,6 +4007,11 @@ public class JSLinker {
 		}
 		if (target instanceof Map map) {
 			return map.get(index);
+		}
+		if (target instanceof Map.Entry<?, ?> entry) {
+			if (index == 0) return entry.getKey();
+			if (index == 1) return entry.getValue();
+			return JSUndefined.INSTANCE;
 		}
 		return getPropGeneric(target, fastIntToString(index));
 	}
@@ -4916,9 +4939,12 @@ public class JSLinker {
 		MethodHandle      cached = data.methodSpreaderCache.get(key);
 		if (cached != null) return cached;
 
-		Method targetMethod = MethodResolver.findMethod(clazz, methodName, arity, isStatic);
+		Method targetMethod = MethodResolver.getAccessibleMethod(MethodResolver.findMethod(clazz, methodName, arity, isStatic));
 		if (targetMethod == null) return null;
-		targetMethod.setAccessible(true);
+		try {
+			targetMethod.setAccessible(true);
+		} catch (Throwable ignored) {
+		}
 		try {
 			MethodHandle mh         = Magic.lookup.unreflect(targetMethod);
 			MethodHandle adapted    = isStatic ? MethodHandles.dropArguments(mh, 0, Object.class) : mh;

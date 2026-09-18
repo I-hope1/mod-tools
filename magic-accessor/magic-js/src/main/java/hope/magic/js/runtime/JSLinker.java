@@ -37,6 +37,7 @@ public class JSLinker {
 	public static final MethodHandle MH_TO_STRING;
 	public static final MethodHandle MH_TO_INTERFACE;
 	public static final MethodHandle MH_IS_EXACT_CLASS;
+	public static final MethodHandle MH_IS_EXACT_CLASS_AND_ARGS;
 	public static final MethodHandle MH_IS_EXACT_SHAPE;
 	public static final MethodHandle MH_IS_EXACT_SHAPE_AND_PROTO;
 	public static final MethodHandle MH_IS_SAME_OBJECT;
@@ -60,6 +61,7 @@ public class JSLinker {
 			MH_TO_STRING = LOOKUP.findStatic(JSOps.class, "toStr", MethodType.methodType(String.class, Object.class));
 			MH_TO_INTERFACE = LOOKUP.findStatic(JSOps.class, "castValue", MethodType.methodType(Object.class, Object.class, Class.class));
 			MH_IS_EXACT_CLASS = LOOKUP.findStatic(JSLinker.class, "isExactClass", MethodType.methodType(boolean.class, Class.class, Object.class));
+			MH_IS_EXACT_CLASS_AND_ARGS = LOOKUP.findStatic(JSLinker.class, "isExactClassAndArgs", MethodType.methodType(boolean.class, Class.class, Class[].class, Object.class, Object[].class));
 			MH_IS_EXACT_SHAPE = LOOKUP.findStatic(JSLinker.class, "isExactShape", MethodType.methodType(boolean.class, JSShape.class, Object.class));
 			MH_IS_EXACT_SHAPE_AND_PROTO = LOOKUP.findStatic(JSLinker.class, "isExactShapeAndProto", MethodType.methodType(boolean.class, JSShape.class, JSObject.class, Object.class));
 			MH_IS_SAME_OBJECT = LOOKUP.findStatic(JSLinker.class, "isSameObject", MethodType.methodType(boolean.class, Object.class, Object.class));
@@ -1755,8 +1757,12 @@ public class JSLinker {
 		Method getterMethod = MethodResolver.findGetterMethod(targetClass, propName);
 		if (getterMethod != null) {
 			try {
-				MethodHandle mh = Magic.lookup.unreflect(getterMethod);
-				return mh.invoke(target);
+				getterMethod.setAccessible(true);
+				MethodHandle mh           = Magic.lookup.unreflect(getterMethod);
+				MethodHandle directGetter = mh.asType(site.type());
+				MethodHandle test         = MH_IS_EXACT_CLASS.bindTo(targetClass);
+				site.installGuardOrSwitchMegamorphic(test, directGetter);
+				return directGetter.invoke(target);
 			} catch (Throwable ignored) {
 			}
 		}
@@ -1960,8 +1966,20 @@ public class JSLinker {
 		Method setterMethod = MethodResolver.findSetterMethod(targetClass, propName);
 		if (setterMethod != null) {
 			try {
-				Object casted = JSOps.castValue(value, setterMethod.getParameterTypes()[0]);
-				setterMethod.invoke(target, casted);
+				setterMethod.setAccessible(true);
+				MethodHandle mh = Magic.lookup.unreflect(setterMethod);
+				Class<?> paramType = setterMethod.getParameterTypes()[0];
+				MethodHandle filter = getArgumentFilter(paramType);
+				if (filter != null) {
+					mh = MethodHandles.filterArguments(mh, 1, filter);
+				}
+				MethodHandle directSetter = mh.asType(site.type());
+				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
+				if (site.type().parameterCount() > 1) {
+					test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+				}
+				site.installGuardOrSwitchMegamorphic(test, directSetter);
+				directSetter.invoke(target, value);
 				return;
 			} catch (Throwable ignored) {
 			}
@@ -2363,30 +2381,30 @@ public class JSLinker {
 		targetMethod.setAccessible(true);
 		Class<?>[] paramTypes = targetMethod.getParameterTypes();
 		int arity = args.length;
-		MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(clazz, methodName, arity, Modifier.isStatic(targetMethod.getModifiers()));
+		MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(clazz, targetMethod);
+		boolean isVoid = (targetMethod.getReturnType() == void.class);
 		if (invoker != null) {
-			switch (arity) {
-				case 0:
-					return invoker.invoke0(target);
-				case 1:
-					return invoker.invoke1(target, JSOps.castValue(args[0], paramTypes[0]));
-				case 2:
-					return invoker.invoke2(target, JSOps.castValue(args[0], paramTypes[0]), JSOps.castValue(args[1], paramTypes[1]));
-				case 3:
-					return invoker.invoke3(target, JSOps.castValue(args[0], paramTypes[0]), JSOps.castValue(args[1], paramTypes[1]), JSOps.castValue(args[2], paramTypes[2]));
-				default:
+			Object res = switch (arity) {
+				case 0 -> invoker.invoke0(target);
+				case 1 -> invoker.invoke1(target, JSOps.castValue(args[0], paramTypes[0]));
+				case 2 -> invoker.invoke2(target, JSOps.castValue(args[0], paramTypes[0]), JSOps.castValue(args[1], paramTypes[1]));
+				case 3 -> invoker.invoke3(target, JSOps.castValue(args[0], paramTypes[0]), JSOps.castValue(args[1], paramTypes[1]), JSOps.castValue(args[2], paramTypes[2]));
+				default -> {
 					Object[] castedArgs = new Object[arity];
 					for (int i = 0; i < arity; i++) {
 						castedArgs[i] = JSOps.castValue(args[i], paramTypes[i]);
 					}
-					return invoker.invoke(target, castedArgs);
-			}
+					yield invoker.invoke(target, castedArgs);
+				}
+			};
+			return isVoid ? JSUndefined.INSTANCE : res;
 		}
 		Object[] castedArgs = new Object[arity];
 		for (int i = 0; i < arity; i++) {
 			castedArgs[i] = JSOps.castValue(args[i], paramTypes[i]);
 		}
-		return targetMethod.invoke(target, castedArgs);
+		Object res = targetMethod.invoke(target, castedArgs);
+		return isVoid ? JSUndefined.INSTANCE : res;
 	}
 
 	public static Object invokeFallback(ChainedCallSite site, Object target, Object[] args, String methodName)
@@ -2540,16 +2558,34 @@ public class JSLinker {
 		if (targetMethod != null) {
 			targetMethod.setAccessible(true);
 
+			int sameArityCandidates = 0;
+			for (Method m : MethodResolver.findCandidateMethods(clazz, methodName)) {
+				if (m.getParameterCount() == args.length && Modifier.isStatic(m.getModifiers()) == isStatic) {
+					sameArityCandidates++;
+				}
+			}
+
+			MethodHandle test;
+			if (sameArityCandidates > 1 && args.length > 0) {
+				Class<?>[] argClasses = new Class<?>[args.length];
+				for (int i = 0; i < args.length; i++) {
+					argClasses[i] = (args[i] == null) ? null : args[i].getClass();
+				}
+				test = MH_IS_EXACT_CLASS_AND_ARGS.bindTo(clazz).bindTo(argClasses)
+					.asCollector(1, Object[].class, site.type().parameterCount() - 1);
+			} else {
+				test = MH_IS_EXACT_CLASS.bindTo(clazz);
+				if (site.type().parameterCount() > 1) {
+					test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+				}
+			}
+
 			boolean preferMagicAccessor = (STRATEGY != InvocationStrategy.SPREADER);
 
 			if (preferMagicAccessor) {
 				try {
 					MethodHandle exactMh = MagicJIT.createExactMethodStub(clazz, targetMethod);
 					if (exactMh != null) {
-						MethodHandle test = MH_IS_EXACT_CLASS.bindTo(clazz);
-						if (site.type().parameterCount() > 1) {
-							test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
-						}
 						MethodHandle genericMh = exactMh.asType(site.type());
 						site.installGuardOrSwitchMegamorphic(test, genericMh);
 
@@ -2574,10 +2610,10 @@ public class JSLinker {
 					}
 				}
 
-				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(clazz);
-				if (site.type().parameterCount() > 1) {
-					test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+				if (targetMethod.getReturnType() == void.class) {
+					adapted = MethodHandles.filterReturnValue(adapted, MethodHandles.constant(Object.class, JSUndefined.INSTANCE));
 				}
+
 				MethodHandle genericMh = adapted.asType(site.type());
 				site.installGuardOrSwitchMegamorphic(test, genericMh);
 
@@ -2985,6 +3021,25 @@ public class JSLinker {
 	public static Object newFallback(ChainedCallSite site, Object ctor, Object[] args) throws Throwable {
 		int arity = args.length;
 		if (ctor instanceof Class<?> clazz) {
+			try {
+				Constructor<?> c = MethodResolver.findConstructor(clazz, arity);
+				if (c != null) {
+					c.setAccessible(true);
+					MethodHandle mh     = Magic.lookup.unreflectConstructor(c);
+					Class<?>[]   pTypes = c.getParameterTypes();
+					for (int i = 0; i < pTypes.length; i++) {
+						MethodHandle filter = getArgumentFilter(pTypes[i]);
+						if (filter != null) mh = MethodHandles.filterArguments(mh, i, filter);
+					}
+					MethodHandle directCtor = MethodHandles.dropArguments(mh, 0, Object.class);
+					MethodHandle test       = MH_IS_SAME_OBJECT.bindTo(clazz);
+					if (site.type().parameterCount() > 1) {
+						test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+					}
+					site.installGuardOrSwitchMegamorphic(test, directCtor.asType(site.type()));
+				}
+			} catch (Throwable ignored) { }
+
 			if (STRATEGY != InvocationStrategy.SPREADER) {
 				try {
 					MagicJIT.MagicConstructorInvoker ctorInvoker = MagicJIT.getConstructorInvoker(clazz, arity);
@@ -3003,23 +3058,6 @@ public class JSLinker {
 
 			MethodHandle ctorSpreader = getConstructorSpreader(clazz, arity);
 			if (ctorSpreader != null) {
-				try {
-					Constructor<?> c = MethodResolver.findConstructor(clazz, arity);
-					if (c != null) {
-						MethodHandle mh     = Magic.lookup.unreflectConstructor(c);
-						Class<?>[]   pTypes = c.getParameterTypes();
-						for (int i = 0; i < pTypes.length; i++) {
-							MethodHandle filter = getArgumentFilter(pTypes[i]);
-							if (filter != null) mh = MethodHandles.filterArguments(mh, i, filter);
-						}
-						MethodHandle directCtor = MethodHandles.dropArguments(mh, 0, Object.class);
-						MethodHandle test       = MH_IS_SAME_OBJECT.bindTo(clazz);
-						if (site.type().parameterCount() > 1) {
-							test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
-						}
-						site.installGuardOrSwitchMegamorphic(test, directCtor.asType(site.type()));
-					}
-				} catch (Throwable ignored) { }
 				return ctorSpreader.invokeExact(args);
 			}
 			throw new NoSuchMethodException("No matching constructor for " + clazz.getName() + " with " + arity + " args");
@@ -3313,6 +3351,20 @@ public class JSLinker {
 
 	public static boolean isExactClass(Class<?> expected, Object target) {
 		return target != null && target.getClass() == expected;
+	}
+	public static boolean isExactClassAndArgs(Class<?> expected, Class<?>[] expectedArgs, Object target, Object[] args) {
+		if (target == null || target.getClass() != expected) return false;
+		if (args.length != expectedArgs.length) return false;
+		for (int i = 0; i < expectedArgs.length; i++) {
+			Class<?> exp = expectedArgs[i];
+			Object act = args[i];
+			if (exp == null) {
+				if (act != null) return false;
+			} else {
+				if (act == null || act.getClass() != exp) return false;
+			}
+		}
+		return true;
 	}
 	@SuppressWarnings("RedundantIfStatement")
 	public static boolean isExactShape(JSShape expected, Object target) {
@@ -3621,6 +3673,9 @@ public class JSLinker {
 					adapted = MethodHandles.filterArguments(adapted, 1 + i, filter);
 				}
 			}
+			if (targetMethod.getReturnType() == void.class) {
+				adapted = MethodHandles.filterReturnValue(adapted, MethodHandles.constant(Object.class, JSUndefined.INSTANCE));
+			}
 			MethodType   genericType = MethodType.genericMethodType(1 + arity);
 			MethodHandle genericMh   = adapted.asType(genericType);
 			MethodHandle spreader    = genericMh.asSpreader(Object[].class, arity);
@@ -3774,21 +3829,9 @@ public class JSLinker {
 		Class<?> clazz    = (target instanceof Class<?>) ? (Class<?>) target : target.getClass();
 		boolean  isStatic = (target instanceof Class<?>);
 
-		if (STRATEGY != InvocationStrategy.SPREADER) {
-			try {
-				int arity = args.length;
-				MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(clazz, methodName, arity, isStatic);
-				if (invoker != null) {
-					switch (arity) {
-						case 0: return invoker.invoke0(target);
-						case 1: return invoker.invoke1(target, args[0]);
-						case 2: return invoker.invoke2(target, args[0], args[1]);
-						case 3: return invoker.invoke3(target, args[0], args[1], args[2]);
-						default: return invoker.invoke(target, args);
-					}
-				}
-			} catch (Throwable ignored) {
-			}
+		Method targetMethod = MethodResolver.findBestMatchingMethod(clazz, methodName, args);
+		if (targetMethod != null) {
+			return invokeMatchedMethod(target, targetMethod, args, clazz, methodName);
 		}
 
 		MethodHandle spreader = getMethodSpreader(clazz, methodName, args.length, isStatic);

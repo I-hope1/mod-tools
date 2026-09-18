@@ -263,11 +263,12 @@ public class MagicJIT implements Opcodes {
 
 
 	private static final class ClassJITData {
-		final Map<InvokerLookupKey, MagicInvoker>         invokerCache     = new ConcurrentHashMap<>();
-		final Map<CtorLookupKey, MagicConstructorInvoker> ctorCache        = new ConcurrentHashMap<>();
-		final Map<String, MethodHandle>                   getterCache      = new ConcurrentHashMap<>();
-		final Map<String, MethodHandle>                   setterCache      = new ConcurrentHashMap<>();
-		final Map<ExactMethodKey, MethodHandle>           exactMethodCache = new ConcurrentHashMap<>();
+		final Map<InvokerLookupKey, MagicInvoker>         invokerCache      = new ConcurrentHashMap<>();
+		final Map<ExactMethodKey, MagicInvoker>           exactInvokerCache = new ConcurrentHashMap<>();
+		final Map<CtorLookupKey, MagicConstructorInvoker> ctorCache         = new ConcurrentHashMap<>();
+		final Map<String, MethodHandle>                   getterCache       = new ConcurrentHashMap<>();
+		final Map<String, MethodHandle>                   setterCache       = new ConcurrentHashMap<>();
+		final Map<ExactMethodKey, MethodHandle>           exactMethodCache  = new ConcurrentHashMap<>();
 
 		volatile HostMethodGroup nestmateMethodGroup;
 		volatile HostCtorGroup   nestmateCtorGroup;
@@ -932,16 +933,31 @@ public class MagicJIT implements Opcodes {
 		return invoker;
 	}
 
-	public static MagicInvoker createMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic) {
-		return createMethodInvoker(clazz, methodName, arity, isStatic, getEffectiveMode());
+	public static MagicInvoker getMethodInvoker(Class<?> clazz, Method targetMethod) {
+		return getMethodInvoker(clazz, targetMethod, getEffectiveMode());
 	}
 
-	public static MagicInvoker createMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic,
-	                                               AccessMode mode) {
-		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
-		Method targetMethod = MethodResolver.findMethod(clazz, methodName, arity, isStatic);
+	public static MagicInvoker getMethodInvoker(Class<?> clazz, Method targetMethod, AccessMode mode) {
 		if (targetMethod == null) return null;
+		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
+		ClassJITData   data   = JIT_DATA.get(clazz);
+		ExactMethodKey key    = new ExactMethodKey(mode, targetMethod);
+		MagicInvoker   cached = data.exactInvokerCache.get(key);
+		if (cached != null) return cached;
+		MagicInvoker invoker = createMethodInvoker(clazz, targetMethod, mode);
+		if (invoker != null) data.exactInvokerCache.put(key, invoker);
+		return invoker;
+	}
+
+	public static MagicInvoker createMethodInvoker(Class<?> clazz, Method targetMethod) {
+		return createMethodInvoker(clazz, targetMethod, getEffectiveMode());
+	}
+
+	public static MagicInvoker createMethodInvoker(Class<?> clazz, Method targetMethod, AccessMode mode) {
+		if (targetMethod == null) return null;
+		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
 		targetMethod.setAccessible(true);
+		int arity = targetMethod.getParameterCount();
 		try {
 			if (mode == AccessMode.NESTMATE) {
 				if (canUseNestmate(clazz, targetMethod)) {
@@ -979,8 +995,20 @@ public class MagicJIT implements Opcodes {
 					return new GenericInvoker(exactMh.asSpreader(Object[].class, arity));
 			}
 		} catch (Throwable e) {
-			throw new RuntimeException("Failed to generate MagicInvoker for " + clazz.getName() + "#" + methodName + " (mode=" + mode + ")", e);
+			throw new RuntimeException("Failed to generate MagicInvoker for " + clazz.getName() + "#" + targetMethod.getName() + " (mode=" + mode + ")", e);
 		}
+	}
+
+	public static MagicInvoker createMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic) {
+		return createMethodInvoker(clazz, methodName, arity, isStatic, getEffectiveMode());
+	}
+
+	public static MagicInvoker createMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic,
+	                                               AccessMode mode) {
+		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
+		Method targetMethod = MethodResolver.findMethod(clazz, methodName, arity, isStatic);
+		if (targetMethod == null) return null;
+		return createMethodInvoker(clazz, targetMethod, mode);
 	}
 
 	public static MagicConstructorInvoker createConstructorInvoker(Class<?> clazz, int arity) {

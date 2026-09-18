@@ -1561,13 +1561,10 @@ public class JSLinker {
 		} catch (Throwable ignored) {
 		}
 
-		String   capName          = Character.toUpperCase(propName.charAt(0)) + (propName.length() > 1 ? propName.substring(1) : "");
-		String[] getterCandidates = new String[]{"get" + capName, "is" + capName, propName};
-		for (String candidate : getterCandidates) {
+		Method getterMethod = MethodResolver.findGetterMethod(targetClass, propName);
+		if (getterMethod != null) {
 			try {
-				Method method = targetClass.getMethod(candidate);
-				method.setAccessible(true);
-				return method.invoke(target);
+				return getterMethod.invoke(target);
 			} catch (Throwable ignored) {
 			}
 		}
@@ -3425,7 +3422,14 @@ public class JSLinker {
 			}
 			return JSUndefined.INSTANCE;
 		}
-		return JSUndefined.INSTANCE;
+		if (target instanceof Map map) {
+			Object val = map.get(index);
+			if (val == null && !map.containsKey(index)) {
+				val = map.get(toPropertyKey(index));
+			}
+			return val == null && !map.containsKey(index) ? JSUndefined.INSTANCE : val;
+		}
+		return getPropGeneric(target, toPropertyKey(index));
 	}
 
 	public static void setIndex(Object target, Object index, Object value) {
@@ -3475,7 +3479,9 @@ public class JSLinker {
 		}
 		if (target instanceof Map map) {
 			map.put(index, value);
+			return;
 		}
+		setPropGeneric(target, value, toPropertyKey(index));
 	}
 	//endregion
 

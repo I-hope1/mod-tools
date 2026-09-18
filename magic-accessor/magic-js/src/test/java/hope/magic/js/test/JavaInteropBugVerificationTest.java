@@ -424,5 +424,55 @@ public class JavaInteropBugVerificationTest {
 		Object titleVal = recordSite.getTarget().invokeExact((Object) record);
 		Assertions.assertEquals("hello-record", titleVal);
 	}
+
+	public static class IndexedBean {
+		public String name;
+		private int count;
+
+		public int getCount() {
+			return count;
+		}
+
+		public void setCount(int count) {
+			this.count = count;
+		}
+	}
+
+	/**
+	 * 验证缺陷 8: JSLinker.getIndex 与 setIndex 对 Java Map 与通用 Java Bean 的动态索引读写缺失：
+	 * 1. getIndex(target, Object index) 漏掉 Map 检索与 JavaBean 属性获取，导致 map["key"] 与 bean["prop"] 返回 undefined；
+	 * 2. setIndex(target, Object index, value) 漏掉 JavaBean 属性写入，导致 bean["prop"] = val 静默丢失。
+	 */
+	@Test
+	public void testBug8_DynamicIndexAccessOnMapAndJavaBean() {
+		// 1. 测试 Java Map 字符串键动态读写
+		java.util.Map<String, Object> map = new java.util.HashMap<>();
+		map.put("city", "Beijing");
+		Object mapVal = hope.magic.js.runtime.JSLinker.getIndex(map, "city");
+		System.out.println("[Bug 8 现象 Map Read] getIndex(map, 'city')=" + mapVal);
+		Assertions.assertEquals("Beijing", mapVal, "getIndex on Map with String key must return the map entry!");
+
+		// 2. 测试 JavaBean 动态索引属性读取
+		IndexedBean bean = new IndexedBean();
+		bean.name = "MyBean";
+		bean.setCount(100);
+
+		Object nameVal = hope.magic.js.runtime.JSLinker.getIndex(bean, "name");
+		System.out.println("[Bug 8 现象 Bean Field Read] getIndex(bean, 'name')=" + nameVal);
+		Assertions.assertEquals("MyBean", nameVal, "getIndex on JavaBean field property must return field value!");
+
+		Object countVal = hope.magic.js.runtime.JSLinker.getIndex(bean, "count");
+		System.out.println("[Bug 8 现象 Bean Getter Read] getIndex(bean, 'count')=" + countVal);
+		Assertions.assertEquals(100, countVal, "getIndex on JavaBean getter property must return getter value!");
+
+		// 3. 测试 JavaBean 动态索引属性写入
+		hope.magic.js.runtime.JSLinker.setIndex(bean, "name", "UpdatedName");
+		System.out.println("[Bug 8 现象 Bean Field Write] bean.name=" + bean.name);
+		Assertions.assertEquals("UpdatedName", bean.name, "setIndex on JavaBean field must update field!");
+
+		hope.magic.js.runtime.JSLinker.setIndex(bean, "count", 200);
+		System.out.println("[Bug 8 现象 Bean Setter Write] bean.count=" + bean.getCount());
+		Assertions.assertEquals(200, bean.getCount(), "setIndex on JavaBean setter must update value!");
+	}
 }
 

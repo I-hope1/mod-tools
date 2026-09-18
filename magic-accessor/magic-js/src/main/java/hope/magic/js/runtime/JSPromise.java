@@ -489,7 +489,7 @@ public class JSPromise extends JSObject {
 		promise.whenSettled(currentCx, onComplete);
 
 		while (!resumeFuture.isDone()) {
-			if (currentCx != null) {
+			if (state == null && currentCx != null) {
 				currentCx.drainMicrotasks();
 			}
 			if (resumeFuture.isDone()) break;

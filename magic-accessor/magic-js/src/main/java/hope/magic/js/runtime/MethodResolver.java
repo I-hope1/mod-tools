@@ -204,6 +204,7 @@ public final class MethodResolver {
 		final Map<MethodLookupKey, Method> methodCache = new ConcurrentHashMap<>();
 		final Map<Integer, Constructor<?>> ctorCache = new ConcurrentHashMap<>();
 		final Map<String, List<Method>> candidateCache = new ConcurrentHashMap<>();
+		volatile List<Constructor<?>> candidateCtors;
 		final Map<String, Method> getterCache = new ConcurrentHashMap<>();
 		final Map<String, Method> setterCache = new ConcurrentHashMap<>();
 	}
@@ -317,6 +318,110 @@ public final class MethodResolver {
 		List<Method> unmod = Collections.unmodifiableList(list);
 		data.candidateCache.put(methodName, unmod);
 		return unmod;
+	}
+
+	/**
+	 * 查找类中所有构造函数（缓存化）。
+	 */
+	public static List<Constructor<?>> findCandidateConstructors(Class<?> clazz) {
+		if (clazz == null) return Collections.emptyList();
+		ClassReflectionData data = REFLECTION_DATA.get(clazz);
+		List<Constructor<?>> cached = data.candidateCtors;
+		if (cached != null) return cached;
+
+		List<Constructor<?>> list = new ArrayList<>();
+		for (Constructor<?> c : clazz.getConstructors()) {
+			trySetAccessible(c);
+			list.add(c);
+		}
+		try {
+			for (Constructor<?> c : clazz.getDeclaredConstructors()) {
+				if (!list.contains(c)) {
+					if (trySetAccessible(c)) {
+						list.add(c);
+					}
+				}
+			}
+		} catch (Throwable ignored) {}
+		List<Constructor<?>> unmod = Collections.unmodifiableList(list);
+		data.candidateCtors = unmod;
+		return unmod;
+	}
+
+	/**
+	 * 基于入参动态类型和 JLS Pairwise Specificity 查找最佳匹配的构造函数。
+	 */
+	public static Constructor<?> findBestMatchingConstructor(Class<?> clazz, Object[] args) {
+		List<Constructor<?>> candidates = findCandidateConstructors(clazz);
+		if (candidates.isEmpty()) return null;
+
+		Constructor<?>       bestCtor   = null;
+		int                  minCost    = COST_INCOMPATIBLE;
+		List<Constructor<?>> applicable = new ArrayList<>();
+
+		for (Constructor<?> c : candidates) {
+			if (c.getParameterCount() != args.length) continue;
+			Class<?>[] params    = c.getParameterTypes();
+			int        totalCost = 0;
+			boolean    ok        = true;
+			for (int i = 0; i < args.length; i++) {
+				int cost = JSLinker.computeConversionCost(args[i], params[i]);
+				if (cost >= COST_INCOMPATIBLE) {
+					ok = false;
+					break;
+				}
+				totalCost += cost;
+			}
+			if (ok) {
+				applicable.add(c);
+				if (totalCost < minCost) {
+					minCost = totalCost;
+					bestCtor = c;
+				}
+			}
+		}
+
+		if (!applicable.isEmpty()) {
+			List<Constructor<?>> bestCandidates = new ArrayList<>();
+			for (Constructor<?> c : applicable) {
+				Class<?>[] params = c.getParameterTypes();
+				int        cost   = 0;
+				for (int i = 0; i < args.length; i++) cost += JSLinker.computeConversionCost(args[i], params[i]);
+				if (cost == minCost) bestCandidates.add(c);
+			}
+			if (bestCandidates.size() == 1) return bestCandidates.get(0);
+			Constructor<?> mostSpecific = bestCandidates.get(0);
+			for (int i = 1; i < bestCandidates.size(); i++) {
+				Constructor<?> curr = bestCandidates.get(i);
+				if (isMoreSpecific(curr, mostSpecific)) {
+					mostSpecific = curr;
+				}
+			}
+			return mostSpecific;
+		}
+
+		return findConstructor(clazz, args.length);
+	}
+
+	private static boolean isMoreSpecific(Constructor<?> c1, Constructor<?> c2) {
+		Class<?>[] p1 = c1.getParameterTypes();
+		Class<?>[] p2 = c2.getParameterTypes();
+		if (p1.length != p2.length) return false;
+		boolean oneMoreSpecific = false;
+		for (int i = 0; i < p1.length; i++) {
+			Class<?> t1 = p1[i];
+			Class<?> t2 = p2[i];
+			if (t1 != t2) {
+				if (t2.isAssignableFrom(t1)) {
+					oneMoreSpecific = true;
+				} else if (t1.isPrimitive() && !t2.isPrimitive()) {
+					oneMoreSpecific = true;
+				} else {
+					return false;
+				}
+			}
+		}
+		return oneMoreSpecific;
 	}
 
 	/**

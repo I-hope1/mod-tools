@@ -41,6 +41,7 @@ public class JSLinker {
 	public static final MethodHandle MH_IS_EXACT_SHAPE;
 	public static final MethodHandle MH_IS_EXACT_SHAPE_AND_PROTO;
 	public static final MethodHandle MH_IS_SAME_OBJECT;
+	public static final MethodHandle MH_IS_SAME_OBJECT_AND_ARGS;
 	public static final MethodHandle MH_TRANSITION_SET_DOUBLE;
 	public static final MethodHandle MH_TRANSITION_SET_OBJECT;
 	public static final MethodHandle MH_TRANSITION_SET_OBJECT_DOUBLE;
@@ -65,6 +66,7 @@ public class JSLinker {
 			MH_IS_EXACT_SHAPE = LOOKUP.findStatic(JSLinker.class, "isExactShape", MethodType.methodType(boolean.class, JSShape.class, Object.class));
 			MH_IS_EXACT_SHAPE_AND_PROTO = LOOKUP.findStatic(JSLinker.class, "isExactShapeAndProto", MethodType.methodType(boolean.class, JSShape.class, JSObject.class, Object.class));
 			MH_IS_SAME_OBJECT = LOOKUP.findStatic(JSLinker.class, "isSameObject", MethodType.methodType(boolean.class, Object.class, Object.class));
+			MH_IS_SAME_OBJECT_AND_ARGS = LOOKUP.findStatic(JSLinker.class, "isSameObjectAndArgs", MethodType.methodType(boolean.class, Object.class, Class[].class, Object.class, Object[].class));
 			MH_TRANSITION_SET_DOUBLE = LOOKUP.findStatic(JSLinker.class, "transitionSetDouble", MethodType.methodType(void.class, JSShape.class, int.class, Object.class, double.class));
 			MH_TRANSITION_SET_OBJECT = LOOKUP.findStatic(JSLinker.class, "transitionSetObject", MethodType.methodType(void.class, JSShape.class, int.class, Object.class, Object.class));
 			MH_TRANSITION_SET_OBJECT_DOUBLE = LOOKUP.findStatic(JSLinker.class, "transitionSetObjectDouble", MethodType.methodType(void.class, JSShape.class, int.class, Object.class, Object.class));
@@ -2690,6 +2692,7 @@ public class JSLinker {
 
 	private static final class ClassSpreaderData {
 		final Map<Integer, MethodHandle> ctorSpreaderCache = new ConcurrentHashMap<>();
+		final Map<Constructor<?>, MethodHandle> exactCtorSpreaderCache = new ConcurrentHashMap<>();
 		final Map<MethodLookupKey, MethodHandle> methodSpreaderCache = new ConcurrentHashMap<>();
 	}
 
@@ -2700,16 +2703,15 @@ public class JSLinker {
 		}
 	};
 
-	private static MethodHandle getConstructorSpreader(Class<?> clazz, int arity) {
-		ClassSpreaderData data   = SPREADER_DATA.get(clazz);
-		MethodHandle      cached = data.ctorSpreaderCache.get(arity);
-		if (cached != null) return cached;
-
-		Constructor<?> c = MethodResolver.findConstructor(clazz, arity);
+	private static MethodHandle getConstructorSpreader(Class<?> clazz, Constructor<?> c) {
 		if (c == null) return null;
+		ClassSpreaderData data   = SPREADER_DATA.get(clazz);
+		MethodHandle      cached = data.exactCtorSpreaderCache.get(c);
+		if (cached != null) return cached;
 		try {
 			MethodHandle mh         = Magic.lookup.unreflectConstructor(c);
 			Class<?>[]   paramTypes = c.getParameterTypes();
+			int          arity      = paramTypes.length;
 			MethodHandle adapted    = mh;
 			for (int i = 0; i < paramTypes.length; i++) {
 				MethodHandle filter = getArgumentFilter(paramTypes[i]);
@@ -2719,11 +2721,17 @@ public class JSLinker {
 			}
 			MethodHandle genericMh = adapted.asType(MethodType.genericMethodType(arity));
 			MethodHandle spreader  = genericMh.asSpreader(Object[].class, arity);
-			data.ctorSpreaderCache.put(arity, spreader);
+			data.exactCtorSpreaderCache.put(c, spreader);
 			return spreader;
 		} catch (Throwable e) {
 			throw new RuntimeException(e);
 		}
+	}
+
+	private static MethodHandle getConstructorSpreader(Class<?> clazz, int arity) {
+		Constructor<?> c = MethodResolver.findConstructor(clazz, arity);
+		if (c == null) return null;
+		return getConstructorSpreader(clazz, c);
 	}
 
 	public static JSObject getPrototypeFromConstructor(JSContext cx, Object constructor, String intrinsicDefaultProto) {
@@ -2770,7 +2778,7 @@ public class JSLinker {
 
 	public static Object newGeneric(Object ctor, Object[] args, Object newTarget) throws Throwable {
 		if (ctor instanceof Class<?> clazz) {
-			Constructor<?> c = MethodResolver.findConstructor(clazz, args.length);
+			Constructor<?> c = MethodResolver.findBestMatchingConstructor(clazz, args);
 			if (c != null) {
 				Object[]   castedArgs = new Object[args.length];
 				Class<?>[] paramTypes = c.getParameterTypes();
@@ -3021,44 +3029,65 @@ public class JSLinker {
 	public static Object newFallback(ChainedCallSite site, Object ctor, Object[] args) throws Throwable {
 		int arity = args.length;
 		if (ctor instanceof Class<?> clazz) {
-			try {
-				Constructor<?> c = MethodResolver.findConstructor(clazz, arity);
-				if (c != null) {
-					c.setAccessible(true);
-					MethodHandle mh     = Magic.lookup.unreflectConstructor(c);
-					Class<?>[]   pTypes = c.getParameterTypes();
+			Constructor<?> targetCtor = MethodResolver.findBestMatchingConstructor(clazz, args);
+			if (targetCtor != null) {
+				targetCtor.setAccessible(true);
+				int sameArityCandidates = 0;
+				for (Constructor<?> c : MethodResolver.findCandidateConstructors(clazz)) {
+					if (c.getParameterCount() == arity) sameArityCandidates++;
+				}
+				MethodHandle test;
+				if (sameArityCandidates > 1 && arity > 0) {
+					Class<?>[] argClasses = new Class<?>[arity];
+					for (int i = 0; i < arity; i++) {
+						argClasses[i] = (args[i] == null) ? null : args[i].getClass();
+					}
+					test = MH_IS_SAME_OBJECT_AND_ARGS.bindTo(clazz).bindTo(argClasses)
+							.asCollector(1, Object[].class, site.type().parameterCount() - 1);
+				} else {
+					test = MH_IS_SAME_OBJECT.bindTo(clazz);
+					if (site.type().parameterCount() > 1) {
+						test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+					}
+				}
+
+				try {
+					MethodHandle mh     = Magic.lookup.unreflectConstructor(targetCtor);
+					Class<?>[]   pTypes = targetCtor.getParameterTypes();
 					for (int i = 0; i < pTypes.length; i++) {
 						MethodHandle filter = getArgumentFilter(pTypes[i]);
 						if (filter != null) mh = MethodHandles.filterArguments(mh, i, filter);
 					}
 					MethodHandle directCtor = MethodHandles.dropArguments(mh, 0, Object.class);
-					MethodHandle test       = MH_IS_SAME_OBJECT.bindTo(clazz);
-					if (site.type().parameterCount() > 1) {
-						test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
-					}
 					site.installGuardOrSwitchMegamorphic(test, directCtor.asType(site.type()));
-				}
-			} catch (Throwable ignored) { }
+				} catch (Throwable ignored) { }
 
-			if (STRATEGY != InvocationStrategy.SPREADER) {
-				try {
-					MagicJIT.MagicConstructorInvoker ctorInvoker = MagicJIT.getConstructorInvoker(clazz, arity);
-					if (ctorInvoker != null) {
-						switch (arity) {
-							case 0: return ctorInvoker.newInstance0();
-							case 1: return ctorInvoker.newInstance1(args[0]);
-							case 2: return ctorInvoker.newInstance2(args[0], args[1]);
-							case 3: return ctorInvoker.newInstance3(args[0], args[1], args[2]);
-							default: return ctorInvoker.newInstance(args);
+				if (STRATEGY != InvocationStrategy.SPREADER) {
+					try {
+						MagicJIT.MagicConstructorInvoker ctorInvoker = MagicJIT.getConstructorInvoker(clazz, targetCtor);
+						if (ctorInvoker != null) {
+							switch (arity) {
+								case 0: return ctorInvoker.newInstance0();
+								case 1: return ctorInvoker.newInstance1(args[0]);
+								case 2: return ctorInvoker.newInstance2(args[0], args[1]);
+								case 3: return ctorInvoker.newInstance3(args[0], args[1], args[2]);
+								default: return ctorInvoker.newInstance(args);
+							}
 						}
+					} catch (Throwable ignored) {
 					}
-				} catch (Throwable ignored) {
 				}
-			}
 
-			MethodHandle ctorSpreader = getConstructorSpreader(clazz, arity);
-			if (ctorSpreader != null) {
-				return ctorSpreader.invokeExact(args);
+				MethodHandle ctorSpreader = getConstructorSpreader(clazz, targetCtor);
+				if (ctorSpreader != null) {
+					return ctorSpreader.invokeExact(args);
+				}
+				Object[]   casted = new Object[arity];
+				Class<?>[] pTypes = targetCtor.getParameterTypes();
+				for (int i = 0; i < arity; i++) {
+					casted[i] = JSOps.castValue(args[i], pTypes[i]);
+				}
+				return targetCtor.newInstance(casted);
 			}
 			throw new NoSuchMethodException("No matching constructor for " + clazz.getName() + " with " + arity + " args");
 		}
@@ -3354,6 +3383,20 @@ public class JSLinker {
 	}
 	public static boolean isExactClassAndArgs(Class<?> expected, Class<?>[] expectedArgs, Object target, Object[] args) {
 		if (target == null || target.getClass() != expected) return false;
+		if (args.length != expectedArgs.length) return false;
+		for (int i = 0; i < expectedArgs.length; i++) {
+			Class<?> exp = expectedArgs[i];
+			Object act = args[i];
+			if (exp == null) {
+				if (act != null) return false;
+			} else {
+				if (act == null || act.getClass() != exp) return false;
+			}
+		}
+		return true;
+	}
+	public static boolean isSameObjectAndArgs(Object expected, Class<?>[] expectedArgs, Object target, Object[] args) {
+		if (target != expected) return false;
 		if (args.length != expectedArgs.length) return false;
 		for (int i = 0; i < expectedArgs.length; i++) {
 			Class<?> exp = expectedArgs[i];

@@ -172,6 +172,30 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
+	private static final class ExactCtorKey {
+		final AccessMode mode;
+		final Constructor<?> ctor;
+		final int hash;
+
+		ExactCtorKey(AccessMode mode, Constructor<?> ctor) {
+			this.mode = mode;
+			this.ctor = ctor;
+			this.hash = 31 * (mode != null ? mode.hashCode() : 0) + ctor.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof ExactCtorKey that)) return false;
+			return mode == that.mode && ctor.equals(that.ctor);
+		}
+
+		@Override
+		public int hashCode() {
+			return hash;
+		}
+	}
+
 	private static final class HostMethodGroup {
 		final Class<?> invokerClass;
 		final Constructor<?> ctor;
@@ -266,6 +290,7 @@ public class MagicJIT implements Opcodes {
 		final Map<InvokerLookupKey, MagicInvoker>         invokerCache      = new ConcurrentHashMap<>();
 		final Map<ExactMethodKey, MagicInvoker>           exactInvokerCache = new ConcurrentHashMap<>();
 		final Map<CtorLookupKey, MagicConstructorInvoker> ctorCache         = new ConcurrentHashMap<>();
+		final Map<ExactCtorKey, MagicConstructorInvoker>  exactCtorCache    = new ConcurrentHashMap<>();
 		final Map<String, MethodHandle>                   getterCache       = new ConcurrentHashMap<>();
 		final Map<String, MethodHandle>                   setterCache       = new ConcurrentHashMap<>();
 		final Map<ExactMethodKey, MethodHandle>           exactMethodCache  = new ConcurrentHashMap<>();
@@ -918,21 +943,6 @@ public class MagicJIT implements Opcodes {
 		return invoker;
 	}
 
-	public static MagicConstructorInvoker getConstructorInvoker(Class<?> clazz, int arity) {
-		return getConstructorInvoker(clazz, arity, getEffectiveMode());
-	}
-
-	public static MagicConstructorInvoker getConstructorInvoker(Class<?> clazz, int arity, AccessMode mode) {
-		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
-		ClassJITData            data   = JIT_DATA.get(clazz);
-		CtorLookupKey           key    = new CtorLookupKey(mode, arity);
-		MagicConstructorInvoker cached = data.ctorCache.get(key);
-		if (cached != null) return cached;
-		MagicConstructorInvoker invoker = createConstructorInvoker(clazz, arity, mode);
-		if (invoker != null) data.ctorCache.put(key, invoker);
-		return invoker;
-	}
-
 	public static MagicInvoker getMethodInvoker(Class<?> clazz, Method targetMethod) {
 		return getMethodInvoker(clazz, targetMethod, getEffectiveMode());
 	}
@@ -947,6 +957,17 @@ public class MagicJIT implements Opcodes {
 		MagicInvoker invoker = createMethodInvoker(clazz, targetMethod, mode);
 		if (invoker != null) data.exactInvokerCache.put(key, invoker);
 		return invoker;
+	}
+
+	public static MagicInvoker createMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic) {
+		return createMethodInvoker(clazz, methodName, arity, isStatic, getEffectiveMode());
+	}
+
+	public static MagicInvoker createMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic,
+	                                               AccessMode mode) {
+		Method targetMethod = MethodResolver.findMethod(clazz, methodName, arity, isStatic);
+		if (targetMethod == null) return null;
+		return createMethodInvoker(clazz, targetMethod, mode);
 	}
 
 	public static MagicInvoker createMethodInvoker(Class<?> clazz, Method targetMethod) {
@@ -999,27 +1020,46 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
-	public static MagicInvoker createMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic) {
-		return createMethodInvoker(clazz, methodName, arity, isStatic, getEffectiveMode());
+	public static MagicConstructorInvoker getConstructorInvoker(Class<?> clazz, int arity) {
+		return getConstructorInvoker(clazz, arity, getEffectiveMode());
 	}
 
-	public static MagicInvoker createMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic,
-	                                               AccessMode mode) {
+	public static MagicConstructorInvoker getConstructorInvoker(Class<?> clazz, int arity, AccessMode mode) {
 		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
-		Method targetMethod = MethodResolver.findMethod(clazz, methodName, arity, isStatic);
-		if (targetMethod == null) return null;
-		return createMethodInvoker(clazz, targetMethod, mode);
+		ClassJITData            data   = JIT_DATA.get(clazz);
+		CtorLookupKey           key    = new CtorLookupKey(mode, arity);
+		MagicConstructorInvoker cached = data.ctorCache.get(key);
+		if (cached != null) return cached;
+		MagicConstructorInvoker invoker = createConstructorInvoker(clazz, arity, mode);
+		if (invoker != null) data.ctorCache.put(key, invoker);
+		return invoker;
 	}
 
-	public static MagicConstructorInvoker createConstructorInvoker(Class<?> clazz, int arity) {
-		return createConstructorInvoker(clazz, arity, getEffectiveMode());
+	public static MagicConstructorInvoker getConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor) {
+		return getConstructorInvoker(clazz, targetCtor, getEffectiveMode());
 	}
 
-	public static MagicConstructorInvoker createConstructorInvoker(Class<?> clazz, int arity, AccessMode mode) {
-		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
-		Constructor<?> targetCtor = MethodResolver.findConstructor(clazz, arity);
+	public static MagicConstructorInvoker getConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor, AccessMode mode) {
 		if (targetCtor == null) return null;
+		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
+		ClassJITData            data   = JIT_DATA.get(clazz);
+		ExactCtorKey            key    = new ExactCtorKey(mode, targetCtor);
+		MagicConstructorInvoker cached = data.exactCtorCache.get(key);
+		if (cached != null) return cached;
+		MagicConstructorInvoker invoker = createConstructorInvoker(clazz, targetCtor, mode);
+		if (invoker != null) data.exactCtorCache.put(key, invoker);
+		return invoker;
+	}
+
+	public static MagicConstructorInvoker createConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor) {
+		return createConstructorInvoker(clazz, targetCtor, getEffectiveMode());
+	}
+
+	public static MagicConstructorInvoker createConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor, AccessMode mode) {
+		if (targetCtor == null) return null;
+		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
 		targetCtor.setAccessible(true);
+		int arity = targetCtor.getParameterCount();
 		try {
 			if (mode == AccessMode.NESTMATE) {
 				if (canUseNestmateCtor(clazz, targetCtor)) {
@@ -1031,7 +1071,7 @@ public class MagicJIT implements Opcodes {
 			} else if (mode == AccessMode.MAGIC_ACCESSOR) {
 				if (!Magic.isInstalled()) Magic.install();
 				if (Magic.isMagicAccessorInstalled()) {
-					MagicConstructorInvoker asmInvoker = generateAsmConstructorInvoker(clazz, arity);
+					MagicConstructorInvoker asmInvoker = generateAsmConstructorInvoker(clazz, targetCtor);
 					if (asmInvoker != null) return asmInvoker;
 				}
 				MagicConstructorInvoker linkToCtor = generateLinkToConstructorInvoker(clazz, targetCtor);
@@ -1069,6 +1109,17 @@ public class MagicJIT implements Opcodes {
 		} catch (Throwable e) {
 			throw new RuntimeException("Failed to generate MagicConstructorInvoker for " + clazz.getName() + " (mode=" + mode + ")", e);
 		}
+	}
+
+	public static MagicConstructorInvoker createConstructorInvoker(Class<?> clazz, int arity) {
+		return createConstructorInvoker(clazz, arity, getEffectiveMode());
+	}
+
+	public static MagicConstructorInvoker createConstructorInvoker(Class<?> clazz, int arity, AccessMode mode) {
+		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
+		Constructor<?> targetCtor = MethodResolver.findConstructor(clazz, arity);
+		if (targetCtor == null) return null;
+		return createConstructorInvoker(clazz, targetCtor, mode);
 	}
 
 	public static MethodHandle getFieldGetterStub(Class<?> clazz, String fieldName) {
@@ -4160,8 +4211,12 @@ public class MagicJIT implements Opcodes {
 
 	private static MagicConstructorInvoker generateAsmConstructorInvoker(Class<?> clazz, int arity) {
 		Constructor<?> targetCtor = MethodResolver.findConstructor(clazz, arity);
+		return targetCtor == null ? null : generateAsmConstructorInvoker(clazz, targetCtor);
+	}
+
+	private static MagicConstructorInvoker generateAsmConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor) {
 		if (targetCtor == null || Modifier.isPrivate(targetCtor.getModifiers())) return null;
-		// targetCtor.setAccessible(true); // 没必要
+		int arity = targetCtor.getParameterCount();
 		try {
 			Magic.install();
 			Class<?>    hostClass = getHostClass(clazz);

@@ -197,4 +197,39 @@ public class JavaInteropBugVerificationTest {
 			hope.magic.js.runtime.JSLinker.STRATEGY = oldStrategy;
 		}
 	}
+
+	public static class OverloadCtorTarget {
+		public final String tag;
+
+		public OverloadCtorTarget(int x) {
+			this.tag = "int:" + x;
+		}
+
+		public OverloadCtorTarget(String s) {
+			this.tag = "string:" + s;
+		}
+	}
+
+	/**
+	 * 验证构造函数重载解析与 CallSite 守卫锁定缺陷
+	 */
+	@Test
+	public void testBug_ConstructorOverloadResolutionAndGuard() {
+		JSContext cx = new JSContext();
+		cx.set("OverloadCtorTarget", OverloadCtorTarget.class);
+		String script = """
+			function make(val) {
+				return new OverloadCtorTarget(val);
+			}
+			let o1 = make(100);
+			let o2 = make("hello");
+			[o1.tag, o2.tag];
+			""";
+		cx.eval(script);
+		Object tag1 = cx.eval("o1.tag;");
+		Object tag2 = cx.eval("o2.tag;");
+		System.out.println("[Constructor Overload 现象] tag1=" + tag1 + ", tag2=" + tag2);
+		Assertions.assertEquals("int:100", tag1);
+		Assertions.assertEquals("string:hello", tag2);
+	}
 }

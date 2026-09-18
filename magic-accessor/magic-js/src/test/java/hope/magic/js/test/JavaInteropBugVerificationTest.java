@@ -279,4 +279,53 @@ public class JavaInteropBugVerificationTest {
 		System.out.println("[Bug 4.2 现象] array index site.getChainDepth()=" + arrSite.getChainDepth());
 		Assertions.assertTrue(arrSite.getChainDepth() > 0, "Array index CallSite must install Guard!");
 	}
+
+	private static Object extractBoundInvoker(MethodHandle mh) {
+		Class<?> cur = mh.getClass();
+		while (cur != null && cur != Object.class) {
+			for (Field f : cur.getDeclaredFields()) {
+				try {
+					f.setAccessible(true);
+					Object val = f.get(mh);
+					if (val instanceof hope.magic.js.runtime.MagicJIT.MagicInvoker || val instanceof hope.magic.js.runtime.MagicJIT.MagicConstructorInvoker) {
+						return val;
+					}
+				} catch (Throwable ignored) {}
+			}
+			cur = cur.getSuperclass();
+		}
+		return null;
+	}
+
+	/**
+	 * 验证缺陷 5.1: MagicJIT.createExactMethodStub 与 createExactConstructorStub 直连字节码调用器
+	 */
+	@Test
+	public void testBug5_ExactMethodAndConstructorStubUsesMagicInvoker() throws Throwable {
+		// 1. Method stub 直连 MagicInvoker 验证
+		java.lang.reflect.Method method = OverloadTarget.class.getMethod("execute", int.class);
+		MethodHandle stub = hope.magic.js.runtime.MagicJIT.createExactMethodStub(OverloadTarget.class, method);
+		Assertions.assertNotNull(stub, "Exact stub must not be null");
+
+		OverloadTarget target = new OverloadTarget();
+		Object res = stub.invokeExact((Object) target, (Object) 42);
+		Assertions.assertEquals("int:42", res);
+
+		Object boundInvoker = extractBoundInvoker(stub);
+		System.out.println("[Bug 5 现象 Method] boundInvoker=" + boundInvoker);
+		Assertions.assertNotNull(boundInvoker, "createExactMethodStub must bind a MagicInvoker bytecode invoker instance!");
+
+		// 2. Constructor stub 直连 MagicConstructorInvoker 验证
+		java.lang.reflect.Constructor<?> ctor = SimpleConstructorTarget.class.getConstructor();
+		MethodHandle ctorStub = hope.magic.js.runtime.MagicJIT.createExactConstructorStub(SimpleConstructorTarget.class, ctor);
+		Assertions.assertNotNull(ctorStub, "Constructor stub must not be null");
+
+		Object instance = ctorStub.invokeExact((Object) SimpleConstructorTarget.class);
+		Assertions.assertInstanceOf(SimpleConstructorTarget.class, instance);
+
+		Object boundCtorInvoker = extractBoundInvoker(ctorStub);
+		System.out.println("[Bug 5 现象 Constructor] boundCtorInvoker=" + boundCtorInvoker);
+		Assertions.assertNotNull(boundCtorInvoker, "createExactConstructorStub must bind a MagicConstructorInvoker bytecode invoker instance!");
+	}
 }
+

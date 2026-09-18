@@ -3093,14 +3093,10 @@ public class JSLinker {
 				}
 
 				try {
-					MethodHandle mh     = Magic.lookup.unreflectConstructor(targetCtor);
-					Class<?>[]   pTypes = targetCtor.getParameterTypes();
-					for (int i = 0; i < pTypes.length; i++) {
-						MethodHandle filter = getArgumentFilter(pTypes[i]);
-						if (filter != null) mh = MethodHandles.filterArguments(mh, i, filter);
+					MethodHandle directCtor = MagicJIT.createExactConstructorStub(clazz, targetCtor);
+					if (directCtor != null) {
+						site.installGuardOrSwitchMegamorphic(test, directCtor.asType(site.type()));
 					}
-					MethodHandle directCtor = MethodHandles.dropArguments(mh, 0, Object.class);
-					site.installGuardOrSwitchMegamorphic(test, directCtor.asType(site.type()));
 				} catch (Throwable ignored) { }
 
 				if (STRATEGY != InvocationStrategy.SPREADER) {

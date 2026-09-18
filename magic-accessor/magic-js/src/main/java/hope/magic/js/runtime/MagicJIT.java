@@ -48,10 +48,10 @@ public class MagicJIT implements Opcodes {
 	public static volatile java.util.function.BiConsumer<String, byte[]> CLASS_DUMP_HOOK = null;
 
 	public static String disassemble(byte[] classBytes) {
-		org.objectweb.asm.ClassReader cr = new org.objectweb.asm.ClassReader(classBytes);
-		java.io.StringWriter sw = new java.io.StringWriter();
-		java.io.PrintWriter pw = new java.io.PrintWriter(sw);
-		org.objectweb.asm.util.TraceClassVisitor tcv = new org.objectweb.asm.util.TraceClassVisitor(pw);
+		var cr  = new org.objectweb.asm.ClassReader(classBytes);
+		var sw  = new java.io.StringWriter();
+		var pw  = new java.io.PrintWriter(sw);
+		var tcv = new org.objectweb.asm.util.TraceClassVisitor(pw);
 		cr.accept(tcv, 0);
 		return sw.toString();
 	}
@@ -173,9 +173,9 @@ public class MagicJIT implements Opcodes {
 	}
 
 	private static final class ExactCtorKey {
-		final AccessMode mode;
+		final AccessMode     mode;
 		final Constructor<?> ctor;
-		final int hash;
+		final int            hash;
 
 		ExactCtorKey(AccessMode mode, Constructor<?> ctor) {
 			this.mode = mode;
@@ -197,10 +197,10 @@ public class MagicJIT implements Opcodes {
 	}
 
 	private static final class HostMethodGroup {
-		final Class<?> invokerClass;
-		final Constructor<?> ctor;
+		final Class<?>             invokerClass;
+		final Constructor<?>       ctor;
 		final Map<Method, Integer> slotMap;
-		final boolean isBoot;
+		final boolean              isBoot;
 
 		HostMethodGroup(Class<?> invokerClass, Constructor<?> ctor, Map<Method, Integer> slotMap, boolean isBoot) {
 			this.invokerClass = invokerClass;
@@ -240,10 +240,10 @@ public class MagicJIT implements Opcodes {
 	}
 
 	private static final class HostCtorGroup {
-		final Class<?> invokerClass;
-		final Constructor<?> ctor;
+		final Class<?>                     invokerClass;
+		final Constructor<?>               ctor;
 		final Map<Constructor<?>, Integer> slotMap;
-		final boolean isBoot;
+		final boolean                      isBoot;
 
 		HostCtorGroup(Class<?> invokerClass, Constructor<?> ctor, Map<Constructor<?>, Integer> slotMap, boolean isBoot) {
 			this.invokerClass = invokerClass;
@@ -283,7 +283,7 @@ public class MagicJIT implements Opcodes {
 	}
 
 	private static final HostMethodGroup EMPTY_METHOD_GROUP = new HostMethodGroup(null, null, Collections.emptyMap(), false);
-	private static final HostCtorGroup EMPTY_CTOR_GROUP = new HostCtorGroup(null, null, Collections.emptyMap(), false);
+	private static final HostCtorGroup   EMPTY_CTOR_GROUP   = new HostCtorGroup(null, null, Collections.emptyMap(), false);
 
 
 	private static final class ClassJITData {
@@ -293,7 +293,8 @@ public class MagicJIT implements Opcodes {
 		final Map<ExactCtorKey, MagicConstructorInvoker>  exactCtorCache    = new ConcurrentHashMap<>();
 		final Map<String, MethodHandle>                   getterCache       = new ConcurrentHashMap<>();
 		final Map<String, MethodHandle>                   setterCache       = new ConcurrentHashMap<>();
-		final Map<ExactMethodKey, MethodHandle>           exactMethodCache  = new ConcurrentHashMap<>();
+		final Map<ExactMethodKey, MethodHandle>           exactMethodCache   = new ConcurrentHashMap<>();
+		final Map<ExactCtorKey, MethodHandle>             exactCtorStubCache = new ConcurrentHashMap<>();
 
 		volatile HostMethodGroup nestmateMethodGroup;
 		volatile HostCtorGroup   nestmateCtorGroup;
@@ -326,11 +327,11 @@ public class MagicJIT implements Opcodes {
 		MEMBER_NAME_CLASS = mnClass;
 	}
 
-	private static final AtomicLong               COUNTER              = new AtomicLong();
+	private static final AtomicLong COUNTER = new AtomicLong();
 
 	private static String getPackageName(Class<?> cls) {
-		String name = cls.getName();
-		int lastDot = name.lastIndexOf('.');
+		String name    = cls.getName();
+		int    lastDot = name.lastIndexOf('.');
 		return lastDot == -1 ? "" : name.substring(0, lastDot);
 	}
 
@@ -347,7 +348,7 @@ public class MagicJIT implements Opcodes {
 	}
 
 	private static String getInvokerClassName(Class<?> hostClass, String simpleName) {
-		String pkg = getPackageName(hostClass);
+		String pkg    = getPackageName(hostClass);
 		String prefix = pkg.isEmpty() ? "" : pkg.replace('.', '/') + "/";
 		return prefix + simpleName + "_" + COUNTER.incrementAndGet();
 	}
@@ -370,9 +371,9 @@ public class MagicJIT implements Opcodes {
 
 	private static void setStaticField(Field field, Object value) {
 		try {
-			jdk.internal.misc.Unsafe u = jdk.internal.misc.Unsafe.getUnsafe();
-			long off = u.staticFieldOffset(field);
-			Object base = u.staticFieldBase(field);
+			jdk.internal.misc.Unsafe u    = jdk.internal.misc.Unsafe.getUnsafe();
+			long                     off  = u.staticFieldOffset(field);
+			Object                   base = u.staticFieldBase(field);
 			u.putReference(base, off, value);
 		} catch (Throwable t) {
 			try {
@@ -593,6 +594,53 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
+	private static boolean isFallbackInvoker(MagicInvoker invoker) {
+		return invoker instanceof Arity0Invoker
+			|| invoker instanceof Arity1Invoker
+			|| invoker instanceof Arity2Invoker
+			|| invoker instanceof Arity3Invoker
+			|| invoker instanceof GenericInvoker;
+	}
+
+	private static boolean isFallbackCtorInvoker(MagicConstructorInvoker invoker) {
+		return invoker instanceof Arity0CtorInvoker
+			|| invoker instanceof Arity1CtorInvoker
+			|| invoker instanceof Arity2CtorInvoker
+			|| invoker instanceof Arity3CtorInvoker
+			|| invoker instanceof GenericCtorInvoker;
+	}
+
+	private static final MethodHandle MH_INVOKER_INVOKE0;
+	private static final MethodHandle MH_INVOKER_INVOKE1;
+	private static final MethodHandle MH_INVOKER_INVOKE2;
+	private static final MethodHandle MH_INVOKER_INVOKE3;
+	private static final MethodHandle MH_INVOKER_INVOKE;
+
+	private static final MethodHandle MH_CTOR_INVOKER_NEW0;
+	private static final MethodHandle MH_CTOR_INVOKER_NEW1;
+	private static final MethodHandle MH_CTOR_INVOKER_NEW2;
+	private static final MethodHandle MH_CTOR_INVOKER_NEW3;
+	private static final MethodHandle MH_CTOR_INVOKER_NEW;
+
+	static {
+		try {
+			MethodHandles.Lookup lk = MethodHandles.publicLookup();
+			MH_INVOKER_INVOKE0 = lk.findVirtual(MagicInvoker.class, "invoke0", MethodType.methodType(Object.class, Object.class));
+			MH_INVOKER_INVOKE1 = lk.findVirtual(MagicInvoker.class, "invoke1", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_INVOKER_INVOKE2 = lk.findVirtual(MagicInvoker.class, "invoke2", MethodType.methodType(Object.class, Object.class, Object.class, Object.class));
+			MH_INVOKER_INVOKE3 = lk.findVirtual(MagicInvoker.class, "invoke3", MethodType.methodType(Object.class, Object.class, Object.class, Object.class, Object.class));
+			MH_INVOKER_INVOKE  = lk.findVirtual(MagicInvoker.class, "invoke", MethodType.methodType(Object.class, Object.class, Object[].class));
+
+			MH_CTOR_INVOKER_NEW0 = lk.findVirtual(MagicConstructorInvoker.class, "newInstance0", MethodType.methodType(Object.class));
+			MH_CTOR_INVOKER_NEW1 = lk.findVirtual(MagicConstructorInvoker.class, "newInstance1", MethodType.methodType(Object.class, Object.class));
+			MH_CTOR_INVOKER_NEW2 = lk.findVirtual(MagicConstructorInvoker.class, "newInstance2", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_CTOR_INVOKER_NEW3 = lk.findVirtual(MagicConstructorInvoker.class, "newInstance3", MethodType.methodType(Object.class, Object.class, Object.class, Object.class));
+			MH_CTOR_INVOKER_NEW  = lk.findVirtual(MagicConstructorInvoker.class, "newInstance", MethodType.methodType(Object.class, Object[].class));
+		} catch (Throwable t) {
+			throw new ExceptionInInitializerError(t);
+		}
+	}
+
 	public static final String BOOT_INVOKER_INTERNAL_NAME      = "java/lang/invoke/MagicInvoker";
 	public static final String BOOT_CTOR_INVOKER_INTERNAL_NAME = "java/lang/invoke/MagicConstructorInvoker";
 
@@ -673,12 +721,12 @@ public class MagicJIT implements Opcodes {
 			if (BOOT_INVOKER_ADAPTER_CTOR == null) {
 				synchronized (MagicJIT.class) {
 					if (BOOT_INVOKER_ADAPTER_CTOR == null) {
-						Class<?> bootIface = getOrCreateBootInvokerInterface();
-						String bootIfaceInternal = Type.getInternalName(bootIface);
-						String adapterName = "hope/magic/js/runtime/MagicBootstrapAdapter";
-						ClassWriter aw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+						Class<?>    bootIface         = getOrCreateBootInvokerInterface();
+						String      bootIfaceInternal = Type.getInternalName(bootIface);
+						String      adapterName       = "hope/magic/js/runtime/MagicBootstrapAdapter";
+						ClassWriter aw                = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 						aw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, adapterName, null, "java/lang/Object",
-							new String[]{ Type.getInternalName(MagicInvoker.class) });
+						 new String[]{Type.getInternalName(MagicInvoker.class)});
 
 						FieldVisitor afv = aw.visitField(ACC_PUBLIC | ACC_FINAL, "delegate", "L" + bootIfaceInternal + ";", null, null);
 						afv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
@@ -836,12 +884,12 @@ public class MagicJIT implements Opcodes {
 			if (BOOT_CTOR_ADAPTER_CTOR == null) {
 				synchronized (MagicJIT.class) {
 					if (BOOT_CTOR_ADAPTER_CTOR == null) {
-						Class<?> bootIface = getOrCreateBootCtorInvokerInterface();
-						String bootIfaceInternal = Type.getInternalName(bootIface);
-						String adapterName = "hope/magic/js/runtime/MagicBootstrapCtorAdapter";
-						ClassWriter aw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+						Class<?>    bootIface         = getOrCreateBootCtorInvokerInterface();
+						String      bootIfaceInternal = Type.getInternalName(bootIface);
+						String      adapterName       = "hope/magic/js/runtime/MagicBootstrapCtorAdapter";
+						ClassWriter aw                = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 						aw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, adapterName, null, "java/lang/Object",
-							new String[]{ Type.getInternalName(MagicConstructorInvoker.class) });
+						 new String[]{Type.getInternalName(MagicConstructorInvoker.class)});
 
 						FieldVisitor afv = aw.visitField(ACC_PUBLIC | ACC_FINAL, "delegate", "L" + bootIfaceInternal + ";", null, null);
 						afv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
@@ -1039,7 +1087,8 @@ public class MagicJIT implements Opcodes {
 		return getConstructorInvoker(clazz, targetCtor, getEffectiveMode());
 	}
 
-	public static MagicConstructorInvoker getConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor, AccessMode mode) {
+	public static MagicConstructorInvoker getConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor,
+	                                                            AccessMode mode) {
 		if (targetCtor == null) return null;
 		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
 		ClassJITData            data   = JIT_DATA.get(clazz);
@@ -1055,7 +1104,8 @@ public class MagicJIT implements Opcodes {
 		return createConstructorInvoker(clazz, targetCtor, getEffectiveMode());
 	}
 
-	public static MagicConstructorInvoker createConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor, AccessMode mode) {
+	public static MagicConstructorInvoker createConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor,
+	                                                               AccessMode mode) {
 		if (targetCtor == null) return null;
 		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
 		targetCtor.setAccessible(true);
@@ -1234,7 +1284,78 @@ public class MagicJIT implements Opcodes {
 	}
 
 	public static MethodHandle generateExactMethodStub(Class<?> clazz, Method targetMethod, AccessMode mode) {
+		if (mode != AccessMode.UNSAFE_AND_METHODHANDLE) {
+			try {
+				MagicInvoker invoker = getMethodInvoker(clazz, targetMethod, mode);
+				if (invoker != null && !isFallbackInvoker(invoker)) {
+					int arity = targetMethod.getParameterCount();
+					return switch (arity) {
+						case 0 -> MH_INVOKER_INVOKE0.bindTo(invoker);
+						case 1 -> MH_INVOKER_INVOKE1.bindTo(invoker);
+						case 2 -> MH_INVOKER_INVOKE2.bindTo(invoker);
+						case 3 -> MH_INVOKER_INVOKE3.bindTo(invoker);
+						default -> MH_INVOKER_INVOKE.bindTo(invoker).asCollector(1, Object[].class, arity);
+					};
+				}
+			} catch (Throwable ignored) {
+			}
+		}
 		return generateDirectMethodHandleStub(clazz, targetMethod);
+	}
+
+	public static MethodHandle createExactConstructorStub(Class<?> clazz, Constructor<?> targetCtor) {
+		return getExactConstructorStub(clazz, targetCtor, getEffectiveMode());
+	}
+
+	public static MethodHandle getExactConstructorStub(Class<?> clazz, Constructor<?> targetCtor) {
+		return getExactConstructorStub(clazz, targetCtor, getEffectiveMode());
+	}
+
+	public static MethodHandle getExactConstructorStub(Class<?> clazz, Constructor<?> targetCtor, AccessMode mode) {
+		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
+		ClassJITData   data   = JIT_DATA.get(clazz);
+		ExactCtorKey   key    = new ExactCtorKey(mode, targetCtor);
+		MethodHandle   cached = data.exactCtorStubCache.get(key);
+		if (cached != null) return cached;
+		MethodHandle stub = generateExactConstructorStub(clazz, targetCtor, mode);
+		if (stub != null) data.exactCtorStubCache.put(key, stub);
+		return stub;
+	}
+
+	public static MethodHandle generateExactConstructorStub(Class<?> clazz, Constructor<?> targetCtor, AccessMode mode) {
+		if (mode != AccessMode.UNSAFE_AND_METHODHANDLE) {
+			try {
+				MagicConstructorInvoker ctorInvoker = getConstructorInvoker(clazz, targetCtor, mode);
+				if (ctorInvoker != null && !isFallbackCtorInvoker(ctorInvoker)) {
+					int arity = targetCtor.getParameterCount();
+					MethodHandle rawStub = switch (arity) {
+						case 0 -> MH_CTOR_INVOKER_NEW0.bindTo(ctorInvoker);
+						case 1 -> MH_CTOR_INVOKER_NEW1.bindTo(ctorInvoker);
+						case 2 -> MH_CTOR_INVOKER_NEW2.bindTo(ctorInvoker);
+						case 3 -> MH_CTOR_INVOKER_NEW3.bindTo(ctorInvoker);
+						default -> MH_CTOR_INVOKER_NEW.bindTo(ctorInvoker).asCollector(0, Object[].class, arity);
+					};
+					return MethodHandles.dropArguments(rawStub, 0, Object.class);
+				}
+			} catch (Throwable ignored) {
+			}
+		}
+		return generateDirectConstructorStub(clazz, targetCtor);
+	}
+
+	private static MethodHandle generateDirectConstructorStub(Class<?> clazz, Constructor<?> targetCtor) {
+		try {
+			targetCtor.setAccessible(true);
+			MethodHandle mh     = Magic.lookup.unreflectConstructor(targetCtor);
+			Class<?>[]   pTypes = targetCtor.getParameterTypes();
+			for (int i = 0; i < pTypes.length; i++) {
+				MethodHandle filter = JSLinker.getArgumentFilter(pTypes[i]);
+				if (filter != null) mh = MethodHandles.filterArguments(mh, i, filter);
+			}
+			return MethodHandles.dropArguments(mh, 0, Object.class);
+		} catch (Throwable t) {
+			throw new RuntimeException("Failed to unreflect constructor for " + clazz.getName(), t);
+		}
 	}
 
 	private static MethodHandle generateDirectMethodHandleStub(Class<?> clazz, Method targetMethod) {
@@ -1462,13 +1583,13 @@ public class MagicJIT implements Opcodes {
 	private static Object resolveMemberName(Class<?> declClass, Method m) {
 		int        arity       = m.getParameterCount();
 		boolean    isStatic    = Modifier.isStatic(m.getModifiers());
-		boolean    isSpecial   = Modifier.isPrivate(m.getModifiers());
+		boolean    isSpecial   = Modifier.isPrivate(m.getModifiers()) || Modifier.isFinal(m.getModifiers()) || Modifier.isFinal(declClass.getModifiers());
 		boolean    isInterface = declClass.isInterface();
 		Class<?>[] paramTypes  = m.getParameterTypes();
 		Class<?>   retType     = m.getReturnType();
 
-		byte refKind = isStatic ? (byte) 6 : (isSpecial ? (byte) 7 : (isInterface ? (byte) 9 : (byte) 5));
-		Object mn = null;
+		byte   refKind = isStatic ? (byte) 6 : (isSpecial ? (byte) 7 : (isInterface ? (byte) 9 : (byte) 5));
+		Object mn      = null;
 		try {
 			MethodType mt = MethodType.methodType(retType, paramTypes);
 			mn = resolveOrFail(refKind, declClass, m.getName(), mt);
@@ -1487,7 +1608,7 @@ public class MagicJIT implements Opcodes {
 
 	private static Object resolveCtorMemberName(Class<?> declClass, Constructor<?> c) {
 		Class<?>[] paramTypes = c.getParameterTypes();
-		Object mn = null;
+		Object     mn         = null;
 		try {
 			MethodType mt = MethodType.methodType(void.class, paramTypes);
 			mn = resolveOrFail((byte) 7, declClass, "<init>", mt);
@@ -1506,16 +1627,16 @@ public class MagicJIT implements Opcodes {
 
 	private static String getLinkToName(Class<?> declClass, Method m) {
 		if (Modifier.isStatic(m.getModifiers())) return "linkToStatic";
-		if (Modifier.isPrivate(m.getModifiers())) return "linkToSpecial";
+		if (Modifier.isPrivate(m.getModifiers()) || Modifier.isFinal(m.getModifiers()) || Modifier.isFinal(declClass.getModifiers())) return "linkToSpecial";
 		if (declClass.isInterface()) return "linkToInterface";
 		return "linkToVirtual";
 	}
 
 	private static String getLinkToDesc(Class<?> declClass, Method m) {
-		boolean    isStatic   = Modifier.isStatic(m.getModifiers());
-		Class<?>[] paramTypes = m.getParameterTypes();
-		Class<?>   retType    = m.getReturnType();
-		StringBuilder sb = new StringBuilder("(");
+		boolean       isStatic   = Modifier.isStatic(m.getModifiers());
+		Class<?>[]    paramTypes = m.getParameterTypes();
+		Class<?>      retType    = m.getReturnType();
+		StringBuilder sb         = new StringBuilder("(");
 		if (!isStatic) {
 			sb.append("Ljava/lang/Object;");
 		}
@@ -1538,8 +1659,8 @@ public class MagicJIT implements Opcodes {
 	}
 
 	private static String getLinkToCtorDesc(Constructor<?> c) {
-		Class<?>[] paramTypes = c.getParameterTypes();
-		StringBuilder sb = new StringBuilder("(Ljava/lang/Object;");
+		Class<?>[]    paramTypes = c.getParameterTypes();
+		StringBuilder sb         = new StringBuilder("(Ljava/lang/Object;");
 		for (Class<?> p : paramTypes) {
 			if (p.isPrimitive()) {
 				sb.append(Type.getDescriptor(p));
@@ -1564,7 +1685,7 @@ public class MagicJIT implements Opcodes {
 			m0.visitVarInsn(ALOAD, 0);
 			m0.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slots0.size()];
+			int[]   keys   = new int[slots0.size()];
 			Label[] labels = new Label[slots0.size()];
 			for (int k = 0; k < slots0.size(); k++) {
 				keys[k] = slots0.get(k);
@@ -1575,7 +1696,7 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slots0.size(); k++) {
 				m0.visitLabel(labels[k]);
-				Method m = methods.get(slots0.get(k));
+				Method  m        = methods.get(slots0.get(k));
 				boolean isStatic = Modifier.isStatic(m.getModifiers());
 				if (!isStatic) {
 					m0.visitVarInsn(ALOAD, 1);
@@ -1607,7 +1728,7 @@ public class MagicJIT implements Opcodes {
 			m1.visitVarInsn(ALOAD, 0);
 			m1.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slots1.size()];
+			int[]   keys   = new int[slots1.size()];
 			Label[] labels = new Label[slots1.size()];
 			for (int k = 0; k < slots1.size(); k++) {
 				keys[k] = slots1.get(k);
@@ -1618,7 +1739,7 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slots1.size(); k++) {
 				m1.visitLabel(labels[k]);
-				Method m = methods.get(slots1.get(k));
+				Method  m        = methods.get(slots1.get(k));
 				boolean isStatic = Modifier.isStatic(m.getModifiers());
 				if (!isStatic) {
 					m1.visitVarInsn(ALOAD, 1);
@@ -1656,7 +1777,7 @@ public class MagicJIT implements Opcodes {
 			m2.visitVarInsn(ALOAD, 0);
 			m2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slots2.size()];
+			int[]   keys   = new int[slots2.size()];
 			Label[] labels = new Label[slots2.size()];
 			for (int k = 0; k < slots2.size(); k++) {
 				keys[k] = slots2.get(k);
@@ -1667,7 +1788,7 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slots2.size(); k++) {
 				m2.visitLabel(labels[k]);
-				Method m = methods.get(slots2.get(k));
+				Method  m        = methods.get(slots2.get(k));
 				boolean isStatic = Modifier.isStatic(m.getModifiers());
 				if (!isStatic) {
 					m2.visitVarInsn(ALOAD, 1);
@@ -1711,7 +1832,7 @@ public class MagicJIT implements Opcodes {
 			m3.visitVarInsn(ALOAD, 0);
 			m3.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slots3.size()];
+			int[]   keys   = new int[slots3.size()];
 			Label[] labels = new Label[slots3.size()];
 			for (int k = 0; k < slots3.size(); k++) {
 				keys[k] = slots3.get(k);
@@ -1722,7 +1843,7 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slots3.size(); k++) {
 				m3.visitLabel(labels[k]);
-				Method m = methods.get(slots3.get(k));
+				Method  m        = methods.get(slots3.get(k));
 				boolean isStatic = Modifier.isStatic(m.getModifiers());
 				if (!isStatic) {
 					m3.visitVarInsn(ALOAD, 1);
@@ -1776,7 +1897,7 @@ public class MagicJIT implements Opcodes {
 			mi0.visitVarInsn(ALOAD, 0);
 			mi0.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slotsI0.size()];
+			int[]   keys   = new int[slotsI0.size()];
 			Label[] labels = new Label[slotsI0.size()];
 			for (int k = 0; k < slotsI0.size(); k++) {
 				keys[k] = slotsI0.get(k);
@@ -1787,7 +1908,7 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slotsI0.size(); k++) {
 				mi0.visitLabel(labels[k]);
-				Method m = methods.get(slotsI0.get(k));
+				Method  m        = methods.get(slotsI0.get(k));
 				boolean isStatic = Modifier.isStatic(m.getModifiers());
 				if (!isStatic) {
 					mi0.visitVarInsn(ALOAD, 1);
@@ -1811,7 +1932,9 @@ public class MagicJIT implements Opcodes {
 		List<Integer> slotsI1 = new ArrayList<>();
 		for (int i = 0; i < methods.size(); i++) {
 			Method m = methods.get(i);
-			if (m.getReturnType() == int.class && m.getParameterCount() == 1 && m.getParameterTypes()[0] == int.class) slotsI1.add(i);
+			if (m.getReturnType() == int.class && m.getParameterCount() == 1 && m.getParameterTypes()[0] == int.class) {
+				slotsI1.add(i);
+			}
 		}
 		if (!slotsI1.isEmpty()) {
 			MethodVisitor mi1 = cw.visitMethod(ACC_PUBLIC, "invokeInt1", "(Ljava/lang/Object;I)I", null, new String[]{"java/lang/Throwable"});
@@ -1819,7 +1942,7 @@ public class MagicJIT implements Opcodes {
 			mi1.visitVarInsn(ALOAD, 0);
 			mi1.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slotsI1.size()];
+			int[]   keys   = new int[slotsI1.size()];
 			Label[] labels = new Label[slotsI1.size()];
 			for (int k = 0; k < slotsI1.size(); k++) {
 				keys[k] = slotsI1.get(k);
@@ -1830,7 +1953,7 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slotsI1.size(); k++) {
 				mi1.visitLabel(labels[k]);
-				Method m = methods.get(slotsI1.get(k));
+				Method  m        = methods.get(slotsI1.get(k));
 				boolean isStatic = Modifier.isStatic(m.getModifiers());
 				if (!isStatic) {
 					mi1.visitVarInsn(ALOAD, 1);
@@ -1867,7 +1990,7 @@ public class MagicJIT implements Opcodes {
 			mi2.visitVarInsn(ALOAD, 0);
 			mi2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slotsI2.size()];
+			int[]   keys   = new int[slotsI2.size()];
 			Label[] labels = new Label[slotsI2.size()];
 			for (int k = 0; k < slotsI2.size(); k++) {
 				keys[k] = slotsI2.get(k);
@@ -1878,7 +2001,7 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slotsI2.size(); k++) {
 				mi2.visitLabel(labels[k]);
-				Method m = methods.get(slotsI2.get(k));
+				Method  m        = methods.get(slotsI2.get(k));
 				boolean isStatic = Modifier.isStatic(m.getModifiers());
 				if (!isStatic) {
 					mi2.visitVarInsn(ALOAD, 1);
@@ -1918,7 +2041,7 @@ public class MagicJIT implements Opcodes {
 			ml2.visitVarInsn(ALOAD, 0);
 			ml2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slotsL2.size()];
+			int[]   keys   = new int[slotsL2.size()];
 			Label[] labels = new Label[slotsL2.size()];
 			for (int k = 0; k < slotsL2.size(); k++) {
 				keys[k] = slotsL2.get(k);
@@ -1929,7 +2052,7 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slotsL2.size(); k++) {
 				ml2.visitLabel(labels[k]);
-				Method m = methods.get(slotsL2.get(k));
+				Method  m        = methods.get(slotsL2.get(k));
 				boolean isStatic = Modifier.isStatic(m.getModifiers());
 				if (!isStatic) {
 					ml2.visitVarInsn(ALOAD, 1);
@@ -1969,7 +2092,7 @@ public class MagicJIT implements Opcodes {
 			md2.visitVarInsn(ALOAD, 0);
 			md2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slotsD2.size()];
+			int[]   keys   = new int[slotsD2.size()];
 			Label[] labels = new Label[slotsD2.size()];
 			for (int k = 0; k < slotsD2.size(); k++) {
 				keys[k] = slotsD2.get(k);
@@ -1980,7 +2103,7 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slotsD2.size(); k++) {
 				md2.visitLabel(labels[k]);
-				Method m = methods.get(slotsD2.get(k));
+				Method  m        = methods.get(slotsD2.get(k));
 				boolean isStatic = Modifier.isStatic(m.getModifiers());
 				if (!isStatic) {
 					md2.visitVarInsn(ALOAD, 1);
@@ -2008,7 +2131,8 @@ public class MagicJIT implements Opcodes {
 	}
 
 	private static void emitLinkToArityFastPaths(ClassWriter cw, String invokerClassName,
-	                                             List<Method> methods, List<String> linkToNames, List<String> linkToDescs) {
+	                                             List<Method> methods, List<String> linkToNames,
+	                                             List<String> linkToDescs) {
 		// invoke0
 		List<Integer> slots0 = new ArrayList<>();
 		for (int i = 0; i < methods.size(); i++) {
@@ -2020,7 +2144,7 @@ public class MagicJIT implements Opcodes {
 			m0.visitVarInsn(ALOAD, 0);
 			m0.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slots0.size()];
+			int[]   keys   = new int[slots0.size()];
 			Label[] labels = new Label[slots0.size()];
 			for (int k = 0; k < slots0.size(); k++) {
 				keys[k] = slots0.get(k);
@@ -2031,8 +2155,8 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slots0.size(); k++) {
 				m0.visitLabel(labels[k]);
-				int idx = slots0.get(k);
-				Method m = methods.get(idx);
+				int     idx      = slots0.get(k);
+				Method  m        = methods.get(idx);
 				boolean isStatic = Modifier.isStatic(m.getModifiers());
 				if (!isStatic) {
 					m0.visitVarInsn(ALOAD, 1);
@@ -2065,7 +2189,7 @@ public class MagicJIT implements Opcodes {
 			m1.visitVarInsn(ALOAD, 0);
 			m1.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slots1.size()];
+			int[]   keys   = new int[slots1.size()];
 			Label[] labels = new Label[slots1.size()];
 			for (int k = 0; k < slots1.size(); k++) {
 				keys[k] = slots1.get(k);
@@ -2076,8 +2200,8 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slots1.size(); k++) {
 				m1.visitLabel(labels[k]);
-				int idx = slots1.get(k);
-				Method m = methods.get(idx);
+				int     idx      = slots1.get(k);
+				Method  m        = methods.get(idx);
 				boolean isStatic = Modifier.isStatic(m.getModifiers());
 				if (!isStatic) {
 					m1.visitVarInsn(ALOAD, 1);
@@ -2116,7 +2240,7 @@ public class MagicJIT implements Opcodes {
 			m2.visitVarInsn(ALOAD, 0);
 			m2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slots2.size()];
+			int[]   keys   = new int[slots2.size()];
 			Label[] labels = new Label[slots2.size()];
 			for (int k = 0; k < slots2.size(); k++) {
 				keys[k] = slots2.get(k);
@@ -2127,8 +2251,8 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slots2.size(); k++) {
 				m2.visitLabel(labels[k]);
-				int idx = slots2.get(k);
-				Method m = methods.get(idx);
+				int     idx      = slots2.get(k);
+				Method  m        = methods.get(idx);
 				boolean isStatic = Modifier.isStatic(m.getModifiers());
 				if (!isStatic) {
 					m2.visitVarInsn(ALOAD, 1);
@@ -2173,7 +2297,7 @@ public class MagicJIT implements Opcodes {
 			m3.visitVarInsn(ALOAD, 0);
 			m3.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slots3.size()];
+			int[]   keys   = new int[slots3.size()];
 			Label[] labels = new Label[slots3.size()];
 			for (int k = 0; k < slots3.size(); k++) {
 				keys[k] = slots3.get(k);
@@ -2184,8 +2308,8 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slots3.size(); k++) {
 				m3.visitLabel(labels[k]);
-				int idx = slots3.get(k);
-				Method m = methods.get(idx);
+				int     idx      = slots3.get(k);
+				Method  m        = methods.get(idx);
 				boolean isStatic = Modifier.isStatic(m.getModifiers());
 				if (!isStatic) {
 					m3.visitVarInsn(ALOAD, 1);
@@ -2227,7 +2351,8 @@ public class MagicJIT implements Opcodes {
 	}
 
 	private static void emitLinkToPrimitiveFastPaths(ClassWriter cw, String invokerClassName,
-	                                                 List<Method> methods, List<String> linkToNames, List<String> linkToDescs) {
+	                                                 List<Method> methods, List<String> linkToNames,
+	                                                 List<String> linkToDescs) {
 		// invokeInt0
 		List<Integer> slotsI0 = new ArrayList<>();
 		for (int i = 0; i < methods.size(); i++) {
@@ -2240,7 +2365,7 @@ public class MagicJIT implements Opcodes {
 			mi0.visitVarInsn(ALOAD, 0);
 			mi0.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slotsI0.size()];
+			int[]   keys   = new int[slotsI0.size()];
 			Label[] labels = new Label[slotsI0.size()];
 			for (int k = 0; k < slotsI0.size(); k++) {
 				keys[k] = slotsI0.get(k);
@@ -2251,8 +2376,8 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slotsI0.size(); k++) {
 				mi0.visitLabel(labels[k]);
-				int idx = slotsI0.get(k);
-				Method m = methods.get(idx);
+				int     idx      = slotsI0.get(k);
+				Method  m        = methods.get(idx);
 				boolean isStatic = Modifier.isStatic(m.getModifiers());
 				if (!isStatic) {
 					mi0.visitVarInsn(ALOAD, 1);
@@ -2277,7 +2402,9 @@ public class MagicJIT implements Opcodes {
 		List<Integer> slotsI1 = new ArrayList<>();
 		for (int i = 0; i < methods.size(); i++) {
 			Method m = methods.get(i);
-			if (m.getReturnType() == int.class && m.getParameterCount() == 1 && m.getParameterTypes()[0] == int.class) slotsI1.add(i);
+			if (m.getReturnType() == int.class && m.getParameterCount() == 1 && m.getParameterTypes()[0] == int.class) {
+				slotsI1.add(i);
+			}
 		}
 		if (!slotsI1.isEmpty()) {
 			MethodVisitor mi1 = cw.visitMethod(ACC_PUBLIC, "invokeInt1", "(Ljava/lang/Object;I)I", null, new String[]{"java/lang/Throwable"});
@@ -2285,7 +2412,7 @@ public class MagicJIT implements Opcodes {
 			mi1.visitVarInsn(ALOAD, 0);
 			mi1.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slotsI1.size()];
+			int[]   keys   = new int[slotsI1.size()];
 			Label[] labels = new Label[slotsI1.size()];
 			for (int k = 0; k < slotsI1.size(); k++) {
 				keys[k] = slotsI1.get(k);
@@ -2296,8 +2423,8 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slotsI1.size(); k++) {
 				mi1.visitLabel(labels[k]);
-				int idx = slotsI1.get(k);
-				Method m = methods.get(idx);
+				int     idx      = slotsI1.get(k);
+				Method  m        = methods.get(idx);
 				boolean isStatic = Modifier.isStatic(m.getModifiers());
 				if (!isStatic) {
 					mi1.visitVarInsn(ALOAD, 1);
@@ -2335,7 +2462,7 @@ public class MagicJIT implements Opcodes {
 			mi2.visitVarInsn(ALOAD, 0);
 			mi2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slotsI2.size()];
+			int[]   keys   = new int[slotsI2.size()];
 			Label[] labels = new Label[slotsI2.size()];
 			for (int k = 0; k < slotsI2.size(); k++) {
 				keys[k] = slotsI2.get(k);
@@ -2346,8 +2473,8 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slotsI2.size(); k++) {
 				mi2.visitLabel(labels[k]);
-				int idx = slotsI2.get(k);
-				Method m = methods.get(idx);
+				int     idx      = slotsI2.get(k);
+				Method  m        = methods.get(idx);
 				boolean isStatic = Modifier.isStatic(m.getModifiers());
 				if (!isStatic) {
 					mi2.visitVarInsn(ALOAD, 1);
@@ -2388,7 +2515,7 @@ public class MagicJIT implements Opcodes {
 			ml2.visitVarInsn(ALOAD, 0);
 			ml2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slotsL2.size()];
+			int[]   keys   = new int[slotsL2.size()];
 			Label[] labels = new Label[slotsL2.size()];
 			for (int k = 0; k < slotsL2.size(); k++) {
 				keys[k] = slotsL2.get(k);
@@ -2399,8 +2526,8 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slotsL2.size(); k++) {
 				ml2.visitLabel(labels[k]);
-				int idx = slotsL2.get(k);
-				Method m = methods.get(idx);
+				int     idx      = slotsL2.get(k);
+				Method  m        = methods.get(idx);
 				boolean isStatic = Modifier.isStatic(m.getModifiers());
 				if (!isStatic) {
 					ml2.visitVarInsn(ALOAD, 1);
@@ -2441,7 +2568,7 @@ public class MagicJIT implements Opcodes {
 			md2.visitVarInsn(ALOAD, 0);
 			md2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slotsD2.size()];
+			int[]   keys   = new int[slotsD2.size()];
 			Label[] labels = new Label[slotsD2.size()];
 			for (int k = 0; k < slotsD2.size(); k++) {
 				keys[k] = slotsD2.get(k);
@@ -2452,8 +2579,8 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slotsD2.size(); k++) {
 				md2.visitLabel(labels[k]);
-				int idx = slotsD2.get(k);
-				Method m = methods.get(idx);
+				int     idx      = slotsD2.get(k);
+				Method  m        = methods.get(idx);
 				boolean isStatic = Modifier.isStatic(m.getModifiers());
 				if (!isStatic) {
 					md2.visitVarInsn(ALOAD, 1);
@@ -2494,7 +2621,7 @@ public class MagicJIT implements Opcodes {
 			n0.visitVarInsn(ALOAD, 0);
 			n0.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slots0.size()];
+			int[]   keys   = new int[slots0.size()];
 			Label[] labels = new Label[slots0.size()];
 			for (int k = 0; k < slots0.size(); k++) {
 				keys[k] = slots0.get(k);
@@ -2532,7 +2659,7 @@ public class MagicJIT implements Opcodes {
 			n1.visitVarInsn(ALOAD, 0);
 			n1.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slots1.size()];
+			int[]   keys   = new int[slots1.size()];
 			Label[] labels = new Label[slots1.size()];
 			for (int k = 0; k < slots1.size(); k++) {
 				keys[k] = slots1.get(k);
@@ -2576,7 +2703,7 @@ public class MagicJIT implements Opcodes {
 			n2.visitVarInsn(ALOAD, 0);
 			n2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slots2.size()];
+			int[]   keys   = new int[slots2.size()];
 			Label[] labels = new Label[slots2.size()];
 			for (int k = 0; k < slots2.size(); k++) {
 				keys[k] = slots2.get(k);
@@ -2626,7 +2753,7 @@ public class MagicJIT implements Opcodes {
 			n3.visitVarInsn(ALOAD, 0);
 			n3.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slots3.size()];
+			int[]   keys   = new int[slots3.size()];
 			Label[] labels = new Label[slots3.size()];
 			for (int k = 0; k < slots3.size(); k++) {
 				keys[k] = slots3.get(k);
@@ -2685,7 +2812,7 @@ public class MagicJIT implements Opcodes {
 			n0.visitVarInsn(ALOAD, 0);
 			n0.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slots0.size()];
+			int[]   keys   = new int[slots0.size()];
 			Label[] labels = new Label[slots0.size()];
 			for (int k = 0; k < slots0.size(); k++) {
 				keys[k] = slots0.get(k);
@@ -2727,7 +2854,7 @@ public class MagicJIT implements Opcodes {
 			n1.visitVarInsn(ALOAD, 0);
 			n1.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slots1.size()];
+			int[]   keys   = new int[slots1.size()];
 			Label[] labels = new Label[slots1.size()];
 			for (int k = 0; k < slots1.size(); k++) {
 				keys[k] = slots1.get(k);
@@ -2738,8 +2865,8 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slots1.size(); k++) {
 				n1.visitLabel(labels[k]);
-				int idx = slots1.get(k);
-				Constructor<?> c = ctors.get(idx);
+				int            idx = slots1.get(k);
+				Constructor<?> c   = ctors.get(idx);
 				n1.visitMethodInsn(INVOKESTATIC, "jdk/internal/misc/Unsafe", "getUnsafe", "()Ljdk/internal/misc/Unsafe;", false);
 				n1.visitFieldInsn(GETSTATIC, invokerClassName, "TARGET_CLS", "Ljava/lang/Class;");
 				n1.visitMethodInsn(INVOKEVIRTUAL, "jdk/internal/misc/Unsafe", "allocateInstance", "(Ljava/lang/Class;)Ljava/lang/Object;", false);
@@ -2776,7 +2903,7 @@ public class MagicJIT implements Opcodes {
 			n2.visitVarInsn(ALOAD, 0);
 			n2.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slots2.size()];
+			int[]   keys   = new int[slots2.size()];
 			Label[] labels = new Label[slots2.size()];
 			for (int k = 0; k < slots2.size(); k++) {
 				keys[k] = slots2.get(k);
@@ -2787,8 +2914,8 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slots2.size(); k++) {
 				n2.visitLabel(labels[k]);
-				int idx = slots2.get(k);
-				Constructor<?> c = ctors.get(idx);
+				int            idx = slots2.get(k);
+				Constructor<?> c   = ctors.get(idx);
 				n2.visitMethodInsn(INVOKESTATIC, "jdk/internal/misc/Unsafe", "getUnsafe", "()Ljdk/internal/misc/Unsafe;", false);
 				n2.visitFieldInsn(GETSTATIC, invokerClassName, "TARGET_CLS", "Ljava/lang/Class;");
 				n2.visitMethodInsn(INVOKEVIRTUAL, "jdk/internal/misc/Unsafe", "allocateInstance", "(Ljava/lang/Class;)Ljava/lang/Object;", false);
@@ -2831,7 +2958,7 @@ public class MagicJIT implements Opcodes {
 			n3.visitVarInsn(ALOAD, 0);
 			n3.visitFieldInsn(GETFIELD, invokerClassName, "slot", "I");
 
-			int[] keys = new int[slots3.size()];
+			int[]   keys   = new int[slots3.size()];
 			Label[] labels = new Label[slots3.size()];
 			for (int k = 0; k < slots3.size(); k++) {
 				keys[k] = slots3.get(k);
@@ -2842,8 +2969,8 @@ public class MagicJIT implements Opcodes {
 
 			for (int k = 0; k < slots3.size(); k++) {
 				n3.visitLabel(labels[k]);
-				int idx = slots3.get(k);
-				Constructor<?> c = ctors.get(idx);
+				int            idx = slots3.get(k);
+				Constructor<?> c   = ctors.get(idx);
 				n3.visitMethodInsn(INVOKESTATIC, "jdk/internal/misc/Unsafe", "getUnsafe", "()Ljdk/internal/misc/Unsafe;", false);
 				n3.visitFieldInsn(GETSTATIC, invokerClassName, "TARGET_CLS", "Ljava/lang/Class;");
 				n3.visitMethodInsn(INVOKEVIRTUAL, "jdk/internal/misc/Unsafe", "allocateInstance", "(Ljava/lang/Class;)Ljava/lang/Object;", false);
@@ -2907,14 +3034,14 @@ public class MagicJIT implements Opcodes {
 			}
 
 			String ifaceName = canSeeMagicInvoker ?
-				Type.getInternalName(MagicInvoker.class) :
-				Type.getInternalName(getOrCreateBootInvokerInterface());
+			 Type.getInternalName(MagicInvoker.class) :
+			 Type.getInternalName(getOrCreateBootInvokerInterface());
 
 			String      owner            = Type.getInternalName(declClass);
 			String      invokerClassName = owner + "$$MagicNestmateHostInvoker_" + COUNTER.incrementAndGet();
 			ClassWriter cw               = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 			cw.visit(V17, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
-				new String[]{ifaceName});
+			 new String[]{ifaceName});
 
 			// slot field
 			cw.visitField(ACC_PUBLIC | ACC_FINAL, "slot", "I", null, null).visitEnd();
@@ -3031,7 +3158,7 @@ public class MagicJIT implements Opcodes {
 
 			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 			cw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
-				new String[]{BOOT_INVOKER_INTERNAL_NAME});
+			 new String[]{BOOT_INVOKER_INTERNAL_NAME});
 
 			int n = validMethods.size();
 			for (int i = 0; i < n; i++) {
@@ -3154,14 +3281,14 @@ public class MagicJIT implements Opcodes {
 			}
 
 			String ifaceName = canSeeCtorInvoker ?
-				Type.getInternalName(MagicConstructorInvoker.class) :
-				Type.getInternalName(getOrCreateBootCtorInvokerInterface());
+			 Type.getInternalName(MagicConstructorInvoker.class) :
+			 Type.getInternalName(getOrCreateBootCtorInvokerInterface());
 
 			String      targetOwner      = Type.getInternalName(declClass);
 			String      invokerClassName = targetOwner + "$$MagicNestmateHostCtor_" + COUNTER.incrementAndGet();
 			ClassWriter cw               = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 			cw.visit(V17, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
-				new String[]{ifaceName});
+			 new String[]{ifaceName});
 
 			// slot field
 			cw.visitField(ACC_PUBLIC | ACC_FINAL, "slot", "I", null, null).visitEnd();
@@ -3272,7 +3399,7 @@ public class MagicJIT implements Opcodes {
 
 			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 			cw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
-				new String[]{BOOT_CTOR_INVOKER_INTERNAL_NAME});
+			 new String[]{BOOT_CTOR_INVOKER_INTERNAL_NAME});
 
 			FieldVisitor cfv = cw.visitField(ACC_PUBLIC | ACC_STATIC | ACC_FINAL, "TARGET_CLS", "Ljava/lang/Class;", null, null);
 			cfv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
@@ -3374,7 +3501,6 @@ public class MagicJIT implements Opcodes {
 	}
 
 
-
 	public static boolean canUseNestmate(Class<?> clazz, Method targetMethod) {
 		if (!Magic.supportsNestmateClasses()) return false;
 		if (clazz == null || targetMethod == null) return false;
@@ -3401,9 +3527,9 @@ public class MagicJIT implements Opcodes {
 	 */
 	private static MagicInvoker generateNestmateMethodInvoker(Class<?> clazz, Method targetMethod) {
 		if (!Magic.supportsNestmateClasses()) return null;
-		Class<?> declClass = targetMethod.getDeclaringClass();
-		ClassJITData jitData = JIT_DATA.get(declClass);
-		HostMethodGroup group = jitData.nestmateMethodGroup;
+		Class<?>        declClass = targetMethod.getDeclaringClass();
+		ClassJITData    jitData   = JIT_DATA.get(declClass);
+		HostMethodGroup group     = jitData.nestmateMethodGroup;
 		if (group == null) {
 			synchronized (jitData) {
 				group = jitData.nestmateMethodGroup;
@@ -3439,14 +3565,14 @@ public class MagicJIT implements Opcodes {
 			}
 
 			String ifaceName = canSeeMagicInvoker ?
-				Type.getInternalName(MagicInvoker.class) :
-				Type.getInternalName(getOrCreateBootInvokerInterface());
+			 Type.getInternalName(MagicInvoker.class) :
+			 Type.getInternalName(getOrCreateBootInvokerInterface());
 
 			String      owner            = Type.getInternalName(declClass);
 			String      invokerClassName = owner + "$$MagicNestmateInvoker_" + COUNTER.incrementAndGet();
 			ClassWriter cw               = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 			cw.visit(V17, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
-				new String[]{ifaceName});
+			 new String[]{ifaceName});
 
 			// Default constructor <init>()
 			MethodVisitor initMv = cw.visitMethod(ACC_PUBLIC, "<init>", "()V", null, null);
@@ -3639,9 +3765,9 @@ public class MagicJIT implements Opcodes {
 
 	private static MagicConstructorInvoker generateNestmateConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor) {
 		if (!Magic.supportsNestmateClasses()) return null;
-		Class<?> declClass = targetCtor.getDeclaringClass();
-		ClassJITData jitData = JIT_DATA.get(declClass);
-		HostCtorGroup group = jitData.nestmateCtorGroup;
+		Class<?>      declClass = targetCtor.getDeclaringClass();
+		ClassJITData  jitData   = JIT_DATA.get(declClass);
+		HostCtorGroup group     = jitData.nestmateCtorGroup;
 		if (group == null) {
 			synchronized (jitData) {
 				group = jitData.nestmateCtorGroup;
@@ -3658,10 +3784,11 @@ public class MagicJIT implements Opcodes {
 		return generateSingleNestmateConstructorInvoker(clazz, targetCtor);
 	}
 
-	private static MagicConstructorInvoker generateSingleNestmateConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor) {
+	private static MagicConstructorInvoker generateSingleNestmateConstructorInvoker(Class<?> clazz,
+	                                                                                Constructor<?> targetCtor) {
 		if (!Magic.supportsNestmateClasses()) return null;
 		if (targetCtor == null) return null;
-		int arity = targetCtor.getParameterCount();
+		int      arity     = targetCtor.getParameterCount();
 		Class<?> declClass = targetCtor.getDeclaringClass();
 		if (Modifier.isAbstract(declClass.getModifiers())) return null;
 		Class<?> hostClass = getHostClass(declClass);
@@ -3676,14 +3803,14 @@ public class MagicJIT implements Opcodes {
 			}
 
 			String ifaceName = canSeeCtorInvoker ?
-				Type.getInternalName(MagicConstructorInvoker.class) :
-				Type.getInternalName(getOrCreateBootCtorInvokerInterface());
+			 Type.getInternalName(MagicConstructorInvoker.class) :
+			 Type.getInternalName(getOrCreateBootCtorInvokerInterface());
 
 			String      targetOwner      = Type.getInternalName(declClass);
 			String      invokerClassName = targetOwner + "$$MagicNestmateCtor_" + COUNTER.incrementAndGet();
 			ClassWriter cw               = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 			cw.visit(V17, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
-				new String[]{ifaceName});
+			 new String[]{ifaceName});
 
 			// Default constructor <init>()
 			MethodVisitor initMv = cw.visitMethod(ACC_PUBLIC, "<init>", "()V", null, null);
@@ -3788,9 +3915,9 @@ public class MagicJIT implements Opcodes {
 	 */
 	private static MagicInvoker generateLinkToMethodInvoker(Class<?> clazz, Method targetMethod) {
 		if (MEMBER_NAME_CLASS == null || LinkerHelper.IS_ANDROID) return null;
-		Class<?> declClass = targetMethod.getDeclaringClass();
-		ClassJITData jitData = JIT_DATA.get(declClass);
-		HostMethodGroup group = jitData.linkToMethodGroup;
+		Class<?>        declClass = targetMethod.getDeclaringClass();
+		ClassJITData    jitData   = JIT_DATA.get(declClass);
+		HostMethodGroup group     = jitData.linkToMethodGroup;
 		if (group == null) {
 			synchronized (jitData) {
 				group = jitData.linkToMethodGroup;
@@ -3810,7 +3937,7 @@ public class MagicJIT implements Opcodes {
 	private static MagicInvoker generateSingleLinkToMethodInvoker(Class<?> clazz, Method targetMethod) {
 		if (MEMBER_NAME_CLASS == null || LinkerHelper.IS_ANDROID) return null;
 		Class<?> declClass = targetMethod.getDeclaringClass();
-		Object mn = resolveMemberName(declClass, targetMethod);
+		Object   mn        = resolveMemberName(declClass, targetMethod);
 		if (mn == null) return null;
 
 		int        arity      = targetMethod.getParameterCount();
@@ -3830,7 +3957,7 @@ public class MagicJIT implements Opcodes {
 
 			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 			cw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
-				new String[]{BOOT_INVOKER_INTERNAL_NAME});
+			 new String[]{BOOT_INVOKER_INTERNAL_NAME});
 
 			FieldVisitor fv = cw.visitField(ACC_PUBLIC | ACC_STATIC | ACC_FINAL, "MN", "Ljava/lang/Object;", null, null);
 			fv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
@@ -4006,7 +4133,7 @@ public class MagicJIT implements Opcodes {
 			}
 
 			cw.visitEnd();
-			byte[]   bytes        = cw.toByteArray();
+			byte[] bytes = cw.toByteArray();
 			if (CLASS_DUMP_HOOK != null) {
 				CLASS_DUMP_HOOK.accept(invokerClassName, bytes);
 			}
@@ -4205,7 +4332,7 @@ public class MagicJIT implements Opcodes {
 	                                     String methodDesc, boolean isStatic) {
 		int opcode = isStatic ? INVOKESTATIC :
 		 clazz.isInterface() ? INVOKEINTERFACE :
-		  INVOKEVIRTUAL;
+			INVOKEVIRTUAL;
 		mv.visitMethodInsn(opcode, owner, targetMethod.getName(), methodDesc, clazz.isInterface());
 	}
 
@@ -4324,9 +4451,9 @@ public class MagicJIT implements Opcodes {
 
 	private static MagicConstructorInvoker generateLinkToConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor) {
 		if (MEMBER_NAME_CLASS == null || LinkerHelper.IS_ANDROID) return null;
-		Class<?> declClass = targetCtor.getDeclaringClass();
-		ClassJITData jitData = JIT_DATA.get(declClass);
-		HostCtorGroup group = jitData.linkToCtorGroup;
+		Class<?>      declClass = targetCtor.getDeclaringClass();
+		ClassJITData  jitData   = JIT_DATA.get(declClass);
+		HostCtorGroup group     = jitData.linkToCtorGroup;
 		if (group == null) {
 			synchronized (jitData) {
 				group = jitData.linkToCtorGroup;
@@ -4343,11 +4470,12 @@ public class MagicJIT implements Opcodes {
 		return generateSingleLinkToConstructorInvoker(clazz, targetCtor);
 	}
 
-	private static MagicConstructorInvoker generateSingleLinkToConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor) {
+	private static MagicConstructorInvoker generateSingleLinkToConstructorInvoker(Class<?> clazz,
+	                                                                              Constructor<?> targetCtor) {
 		if (MEMBER_NAME_CLASS == null || LinkerHelper.IS_ANDROID) return null;
 		if (targetCtor == null) return null;
 		Class<?> declClass = targetCtor.getDeclaringClass();
-		Object mn = resolveCtorMemberName(declClass, targetCtor);
+		Object   mn        = resolveCtorMemberName(declClass, targetCtor);
 		if (mn == null) return null;
 
 		int        arity      = targetCtor.getParameterCount();
@@ -4363,7 +4491,7 @@ public class MagicJIT implements Opcodes {
 
 			ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 			cw.visit(V1_8, ACC_PUBLIC | ACC_FINAL, invokerClassName, null, "java/lang/Object",
-				new String[]{BOOT_CTOR_INVOKER_INTERNAL_NAME});
+			 new String[]{BOOT_CTOR_INVOKER_INTERNAL_NAME});
 
 			FieldVisitor cfv = cw.visitField(ACC_PUBLIC | ACC_STATIC | ACC_FINAL, "TARGET_CLS", "Ljava/lang/Class;", null, null);
 			cfv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
@@ -4469,7 +4597,7 @@ public class MagicJIT implements Opcodes {
 			}
 
 			cw.visitEnd();
-			byte[]   bytes        = cw.toByteArray();
+			byte[] bytes = cw.toByteArray();
 			if (CLASS_DUMP_HOOK != null) {
 				CLASS_DUMP_HOOK.accept(invokerClassName, bytes);
 			}

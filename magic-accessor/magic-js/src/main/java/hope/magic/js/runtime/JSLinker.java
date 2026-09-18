@@ -71,6 +71,7 @@ public class JSLinker {
 	public static final MethodHandle MH_NEW_ARRAY_0;
 	public static final MethodHandle MH_NEW_ARRAY_1;
 	public static final MethodHandle MH_NEW_ARRAY_N;
+	public static final MethodHandle MH_CREATE_BOUND_INSTANCE_METHOD;
 
 	static {
 		try {
@@ -119,6 +120,7 @@ public class JSLinker {
 			MH_NEW_ARRAY_1 = LOOKUP.findStatic(JSLinker.class, "newArrayInstance1", MethodType.methodType(Object.class, Class.class, Object.class));
 			MH_NEW_ARRAY_N = LOOKUP.findStatic(JSLinker.class, "newArrayInstanceN", MethodType.methodType(Object.class, Class.class, Object[].class));
 			MH_INVOKE_INTERFACE_1 = LOOKUP.findStatic(JSLinker.class, "invokeInterfaceAdapter1", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_CREATE_BOUND_INSTANCE_METHOD = LOOKUP.findStatic(JSLinker.class, "createBoundInstanceMethod", MethodType.methodType(Object.class, Object.class, Class.class, String.class, int.class));
 		} catch (Throwable e) {
 			throw new ExceptionInInitializerError(e);
 		}
@@ -1679,7 +1681,8 @@ public class JSLinker {
 			if (target instanceof JSBridgedObject) {
 				List<Method> candidates = MethodResolver.findCandidateMethods(target.getClass(), propName);
 				if (!candidates.isEmpty()) {
-					return (JSFunction) (cx, thisObj, args) -> invokeJavaMethod(target, propName, args);
+					int arity = candidates.stream().mapToInt(Method::getParameterCount).min().orElse(0);
+					return new BoundJavaMethod(target, target.getClass(), propName, arity, false);
 				}
 			}
 
@@ -1779,11 +1782,16 @@ public class JSLinker {
 		}
 
 		try {
-			for (Method m : targetClass.getMethods()) {
-				if (m.getName().equals(propName)) {
-					if (!isStatic || Modifier.isStatic(m.getModifiers())) {
-						return (JSFunction) (cx, thisObj, args) -> invokeJavaMethod(target, propName, args);
-					}
+			List<Method> candidates = MethodResolver.findCandidateMethods(targetClass, propName);
+			if (!candidates.isEmpty()) {
+				boolean hasStatic = candidates.stream().anyMatch(m -> Modifier.isStatic(m.getModifiers()));
+				boolean hasInstance = candidates.stream().anyMatch(m -> !Modifier.isStatic(m.getModifiers()));
+				if (isStatic && hasStatic) {
+					int arity = candidates.stream().filter(m -> Modifier.isStatic(m.getModifiers())).mapToInt(Method::getParameterCount).min().orElse(0);
+					return getOrCreateStaticBoundMethod(targetClass, propName, arity);
+				} else if (!isStatic && (hasInstance || hasStatic)) {
+					int arity = candidates.stream().mapToInt(Method::getParameterCount).min().orElse(0);
+					return new BoundJavaMethod(target, targetClass, propName, arity, false);
 				}
 			}
 		} catch (Throwable ignored) {
@@ -2034,7 +2042,14 @@ public class JSLinker {
 
 			List<Method> candidates = MethodResolver.findCandidateMethods(targetClass, propName);
 			if (!candidates.isEmpty() && candidates.stream().anyMatch(m -> Modifier.isStatic(m.getModifiers()))) {
-				return (JSFunction) (cx, thisObj, args) -> invokeJavaMethod(target, propName, args);
+				int arity = candidates.stream().filter(m -> Modifier.isStatic(m.getModifiers())).mapToInt(Method::getParameterCount).min().orElse(0);
+				BoundJavaMethod bound = getOrCreateStaticBoundMethod(targetClass, propName, arity);
+				try {
+					MethodHandle directGetter = MethodHandles.dropArguments(MethodHandles.constant(Object.class, bound), 0, Object.class).asType(site.type());
+					site.installGuardOrSwitchMegamorphic(test, directGetter);
+				} catch (Throwable ignored) {
+				}
+				return bound;
 			}
 
 			return JSUndefined.INSTANCE;
@@ -2079,11 +2094,30 @@ public class JSLinker {
 		}
 
 		// 3. 尝试匹配方法名并返回绑定的 JS 方法函数
-		if (!MethodResolver.findCandidateMethods(targetClass, propName).isEmpty()) {
-			return (JSFunction) (cx, thisObj, args) -> invokeJavaMethod(target, propName, args);
+		List<Method> candidates = MethodResolver.findCandidateMethods(targetClass, propName);
+		if (!candidates.isEmpty()) {
+			int arity = candidates.stream().mapToInt(Method::getParameterCount).min().orElse(0);
+			try {
+				MethodHandle factory = MethodHandles.insertArguments(MH_CREATE_BOUND_INSTANCE_METHOD, 1, targetClass, propName, arity);
+				site.installGuardOrSwitchMegamorphic(test, factory.asType(site.type()));
+			} catch (Throwable ignored) {
+			}
+			return new BoundJavaMethod(target, targetClass, propName, arity, false);
 		}
 
 		return JSUndefined.INSTANCE;
+	}
+
+	private static final ConcurrentHashMap<Class<?>, ConcurrentHashMap<String, BoundJavaMethod>> STATIC_METHOD_CACHE = new ConcurrentHashMap<>();
+
+	public static BoundJavaMethod getOrCreateStaticBoundMethod(Class<?> targetClass, String propName, int arity) {
+		return STATIC_METHOD_CACHE
+			.computeIfAbsent(targetClass, k -> new ConcurrentHashMap<>())
+			.computeIfAbsent(propName, k -> new BoundJavaMethod(targetClass, targetClass, propName, arity, true));
+	}
+
+	public static Object createBoundInstanceMethod(Object target, Class<?> targetClass, String propName, int arity) {
+		return new BoundJavaMethod(target, targetClass, propName, arity, false);
 	}
 
 	public static void setPropFallback(ChainedCallSite site, Object target, Object value, String propName) {
@@ -5047,7 +5081,10 @@ public class JSLinker {
 		return sb.toString();
 	}
 
-	private static Object invokeJavaMethod(Object target, String methodName, Object[] args) throws Throwable {
+	static Object invokeJavaMethod(Object target, String methodName, Object[] args) throws Throwable {
+		if (args == null) {
+			args = JSFunction.EMPTY_ARGS;
+		}
 		Class<?> clazz    = (target instanceof Class<?>) ? (Class<?>) target : target.getClass();
 		boolean  isStatic = (target instanceof Class<?>);
 

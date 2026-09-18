@@ -13,6 +13,8 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
+import hope.magic.js.runtime.JSLinker;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -891,6 +893,97 @@ public class JavaInteropBugVerificationTest {
 		Assertions.assertEquals("lambda:customJob", customResult);
 		Assertions.assertSame(cx, receivedCx.get(), "callCx passed to JSFunction must be the bound JSContext, not null!");
 		Assertions.assertSame(cx, receivedCurrent.get(), "JSContext.current() inside JSFunction must be the bound JSContext, not null!");
+	}
+
+	@Test
+	public void testBug16_MethodTearOffCacheAndFunctionPrototype() throws Throwable {
+		JSContext cx = new JSContext();
+
+		// 1. 验证实例方法撕脱（Method Tear-off）：原型继承、call/apply/bind、属性 name/length、安全调用
+		cx.eval("""
+			const list1 = new (Java.type('java.util.ArrayList'))();
+			const list2 = new (Java.type('java.util.ArrayList'))();
+			const addFn = list1.add;
+
+			isFunction = (typeof addFn === 'function');
+			isInstanceOfFunction = (addFn instanceof Function);
+			hasCall = (typeof addFn.call === 'function');
+			hasApply = (typeof addFn.apply === 'function');
+			hasBind = (typeof addFn.bind === 'function');
+
+			fnName = addFn.name;
+			fnLength = addFn.length;
+
+			// 默认调用绑定到原目标 list1
+			addFn("itemA");
+			// call(null, ...) 同样绑定到原目标 list1
+			addFn.call(null, "itemB");
+			// call(list2, ...) 重绑定到 list2
+			addFn.call(list2, "itemC");
+			// apply(list2, [...]) 重绑定到 list2
+			addFn.apply(list2, ["itemD"]);
+
+			// bind(list2, ...)
+			const bound = addFn.bind(list2, "itemE");
+			bound();
+
+			list1Size = list1.size();
+			list2Size = list2.size();
+		""");
+
+		Assertions.assertEquals(true, cx.get("isFunction"), "Torn-off method must have typeof 'function'");
+		Assertions.assertEquals(true, cx.get("isInstanceOfFunction"), "Torn-off method must be instanceof Function");
+		Assertions.assertEquals(true, cx.get("hasCall"), "Torn-off method must inherit Function.prototype.call");
+		Assertions.assertEquals(true, cx.get("hasApply"), "Torn-off method must inherit Function.prototype.apply");
+		Assertions.assertEquals(true, cx.get("hasBind"), "Torn-off method must inherit Function.prototype.bind");
+		Assertions.assertEquals("add", cx.get("fnName"), "Torn-off method name must match Java method name");
+		Assertions.assertEquals(1.0, ((Number) cx.get("fnLength")).doubleValue(), "ArrayList.add length should be 1");
+		Assertions.assertEquals(2, ((Number) cx.get("list1Size")).intValue(), "list1 should have received 2 items (itemA, itemB)");
+		Assertions.assertEquals(3, ((Number) cx.get("list2Size")).intValue(), "list2 should have received 3 items (itemC, itemD, itemE)");
+
+		// 2. 验证静态方法撕脱：缓存复用、call/apply/bind 与调用
+		cx.eval("""
+			const MathClass = Java.type('java.lang.Math');
+			const abs1 = MathClass.abs;
+			const abs2 = MathClass.abs;
+			sameStaticMethod = (abs1 === abs2);
+			absDirect = abs1(-50);
+			absCall = abs1.call(null, -100);
+			absApply = abs1.apply(null, [-200]);
+			absBound = abs1.bind(null, -300)();
+		""");
+		Assertions.assertEquals(true, cx.get("sameStaticMethod"), "Static method tear-off must be cached and identity-equal");
+		Assertions.assertEquals(50.0, ((Number) cx.get("absDirect")).doubleValue());
+		Assertions.assertEquals(100.0, ((Number) cx.get("absCall")).doubleValue());
+		Assertions.assertEquals(200.0, ((Number) cx.get("absApply")).doubleValue());
+		Assertions.assertEquals(300.0, ((Number) cx.get("absBound")).doubleValue());
+
+		// 3. 验证无参/空参方法直接调用与安全防御
+		cx.eval("""
+			const list = new (Java.type('java.util.ArrayList'))();
+			list.add("test");
+			const clearFn = list.clear;
+			clearFn();
+			clearedSize = list.size();
+		""");
+		Assertions.assertEquals(0, ((Number) cx.get("clearedSize")).intValue());
+
+		// 4. 验证 CallSite 单态/多态守卫安装（内联缓存不再穿透慢路径）
+		CallSite site = JSLinker.bootstrapGetProp(
+			MethodHandles.lookup(),
+			"getProp",
+			MethodType.methodType(Object.class, Object.class),
+			"clear"
+		);
+		ArrayList<String> testList = new ArrayList<>();
+		Object tornOff1 = site.getTarget().invokeExact((Object) testList);
+		Assertions.assertInstanceOf(JSFunction.class, tornOff1);
+		ChainedCallSite chained = (ChainedCallSite) site;
+		Assertions.assertTrue(chained.getChainDepth() > 0,
+			"CallSite must install a guard for method tear-off instead of remaining unlinked!");
+
+		Object tornOff2 = site.getTarget().invokeExact((Object) testList);
+		Assertions.assertInstanceOf(JSFunction.class, tornOff2);
 	}
 }
 

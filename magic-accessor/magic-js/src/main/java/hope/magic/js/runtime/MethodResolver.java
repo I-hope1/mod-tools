@@ -87,13 +87,17 @@ public final class MethodResolver {
 				totalCost += c;
 			}
 			if (ok) {
-				for (int i = paramCount - 1; i < args.length; i++) {
-					int c = JSLinker.computeConversionCost(args[i], varargElemType);
-					if (c >= COST_INCOMPATIBLE) {
-						ok = false;
-						break;
+				if (args.length == paramCount && args[paramCount - 1] != null && params[paramCount - 1].isAssignableFrom(args[paramCount - 1].getClass())) {
+					totalCost += JSLinker.computeConversionCost(args[paramCount - 1], params[paramCount - 1]);
+				} else {
+					for (int i = paramCount - 1; i < args.length; i++) {
+						int c = JSLinker.computeConversionCost(args[i], varargElemType);
+						if (c >= COST_INCOMPATIBLE) {
+							ok = false;
+							break;
+						}
+						totalCost += c;
 					}
-					totalCost += c;
 				}
 			}
 			if (ok && totalCost < minCost) {
@@ -399,6 +403,45 @@ public final class MethodResolver {
 			}
 			return mostSpecific;
 		}
+
+		// Phase 2: 可变参数构造函数匹配 (Varargs)
+		for (Constructor<?> c : candidates) {
+			if (!c.isVarArgs()) continue;
+			int paramCount = c.getParameterCount();
+			if (args.length < paramCount - 1) continue;
+			Class<?>[] params         = c.getParameterTypes();
+			Class<?>   varargElemType = params[paramCount - 1].getComponentType();
+			boolean    ok             = true;
+			int        totalCost      = 1000; // Varargs 惩罚项
+			for (int i = 0; i < paramCount - 1; i++) {
+				int cost = JSLinker.computeConversionCost(args[i], params[i]);
+				if (cost >= COST_INCOMPATIBLE) {
+					ok = false;
+					break;
+				}
+				totalCost += cost;
+			}
+			if (ok) {
+				if (args.length == paramCount && args[paramCount - 1] != null && params[paramCount - 1].isAssignableFrom(args[paramCount - 1].getClass())) {
+					totalCost += JSLinker.computeConversionCost(args[paramCount - 1], params[paramCount - 1]);
+				} else {
+					for (int i = paramCount - 1; i < args.length; i++) {
+						int cost = JSLinker.computeConversionCost(args[i], varargElemType);
+						if (cost >= COST_INCOMPATIBLE) {
+							ok = false;
+							break;
+						}
+						totalCost += cost;
+					}
+				}
+			}
+			if (ok && totalCost < minCost) {
+				minCost = totalCost;
+				bestCtor = c;
+			}
+		}
+
+		if (bestCtor != null) return bestCtor;
 
 		return findConstructor(clazz, args.length);
 	}

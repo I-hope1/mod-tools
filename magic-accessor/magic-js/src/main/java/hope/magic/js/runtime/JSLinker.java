@@ -2849,12 +2849,51 @@ public class JSLinker {
 		return invokeJavaMethod(target, methodName, args);
 	}
 
+	public static Object[] packVarArgs(Class<?>[] paramTypes, Object[] args) {
+		int paramCount = paramTypes.length;
+		Class<?> varargArrayType = paramTypes[paramCount - 1];
+		Class<?> elemType = varargArrayType.getComponentType();
+
+		if (args.length == paramCount && args[paramCount - 1] != null) {
+			Object lastArg = args[paramCount - 1];
+			if (varargArrayType.isInstance(lastArg)) {
+				Object[] casted = new Object[paramCount];
+				for (int i = 0; i < paramCount - 1; i++) {
+					casted[i] = JSOps.castValue(args[i], paramTypes[i]);
+				}
+				casted[paramCount - 1] = lastArg;
+				return casted;
+			}
+		}
+
+		Object[] packed = new Object[paramCount];
+		for (int i = 0; i < paramCount - 1; i++) {
+			packed[i] = (i < args.length) ? JSOps.castValue(args[i], paramTypes[i]) : null;
+		}
+
+		int varargLen = Math.max(0, args.length - (paramCount - 1));
+		Object varargArr = Array.newInstance(elemType, varargLen);
+		for (int i = 0; i < varargLen; i++) {
+			Object raw = args[paramCount - 1 + i];
+			Array.set(varargArr, i, JSOps.castValue(raw, elemType));
+		}
+		packed[paramCount - 1] = varargArr;
+		return packed;
+	}
+
 	private static Object invokeMatchedMethod(Object target, Method targetMethod, Object[] args, Class<?> clazz, String methodName) throws Throwable {
 		targetMethod.setAccessible(true);
 		Class<?>[] paramTypes = targetMethod.getParameterTypes();
+		boolean isVoid = (targetMethod.getReturnType() == void.class);
+
+		if (targetMethod.isVarArgs()) {
+			Object[] packedArgs = packVarArgs(paramTypes, args);
+			Object res = targetMethod.invoke(target, packedArgs);
+			return isVoid ? JSUndefined.INSTANCE : res;
+		}
+
 		int arity = args.length;
 		MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(clazz, targetMethod);
-		boolean isVoid = (targetMethod.getReturnType() == void.class);
 		if (invoker != null) {
 			Object res = switch (arity) {
 				case 0 -> invoker.invoke0(target);
@@ -3098,6 +3137,29 @@ public class JSLinker {
 				}
 			}
 
+			if (targetMethod.isVarArgs()) {
+				try {
+					MethodHandle mh      = Magic.lookup.unreflect(targetMethod);
+					MethodHandle adapted = isStatic ? MethodHandles.dropArguments(mh, 0, Object.class) : mh;
+					int paramCount = targetMethod.getParameterCount();
+					Class<?> varargArrayType = targetMethod.getParameterTypes()[paramCount - 1];
+					int argOffset = 1; // index 0 is receiver or dropped target
+					int varargCount = args.length - (paramCount - 1);
+					if (varargCount >= 0) {
+						MethodHandle collector = adapted.asCollector(argOffset + paramCount - 1, varargArrayType, varargCount);
+						if (targetMethod.getReturnType() == void.class) {
+							collector = MethodHandles.filterReturnValue(collector, MethodHandles.constant(Object.class, JSUndefined.INSTANCE));
+						}
+						MethodHandle genericMh = collector.asType(site.type());
+						site.installGuardOrSwitchMegamorphic(test, genericMh);
+						MethodHandle spreader = genericMh.asSpreader(Object[].class, args.length);
+						return spreader.invokeExact(target, args);
+					}
+				} catch (Throwable ignored) {
+				}
+				return invokeMatchedMethod(target, targetMethod, args, clazz, methodName);
+			}
+
 			boolean preferMagicAccessor = (STRATEGY != InvocationStrategy.SPREADER);
 
 			if (preferMagicAccessor) {
@@ -3309,10 +3371,12 @@ public class JSLinker {
 			}
 			Constructor<?> c = MethodResolver.findBestMatchingConstructor(clazz, args);
 			if (c != null) {
-				Object[]   castedArgs = new Object[args.length];
 				Class<?>[] paramTypes = c.getParameterTypes();
-				for (int i = 0; i < args.length; i++) {
-					castedArgs[i] = JSOps.castValue(args[i], paramTypes[i]);
+				Object[]   castedArgs = c.isVarArgs() ? packVarArgs(paramTypes, args) : new Object[args.length];
+				if (!c.isVarArgs()) {
+					for (int i = 0; i < args.length; i++) {
+						castedArgs[i] = JSOps.castValue(args[i], paramTypes[i]);
+					}
 				}
 				return c.newInstance(castedArgs);
 			}
@@ -3684,6 +3748,23 @@ public class JSLinker {
 					if (site.type().parameterCount() > 1) {
 						test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
 					}
+				}
+
+				if (targetCtor.isVarArgs()) {
+					try {
+						MethodHandle mh = Magic.lookup.unreflectConstructor(targetCtor);
+						int paramCount = targetCtor.getParameterCount();
+						Class<?> varargArrayType = targetCtor.getParameterTypes()[paramCount - 1];
+						int varargCount = arity - (paramCount - 1);
+						if (varargCount >= 0) {
+							MethodHandle collector = mh.asCollector(paramCount - 1, varargArrayType, varargCount);
+							MethodHandle directCtor = MethodHandles.dropArguments(collector, 0, Object.class);
+							site.installGuardOrSwitchMegamorphic(test, directCtor.asType(site.type()));
+						}
+					} catch (Throwable ignored) { }
+
+					Object[] packed = packVarArgs(targetCtor.getParameterTypes(), args);
+					return targetCtor.newInstance(packed);
 				}
 
 				try {

@@ -733,6 +733,73 @@ public class JavaInteropBugVerificationTest {
 		""");
 		Assertions.assertEquals(9900.0, ((Number) sum).doubleValue());
 	}
+
+	public static class VarargsTarget {
+		public final String prefix;
+		public final Object[] items;
+
+		public VarargsTarget(String prefix, Object... items) {
+			this.prefix = prefix;
+			this.items = items;
+		}
+
+		public static String join(String delimiter, String... elements) {
+			return String.join(delimiter, elements);
+		}
+
+		public String formatItems(String sep, int... counts) {
+			StringBuilder sb = new StringBuilder(prefix);
+			for (int c : counts) {
+				sb.append(sep).append(c);
+			}
+			return sb.toString();
+		}
+	}
+
+	/**
+	 * 验证缺陷 14: Java 可变参数 (Varargs) 方法与构造函数调用崩溃：
+	 * 1. MethodResolver.findBestMatchingConstructor 遗漏 Varargs 构造函数导致无法构造对象；
+	 * 2. invokeMatchedMethod / newFallback 处理 Varargs 时由于 paramTypes 下标溢出导致 ArrayIndexOutOfBoundsException；
+	 * 3. invokeFallbackSlow / newFallback 未使用 asCollector 导致 MethodHandle.asType 抛出 WrongMethodTypeException。
+	 */
+	@Test
+	public void testBug14_JavaVarargsInvocationFails() {
+		JSContext cx = new JSContext();
+
+		// 1. 验证静态可变参数方法 String.format
+		Object resFormat = cx.eval("""
+			var String = Java.type("java.lang.String");
+			String.format("Hello %s %s", "World", "Antigravity");
+		""");
+		System.out.println("[Bug 14 现象 String.format] " + resFormat);
+		Assertions.assertEquals("Hello World Antigravity", resFormat);
+
+		// 2. 验证静态自定义可变参数方法 VarargsTarget.join
+		Object resJoin = cx.eval("""
+			var VarargsTarget = Java.type("hope.magic.js.test.JavaInteropBugVerificationTest$VarargsTarget");
+			VarargsTarget.join("-", "a", "b", "c");
+		""");
+		System.out.println("[Bug 14 现象 VarargsTarget.join] " + resJoin);
+		Assertions.assertEquals("a-b-c", resJoin);
+
+		// 3. 验证实例自定义原生类型可变参数方法 formatItems
+		Object resInst = cx.eval("""
+			var VarargsTarget = Java.type("hope.magic.js.test.JavaInteropBugVerificationTest$VarargsTarget");
+			var target = new VarargsTarget("count", "dummy");
+			target.formatItems(":", 1, 2, 3);
+		""");
+		System.out.println("[Bug 14 现象 formatItems] " + resInst);
+		Assertions.assertEquals("count:1:2:3", resInst);
+
+		// 4. 验证可变参数构造函数 new VarargsTarget(prefix, items...)
+		Object resCtor = cx.eval("""
+			var VarargsTarget = Java.type("hope.magic.js.test.JavaInteropBugVerificationTest$VarargsTarget");
+			var obj = new VarargsTarget("items", 10, "x", true);
+			obj.items.length;
+		""");
+		System.out.println("[Bug 14 现象 new VarargsTarget items.length] " + resCtor);
+		Assertions.assertEquals(3.0, ((Number) resCtor).doubleValue());
+	}
 }
 
 

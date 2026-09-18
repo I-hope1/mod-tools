@@ -600,11 +600,75 @@ public class JSContext {
 					throw new IllegalArgumentException("Java.type() requires a class name");
 				}
 				String className = JSOps.toStr(args[0]);
-				try {
-					return Class.forName(className);
-				} catch (ClassNotFoundException e) {
-					throw new RuntimeException("ClassNotFoundException: " + className, e);
+				return resolveJavaType(className);
+			});
+
+			javaObj.put("from", (JSFunction) (cx, thisObj, args) -> {
+				if (args.length == 0 || args[0] == null || args[0] == JSUndefined.INSTANCE) {
+					return JSUndefined.INSTANCE;
 				}
+				Object arg = args[0];
+				if (arg instanceof JSObject) return arg;
+				if (arg.getClass().isArray()) {
+					int len = java.lang.reflect.Array.getLength(arg);
+					JSArray jsArr = new JSArray(len);
+					for (int i = 0; i < len; i++) {
+						jsArr.push(java.lang.reflect.Array.get(arg, i));
+					}
+					return jsArr;
+				}
+				if (arg instanceof Iterable<?> iterable) {
+					JSArray jsArr = new JSArray();
+					for (Object item : iterable) {
+						jsArr.push(item);
+					}
+					return jsArr;
+				}
+				if (arg instanceof Map<?, ?> map) {
+					JSObject obj = new JSObject();
+					for (Map.Entry<?, ?> entry : map.entrySet()) {
+						obj.put(String.valueOf(entry.getKey()), entry.getValue());
+					}
+					return obj;
+				}
+				return arg;
+			});
+
+			javaObj.put("to", (JSFunction) (cx, thisObj, args) -> {
+				if (args.length == 0) return JSUndefined.INSTANCE;
+				Object jsVal = args[0];
+				Class<?> targetClass = Object[].class;
+				if (args.length > 1 && args[1] != null) {
+					if (args[1] instanceof Class<?> c) {
+						targetClass = c;
+					} else if (args[1] instanceof String s) {
+						targetClass = resolveJavaType(s);
+					}
+				}
+				if (!targetClass.isArray()) {
+					targetClass = java.lang.reflect.Array.newInstance(targetClass, 0).getClass();
+				}
+				Class<?> comp = targetClass.getComponentType();
+				if (jsVal instanceof JSArray jsArr) {
+					int len = (int) jsArr.length();
+					Object arr = java.lang.reflect.Array.newInstance(comp, len);
+					for (int i = 0; i < len; i++) {
+						java.lang.reflect.Array.set(arr, i, JSOps.castValue(jsArr.getElement(i), comp));
+					}
+					return arr;
+				}
+				if (jsVal instanceof Collection<?> col) {
+					int len = col.size();
+					Object arr = java.lang.reflect.Array.newInstance(comp, len);
+					int idx = 0;
+					for (Object item : col) {
+						java.lang.reflect.Array.set(arr, idx++, JSOps.castValue(item, comp));
+					}
+					return arr;
+				}
+				Object arr = java.lang.reflect.Array.newInstance(comp, 1);
+				java.lang.reflect.Array.set(arr, 0, JSOps.castValue(jsVal, comp));
+				return arr;
 			});
 
 			javaObj.put("extend", (JSFunction) (cx, thisObj, args) -> {
@@ -624,6 +688,59 @@ public class JSContext {
 			});
 
 			return javaObj;
+		}
+
+		public static Class<?> resolveJavaType(String typeName) {
+			if (typeName == null || typeName.isEmpty()) {
+				throw new IllegalArgumentException("Java.type() requires a non-empty class name");
+			}
+			typeName = typeName.trim();
+			// 1. 基础数据类型映射
+			switch (typeName) {
+				case "int": return int.class;
+				case "boolean": return boolean.class;
+				case "byte": return byte.class;
+				case "char": return char.class;
+				case "short": return short.class;
+				case "long": return long.class;
+				case "float": return float.class;
+				case "double": return double.class;
+				case "void": return void.class;
+			}
+
+			// 2. 数组类型判断 (e.g. "int[]", "java.lang.String[][]")
+			if (typeName.endsWith("[]")) {
+				int dims = 0;
+				String baseName = typeName;
+				while (baseName.endsWith("[]")) {
+					dims++;
+					baseName = baseName.substring(0, baseName.length() - 2).trim();
+				}
+				Class<?> elemClass = resolveJavaType(baseName);
+				return java.lang.reflect.Array.newInstance(elemClass, new int[dims]).getClass();
+			}
+
+			// 3. 类名查找 (支持上下文 ClassLoader 与内部类 Outer.Inner -> Outer$Inner 降级)
+			ClassLoader cl = Thread.currentThread().getContextClassLoader();
+			if (cl == null) cl = JSContext.class.getClassLoader();
+
+			try {
+				return Class.forName(typeName, false, cl);
+			} catch (ClassNotFoundException ignored) {
+			}
+
+			// 内部类降级尝试: 从最后一个点依次尝试替换为 $
+			int dotIndex = typeName.lastIndexOf('.');
+			while (dotIndex > 0) {
+				String innerName = typeName.substring(0, dotIndex) + "$" + typeName.substring(dotIndex + 1);
+				try {
+					return Class.forName(innerName, false, cl);
+				} catch (ClassNotFoundException ignored) {
+					dotIndex = typeName.lastIndexOf('.', dotIndex - 1);
+				}
+			}
+
+			throw new RuntimeException("ClassNotFoundException: " + typeName, new ClassNotFoundException(typeName));
 		}
 
 		static final JSFunction REGEXP = (cx, thisObj, args) -> {

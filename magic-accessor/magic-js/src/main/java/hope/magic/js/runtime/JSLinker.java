@@ -54,6 +54,9 @@ public class JSLinker {
 	public static final MethodHandle MH_GET_INDEX_LIST;
 	public static final MethodHandle MH_GET_INDEX_OBJECT_ARRAY;
 	public static final MethodHandle MH_GET_INDEX_PRIMITIVE_ARRAY;
+	public static final MethodHandle MH_NEW_ARRAY_0;
+	public static final MethodHandle MH_NEW_ARRAY_1;
+	public static final MethodHandle MH_NEW_ARRAY_N;
 
 	static {
 		try {
@@ -85,6 +88,9 @@ public class JSLinker {
 			MH_GET_INDEX_LIST = LOOKUP.findStatic(JSLinker.class, "getIndexList", MethodType.methodType(Object.class, Object.class, Object.class));
 			MH_GET_INDEX_OBJECT_ARRAY = LOOKUP.findStatic(JSLinker.class, "getIndexObjectArray", MethodType.methodType(Object.class, Object.class, Object.class));
 			MH_GET_INDEX_PRIMITIVE_ARRAY = LOOKUP.findStatic(JSLinker.class, "getIndexPrimitiveArray", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_NEW_ARRAY_0 = LOOKUP.findStatic(JSLinker.class, "newArrayInstance0", MethodType.methodType(Object.class, Class.class));
+			MH_NEW_ARRAY_1 = LOOKUP.findStatic(JSLinker.class, "newArrayInstance1", MethodType.methodType(Object.class, Class.class, Object.class));
+			MH_NEW_ARRAY_N = LOOKUP.findStatic(JSLinker.class, "newArrayInstanceN", MethodType.methodType(Object.class, Class.class, Object[].class));
 		} catch (Throwable e) {
 			throw new ExceptionInInitializerError(e);
 		}
@@ -3146,9 +3152,78 @@ public class JSLinker {
 		return newObj;
 	}
 
+	public static Object newArrayInstance0(Class<?> componentType) {
+		return Array.newInstance(componentType, 0);
+	}
+
+	public static Object newArrayInstance1(Class<?> componentType, Object lenOrInit) {
+		if (lenOrInit instanceof Number num) {
+			return Array.newInstance(componentType, num.intValue());
+		}
+		if (lenOrInit instanceof JSArray jsArr) {
+			int len = (int) jsArr.length();
+			Object arr = Array.newInstance(componentType, len);
+			for (int i = 0; i < len; i++) {
+				Array.set(arr, i, JSOps.castValue(jsArr.getElement(i), componentType));
+			}
+			return arr;
+		}
+		if (lenOrInit instanceof List<?> list) {
+			int len = list.size();
+			Object arr = Array.newInstance(componentType, len);
+			for (int i = 0; i < len; i++) {
+				Array.set(arr, i, JSOps.castValue(list.get(i), componentType));
+			}
+			return arr;
+		}
+		if (lenOrInit != null && lenOrInit.getClass().isArray()) {
+			int len = Array.getLength(lenOrInit);
+			Object arr = Array.newInstance(componentType, len);
+			for (int i = 0; i < len; i++) {
+				Array.set(arr, i, JSOps.castValue(Array.get(lenOrInit, i), componentType));
+			}
+			return arr;
+		}
+		return Array.newInstance(componentType, JSOps.toInt(lenOrInit));
+	}
+
+	public static Object newArrayInstanceN(Class<?> componentType, Object[] args) {
+		int len = args.length;
+		Object arr = Array.newInstance(componentType, len);
+		for (int i = 0; i < len; i++) {
+			Array.set(arr, i, JSOps.castValue(args[i], componentType));
+		}
+		return arr;
+	}
+
 	public static Object newFallback(ChainedCallSite site, Object ctor, Object[] args) throws Throwable {
 		int arity = args.length;
 		if (ctor instanceof Class<?> clazz) {
+			if (clazz.isArray()) {
+				Class<?> componentType = clazz.getComponentType();
+				MethodHandle test = MH_IS_SAME_OBJECT.bindTo(clazz);
+				if (site.type().parameterCount() > 1) {
+					test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+				}
+				try {
+					if (arity == 1) {
+						site.installGuardOrSwitchMegamorphic(test, MH_NEW_ARRAY_1.bindTo(componentType).asType(site.type()));
+					} else if (arity == 0) {
+						site.installGuardOrSwitchMegamorphic(test, MH_NEW_ARRAY_0.bindTo(componentType).asType(site.type()));
+					} else {
+						site.installGuardOrSwitchMegamorphic(test, MH_NEW_ARRAY_N.bindTo(componentType).asCollector(1, Object[].class, arity).asType(site.type()));
+					}
+				} catch (Throwable ignored) { }
+
+				if (arity == 1) {
+					return newArrayInstance1(componentType, args[0]);
+				} else if (arity == 0) {
+					return newArrayInstance0(componentType);
+				} else {
+					return newArrayInstanceN(componentType, args);
+				}
+			}
+
 			Constructor<?> targetCtor = MethodResolver.findBestMatchingConstructor(clazz, args);
 			if (targetCtor != null) {
 				targetCtor.setAccessible(true);

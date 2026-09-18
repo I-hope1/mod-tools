@@ -503,5 +503,53 @@ public class JavaInteropBugVerificationTest {
 		System.out.println("[Bug 9 现象] depthAfterSecondCall=" + depthAfterSecondCall);
 		Assertions.assertEquals(1, depthAfterSecondCall, "Guard must succeed on same static class and NOT re-enter fallback (depth must stay 1)!");
 	}
+
+	/**
+	 * 验证缺陷 10:
+	 * 1. Java.type(...) 不支持基础类型 (int, double, boolean 等)、数组类型 (int[], java.lang.String[] 等) 以及内部类 (java.util.Map.Entry)；
+	 * 2. 无法通过 new (Java.type("int[]"))(5) 或 new (Java.type("java.lang.String[]"))(3) 实例化原生 Java 数组。
+	 */
+	@Test
+	public void testBug10_JavaTypeAndArrayInstantiation() {
+		JSContext cx = new JSContext();
+
+		// 1. 基础类型支持
+		Object intType = cx.eval("Java.type('int')");
+		Assertions.assertEquals(int.class, intType, "Java.type('int') must return int.class");
+
+		Object doubleType = cx.eval("Java.type('double')");
+		Assertions.assertEquals(double.class, doubleType, "Java.type('double') must return double.class");
+
+		Object booleanType = cx.eval("Java.type('boolean')");
+		Assertions.assertEquals(boolean.class, booleanType, "Java.type('boolean') must return boolean.class");
+
+		// 2. 数组类型与内部类支持
+		Object strArrType = cx.eval("Java.type('java.lang.String[]')");
+		Assertions.assertEquals(String[].class, strArrType, "Java.type('java.lang.String[]') must return String[].class");
+
+		Object intArrType = cx.eval("Java.type('int[]')");
+		Assertions.assertEquals(int[].class, intArrType, "Java.type('int[]') must return int[].class");
+
+		Object mapEntryType = cx.eval("Java.type('java.util.Map.Entry')");
+		Assertions.assertEquals(java.util.Map.Entry.class, mapEntryType, "Java.type('java.util.Map.Entry') must return java.util.Map.Entry.class");
+
+		// 3. 原生数组实例化
+		Object newIntArr = cx.eval("const IntArr = Java.type('int[]'); const a = new IntArr(5); a;");
+		Assertions.assertInstanceOf(int[].class, newIntArr);
+		Assertions.assertEquals(5, ((int[]) newIntArr).length);
+
+		Object newStrArr = cx.eval("const StrArr = Java.type('java.lang.String[]'); const s = new StrArr(3); s[0] = 'hello'; s[0];");
+		Assertions.assertEquals("hello", newStrArr);
+
+		// 4. Java.from 与 Java.to
+		cx.set("javaList", java.util.List.of("a", "b", "c"));
+		Object jsArrFromList = cx.eval("const arr = Java.from(javaList); arr[1];");
+		Assertions.assertEquals("b", jsArrFromList);
+
+		Object javaArrFromTo = cx.eval("Java.to([10, 20, 30], 'int[]')");
+		Assertions.assertInstanceOf(int[].class, javaArrFromTo);
+		Assertions.assertArrayEquals(new int[]{10, 20, 30}, (int[]) javaArrFromTo);
+	}
 }
+
 

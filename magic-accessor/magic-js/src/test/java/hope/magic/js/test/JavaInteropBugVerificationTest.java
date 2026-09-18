@@ -232,4 +232,51 @@ public class JavaInteropBugVerificationTest {
 		Assertions.assertEquals("int:100", tag1);
 		Assertions.assertEquals("string:hello", tag2);
 	}
+
+	/**
+	 * 验证缺陷 4.1: Java 数组 .length 访问未挂载 CallSite 守卫导致每次回退慢路径
+	 */
+	@Test
+	public void testBug4_1_JavaArrayLengthCallSiteGuardMissing() throws Throwable {
+		String[] arr = new String[]{"a", "b", "c"};
+		java.lang.invoke.MethodType getterType = java.lang.invoke.MethodType.methodType(Object.class, Object.class);
+		ChainedCallSite site = (ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapGetProp(
+			java.lang.invoke.MethodHandles.lookup(), "getProp", getterType, "length"
+		);
+		Assertions.assertEquals(0, site.getChainDepth(), "Initial chainDepth must be 0");
+		Object len = site.getTarget().invokeExact((Object) arr);
+		Assertions.assertEquals(3.0, ((Number) len).doubleValue());
+		System.out.println("[Bug 4.1 现象] array length site.getChainDepth()=" + site.getChainDepth());
+		Assertions.assertTrue(site.getChainDepth() > 0, "Array length CallSite must install Guard!");
+	}
+
+	/**
+	 * 验证缺陷 4.2: Java 数组与 List 索引访问 (getIndexDynamicFallback) 未挂载 CallSite 守卫
+	 */
+	@Test
+	public void testBug4_2_JavaCollectionAndArrayIndexGuardMissing() throws Throwable {
+		java.lang.invoke.MethodType indexType = java.lang.invoke.MethodType.methodType(Object.class, Object.class, Object.class);
+
+		// 1. 测试 List 索引
+		java.util.List<String> list = java.util.List.of("x", "y", "z");
+		ChainedCallSite listSite = (ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapGetIndex(
+			java.lang.invoke.MethodHandles.lookup(), "getIndex", indexType
+		);
+		Assertions.assertEquals(0, listSite.getChainDepth(), "Initial list site chainDepth must be 0");
+		Object item = listSite.getTarget().invokeExact((Object) list, (Object) 1);
+		Assertions.assertEquals("y", item);
+		System.out.println("[Bug 4.2 现象] list index site.getChainDepth()=" + listSite.getChainDepth());
+		Assertions.assertTrue(listSite.getChainDepth() > 0, "List index CallSite must install Guard!");
+
+		// 2. 测试 Java 原生数组索引
+		int[] intArr = new int[]{10, 20, 30};
+		ChainedCallSite arrSite = (ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapGetIndex(
+			java.lang.invoke.MethodHandles.lookup(), "getIndex", indexType
+		);
+		Assertions.assertEquals(0, arrSite.getChainDepth(), "Initial arr site chainDepth must be 0");
+		Object arrItem = arrSite.getTarget().invokeExact((Object) intArr, (Object) 2);
+		Assertions.assertEquals(30.0, ((Number) arrItem).doubleValue());
+		System.out.println("[Bug 4.2 现象] array index site.getChainDepth()=" + arrSite.getChainDepth());
+		Assertions.assertTrue(arrSite.getChainDepth() > 0, "Array index CallSite must install Guard!");
+	}
 }

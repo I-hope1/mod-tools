@@ -48,6 +48,12 @@ public class JSLinker {
 	public static final MethodHandle MH_GET_ACCESSOR_PROP;
 	public static final MethodHandle MH_SET_ACCESSOR_PROP;
 	public static final MethodHandle MH_SET_NOOP_PROP;
+	public static final MethodHandle MH_ARRAY_LENGTH_INT;
+	public static final MethodHandle MH_ARRAY_LENGTH_DOUBLE;
+	public static final MethodHandle MH_GET_INDEX_JS_ARRAY;
+	public static final MethodHandle MH_GET_INDEX_LIST;
+	public static final MethodHandle MH_GET_INDEX_OBJECT_ARRAY;
+	public static final MethodHandle MH_GET_INDEX_PRIMITIVE_ARRAY;
 
 	static {
 		try {
@@ -73,6 +79,12 @@ public class JSLinker {
 			MH_GET_ACCESSOR_PROP = LOOKUP.findStatic(JSLinker.class, "getAccessorProp", MethodType.methodType(Object.class, int.class, Object.class));
 			MH_SET_ACCESSOR_PROP = LOOKUP.findStatic(JSLinker.class, "setAccessorProp", MethodType.methodType(void.class, int.class, Object.class, Object.class));
 			MH_SET_NOOP_PROP = LOOKUP.findStatic(JSLinker.class, "setNoopProp", MethodType.methodType(void.class, Object.class, Object.class));
+			MH_ARRAY_LENGTH_INT = LOOKUP.findStatic(JSLinker.class, "getArrayLengthInt", MethodType.methodType(int.class, Object.class));
+			MH_ARRAY_LENGTH_DOUBLE = LOOKUP.findStatic(JSLinker.class, "getArrayLengthDouble", MethodType.methodType(double.class, Object.class));
+			MH_GET_INDEX_JS_ARRAY = LOOKUP.findStatic(JSLinker.class, "getIndexJSArray", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_GET_INDEX_LIST = LOOKUP.findStatic(JSLinker.class, "getIndexList", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_GET_INDEX_OBJECT_ARRAY = LOOKUP.findStatic(JSLinker.class, "getIndexObjectArray", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_GET_INDEX_PRIMITIVE_ARRAY = LOOKUP.findStatic(JSLinker.class, "getIndexPrimitiveArray", MethodType.methodType(Object.class, Object.class, Object.class));
 		} catch (Throwable e) {
 			throw new ExceptionInInitializerError(e);
 		}
@@ -1218,6 +1230,31 @@ public class JSLinker {
 				}
 			}
 		}
+		if (target instanceof JSArray) {
+			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
+			if (site.type().parameterCount() > 1) {
+				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+			}
+			site.installGuardOrSwitchMegamorphic(test, MH_GET_INDEX_JS_ARRAY.asType(site.type()));
+			return getIndexJSArray(target, index);
+		}
+		if (target instanceof List) {
+			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
+			if (site.type().parameterCount() > 1) {
+				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+			}
+			site.installGuardOrSwitchMegamorphic(test, MH_GET_INDEX_LIST.asType(site.type()));
+			return getIndexList(target, index);
+		}
+		if (target != null && target.getClass().isArray()) {
+			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
+			if (site.type().parameterCount() > 1) {
+				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+			}
+			MethodHandle directTarget = (target instanceof Object[]) ? MH_GET_INDEX_OBJECT_ARRAY : MH_GET_INDEX_PRIMITIVE_ARRAY;
+			site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
+			return (target instanceof Object[]) ? getIndexObjectArray(target, index) : getIndexPrimitiveArray(target, index);
+		}
 		// 降级走原有的全量查找
 		return getIndex(target, index);
 	}
@@ -1722,6 +1759,10 @@ public class JSLinker {
 
 		if (target.getClass().isArray()) {
 			if ("length".equals(propName)) {
+				try {
+					MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
+					site.installGuardOrSwitchMegamorphic(test, MH_ARRAY_LENGTH_DOUBLE.asType(site.type()));
+				} catch (Throwable ignored) { }
 				return (double) java.lang.reflect.Array.getLength(target);
 			}
 		}
@@ -3409,6 +3450,92 @@ public class JSLinker {
 		}
 		return true;
 	}
+
+	public static int getArrayLengthInt(Object target) {
+		return target != null && target.getClass().isArray() ? java.lang.reflect.Array.getLength(target) : 0;
+	}
+
+	public static double getArrayLengthDouble(Object target) {
+		return target != null && target.getClass().isArray() ? (double) java.lang.reflect.Array.getLength(target) : Double.NaN;
+	}
+
+	public static Object getIndexJSArray(Object target, Object index) {
+		JSArray jsArr = (JSArray) target;
+		if (index instanceof Integer i) {
+			int val = i.intValue();
+			return (val >= 0 && val < jsArr.length()) ? jsArr.getElement(val) : jsArr.get(fastIntToString(val));
+		}
+		if (index instanceof Double d) {
+			double val = d.doubleValue();
+			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
+				int idx = (int) val;
+				return (idx < jsArr.length()) ? jsArr.getElement(idx) : jsArr.get(fastIntToString(idx));
+			}
+		}
+		Long idx = JSArray.toValidArrayIndex(index);
+		if (idx != null) {
+			return jsArr.getElement(idx);
+		}
+		return jsArr.get(JSArray.toPropertyKey(index));
+	}
+
+	public static Object getIndexList(Object target, Object index) {
+		List<?> list = (List<?>) target;
+		if (index instanceof Integer i) {
+			int idx = i.intValue();
+			return (idx >= 0 && idx < list.size()) ? list.get(idx) : JSUndefined.INSTANCE;
+		}
+		if (index instanceof Double d) {
+			double val = d.doubleValue();
+			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
+				int idx = (int) val;
+				return (idx >= 0 && idx < list.size()) ? list.get(idx) : JSUndefined.INSTANCE;
+			}
+		}
+		Integer idx = JSArray.toValidJavaArrayIndex(index);
+		if (idx != null && idx >= 0 && idx < list.size()) {
+			return list.get(idx);
+		}
+		return JSUndefined.INSTANCE;
+	}
+
+	public static Object getIndexObjectArray(Object target, Object index) {
+		Object[] a = (Object[]) target;
+		if (index instanceof Integer i) {
+			int idx = i.intValue();
+			return (idx >= 0 && idx < a.length) ? a[idx] : JSUndefined.INSTANCE;
+		}
+		if (index instanceof Double d) {
+			double val = d.doubleValue();
+			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
+				int idx = (int) val;
+				return (idx >= 0 && idx < a.length) ? a[idx] : JSUndefined.INSTANCE;
+			}
+		}
+		Integer idx = JSArray.toValidJavaArrayIndex(index);
+		if (idx != null && idx >= 0 && idx < a.length) {
+			return a[idx];
+		}
+		return JSUndefined.INSTANCE;
+	}
+
+	public static Object getIndexPrimitiveArray(Object target, Object index) {
+		if (index instanceof Integer i) {
+			return getArrayElement(target, i.intValue());
+		}
+		if (index instanceof Double d) {
+			double val = d.doubleValue();
+			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
+				return getArrayElement(target, (int) val);
+			}
+		}
+		Integer idx = JSArray.toValidJavaArrayIndex(index);
+		if (idx != null) {
+			return getArrayElement(target, idx);
+		}
+		return JSUndefined.INSTANCE;
+	}
+
 	@SuppressWarnings("RedundantIfStatement")
 	public static boolean isExactShape(JSShape expected, Object target) {
 		if (target instanceof JSObject && ((JSObject) target).shape == expected) return true;
@@ -3526,6 +3653,10 @@ public class JSLinker {
 		}
 
 		if (target.getClass().isArray() && "length".equals(propName)) {
+			try {
+				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
+				site.installGuardOrSwitchMegamorphic(test, MH_ARRAY_LENGTH_INT.asType(site.type()));
+			} catch (Throwable ignored) { }
 			return java.lang.reflect.Array.getLength(target);
 		}
 		Class<?> targetClass = target.getClass();
@@ -3540,6 +3671,20 @@ public class JSLinker {
 			site.installGuardOrSwitchMegamorphic(test, directGetter);
 			return (int) directGetter.invokeExact(target);
 		} catch (Throwable ignored) {
+		}
+
+		Method getterMethod = MethodResolver.findGetterMethod(targetClass, propName);
+		if (getterMethod != null) {
+			try {
+				MethodHandle mh = Magic.lookup.unreflect(getterMethod);
+				if (getterMethod.getReturnType() != int.class) {
+					mh = MethodHandles.filterReturnValue(mh, MH_TO_INT);
+				}
+				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
+				site.installGuardOrSwitchMegamorphic(test, mh.asType(site.type()));
+				return (int) mh.invoke(target);
+			} catch (Throwable ignored) {
+			}
 		}
 
 		return getPropIntGeneric(target, propName);
@@ -3601,7 +3746,11 @@ public class JSLinker {
 		}
 
 		if (target.getClass().isArray() && "length".equals(propName)) {
-			return Array.getLength(target);
+			try {
+				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
+				site.installGuardOrSwitchMegamorphic(test, MH_ARRAY_LENGTH_DOUBLE.asType(site.type()));
+			} catch (Throwable ignored) { }
+			return (double) Array.getLength(target);
 		}
 
 		Class<?> targetClass = target.getClass();
@@ -3678,6 +3827,10 @@ public class JSLinker {
 		}
 
 		if (target.getClass().isArray() && "length".equals(propName)) {
+			try {
+				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
+				site.installGuardOrSwitchMegamorphic(test, MH_ARRAY_LENGTH_INT.asType(site.type()));
+			} catch (Throwable ignored) { }
 			return Array.getLength(target);
 		}
 		Class<?> targetClass = target.getClass();
@@ -3692,6 +3845,20 @@ public class JSLinker {
 			site.installGuardOrSwitchMegamorphic(test, directGetter);
 			return (long) directGetter.invokeExact(target);
 		} catch (Throwable ignored) {
+		}
+
+		Method getterMethod = MethodResolver.findGetterMethod(targetClass, propName);
+		if (getterMethod != null) {
+			try {
+				MethodHandle mh = Magic.lookup.unreflect(getterMethod);
+				if (getterMethod.getReturnType() != long.class) {
+					mh = MethodHandles.filterReturnValue(mh, MH_TO_LONG);
+				}
+				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
+				site.installGuardOrSwitchMegamorphic(test, mh.asType(site.type()));
+				return (long) mh.invoke(target);
+			} catch (Throwable ignored) {
+			}
 		}
 
 		return getPropLongGeneric(target, propName);

@@ -48,7 +48,8 @@ public final class JavaClassExtender {
 			java.lang.invoke.MethodHandle mh    = null;
 			for (Constructor<?> c : subConstructors) {
 				Class<?>[] pTypes = c.getParameterTypes();
-				if (pTypes.length == 2 && pTypes[0] == JSObject.class && pTypes[1] == long.class) {
+				if ((pTypes.length == 3 && pTypes[0] == JSContext.class && pTypes[1] == JSObject.class && pTypes[2] == long.class) ||
+				    (pTypes.length == 2 && pTypes[0] == JSObject.class && pTypes[1] == long.class)) {
 					noArg = c;
 					try {
 						mh = Magic.lookup.unreflectConstructor(c);
@@ -149,7 +150,7 @@ public final class JavaClassExtender {
 		Class<?>   javaSuperClass = getJavaSuperClass(superClassObj);
 		if (javaSuperClass != null) {
 			JSFunction superJSClass = (superClassObj instanceof JSFunction sf) ? sf : null;
-			resultCtor = createClassConstructor(javaSuperClass, superJSClass, methods, ctorFn);
+			resultCtor = createClassConstructor(cx, javaSuperClass, superJSClass, methods, ctorFn);
 		} else if (superClassObj instanceof JSFunction superCtor) {
 			resultCtor = createJSClassConstructor(cx, superCtor, methods, ctorFn);
 		} else if (superClassObj == null || superClassObj == JSUndefined.INSTANCE) {
@@ -209,6 +210,7 @@ public final class JavaClassExtender {
 	}
 
 	public static JSFunction createClassConstructor(
+	 JSContext cx,
 	 Class<?> javaSuperClass,
 	 JSFunction superJSClass,
 	 List<ClassMethodDef> methods,
@@ -252,21 +254,22 @@ public final class JavaClassExtender {
 			}
 		}
 
-		JSFunctionObject ctor = new JSFunctionObject((cx, thisObj, args) -> {
+		JSFunctionObject ctor = new JSFunctionObject((callCx, thisObj, args) -> {
+			JSContext useCx = callCx != null ? callCx : (cx != null ? cx : JSContext.current());
 			Object[] callArgs = args != null ? args : new Object[0];
 			Object   instance;
 			if (thisObj instanceof JSBridgedObject existing) {
 				instance = existing;
 			} else {
 				JSObject jsObj = new JSObject(proto);
-				instance = instantiateSubclass(info, jsObj, finalMask, callArgs);
+				instance = instantiateSubclass(useCx, info, jsObj, finalMask, callArgs);
 			}
 
 			// 执行 JS constructor (若存在)
 			if (jsCtor != null) {
-				jsCtor.call(cx, instance, callArgs);
+				jsCtor.call(useCx, instance, callArgs);
 			} else if (superJSClass != null) {
-				superJSClass.call(cx, instance, callArgs);
+				superJSClass.call(useCx, instance, callArgs);
 			}
 
 			return instance;
@@ -281,7 +284,18 @@ public final class JavaClassExtender {
 		}
 		return ctor;
 	}
+
 	public static JSFunction createClassConstructor(
+	 Class<?> javaSuperClass,
+	 JSFunction superJSClass,
+	 List<ClassMethodDef> methods,
+	 JSFunction jsCtor
+	) {
+		return createClassConstructor(null, javaSuperClass, superJSClass, methods, jsCtor);
+	}
+
+	public static JSFunction createClassConstructor(
+	 JSContext cx,
 	 Class<?> javaSuperClass,
 	 JSFunction superJSClass,
 	 Map<String, JSFunction> methods,
@@ -293,12 +307,26 @@ public final class JavaClassExtender {
 				list.add(new ClassMethodDef(e.getKey(), e.getValue(), 0));
 			}
 		}
-		return createClassConstructor(javaSuperClass, superJSClass, list, jsCtor);
+		return createClassConstructor(cx, javaSuperClass, superJSClass, list, jsCtor);
+	}
+
+	public static JSFunction createClassConstructor(
+	 Class<?> javaSuperClass,
+	 JSFunction superJSClass,
+	 Map<String, JSFunction> methods,
+	 JSFunction jsCtor
+	) {
+		return createClassConstructor(null, javaSuperClass, superJSClass, methods, jsCtor);
+	}
+
+	public static JSFunction createClassConstructor(JSContext cx, Class<?> superClass, Map<String, JSFunction> methods,
+	                                                JSFunction jsCtor) {
+		return createClassConstructor(cx, superClass, null, methods, jsCtor);
 	}
 
 	public static JSFunction createClassConstructor(Class<?> superClass, Map<String, JSFunction> methods,
 	                                                JSFunction jsCtor) {
-		return createClassConstructor(superClass, null, methods, jsCtor);
+		return createClassConstructor(null, superClass, null, methods, jsCtor);
 	}
 
 	private static boolean isTypeCompatible(Object arg, Class<?> targetType) {
@@ -333,10 +361,17 @@ public final class JavaClassExtender {
 		return false;
 	}
 
-	private static Object instantiateSubclass(ClassInfo info, JSObject jsObj, long mask, Object[] args) {
+	private static Object instantiateSubclass(JSContext cx, ClassInfo info, JSObject jsObj, long mask, Object[] args) {
+		if (cx == null) {
+			cx = JSContext.current();
+		}
 		if (args.length == 0 && info.noArgSubConstructor != null) {
 			try {
-				return info.noArgSubConstructor.newInstance(jsObj, mask);
+				if (info.noArgSubConstructor.getParameterCount() == 3) {
+					return info.noArgSubConstructor.newInstance(cx, jsObj, mask);
+				} else {
+					return info.noArgSubConstructor.newInstance(jsObj, mask);
+				}
 			} catch (Throwable t) {
 				throw new RuntimeException("Failed to instantiate dynamic subclass for " + info.targetClass.getName(), t);
 			}
@@ -345,24 +380,25 @@ public final class JavaClassExtender {
 		Constructor<?> bestCtor   = null;
 		Object[]       castedArgs = null;
 
-		// 1. 精确匹配参数个数
+		// 1. 精确匹配参数个数 (优先匹配带 JSContext 的构造器)
 		for (Constructor<?> c : info.subConstructors) {
 			Class<?>[] pTypes = c.getParameterTypes();
-			if (pTypes.length < 2 || pTypes[0] != JSObject.class || pTypes[1] != long.class) continue;
+			if (pTypes.length < 3 || pTypes[0] != JSContext.class || pTypes[1] != JSObject.class || pTypes[2] != long.class) continue;
 
-			int superArgCount = pTypes.length - 2;
+			int superArgCount = pTypes.length - 3;
 			if (superArgCount == args.length) {
 				boolean  match    = true;
 				Object[] tempArgs = new Object[pTypes.length];
-				tempArgs[0] = jsObj;
-				tempArgs[1] = mask;
+				tempArgs[0] = cx;
+				tempArgs[1] = jsObj;
+				tempArgs[2] = mask;
 				for (int i = 0; i < args.length; i++) {
-					if (!isTypeCompatible(args[i], pTypes[i + 2])) {
+					if (!isTypeCompatible(args[i], pTypes[i + 3])) {
 						match = false;
 						break;
 					}
 					try {
-						tempArgs[i + 2] = JSOps.castValue(args[i], pTypes[i + 2]);
+						tempArgs[i + 3] = JSOps.castValue(args[i], pTypes[i + 3]);
 					} catch (Throwable t) {
 						match = false;
 						break;
@@ -376,19 +412,66 @@ public final class JavaClassExtender {
 			}
 		}
 
-		// 2. 前缀匹配参数个数 (例如 JS 子类参数多于父类参数)
+		// 2. 前缀匹配参数个数 (优先匹配带 JSContext 的构造器)
 		if (bestCtor == null && args.length > 0) {
+			for (Constructor<?> c : info.subConstructors) {
+				Class<?>[] pTypes = c.getParameterTypes();
+				if (pTypes.length < 3 || pTypes[0] != JSContext.class || pTypes[1] != JSObject.class || pTypes[2] != long.class) continue;
+
+				int superArgCount = pTypes.length - 3;
+				if (superArgCount > 0 && superArgCount < args.length) {
+					boolean  match    = true;
+					Object[] tempArgs = new Object[pTypes.length];
+					tempArgs[0] = cx;
+					tempArgs[1] = jsObj;
+					tempArgs[2] = mask;
+					for (int i = 0; i < superArgCount; i++) {
+						if (!isTypeCompatible(args[i], pTypes[i + 3])) {
+							match = false;
+							break;
+						}
+						try {
+							tempArgs[i + 3] = JSOps.castValue(args[i], pTypes[i + 3]);
+						} catch (Throwable t) {
+							match = false;
+							break;
+						}
+					}
+					if (match) {
+						bestCtor = c;
+						castedArgs = tempArgs;
+						break;
+					}
+				}
+			}
+		}
+
+		// 3. 回退匹配无参构造函数 (带 JSContext)
+		if (bestCtor == null) {
+			for (Constructor<?> c : info.subConstructors) {
+				Class<?>[] pTypes = c.getParameterTypes();
+				if (pTypes.length == 3 && pTypes[0] == JSContext.class && pTypes[1] == JSObject.class && pTypes[2] == long.class) {
+					bestCtor = c;
+					castedArgs = new Object[]{cx, jsObj, mask};
+					break;
+				}
+			}
+		}
+
+		// 4. 降级兼容旧版不带 JSContext 的构造器 (精确与前缀)
+		if (bestCtor == null) {
 			for (Constructor<?> c : info.subConstructors) {
 				Class<?>[] pTypes = c.getParameterTypes();
 				if (pTypes.length < 2 || pTypes[0] != JSObject.class || pTypes[1] != long.class) continue;
 
 				int superArgCount = pTypes.length - 2;
-				if (superArgCount > 0 && superArgCount < args.length) {
+				if (superArgCount == args.length || (superArgCount > 0 && superArgCount < args.length)) {
+					int count = Math.min(superArgCount, args.length);
 					boolean  match    = true;
 					Object[] tempArgs = new Object[pTypes.length];
 					tempArgs[0] = jsObj;
 					tempArgs[1] = mask;
-					for (int i = 0; i < superArgCount; i++) {
+					for (int i = 0; i < count; i++) {
 						if (!isTypeCompatible(args[i], pTypes[i + 2])) {
 							match = false;
 							break;
@@ -409,7 +492,7 @@ public final class JavaClassExtender {
 			}
 		}
 
-		// 3. 回退匹配无参构造函数
+		// 5. 降级兼容旧版无参构造器
 		if (bestCtor == null) {
 			for (Constructor<?> c : info.subConstructors) {
 				Class<?>[] pTypes = c.getParameterTypes();
@@ -419,9 +502,10 @@ public final class JavaClassExtender {
 					break;
 				}
 			}
-			if (bestCtor == null) {
-				throw new RuntimeException("No matching constructor in " + info.targetClass.getName() + " for " + args.length + " args");
-			}
+		}
+
+		if (bestCtor == null) {
+			throw new RuntimeException("No matching constructor in " + info.targetClass.getName() + " for " + args.length + " args");
 		}
 
 		try {
@@ -429,6 +513,10 @@ public final class JavaClassExtender {
 		} catch (Throwable t) {
 			throw new RuntimeException("Failed to instantiate dynamic subclass for " + info.targetClass.getName(), t);
 		}
+	}
+
+	private static Object instantiateSubclass(ClassInfo info, JSObject jsObj, long mask, Object[] args) {
+		return instantiateSubclass(JSContext.current(), info, jsObj, mask, args);
 	}
 
 	private static ClassInfo generateSubclass(Class<?> superClass) {
@@ -482,6 +570,7 @@ public final class JavaClassExtender {
 		// 字段
 		cw.visitField(ACC_PUBLIC | ACC_FINAL, "__magic_jsObj", "Lhope/magic/js/runtime/JSObject;", null, null).visitEnd();
 		cw.visitField(ACC_PUBLIC | ACC_FINAL, "__magic_override_mask", "J", null, null).visitEnd();
+		cw.visitField(ACC_PUBLIC | ACC_FINAL, "__magic_cx", "Lhope/magic/js/runtime/JSContext;", null, null).visitEnd();
 
 		// 实现 JSBridgedObject.getJSObject()
 		MethodVisitor gmv = cw.visitMethod(ACC_PUBLIC, "getJSObject", "()Lhope/magic/js/runtime/JSObject;", null, null);
@@ -585,8 +674,9 @@ public final class JavaClassExtender {
 
 	private static void generateConstructor(ClassWriter cw, String subInternal, String superInternal,
 	                                        Class<?>[] paramTypes) {
-		// 签名: <init>(JSObject jsObj, long mask, P1, P2...)
+		// 1. Primary constructor: <init>(JSContext cx, JSObject jsObj, long mask, P1, P2...)
 		List<Class<?>> allParams = new ArrayList<>();
+		allParams.add(JSContext.class);
 		allParams.add(JSObject.class);
 		allParams.add(long.class);
 		allParams.addAll(Arrays.asList(paramTypes));
@@ -600,7 +690,7 @@ public final class JavaClassExtender {
 
 		// super(p1, p2...)
 		mv.visitVarInsn(ALOAD, 0);
-		int slot = 4; // slot 0 = this, slot 1 = jsObj, slot 2,3 = mask
+		int slot = 5; // slot 0 = this, slot 1 = cx, slot 2 = jsObj, slot 3,4 = mask
 		for (Class<?> pt : paramTypes) {
 			Type t = Type.getType(pt);
 			mv.visitVarInsn(t.getOpcode(ILOAD), slot);
@@ -613,19 +703,57 @@ public final class JavaClassExtender {
 
 		mv.visitMethodInsn(INVOKESPECIAL, superInternal, "<init>", superDesc, false);
 
-		// this.__magic_jsObj = jsObj
+		// this.__magic_cx = (cx != null ? cx : JSContext.current());
 		mv.visitVarInsn(ALOAD, 0);
 		mv.visitVarInsn(ALOAD, 1);
+		Label cxDone = new Label();
+		mv.visitInsn(DUP);
+		mv.visitJumpInsn(IFNONNULL, cxDone);
+		mv.visitInsn(POP);
+		mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSContext", "current", "()Lhope/magic/js/runtime/JSContext;", false);
+		mv.visitLabel(cxDone);
+		mv.visitFieldInsn(PUTFIELD, subInternal, "__magic_cx", "Lhope/magic/js/runtime/JSContext;");
+
+		// this.__magic_jsObj = jsObj
+		mv.visitVarInsn(ALOAD, 0);
+		mv.visitVarInsn(ALOAD, 2);
 		mv.visitFieldInsn(PUTFIELD, subInternal, "__magic_jsObj", "Lhope/magic/js/runtime/JSObject;");
 
 		// this.__magic_override_mask = mask
 		mv.visitVarInsn(ALOAD, 0);
-		mv.visitVarInsn(LLOAD, 2);
+		mv.visitVarInsn(LLOAD, 3);
 		mv.visitFieldInsn(PUTFIELD, subInternal, "__magic_override_mask", "J");
 
 		mv.visitInsn(RETURN);
 		mv.visitMaxs(0, 0);
 		mv.visitEnd();
+
+		// 2. Compatibility constructor: <init>(JSObject jsObj, long mask, P1, P2...)
+		List<Class<?>> legacyParams = new ArrayList<>();
+		legacyParams.add(JSObject.class);
+		legacyParams.add(long.class);
+		legacyParams.addAll(Arrays.asList(paramTypes));
+
+		Type[] legacyTypes = new Type[legacyParams.size()];
+		for (int i = 0; i < legacyParams.size(); i++) legacyTypes[i] = Type.getType(legacyParams.get(i));
+		String legacyDesc = Type.getMethodDescriptor(Type.VOID_TYPE, legacyTypes);
+
+		MethodVisitor lmv = cw.visitMethod(ACC_PUBLIC, "<init>", legacyDesc, null, null);
+		lmv.visitCode();
+		lmv.visitVarInsn(ALOAD, 0);
+		lmv.visitInsn(ACONST_NULL); // cx = null -> will default to JSContext.current() in primary ctor
+		lmv.visitVarInsn(ALOAD, 1); // jsObj
+		lmv.visitVarInsn(LLOAD, 2); // mask
+		slot = 4;
+		for (Class<?> pt : paramTypes) {
+			Type t = Type.getType(pt);
+			lmv.visitVarInsn(t.getOpcode(ILOAD), slot);
+			slot += t.getSize();
+		}
+		lmv.visitMethodInsn(INVOKESPECIAL, subInternal, "<init>", desc, false);
+		lmv.visitInsn(RETURN);
+		lmv.visitMaxs(0, 0);
+		lmv.visitEnd();
 	}
 
 	private static void generateOverriddenMethod(ClassWriter cw, String subInternal, String superInternal, Method m, long maskShift, boolean isInterface) {
@@ -638,7 +766,6 @@ public final class JavaClassExtender {
 		MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, name, desc, null, null);
 		mv.visitCode();
 
-		Label callJsLabel = new Label();
 		Label fallbackLabel = new Label();
 		Label superLabel = new Label();
 
@@ -674,11 +801,68 @@ public final class JavaClassExtender {
 		mv.visitTypeInsn(INSTANCEOF, "hope/magic/js/runtime/JSFunction");
 		mv.visitJumpInsn(IFEQ, fallbackLabel);
 
-		// 特化调用 call0 ~ call4 / call
-		emitJSFunctionCall(mv, paramTypes);
+		// 计算局部变量槽位
+		int paramSlots = 0;
+		for (Class<?> pt : paramTypes) {
+			paramSlots += (pt == long.class || pt == double.class ? 2 : 1);
+		}
+		int fnSlot   = 1 + paramSlots;
+		int cxSlot   = fnSlot + 1;
+		int prevSlot = cxSlot + 1;
+		int resSlot  = prevSlot + 1;
+		int resSlots = (retType == long.class || retType == double.class) ? 2 : (retType == void.class ? 0 : 1);
+		int exSlot   = resSlot + resSlots;
 
-		// 返回值规范化强转
-		emitCastReturn(mv, retType);
+		// 栈上已有 DUP 的 member，强转为 JSFunction 并存入 fnSlot
+		mv.visitTypeInsn(CHECKCAST, "hope/magic/js/runtime/JSFunction");
+		mv.visitVarInsn(ASTORE, fnSlot);
+
+		// cx = this.__magic_cx
+		mv.visitVarInsn(ALOAD, 0);
+		mv.visitFieldInsn(GETFIELD, subInternal, "__magic_cx", "Lhope/magic/js/runtime/JSContext;");
+		mv.visitVarInsn(ASTORE, cxSlot);
+
+		// prev = MagicJIT.enterContext(cx)
+		mv.visitVarInsn(ALOAD, cxSlot);
+		mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/MagicJIT", "enterContext", "(Lhope/magic/js/runtime/JSContext;)Lhope/magic/js/runtime/JSContext;", false);
+		mv.visitVarInsn(ASTORE, prevSlot);
+
+		Label tryStart     = new Label();
+		Label tryEnd       = new Label();
+		Label catchHandler = new Label();
+		mv.visitTryCatchBlock(tryStart, tryEnd, catchHandler, null);
+
+		mv.visitLabel(tryStart);
+
+		// 加载 fn, cx, thisObj
+		mv.visitVarInsn(ALOAD, fnSlot);
+		mv.visitVarInsn(ALOAD, cxSlot);
+		mv.visitVarInsn(ALOAD, 0); // thisObj
+
+		// 特化直调 JSFunction.call0 ~ call4 / call
+		emitJSFunctionCallWithCx(mv, paramTypes);
+
+		// 转换并存储返回值到 resSlot
+		emitCastReturnAndStore(mv, retType, resSlot);
+
+		mv.visitLabel(tryEnd);
+
+		// MagicJIT.exitContext(cx, prev)
+		mv.visitVarInsn(ALOAD, cxSlot);
+		mv.visitVarInsn(ALOAD, prevSlot);
+		mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/MagicJIT", "exitContext", "(Lhope/magic/js/runtime/JSContext;Lhope/magic/js/runtime/JSContext;)V", false);
+
+		// 加载结果并返回
+		emitLoadAndReturn(mv, retType, resSlot);
+
+		// 异常捕获块
+		mv.visitLabel(catchHandler);
+		mv.visitVarInsn(ASTORE, exSlot);
+		mv.visitVarInsn(ALOAD, cxSlot);
+		mv.visitVarInsn(ALOAD, prevSlot);
+		mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/MagicJIT", "exitContext", "(Lhope/magic/js/runtime/JSContext;Lhope/magic/js/runtime/JSContext;)V", false);
+		mv.visitVarInsn(ALOAD, exSlot);
+		mv.visitInsn(ATHROW);
 
 		// 3. Fallback 与 Super 共享路径
 		mv.visitLabel(fallbackLabel);
@@ -759,55 +943,72 @@ public final class JavaClassExtender {
 		}
 	}
 
-	private static void emitCastReturn(MethodVisitor mv, Class<?> retType) {
+	private static void emitCastReturnAndStore(MethodVisitor mv, Class<?> retType, int resSlot) {
 		if (retType == void.class) {
 			mv.visitInsn(POP);
-			mv.visitInsn(RETURN);
 		} else if (retType == boolean.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toBoolean", "(Ljava/lang/Object;)Z", false);
-			mv.visitInsn(IRETURN);
+			mv.visitVarInsn(ISTORE, resSlot);
 		} else if (retType == int.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
-			mv.visitInsn(IRETURN);
+			mv.visitVarInsn(ISTORE, resSlot);
 		} else if (retType == double.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toDouble", "(Ljava/lang/Object;)D", false);
-			mv.visitInsn(DRETURN);
+			mv.visitVarInsn(DSTORE, resSlot);
 		} else if (retType == long.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toLong", "(Ljava/lang/Object;)J", false);
-			mv.visitInsn(LRETURN);
+			mv.visitVarInsn(LSTORE, resSlot);
 		} else if (retType == float.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toDouble", "(Ljava/lang/Object;)D", false);
 			mv.visitInsn(D2F);
-			mv.visitInsn(FRETURN);
+			mv.visitVarInsn(FSTORE, resSlot);
 		} else if (retType == short.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
 			mv.visitInsn(I2S);
-			mv.visitInsn(IRETURN);
+			mv.visitVarInsn(ISTORE, resSlot);
 		} else if (retType == byte.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
 			mv.visitInsn(I2B);
-			mv.visitInsn(IRETURN);
+			mv.visitVarInsn(ISTORE, resSlot);
 		} else if (retType == char.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
 			mv.visitInsn(I2C);
-			mv.visitInsn(IRETURN);
+			mv.visitVarInsn(ISTORE, resSlot);
 		} else if (retType == String.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toStr", "(Ljava/lang/Object;)Ljava/lang/String;", false);
-			mv.visitInsn(ARETURN);
+			mv.visitVarInsn(ASTORE, resSlot);
 		} else {
 			// 对象类型
 			mv.visitLdcInsn(Type.getType(retType));
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "castValue", "(Ljava/lang/Object;Ljava/lang/Class;)Ljava/lang/Object;", false);
 			mv.visitTypeInsn(CHECKCAST, Type.getInternalName(retType));
+			mv.visitVarInsn(ASTORE, resSlot);
+		}
+	}
+
+	private static void emitLoadAndReturn(MethodVisitor mv, Class<?> retType, int resSlot) {
+		if (retType == void.class) {
+			mv.visitInsn(RETURN);
+		} else if (retType == boolean.class || retType == int.class ||
+		           retType == short.class || retType == byte.class || retType == char.class) {
+			mv.visitVarInsn(ILOAD, resSlot);
+			mv.visitInsn(IRETURN);
+		} else if (retType == long.class) {
+			mv.visitVarInsn(LLOAD, resSlot);
+			mv.visitInsn(LRETURN);
+		} else if (retType == float.class) {
+			mv.visitVarInsn(FLOAD, resSlot);
+			mv.visitInsn(FRETURN);
+		} else if (retType == double.class) {
+			mv.visitVarInsn(DLOAD, resSlot);
+			mv.visitInsn(DRETURN);
+		} else {
+			mv.visitVarInsn(ALOAD, resSlot);
 			mv.visitInsn(ARETURN);
 		}
 	}
 
-	private static void emitJSFunctionCall(MethodVisitor mv, Class<?>[] paramTypes) {
-		mv.visitTypeInsn(CHECKCAST, "hope/magic/js/runtime/JSFunction");
-		mv.visitInsn(ACONST_NULL); // cx
-		mv.visitVarInsn(ALOAD, 0); // thisObj
-
+	private static void emitJSFunctionCallWithCx(MethodVisitor mv, Class<?>[] paramTypes) {
 		int count = paramTypes.length;
 		if (count <= 4) {
 			// 0~4 参数特化: 直接装箱后压栈，零数组开销

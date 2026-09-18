@@ -2,7 +2,9 @@ package hope.magic.js.test;
 
 import hope.magic.js.runtime.ChainedCallSite;
 import hope.magic.js.runtime.JSContext;
+import hope.magic.js.runtime.JSFunction;
 import hope.magic.js.runtime.JSUndefined;
+import hope.magic.js.runtime.JavaClassExtender;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -11,6 +13,8 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * 验证 JS 调用 Java 架构中已识别的三大类缺陷的复现测试：
@@ -799,6 +803,94 @@ public class JavaInteropBugVerificationTest {
 		""");
 		System.out.println("[Bug 14 现象 new VarargsTarget items.length] " + resCtor);
 		Assertions.assertEquals(3.0, ((Number) resCtor).doubleValue());
+	}
+
+	public static abstract class AsyncWorker {
+		public final String name;
+
+		public AsyncWorker(String name) {
+			this.name = name;
+		}
+
+		public abstract String work(String task);
+
+		public String defaultGreet() {
+			return "hello " + name;
+		}
+	}
+
+	/**
+	 * 验证缺陷 15:
+	 * JavaClassExtender 生成的子类在 Java 调用被 JS 覆写的方法时，
+	 * 1. emitJSFunctionCall 中硬编码传入 ACONST_NULL 作为 cx；
+	 * 2. 且未保存 JSContext 实例，在异步/外部 Java 线程回调时未调用 enterContext / exitContext；
+	 * 导致异步线程中 JS 代码无法读取/写入 JS 全局变量（getScopeOrGlobal 返回 undefined，setScopeOrGlobal 静默失效），
+	 * 微任务队列无法自动清空，Promise 和上下文操作崩溃。
+	 */
+	@Test
+	public void testBug15_JavaClassExtenderAsyncContextLoss() throws Throwable {
+		JSContext cx = new JSContext();
+		cx.set("sharedMessage", "context_success");
+		cx.set("AsyncWorker", AsyncWorker.class);
+		cx.set("promiseRan", false);
+		cx.set("currentContextPresent", false);
+
+		// 1. ES6 class 继承 Java 抽象类并在覆写方法中访问全局变量、验证 JSContext.current() 以及微任务
+		Object workerObj = cx.eval("""
+			class MyWorker extends AsyncWorker {
+				constructor(name) {
+					super(name);
+				}
+				work(task) {
+					currentContextPresent = (Java.type("hope.magic.js.runtime.JSContext").current() != null);
+					Promise.resolve().then(() => {
+						promiseRan = true;
+					});
+					return sharedMessage + ":" + task + ":" + this.name;
+				}
+			}
+			new MyWorker("agent007");
+		""");
+
+		Assertions.assertInstanceOf(AsyncWorker.class, workerObj);
+		AsyncWorker worker = (AsyncWorker) workerObj;
+
+		// 2. 在独立的异步线程中执行 (异步线程上原本无 JSContext.current())
+		// 缺陷复现：
+		// - 如果没有通过 enterContext/exitContext 绑定上下文并清空微任务队列：
+		//   1. currentContextPresent 将为 false；
+		//   2. 异步微任务 Promise.then 无法在退出时自动 drain，promiseRan 仍为 false；
+		//   3. emitJSFunctionCall 传入 null 导致任何期望 cx != null 的 JSFunction 抛出异常。
+		java.util.concurrent.CompletableFuture<String> future = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+			return worker.work("job2");
+		});
+		String asyncResult = future.get();
+		System.out.println("[Bug 15 现象 asyncResult] " + asyncResult);
+		Assertions.assertEquals("context_success:job2:agent007", asyncResult);
+		Assertions.assertEquals(true, cx.get("currentContextPresent"),
+			"JSContext.current() must be non-null and correctly bound on async thread during method execution!");
+		Assertions.assertEquals(true, cx.get("promiseRan"),
+			"Microtasks must be automatically drained on method exit across threads!");
+
+		// 3. 验证 Java.extend / 自定义 JSFunction 接收到的 cx 不为 null
+		java.util.concurrent.atomic.AtomicReference<JSContext> receivedCx = new java.util.concurrent.atomic.AtomicReference<>();
+		java.util.concurrent.atomic.AtomicReference<JSContext> receivedCurrent = new java.util.concurrent.atomic.AtomicReference<>();
+		Map<String, JSFunction> overrides = new HashMap<>();
+		overrides.put("work", (callCx, thisObj, args) -> {
+			receivedCx.set(callCx);
+			receivedCurrent.set(JSContext.current());
+			return "lambda:" + args[0];
+		});
+
+		JSFunction ctor = JavaClassExtender.createClassConstructor(cx, AsyncWorker.class, overrides, null);
+		AsyncWorker customWorker = (AsyncWorker) ctor.call(cx, null, new Object[]{"agent008"});
+		java.util.concurrent.CompletableFuture<String> futureCustom = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+			return customWorker.work("customJob");
+		});
+		String customResult = futureCustom.get();
+		Assertions.assertEquals("lambda:customJob", customResult);
+		Assertions.assertSame(cx, receivedCx.get(), "callCx passed to JSFunction must be the bound JSContext, not null!");
+		Assertions.assertSame(cx, receivedCurrent.get(), "JSContext.current() inside JSFunction must be the bound JSContext, not null!");
 	}
 }
 

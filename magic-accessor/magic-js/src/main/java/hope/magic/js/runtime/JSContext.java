@@ -684,7 +684,7 @@ public class JSContext {
 						}
 					}
 				}
-				return JavaClassExtender.createClassConstructor(targetClass, methods, null);
+				return JavaClassExtender.createClassConstructor(cx, targetClass, methods, null);
 			});
 
 			return javaObj;

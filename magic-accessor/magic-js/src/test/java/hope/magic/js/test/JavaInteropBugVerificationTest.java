@@ -474,5 +474,34 @@ public class JavaInteropBugVerificationTest {
 		System.out.println("[Bug 8 现象 Bean Setter Write] bean.count=" + bean.getCount());
 		Assertions.assertEquals(200, bean.getCount(), "setIndex on JavaBean setter must update value!");
 	}
+
+	/**
+	 * 验证缺陷 9: 静态方法调用的 CallSite 守卫错误使用 target.getClass() == expected (检查到 Class.class == Math.class -> false)，
+	 * 导致单态守卫对静态方法永远匹配失败，每次调用都重复触发 fallback 增加链深，最终退化为巨态 (Megamorphic) 慢路径。
+	 */
+	@Test
+	public void testBug9_StaticMethodCallSiteGuardAlwaysFails() throws Throwable {
+		java.lang.invoke.MethodType type = java.lang.invoke.MethodType.methodType(Object.class, Object.class, Object.class, Object.class);
+		ChainedCallSite site = (ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapInvoke(
+			java.lang.invoke.MethodHandles.lookup(), "invoke", type, "max"
+		);
+		Assertions.assertEquals(0, site.getChainDepth(), "Initial chainDepth must be 0");
+
+		// 第一次调用 Math.max(10.0, 20.0)：应当安装单态守卫，chainDepth 变为 1
+		Object r1 = site.getTarget().invokeExact((Object) Math.class, (Object) 10.0, (Object) 20.0);
+		Assertions.assertEquals(20.0, r1);
+		int depthAfterFirstCall = site.getChainDepth();
+		System.out.println("[Bug 9 现象] depthAfterFirstCall=" + depthAfterFirstCall);
+		Assertions.assertEquals(1, depthAfterFirstCall, "chainDepth must be 1 after first call");
+
+		// 第二次调用相同的静态方法 Math.max(30.0, 40.0)：
+		// 若守卫正确生效，应当直接命中快速路径，chainDepth 仍然保持为 1！
+		// 缺陷现象：由于 isExactClass 比较 target.getClass() 即 Class.class == Math.class 永远为 false，守卫失效再次进入 fallback，chainDepth 异常递增为 2！
+		Object r2 = site.getTarget().invokeExact((Object) Math.class, (Object) 30.0, (Object) 40.0);
+		Assertions.assertEquals(40.0, r2);
+		int depthAfterSecondCall = site.getChainDepth();
+		System.out.println("[Bug 9 现象] depthAfterSecondCall=" + depthAfterSecondCall);
+		Assertions.assertEquals(1, depthAfterSecondCall, "Guard must succeed on same static class and NOT re-enter fallback (depth must stay 1)!");
+	}
 }
 

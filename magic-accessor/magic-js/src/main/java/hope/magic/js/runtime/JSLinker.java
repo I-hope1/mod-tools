@@ -2672,17 +2672,33 @@ public class JSLinker {
 			}
 
 			MethodHandle test;
-			if (sameArityCandidates > 1 && args.length > 0) {
-				Class<?>[] argClasses = new Class<?>[args.length];
-				for (int i = 0; i < args.length; i++) {
-					argClasses[i] = (args[i] == null) ? null : args[i].getClass();
+			if (isStatic) {
+				if (sameArityCandidates > 1 && args.length > 0) {
+					Class<?>[] argClasses = new Class<?>[args.length];
+					for (int i = 0; i < args.length; i++) {
+						argClasses[i] = (args[i] == null) ? null : args[i].getClass();
+					}
+					test = MH_IS_SAME_OBJECT_AND_ARGS.bindTo(clazz).bindTo(argClasses)
+						.asCollector(1, Object[].class, site.type().parameterCount() - 1);
+				} else {
+					test = MH_IS_SAME_OBJECT.bindTo(clazz);
+					if (site.type().parameterCount() > 1) {
+						test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+					}
 				}
-				test = MH_IS_EXACT_CLASS_AND_ARGS.bindTo(clazz).bindTo(argClasses)
-					.asCollector(1, Object[].class, site.type().parameterCount() - 1);
 			} else {
-				test = MH_IS_EXACT_CLASS.bindTo(clazz);
-				if (site.type().parameterCount() > 1) {
-					test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+				if (sameArityCandidates > 1 && args.length > 0) {
+					Class<?>[] argClasses = new Class<?>[args.length];
+					for (int i = 0; i < args.length; i++) {
+						argClasses[i] = (args[i] == null) ? null : args[i].getClass();
+					}
+					test = MH_IS_EXACT_CLASS_AND_ARGS.bindTo(clazz).bindTo(argClasses)
+						.asCollector(1, Object[].class, site.type().parameterCount() - 1);
+				} else {
+					test = MH_IS_EXACT_CLASS.bindTo(clazz);
+					if (site.type().parameterCount() > 1) {
+						test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+					}
 				}
 			}
 

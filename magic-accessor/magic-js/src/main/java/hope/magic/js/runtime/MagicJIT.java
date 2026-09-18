@@ -300,6 +300,9 @@ public class MagicJIT implements Opcodes {
 		volatile HostCtorGroup   nestmateCtorGroup;
 		volatile HostMethodGroup linkToMethodGroup;
 		volatile HostCtorGroup   linkToCtorGroup;
+
+		volatile SwitchPoint switchPoint = new SwitchPoint();
+		volatile int epoch = 0;
 	}
 
 	private static final ClassValue<ClassJITData> JIT_DATA = new ClassValue<>() {
@@ -308,6 +311,58 @@ public class MagicJIT implements Opcodes {
 			return new ClassJITData();
 		}
 	};
+
+	private static volatile SwitchPoint GLOBAL_SWITCH_POINT = new SwitchPoint();
+
+	public static SwitchPoint getGlobalSwitchPoint() {
+		return GLOBAL_SWITCH_POINT;
+	}
+
+	public static SwitchPoint getSwitchPoint(Class<?> clazz) {
+		if (clazz == null) return null;
+		return JIT_DATA.get(clazz).switchPoint;
+	}
+
+	public static int getEpoch(Class<?> clazz) {
+		if (clazz == null) return 0;
+		return JIT_DATA.get(clazz).epoch;
+	}
+
+	public static void invalidateClass(Class<?> clazz) {
+		if (clazz == null) return;
+		ClassJITData data = JIT_DATA.get(clazz);
+		SwitchPoint oldSp;
+		synchronized (data) {
+			oldSp = data.switchPoint;
+			data.epoch++;
+			data.invokerCache.clear();
+			data.exactInvokerCache.clear();
+			data.ctorCache.clear();
+			data.exactCtorCache.clear();
+			data.getterCache.clear();
+			data.setterCache.clear();
+			data.exactMethodCache.clear();
+			data.exactCtorStubCache.clear();
+			data.nestmateMethodGroup = null;
+			data.nestmateCtorGroup = null;
+			data.linkToMethodGroup = null;
+			data.linkToCtorGroup = null;
+			data.switchPoint = new SwitchPoint();
+		}
+		if (oldSp != null) {
+			SwitchPoint.invalidateAll(new SwitchPoint[]{oldSp});
+		}
+		MethodResolver.invalidateClass(clazz);
+		JSLinker.invalidateClass(clazz);
+	}
+
+	public static void invalidateAll() {
+		SwitchPoint oldGlobal = GLOBAL_SWITCH_POINT;
+		GLOBAL_SWITCH_POINT = new SwitchPoint();
+		if (oldGlobal != null) {
+			SwitchPoint.invalidateAll(new SwitchPoint[]{oldGlobal});
+		}
+	}
 
 	// 架构优化说明：
 	// 原各级反射与 JIT 存根缓存采用 ConcurrentHashMap<Key, ...>。

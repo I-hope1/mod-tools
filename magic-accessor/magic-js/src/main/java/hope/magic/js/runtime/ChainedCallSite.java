@@ -3,6 +3,7 @@ package hope.magic.js.runtime;
 import hope.magic.js.runtime.JSLinker.PolySnapshot;
 
 import java.lang.invoke.*;
+import java.lang.ref.WeakReference;
 import java.util.*;
 
 public class ChainedCallSite extends MutableCallSite {
@@ -10,6 +11,7 @@ public class ChainedCallSite extends MutableCallSite {
 	private             int          chainDepth      = 0;
 	private volatile    boolean      megamorphic     = false;
 	private             MethodHandle megamorphicTarget;
+	private final List<WeakReference<Class<?>>> recordedClasses = new ArrayList<>(4);
 
 	private       int       polyCount       = 0;
 	private final JSShape[] recordedShapes  = new JSShape[MAX_CHAIN_DEPTH];
@@ -186,6 +188,67 @@ public class ChainedCallSite extends MutableCallSite {
 		MethodHandle guard = MethodHandles.guardWithTest(test, fastTarget.asType(type()), getTarget());
 		setTarget(guard);
 		return true;
+	}
+
+	private boolean hasRecordedClass(Class<?> clazz) {
+		for (int i = 0; i < recordedClasses.size(); i++) {
+			Class<?> c = recordedClasses.get(i).get();
+			if (c == clazz) return true;
+		}
+		return false;
+	}
+
+	public synchronized boolean installJavaGuard(Class<?> clazz, MethodHandle test, MethodHandle fastTarget) {
+		if (clazz != null && hasRecordedClass(clazz)) {
+			// 该类此前已挂载过，本次再次进入说明 SwitchPoint 已失效触发 Deopt，旧链条已失效，重置调用点
+			reset();
+		}
+		if (clazz != null && !hasRecordedClass(clazz)) {
+			recordedClasses.add(new WeakReference<>(clazz));
+		}
+		SwitchPoint classSp = (clazz != null) ? MagicJIT.getSwitchPoint(clazz) : null;
+		return installGuardWithSwitchPoint(test, classSp, fastTarget);
+	}
+
+	public synchronized boolean installGuardWithSwitchPoint(MethodHandle test, SwitchPoint switchPoint, MethodHandle fastTarget) {
+		if (megamorphic) return false;
+		chainDepth++;
+		if (chainDepth > MAX_CHAIN_DEPTH) {
+			megamorphic = true;
+			getOrCreateDirectCache();
+			if (megamorphicTarget != null) setTarget(megamorphicTarget.asType(type()));
+			return false;
+		}
+		MethodHandle guardedTarget = fastTarget.asType(type());
+		MethodHandle fb = initialFallback;
+		if (fb != null) {
+			MethodHandle fbTyped = fb.asType(type());
+			if (switchPoint != null) {
+				guardedTarget = switchPoint.guardWithTest(guardedTarget, fbTyped);
+			}
+			SwitchPoint globalSp = MagicJIT.getGlobalSwitchPoint();
+			if (globalSp != null) {
+				guardedTarget = globalSp.guardWithTest(guardedTarget, fbTyped);
+			}
+		}
+		MethodHandle guard = MethodHandles.guardWithTest(test, guardedTarget, getTarget());
+		setTarget(guard);
+		return true;
+	}
+
+	public synchronized void reset() {
+		this.chainDepth = 0;
+		this.megamorphic = false;
+		this.polyCount = 0;
+		this.commonOffset = -1;
+		this.commonType = -1;
+		this.offsetEquivalent = true;
+		this.recordedClasses.clear();
+		Arrays.fill(recordedShapes, null);
+		Arrays.fill(recordedEntries, 0L);
+		if (initialFallback != null) {
+			setTarget(initialFallback.asType(type()));
+		}
 	}
 
 	/**

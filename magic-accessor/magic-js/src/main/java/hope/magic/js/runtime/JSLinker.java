@@ -1054,7 +1054,9 @@ public class JSLinker {
 		ChainedCallSite site = new ChainedCallSite(type, megamorphic);
 		MethodHandle fallback = MethodHandles.insertArguments(InvokeMH.INVOKE_FALLBACK, 3, methodName)
 		 .bindTo(site).asCollector(1, Object[].class, type.parameterCount() - 1);
-		site.setTarget(fallback.asType(type));
+		MethodHandle fbTyped = fallback.asType(type);
+		site.setInitialFallback(fbTyped);
+		site.setTarget(fbTyped);
 		return site;
 	}
 
@@ -1067,7 +1069,9 @@ public class JSLinker {
 		ChainedCallSite site        = new ChainedCallSite(type, megamorphic);
 		MethodHandle fallback = InvokeMH.NEW_FALLBACK.bindTo(site)
 		 .asCollector(1, Object[].class, type.parameterCount() - 1);
-		site.setTarget(fallback.asType(type));
+		MethodHandle fbTyped = fallback.asType(type);
+		site.setInitialFallback(fbTyped);
+		site.setTarget(fbTyped);
 		return site;
 	}
 
@@ -2072,7 +2076,7 @@ public class JSLinker {
 			try {
 				MethodHandle exactGetter = MagicJIT.getFieldGetterStub(targetClass, propName);
 				if (exactGetter != null) {
-					site.installGuardOrSwitchMegamorphic(test, exactGetter);
+					site.installJavaGuard(targetClass, test, exactGetter);
 					return exactGetter.invokeExact(target);
 				}
 			} catch (Throwable ignored) {
@@ -2087,7 +2091,7 @@ public class JSLinker {
 			MethodHandle directGetter = buildDirectFieldGetter(targetClass, field, offset);
 
 			// 构造单态/多态内联缓存
-			site.installGuardOrSwitchMegamorphic(test, directGetter);
+			site.installJavaGuard(targetClass, test, directGetter);
 			return directGetter.invoke(target);
 		} catch (Throwable ignored) {
 		}
@@ -2099,7 +2103,7 @@ public class JSLinker {
 				getterMethod.setAccessible(true);
 				MethodHandle mh           = Magic.lookup.unreflect(getterMethod);
 				MethodHandle directGetter = mh.asType(site.type());
-				site.installGuardOrSwitchMegamorphic(test, directGetter);
+				site.installJavaGuard(targetClass, test, directGetter);
 				return directGetter.invoke(target);
 			} catch (Throwable ignored) {
 			}
@@ -2111,7 +2115,7 @@ public class JSLinker {
 			int arity = candidates.stream().mapToInt(Method::getParameterCount).min().orElse(0);
 			try {
 				MethodHandle factory = MethodHandles.insertArguments(MH_CREATE_BOUND_INSTANCE_METHOD, 1, targetClass, propName, arity);
-				site.installGuardOrSwitchMegamorphic(test, factory.asType(site.type()));
+				site.installJavaGuard(targetClass, test, factory.asType(site.type()));
 			} catch (Throwable ignored) {
 			}
 			return new BoundJavaMethod(target, targetClass, propName, arity, false);
@@ -2120,12 +2124,24 @@ public class JSLinker {
 		return JSUndefined.INSTANCE;
 	}
 
-	private static final ConcurrentHashMap<Class<?>, ConcurrentHashMap<String, BoundJavaMethod>> STATIC_METHOD_CACHE = new ConcurrentHashMap<>();
+	private static final ClassValue<ConcurrentHashMap<String, BoundJavaMethod>> STATIC_METHOD_CACHE = new ClassValue<>() {
+		@Override
+		protected ConcurrentHashMap<String, BoundJavaMethod> computeValue(Class<?> type) {
+			return new ConcurrentHashMap<>();
+		}
+	};
 
 	public static BoundJavaMethod getOrCreateStaticBoundMethod(Class<?> targetClass, String propName, int arity) {
 		return STATIC_METHOD_CACHE
-			.computeIfAbsent(targetClass, k -> new ConcurrentHashMap<>())
+			.get(targetClass)
 			.computeIfAbsent(propName, k -> new BoundJavaMethod(targetClass, targetClass, propName, arity, true));
+	}
+
+	public static void invalidateClass(Class<?> clazz) {
+		if (clazz == null) return;
+		SPREADER_DATA.remove(clazz);
+		INTERFACE_FILTER_CACHE.remove(clazz);
+		STATIC_METHOD_CACHE.remove(clazz);
 	}
 
 	public static Object createBoundInstanceMethod(Object target, Class<?> targetClass, String propName, int arity) {
@@ -2343,7 +2359,7 @@ public class JSLinker {
 			try {
 				MethodHandle exactSetter = MagicJIT.getFieldSetterStub(targetClass, propName);
 				if (exactSetter != null) {
-					site.installGuardOrSwitchMegamorphic(test, exactSetter);
+					site.installJavaGuard(targetClass, test, exactSetter);
 					exactSetter.invokeExact(target, value);
 					return;
 				}
@@ -2358,7 +2374,7 @@ public class JSLinker {
 			long         offset       = LinkerHelper.getFieldOffset(field);
 			MethodHandle directSetter = buildDirectFieldSetter(targetClass, field, offset);
 
-			site.installGuardOrSwitchMegamorphic(test, directSetter);
+			site.installJavaGuard(targetClass, test, directSetter);
 			directSetter.invoke(target, value);
 			return;
 		} catch (Throwable ignored) {
@@ -2376,7 +2392,7 @@ public class JSLinker {
 					mh = MethodHandles.filterArguments(mh, 1, filter);
 				}
 				MethodHandle directSetter = mh.asType(site.type());
-				site.installGuardOrSwitchMegamorphic(test, directSetter);
+				site.installJavaGuard(targetClass, test, directSetter);
 				directSetter.invoke(target, value);
 				return;
 			} catch (Throwable ignored) {
@@ -2563,7 +2579,7 @@ public class JSLinker {
 				MethodHandle exactSetter = MagicJIT.getFieldSetterStub(targetClass, propName);
 				if (exactSetter != null) {
 					MethodHandle directSetter = exactSetter.asType(site.type());
-					site.installGuardOrSwitchMegamorphic(test, directSetter);
+					site.installJavaGuard(targetClass, test, directSetter);
 					directSetter.invoke(target, value);
 					return;
 				}
@@ -2582,7 +2598,7 @@ public class JSLinker {
 			}
 			MethodHandle directSetter = rawSetter.asType(site.type());
 
-			site.installGuardOrSwitchMegamorphic(test, directSetter);
+			site.installJavaGuard(targetClass, test, directSetter);
 			directSetter.invoke(target, value);
 			return;
 		} catch (Throwable ignored) {
@@ -2602,7 +2618,7 @@ public class JSLinker {
 					}
 				}
 				MethodHandle directSetter = mh.asType(site.type());
-				site.installGuardOrSwitchMegamorphic(test, directSetter);
+				site.installJavaGuard(targetClass, test, directSetter);
 				directSetter.invoke(target, value);
 				return;
 			} catch (Throwable ignored) {
@@ -3020,7 +3036,7 @@ public class JSLinker {
 					test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
 				}
 				try {
-					site.installGuardOrSwitchMegamorphic(test, MH_INVOKE_INTERFACE_1.asType(site.type()));
+					site.installJavaGuard(clazz, test, MH_INVOKE_INTERFACE_1.asType(site.type()));
 				} catch (Throwable ignored) { }
 				return invokeInterfaceAdapter1(clazz, args[0]);
 			}
@@ -3203,7 +3219,7 @@ public class JSLinker {
 							collector = MethodHandles.filterReturnValue(collector, MethodHandles.constant(Object.class, JSUndefined.INSTANCE));
 						}
 						MethodHandle genericMh = collector.asType(site.type());
-						site.installGuardOrSwitchMegamorphic(test, genericMh);
+						site.installJavaGuard(clazz, test, genericMh);
 						MethodHandle spreader = genericMh.asSpreader(Object[].class, args.length);
 						return spreader.invokeExact(target, args);
 					}
@@ -3219,7 +3235,7 @@ public class JSLinker {
 					MethodHandle exactMh = MagicJIT.createExactMethodStub(clazz, targetMethod);
 					if (exactMh != null) {
 						MethodHandle genericMh = exactMh.asType(site.type());
-						site.installGuardOrSwitchMegamorphic(test, genericMh);
+						site.installJavaGuard(clazz, test, genericMh);
 
 						MethodHandle spreader = genericMh.asSpreader(Object[].class, args.length);
 						return spreader.invokeExact(target, args);
@@ -3247,7 +3263,7 @@ public class JSLinker {
 				}
 
 				MethodHandle genericMh = adapted.asType(site.type());
-				site.installGuardOrSwitchMegamorphic(test, genericMh);
+				site.installJavaGuard(clazz, test, genericMh);
 
 				// 首次调用使用 asSpreader 极速展开
 				MethodHandle spreader = genericMh.asSpreader(Object[].class, args.length);
@@ -3822,7 +3838,7 @@ public class JSLinker {
 				try {
 					MethodHandle directCtor = MagicJIT.createExactConstructorStub(clazz, targetCtor);
 					if (directCtor != null) {
-						site.installGuardOrSwitchMegamorphic(test, directCtor.asType(site.type()));
+						site.installJavaGuard(clazz, test, directCtor.asType(site.type()));
 					}
 				} catch (Throwable ignored) { }
 

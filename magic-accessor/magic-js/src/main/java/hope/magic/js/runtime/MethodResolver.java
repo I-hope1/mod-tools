@@ -220,6 +220,19 @@ public final class MethodResolver {
 		}
 	};
 
+	public static void invalidateClass(Class<?> clazz) {
+		if (clazz == null) return;
+		ClassReflectionData data = REFLECTION_DATA.get(clazz);
+		synchronized (data) {
+			data.methodCache.clear();
+			data.ctorCache.clear();
+			data.candidateCache.clear();
+			data.candidateCtors = null;
+			data.getterCache.clear();
+			data.setterCache.clear();
+		}
+	}
+
 	private MethodResolver() {}
 
 	private static boolean trySetAccessible(AccessibleObject ao) {

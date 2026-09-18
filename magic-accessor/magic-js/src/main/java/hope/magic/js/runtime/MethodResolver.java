@@ -460,7 +460,8 @@ public final class MethodResolver {
 	}
 
 	/**
-	 * 查找 JavaBean 规范 getter 方法 (getProp / isProp / prop)。
+	 * 查找 JavaBean 规范 getter 方法 (getProp / isProp / [Record component prop])。
+	 * 严禁将 void 返回值方法及普通非 Record 类的无参成员方法误判为 Getter。
 	 */
 	public static Method findGetterMethod(Class<?> clazz, String propName) {
 		if (clazz == null || propName == null || propName.isEmpty()) return null;
@@ -469,12 +470,15 @@ public final class MethodResolver {
 		if (cached != null) return cached;
 
 		String capName = Character.toUpperCase(propName.charAt(0)) + (propName.length() > 1 ? propName.substring(1) : "");
-		String[] getterCandidates = new String[]{"get" + capName, "is" + capName, propName};
+		String[] getterCandidates = clazz.isRecord()
+			? new String[]{"get" + capName, "is" + capName, propName}
+			: new String[]{"get" + capName, "is" + capName};
+
 		Method found = null;
 		for (String candidate : getterCandidates) {
 			try {
 				Method method = clazz.getMethod(candidate);
-				if (method.getParameterCount() == 0) {
+				if (isValidGetter(method, candidate)) {
 					trySetAccessible(method);
 					found = method;
 					break;
@@ -485,17 +489,15 @@ public final class MethodResolver {
 		if (found == null) {
 			try {
 				for (Method m : clazz.getDeclaredMethods()) {
-					if (m.getParameterCount() == 0) {
-						for (String candidate : getterCandidates) {
-							if (m.getName().equals(candidate)) {
-								if (trySetAccessible(m)) {
-									found = m;
-									break;
-								}
+					for (String candidate : getterCandidates) {
+						if (m.getName().equals(candidate) && isValidGetter(m, candidate)) {
+							if (trySetAccessible(m)) {
+								found = m;
+								break;
 							}
 						}
-						if (found != null) break;
 					}
+					if (found != null) break;
 				}
 			} catch (Throwable ignored) {}
 		}
@@ -503,6 +505,16 @@ public final class MethodResolver {
 			data.getterCache.put(propName, found);
 		}
 		return found;
+	}
+
+	private static boolean isValidGetter(Method method, String candidateName) {
+		if (method.getParameterCount() != 0) return false;
+		Class<?> ret = method.getReturnType();
+		if (ret == void.class || ret == Void.class) return false;
+		if (candidateName.startsWith("is") && candidateName.length() > 2) {
+			return ret == boolean.class || ret == Boolean.class;
+		}
+		return true;
 	}
 
 	/**

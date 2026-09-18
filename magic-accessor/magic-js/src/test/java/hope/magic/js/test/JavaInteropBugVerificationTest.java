@@ -369,5 +369,60 @@ public class JavaInteropBugVerificationTest {
 		System.out.println("[Bug 6 现象 Field] fieldSite.getChainDepth()=" + fieldSite.getChainDepth());
 		Assertions.assertTrue(fieldSite.getChainDepth() > 0, "Java field double setter CallSite must install Guard in setPropDoubleFallback!");
 	}
+
+	public static class ActionTarget {
+		public boolean executed = false;
+
+		public void execute() {
+			executed = true;
+		}
+
+		public String getInfo() {
+			return "valid-info";
+		}
+	}
+
+	public record SampleRecord(String title, int count) {}
+
+	/**
+	 * 验证缺陷 7: MethodResolver.findGetterMethod 将无参非 Getter 方法（如 void execute()）误判为 Getter，
+	 * 导致属性读取时被立即副作用执行，且无法获取为 JSFunction 方法引用。
+	 * 修复后：普通类的 void/非 getter 方法被正确解析为 JSFunction；Record 类的 component accessor 和 JavaBean 的 get/is 方法正常作为 Getter 工作。
+	 */
+	@Test
+	public void testBug7_VoidOrRegularMethodMistakenAsGetter() throws Throwable {
+		ActionTarget target = new ActionTarget();
+
+		java.lang.invoke.MethodType getterType = java.lang.invoke.MethodType.methodType(Object.class, Object.class);
+		ChainedCallSite site = (ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapGetProp(
+			java.lang.invoke.MethodHandles.lookup(), "getProp", getterType, "execute"
+		);
+
+		// 1. 仅仅读取属性 "execute"，不应立即执行 void execute() 方法！
+		Object propVal = site.getTarget().invokeExact((Object) target);
+		System.out.println("[Bug 7 现象] target.executed=" + target.executed + ", propVal=" + propVal);
+
+		Assertions.assertFalse(target.executed, "Accessing property 'execute' must NOT invoke the void execute() method!");
+		Assertions.assertInstanceOf(hope.magic.js.runtime.JSFunction.class, propVal, "Property 'execute' must resolve to a callable JSFunction!");
+
+		// 2. 调用返回的 JSFunction 时，才真正执行方法
+		((hope.magic.js.runtime.JSFunction) propVal).call(new hope.magic.js.runtime.JSContext(), target, new Object[0]);
+		Assertions.assertTrue(target.executed, "Calling the returned JSFunction must invoke execute()!");
+
+		// 3. 验证标准 JavaBean getter 正常工作
+		ChainedCallSite infoSite = (ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapGetProp(
+			java.lang.invoke.MethodHandles.lookup(), "getProp", getterType, "info"
+		);
+		Object infoVal = infoSite.getTarget().invokeExact((Object) target);
+		Assertions.assertEquals("valid-info", infoVal);
+
+		// 4. 验证 Record 类组件属性正常作为 getter 工作
+		SampleRecord record = new SampleRecord("hello-record", 42);
+		ChainedCallSite recordSite = (ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapGetProp(
+			java.lang.invoke.MethodHandles.lookup(), "getProp", getterType, "title"
+		);
+		Object titleVal = recordSite.getTarget().invokeExact((Object) record);
+		Assertions.assertEquals("hello-record", titleVal);
+	}
 }
 

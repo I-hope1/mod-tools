@@ -327,5 +327,47 @@ public class JavaInteropBugVerificationTest {
 		System.out.println("[Bug 5 现象 Constructor] boundCtorInvoker=" + boundCtorInvoker);
 		Assertions.assertNotNull(boundCtorInvoker, "createExactConstructorStub must bind a MagicConstructorInvoker bytecode invoker instance!");
 	}
+
+	public static class NumericBeanTarget {
+		private double price = 0.0;
+		public double amount = 0.0;
+
+		public double getPrice() {
+			return price;
+		}
+
+		public void setPrice(double price) {
+			this.price = price;
+		}
+	}
+
+	/**
+	 * 验证缺陷 6: JavaBean Setter 与 Java Field 在 setPropDoubleFallback 中完全漏装 CallSite 守卫
+	 */
+	@Test
+	public void testBug6_JavaBeanAndFieldDoubleSetterCallSiteGuardMissing() throws Throwable {
+		NumericBeanTarget bean = new NumericBeanTarget();
+
+		// 1. 测试 JavaBean double setter
+		java.lang.invoke.MethodType setterType = java.lang.invoke.MethodType.methodType(void.class, Object.class, double.class);
+		ChainedCallSite propSite = (ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapSetPropDouble(
+			java.lang.invoke.MethodHandles.lookup(), "setProp", setterType, "price"
+		);
+		Assertions.assertEquals(0, propSite.getChainDepth(), "Initial chainDepth must be 0");
+		propSite.getTarget().invokeExact((Object) bean, 99.5);
+		Assertions.assertEquals(99.5, bean.getPrice());
+		System.out.println("[Bug 6 现象 Setter] propSite.getChainDepth()=" + propSite.getChainDepth());
+		Assertions.assertTrue(propSite.getChainDepth() > 0, "JavaBean double setter CallSite must install Guard in setPropDoubleFallback!");
+
+		// 2. 测试 Java double field
+		ChainedCallSite fieldSite = (ChainedCallSite) hope.magic.js.runtime.JSLinker.bootstrapSetPropDouble(
+			java.lang.invoke.MethodHandles.lookup(), "setProp", setterType, "amount"
+		);
+		Assertions.assertEquals(0, fieldSite.getChainDepth(), "Initial chainDepth must be 0");
+		fieldSite.getTarget().invokeExact((Object) bean, 123.45);
+		Assertions.assertEquals(123.45, bean.amount);
+		System.out.println("[Bug 6 现象 Field] fieldSite.getChainDepth()=" + fieldSite.getChainDepth());
+		Assertions.assertTrue(fieldSite.getChainDepth() > 0, "Java field double setter CallSite must install Guard in setPropDoubleFallback!");
+	}
 }
 

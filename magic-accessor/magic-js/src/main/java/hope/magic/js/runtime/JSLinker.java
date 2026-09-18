@@ -2149,6 +2149,72 @@ public class JSLinker {
 			return;
 		}
 
+		Class<?> targetClass = target.getClass();
+
+		// 1. 尝试通过 MAGICIMPL 直写字段或 Unsafe 偏移直写
+		if (STRATEGY != InvocationStrategy.SPREADER) {
+			try {
+				MethodHandle exactSetter = MagicJIT.getFieldSetterStub(targetClass, propName);
+				if (exactSetter != null) {
+					MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
+					if (site.type().parameterCount() > 1) {
+						test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+					}
+					MethodHandle directSetter = exactSetter.asType(site.type());
+					site.installGuardOrSwitchMegamorphic(test, directSetter);
+					directSetter.invoke(target, value);
+					return;
+				}
+			} catch (Throwable ignored) {
+			}
+		}
+
+		l:
+		try {
+			Field field = MagicJIT.getDeclaredFieldRecursive(targetClass, propName);
+			if (field == null) break l;
+			long         offset    = LinkerHelper.getFieldOffset(field);
+			MethodHandle rawSetter = buildDirectFieldSetter(targetClass, field, offset);
+			if (field.getType() == boolean.class) {
+				rawSetter = MethodHandles.filterArguments(rawSetter, 1, MH_TO_BOOLEAN);
+			}
+			MethodHandle directSetter = rawSetter.asType(site.type());
+
+			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
+			if (site.type().parameterCount() > 1) {
+				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+			}
+			site.installGuardOrSwitchMegamorphic(test, directSetter);
+			directSetter.invoke(target, value);
+			return;
+		} catch (Throwable ignored) {
+		}
+
+		// 2. 尝试匹配 setter 方法 (setFoo)
+		Method setterMethod = MethodResolver.findSetterMethod(targetClass, propName);
+		if (setterMethod != null) {
+			try {
+				setterMethod.setAccessible(true);
+				MethodHandle mh = Magic.lookup.unreflect(setterMethod);
+				Class<?> paramType = setterMethod.getParameterTypes()[0];
+				if (!paramType.isPrimitive() || paramType == boolean.class) {
+					MethodHandle filter = getArgumentFilter(paramType);
+					if (filter != null) {
+						mh = MethodHandles.filterArguments(mh, 1, filter);
+					}
+				}
+				MethodHandle directSetter = mh.asType(site.type());
+				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(targetClass);
+				if (site.type().parameterCount() > 1) {
+					test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+				}
+				site.installGuardOrSwitchMegamorphic(test, directSetter);
+				directSetter.invoke(target, value);
+				return;
+			} catch (Throwable ignored) {
+			}
+		}
+
 		setPropDoubleGeneric(target, value, propName);
 	}
 

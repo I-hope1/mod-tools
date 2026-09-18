@@ -47,6 +47,7 @@ public class JSLinker {
 	public static final MethodHandle MH_TRANSITION_SET_OBJECT;
 	public static final MethodHandle MH_TRANSITION_SET_OBJECT_DOUBLE;
 	public static final MethodHandle MH_GET_ACCESSOR_PROP;
+	public static final MethodHandle MH_GET_PROTO_ACCESSOR_PROP;
 	public static final MethodHandle MH_SET_ACCESSOR_PROP;
 	public static final MethodHandle MH_SET_NOOP_PROP;
 	public static final MethodHandle MH_ARRAY_LENGTH_INT;
@@ -95,6 +96,7 @@ public class JSLinker {
 			MH_TRANSITION_SET_OBJECT = LOOKUP.findStatic(JSLinker.class, "transitionSetObject", MethodType.methodType(void.class, JSShape.class, int.class, Object.class, Object.class));
 			MH_TRANSITION_SET_OBJECT_DOUBLE = LOOKUP.findStatic(JSLinker.class, "transitionSetObjectDouble", MethodType.methodType(void.class, JSShape.class, int.class, Object.class, Object.class));
 			MH_GET_ACCESSOR_PROP = LOOKUP.findStatic(JSLinker.class, "getAccessorProp", MethodType.methodType(Object.class, int.class, Object.class));
+			MH_GET_PROTO_ACCESSOR_PROP = LOOKUP.findStatic(JSLinker.class, "getPrototypeAccessorProp", MethodType.methodType(Object.class, PropertyAccessor.class, Object.class));
 			MH_SET_ACCESSOR_PROP = LOOKUP.findStatic(JSLinker.class, "setAccessorProp", MethodType.methodType(void.class, int.class, Object.class, Object.class));
 			MH_SET_NOOP_PROP = LOOKUP.findStatic(JSLinker.class, "setNoopProp", MethodType.methodType(void.class, Object.class, Object.class));
 			MH_ARRAY_LENGTH_INT = LOOKUP.findStatic(JSLinker.class, "getArrayLengthInt", MethodType.methodType(int.class, Object.class));
@@ -1899,6 +1901,13 @@ public class JSLinker {
 		return JSUndefined.INSTANCE;
 	}
 
+	public static Object getPrototypeAccessorProp(PropertyAccessor acc, Object target) {
+		if (acc != null) {
+			return acc.callGetter(null, target);
+		}
+		return JSUndefined.INSTANCE;
+	}
+
 	public static void setAccessorProp(int offset, Object target, Object value) {
 		if (target instanceof JSObject jsObj) {
 			Object raw = jsObj.getRawObjectSlot(offset);
@@ -1986,6 +1995,63 @@ public class JSLinker {
 				}
 				return jsObj.getSlot(offset);
 			}
+			// 原型链属性快速查找与 SwitchPoint 守卫挂载
+			JSObject proto = jsObj.getPrototype();
+			if (proto != null) {
+				JSObject current = proto;
+				JSObject holder = null;
+				int holderOffset = -1;
+				List<JSObject> chain = null;
+
+				while (current != null) {
+					int pOff = (propId >= 0) ? current.shape.getOffset(propId) : current.shape.getOffset(propName);
+					if (pOff >= 0) {
+						holder = current;
+						holderOffset = pOff;
+						break;
+					}
+					if (chain == null) chain = new ArrayList<>(2);
+					chain.add(current);
+					current = current.getPrototype();
+				}
+
+				if (holder != null) {
+					byte slotType = holder.shape.getSlotType(holderOffset);
+					MethodHandle test = MH_IS_EXACT_SHAPE_AND_PROTO.bindTo(shape).bindTo(proto);
+					MethodHandle fb = site.getInitialFallback();
+					MethodHandle fbTyped = (fb != null) ? fb.asType(site.type()) : null;
+
+					if ((slotType & JSShape.FLAG_ACCESSOR) != 0) {
+						Object raw = holder.getRawObjectSlot(holderOffset);
+						if (raw instanceof PropertyAccessor acc) {
+							MethodHandle getterTarget = MethodHandles.insertArguments(MH_GET_PROTO_ACCESSOR_PROP, 0, acc).asType(site.type());
+							if (chain != null && fbTyped != null) {
+								for (JSObject p : chain) {
+									getterTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(getterTarget, fbTyped);
+								}
+							}
+							site.installProtoGuard(shape, holder.getOrCreateProtoSwitchPoint(), test, getterTarget);
+							return acc.callGetter(null, target);
+						}
+					} else {
+						Object val = holder.getSlot(holderOffset);
+						if (val instanceof JSFunction fn) {
+							// 原型函数属性作为静态常量绑定
+							MethodHandle constTarget = MethodHandles.dropArguments(
+								MethodHandles.constant(Object.class, fn), 0, site.type().parameterList()
+							).asType(site.type());
+							if (chain != null && fbTyped != null) {
+								for (JSObject p : chain) {
+									constTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(constTarget, fbTyped);
+								}
+							}
+							site.installProtoGuard(shape, holder.getOrCreateProtoSwitchPoint(), test, constTarget);
+							return fn;
+						}
+					}
+				}
+			}
+
 			return jsObj.get(propName);
 		}
 
@@ -3093,8 +3159,8 @@ public class JSLinker {
 				// 当方法不在自身槽位上（offset < 0，即来自原型链），或为内置单例对象（如 JSObjectConstructor / JSArrayConstructor）时，函数实例恒定，方可绑定常量
 				if (ownOffset < 0 || jsObj instanceof JSContext.JSObjectConstructor || jsObj instanceof JSContext.JSArrayConstructor) {
 					MethodHandle test;
+					JSObject proto = (ownOffset < 0) ? jsObj.getPrototype() : null;
 					if (ownOffset < 0) {
-						JSObject proto = jsObj.getPrototype();
 						test = (proto != null) ? MH_IS_EXACT_SHAPE_AND_PROTO.bindTo(jsObj.shape).bindTo(proto) : null;
 					} else {
 						test = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
@@ -3120,7 +3186,35 @@ public class JSLinker {
 							 .bindTo(func)
 							 .asCollector(1, Object[].class, arity);
 						}
-						site.installGuardOrSwitchMegamorphic(test, exactFuncCall.asType(site.type()));
+						if (ownOffset < 0 && proto != null) {
+							JSObject current = proto;
+							JSObject holder = null;
+							List<JSObject> chain = null;
+							while (current != null) {
+								if (current.shape.getOffset(methodName) >= 0) {
+									holder = current;
+									break;
+								}
+								if (chain == null) chain = new ArrayList<>(2);
+								chain.add(current);
+								current = current.getPrototype();
+							}
+							if (holder != null) {
+								MethodHandle fb = site.getInitialFallback();
+								MethodHandle fbTyped = (fb != null) ? fb.asType(site.type()) : null;
+								MethodHandle guardedCall = exactFuncCall.asType(site.type());
+								if (chain != null && fbTyped != null) {
+									for (JSObject p : chain) {
+										guardedCall = p.getOrCreateProtoSwitchPoint().guardWithTest(guardedCall, fbTyped);
+									}
+								}
+								site.installProtoGuard(jsObj.shape, holder.getOrCreateProtoSwitchPoint(), test, guardedCall);
+							} else {
+								site.installGuardOrSwitchMegamorphic(test, exactFuncCall.asType(site.type()));
+							}
+						} else {
+							site.installGuardOrSwitchMegamorphic(test, exactFuncCall.asType(site.type()));
+						}
 					}
 				}
 				// 若为自有闭包属性，则不绑定死常量，保持动态调用

@@ -1,5 +1,6 @@
 package hope.magic.js.runtime;
 
+import java.lang.invoke.SwitchPoint;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -53,6 +54,45 @@ public class JSObject {
 	public Object[] overflowObj/*  = null */;
 
 	private JSObject prototype/*  = null */;
+	private volatile SwitchPoint protoSwitchPoint;
+
+	public SwitchPoint getOrCreateProtoSwitchPoint() {
+		SwitchPoint sp = this.protoSwitchPoint;
+		if (sp == null) {
+			synchronized (this) {
+				sp = this.protoSwitchPoint;
+				if (sp == null) {
+					this.protoSwitchPoint = sp = new SwitchPoint();
+				}
+			}
+		}
+		return sp;
+	}
+
+	public SwitchPoint getProtoSwitchPoint() {
+		return this.protoSwitchPoint;
+	}
+
+	public void invalidatePrototype() {
+		SwitchPoint sp = this.protoSwitchPoint;
+		if (sp != null) {
+			synchronized (this) {
+				sp = this.protoSwitchPoint;
+				if (sp != null) {
+					this.protoSwitchPoint = new SwitchPoint();
+				}
+			}
+			if (sp != null) {
+				SwitchPoint.invalidateAll(new SwitchPoint[]{ sp });
+			}
+		}
+	}
+
+	public void onStructuralOrPropertyChange() {
+		if (this.protoSwitchPoint != null) {
+			invalidatePrototype();
+		}
+	}
 
 	public JSObject getPrototype() {
 		if (this == JSContext.LazyObject.OBJECT_PROTOTYPE) {
@@ -66,6 +106,7 @@ public class JSObject {
 			throw new RuntimeException("TypeError: Immutable prototype object '#<Object>' cannot have their prototype set");
 		}
 		this.prototype = prototype;
+		onStructuralOrPropertyChange();
 	}
 
 	//endregion
@@ -428,6 +469,7 @@ public class JSObject {
 				}
 			}
 			setDoubleSlot(offset, value);
+			onStructuralOrPropertyChange();
 			return;
 		}
 		JSObject proto = getPrototype();
@@ -447,6 +489,7 @@ public class JSObject {
 			offset = shape.propertyCount - 1;
 		}
 		setDoubleSlot(offset, value);
+		onStructuralOrPropertyChange();
 
 		// 确保本慢路径方法字节码大小 > 325 字节，使 HotSpot C2 将此冷路径判定为 'hot method too big'，绝不在顶层内联
 		// 让 C2 有更多预算内联其他方法
@@ -533,6 +576,7 @@ public class JSObject {
 				}
 			}
 			setSlot(offset, value);
+			onStructuralOrPropertyChange();
 			return;
 		}
 
@@ -548,6 +592,7 @@ public class JSObject {
 	private void putSlow(int propId, Object value) {
 		shape = shape.addProperty(propId, JSShape.TYPE_OBJECT);
 		setSlot(shape.propertyCount - 1, value);
+		onStructuralOrPropertyChange();
 
 		// 确保本慢路径方法字节码大小 > 325 字节，使 HotSpot C2 将此冷路径判定为 'hot method too big'，绝不在顶层内联
 		// 让 C2 有更多预算内联其他方法
@@ -693,6 +738,7 @@ public class JSObject {
 			}
 			clearPrimSlot(offset);
 			setSlot(offset, DELETED); // setSlot 里有 clearDoubleMask(offset);
+			onStructuralOrPropertyChange();
 		}
 	}
 

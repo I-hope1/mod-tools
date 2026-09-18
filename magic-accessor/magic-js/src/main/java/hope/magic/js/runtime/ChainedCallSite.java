@@ -5,6 +5,7 @@ import hope.magic.js.runtime.JSLinker.PolySnapshot;
 import java.lang.invoke.*;
 import java.lang.ref.WeakReference;
 import java.util.*;
+import java.util.concurrent.atomic.LongAdder;
 
 public class ChainedCallSite extends MutableCallSite {
 	public static final int          MAX_CHAIN_DEPTH = 5; // Shape 种类 <= 5 时使用链式 Guard (覆盖常见 4~5 形态多态), > 5 时自动演化为 Megamorphic 缓存表
@@ -37,17 +38,14 @@ public class ChainedCallSite extends MutableCallSite {
 		return propId;
 	}
 
-	/** shape → observed-offset（插入有序，用于 tableSwitch 构造） */
-	private final LinkedHashMap<JSShape, Integer> shapeOffsetMap = new LinkedHashMap<>(4);
-
 	// Megamorphic 多槽直接映射表 (Direct Mapped Fast Shape->Offset Cache)
 	public static final int CACHE_SIZE  = Integer.getInteger("magic.cache.size", 512);
 	public static final int CACHE_SHIFT = 32 - Integer.numberOfTrailingZeros(CACHE_SIZE);
 	public static final int PHI_32      = 0x9E3779B9; // 黄金比例常数
 
 	public static final boolean ENABLE_STATS = Boolean.getBoolean("magic.cache.stats");
-	public static final java.util.concurrent.atomic.LongAdder STATS_HITS = new java.util.concurrent.atomic.LongAdder();
-	public static final java.util.concurrent.atomic.LongAdder STATS_MISSES = new java.util.concurrent.atomic.LongAdder();
+	public static final LongAdder STATS_HITS = new LongAdder();
+	public static final LongAdder STATS_MISSES = new LongAdder();
 
 	/** 极速 32 位黄金比例散列：单条 imul + 单条 shr 汇编指令 */
 	public static int cacheIndex(int shapeId) {
@@ -198,6 +196,19 @@ public class ChainedCallSite extends MutableCallSite {
 		return false;
 	}
 
+	private final List<JSShape> recordedProtoShapes = new ArrayList<>(4);
+
+	public synchronized boolean installProtoGuard(JSShape shape, SwitchPoint sp, MethodHandle test, MethodHandle fastTarget) {
+		if (shape != null && recordedProtoShapes.contains(shape)) {
+			// 该实例 Shape 此前已挂载过原型守卫，再次进入说明原型的 SwitchPoint 已失效，重置调用点
+			reset();
+		}
+		if (shape != null && !recordedProtoShapes.contains(shape)) {
+			recordedProtoShapes.add(shape);
+		}
+		return installGuardWithSwitchPoint(test, sp, fastTarget);
+	}
+
 	public synchronized boolean installJavaGuard(Class<?> clazz, MethodHandle test, MethodHandle fastTarget) {
 		if (clazz != null && hasRecordedClass(clazz)) {
 			// 该类此前已挂载过，本次再次进入说明 SwitchPoint 已失效触发 Deopt，旧链条已失效，重置调用点
@@ -244,6 +255,7 @@ public class ChainedCallSite extends MutableCallSite {
 		this.commonType = -1;
 		this.offsetEquivalent = true;
 		this.recordedClasses.clear();
+		this.recordedProtoShapes.clear();
 		Arrays.fill(recordedShapes, null);
 		Arrays.fill(recordedEntries, 0L);
 		if (initialFallback != null) {

@@ -1271,6 +1271,7 @@ public class JSContext {
 				}
 			}
 
+			jsObj.onStructuralOrPropertyChange();
 			return target;
 		}
 

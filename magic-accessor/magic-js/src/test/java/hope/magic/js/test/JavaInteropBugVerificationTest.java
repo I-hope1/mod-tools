@@ -594,6 +594,78 @@ public class JavaInteropBugVerificationTest {
 		Object rMethodTearOff = cx.eval("const fn = StaticTarget.staticMethod; fn('antigravity');");
 		Assertions.assertEquals("greeting:antigravity", rMethodTearOff, "Static method tear-off must be callable");
 	}
+
+	/**
+	 * 验证缺陷 12:
+	 * SAM 函数式接口适配器 (JSFunctionAdapter) 中硬编码传入 null 作为 cx，
+	 * 导致当 JS 函数内部访问全局变量 (如 globalThis.xxx、Math、Object、console 等) 时，
+	 * getScopeOrGlobal 中 cx.getSlot() 抛出 NullPointerException，尤其在异步/多线程线程池中 100% 崩溃。
+	 */
+	@Test
+	public void testBug12_SAMAdapterContextLossOnAsyncExecution() {
+		JSContext cx = new JSContext();
+		cx.set("sharedMessage", "antigravity_ok");
+
+		// 1. 函数式直接调用 java.lang.Runnable(...) 创建 SAM 适配器并同步执行
+		Object syncRes = cx.eval("""
+			var r = java.lang.Runnable(() => {
+				sharedResult = sharedMessage + "_sync";
+			});
+			r.run();
+			sharedResult;
+		""");
+		Assertions.assertEquals("antigravity_ok_sync", syncRes);
+
+		// 2. new java.lang.Runnable(...) 构造器语法创建 SAM 适配器
+		Object newRes = cx.eval("""
+			var rNew = new java.lang.Runnable(() => {
+				newResult = sharedMessage + "_new";
+			});
+			rNew.run();
+			newResult;
+		""");
+		Assertions.assertEquals("antigravity_ok_new", newRes);
+
+		// 3. new java.lang.Runnable({ run: () => ... }) 传入 JSObject 构造适配器
+		Object objAdapterRes = cx.eval("""
+			var rObj = new java.lang.Runnable({
+				run: () => {
+					objResult = sharedMessage + "_obj";
+				}
+			});
+			rObj.run();
+			objResult;
+		""");
+		Assertions.assertEquals("antigravity_ok_obj", objAdapterRes);
+
+		// 4. 跨线程异步线程池 (CompletableFuture.runAsync) 执行 SAM 回调访问并修改全局变量
+		cx.eval("""
+			var task = java.lang.Runnable(() => {
+				asyncResult = sharedMessage + "_async";
+			});
+			var future = java.util.concurrent.CompletableFuture.runAsync(task);
+			future.join();
+		""");
+		Object asyncRes = cx.eval("asyncResult;");
+		Assertions.assertEquals("antigravity_ok_async", asyncRes);
+
+		// 5. 跨线程异步线程池 (CompletableFuture.supplyAsync) 执行 Supplier 并返回值
+		Object supplyRes = cx.eval("""
+			var supplier = new java.util.function.Supplier(() => {
+				return sharedMessage + "_supplier";
+			});
+			var future2 = java.util.concurrent.CompletableFuture.supplyAsync(supplier);
+			future2.join();
+		""");
+		Assertions.assertEquals("antigravity_ok_supplier", supplyRes);
+
+		// 6. Primitive SAM 接口跨线程/同步特化直调
+		Object primRes = cx.eval("""
+			var op = new java.util.function.IntBinaryOperator((a, b) => a * 10 + b);
+			op.applyAsInt(4, 2);
+		""");
+		Assertions.assertEquals(42, ((Number) primRes).intValue());
+	}
 }
 
 

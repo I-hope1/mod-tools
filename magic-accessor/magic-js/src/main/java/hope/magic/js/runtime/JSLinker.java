@@ -42,6 +42,7 @@ public class JSLinker {
 	public static final MethodHandle MH_IS_EXACT_SHAPE_AND_PROTO;
 	public static final MethodHandle MH_IS_SAME_OBJECT;
 	public static final MethodHandle MH_IS_SAME_OBJECT_AND_ARGS;
+	public static final MethodHandle MH_INVOKE_INTERFACE_1;
 	public static final MethodHandle MH_TRANSITION_SET_DOUBLE;
 	public static final MethodHandle MH_TRANSITION_SET_OBJECT;
 	public static final MethodHandle MH_TRANSITION_SET_OBJECT_DOUBLE;
@@ -91,6 +92,7 @@ public class JSLinker {
 			MH_NEW_ARRAY_0 = LOOKUP.findStatic(JSLinker.class, "newArrayInstance0", MethodType.methodType(Object.class, Class.class));
 			MH_NEW_ARRAY_1 = LOOKUP.findStatic(JSLinker.class, "newArrayInstance1", MethodType.methodType(Object.class, Class.class, Object.class));
 			MH_NEW_ARRAY_N = LOOKUP.findStatic(JSLinker.class, "newArrayInstanceN", MethodType.methodType(Object.class, Class.class, Object[].class));
+			MH_INVOKE_INTERFACE_1 = LOOKUP.findStatic(JSLinker.class, "invokeInterfaceAdapter1", MethodType.methodType(Object.class, Object.class, Object.class));
 		} catch (Throwable e) {
 			throw new ExceptionInInitializerError(e);
 		}
@@ -2569,6 +2571,13 @@ public class JSLinker {
 			return func.call(JSContext.current(), JSUndefined.INSTANCE, args);
 		}
 
+		if (target instanceof Class<?> clazz && clazz.isInterface() && "$invoke$".equals(methodName)) {
+			if (args.length == 1) {
+				return invokeInterfaceAdapter1(clazz, args[0]);
+			}
+			throw new NoSuchMethodException("Interface " + clazz.getName() + " cannot be invoked with " + args.length + " args");
+		}
+
 		if (target instanceof JSFunction func && "call".equals(methodName)) {
 			Object   thisArg = args.length > 0 && args[0] != null ? args[0] : JSUndefined.INSTANCE;
 			Object[] rest    = args.length > 1 ? Arrays.copyOfRange(args, 1, args.length) : new Object[0];
@@ -2622,6 +2631,14 @@ public class JSLinker {
 			Object member = jsObj.get(methodName);
 			if (member instanceof JSFunction func) {
 				return func.call(null, jsObj, args);
+			}
+			if (member instanceof Class<?> clazz) {
+				if (clazz.isInterface()) {
+					if (args.length == 1) {
+						return invokeInterfaceAdapter1(clazz, args[0]);
+					}
+					throw new NoSuchMethodException("Interface " + clazz.getName() + " cannot be invoked with " + args.length + " args");
+				}
 			}
 		}
 
@@ -2726,6 +2743,21 @@ public class JSLinker {
 			return func.call(cx, JSUndefined.INSTANCE, args);
 		}
 
+		if (target instanceof Class<?> clazz && clazz.isInterface() && "$invoke$".equals(methodName)) {
+			int arity = args.length;
+			if (arity == 1) {
+				MethodHandle test = MH_IS_SAME_OBJECT.bindTo(clazz);
+				if (site.type().parameterCount() > 1) {
+					test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+				}
+				try {
+					site.installGuardOrSwitchMegamorphic(test, MH_INVOKE_INTERFACE_1.asType(site.type()));
+				} catch (Throwable ignored) { }
+				return invokeInterfaceAdapter1(clazz, args[0]);
+			}
+			throw new NoSuchMethodException("Interface " + clazz.getName() + " cannot be invoked with " + arity + " args");
+		}
+
 		if (target instanceof JSFunction func && "call".equals(methodName)) {
 			int          arity = args.length;
 			MethodHandle directMh;
@@ -2809,6 +2841,14 @@ public class JSLinker {
 				// 若为自有闭包属性，则不绑定死常量，保持动态调用
 				return func.call(null, jsObj, args);
 			}
+			if (member instanceof Class<?> clazz) {
+				if (clazz.isInterface()) {
+					if (args.length == 1) {
+						return invokeInterfaceAdapter1(clazz, args[0]);
+					}
+					throw new NoSuchMethodException("Interface " + clazz.getName() + " cannot be invoked with " + args.length + " args");
+				}
+			}
 		}
 
 		return invokeFallbackSlow(site, target, args, methodName);
@@ -2825,6 +2865,13 @@ public class JSLinker {
 
 		Class<?> clazz    = (target instanceof Class<?>) ? (Class<?>) target : target.getClass();
 		boolean  isStatic = (target instanceof Class<?>);
+
+		if (isStatic && clazz.isInterface() && "$invoke$".equals(methodName)) {
+			if (args.length == 1) {
+				return invokeInterfaceAdapter1(clazz, args[0]);
+			}
+			throw new NoSuchMethodException("Interface " + clazz.getName() + " cannot be invoked with " + args.length + " args");
+		}
 
 		// 查找最匹配的重载方法
 		Method targetMethod = MethodResolver.findBestMatchingMethod(clazz, methodName, args);
@@ -3066,6 +3113,19 @@ public class JSLinker {
 
 	public static Object newGeneric(Object ctor, Object[] args, Object newTarget) throws Throwable {
 		if (ctor instanceof Class<?> clazz) {
+			if (clazz.isArray()) {
+				int arity = args.length;
+				Class<?> componentType = clazz.getComponentType();
+				if (arity == 1) return newArrayInstance1(componentType, args[0]);
+				if (arity == 0) return newArrayInstance0(componentType);
+				return newArrayInstanceN(componentType, args);
+			}
+			if (clazz.isInterface()) {
+				if (args.length == 1) {
+					return invokeInterfaceAdapter1(clazz, args[0]);
+				}
+				throw new NoSuchMethodException("Interface " + clazz.getName() + " cannot be instantiated with " + args.length + " args");
+			}
 			Constructor<?> c = MethodResolver.findBestMatchingConstructor(clazz, args);
 			if (c != null) {
 				Object[]   castedArgs = new Object[args.length];
@@ -3177,14 +3237,26 @@ public class JSLinker {
 		if (scope != null && scope.has(name)) {
 			return scope.get(name);
 		}
-		return cx.getSlot(slot);
+		if (cx != null) {
+			return cx.getSlot(slot);
+		}
+		JSContext current = JSContext.current();
+		if (current != null) {
+			return current.getSlot(slot);
+		}
+		return JSUndefined.INSTANCE;
 	}
 
 	public static void setScopeOrGlobal(JSObject scope, JSContext cx, String name, int slot, Object value) {
 		if (scope != null && scope.has(name)) {
 			scope.setScopeVar(name, value);
-		} else {
+		} else if (cx != null) {
 			cx.setSlot(slot, value);
+		} else {
+			JSContext current = JSContext.current();
+			if (current != null) {
+				current.setSlot(slot, value);
+			}
 		}
 	}
 
@@ -3358,6 +3430,17 @@ public class JSLinker {
 		return arr;
 	}
 
+	public static Object invokeInterfaceAdapter1(Object target, Object arg) {
+		Class<?> clazz = (Class<?>) target;
+		if (arg instanceof JSFunction fn) {
+			return MagicJIT.getFunctionAdapter(clazz, fn);
+		}
+		if (arg instanceof JSObject jsObj) {
+			return MagicJIT.getObjectAdapter(clazz, jsObj);
+		}
+		throw JSContext.makeTypeError("Cannot adapt " + arg + " to interface " + clazz.getName());
+	}
+
 	public static Object newFallback(ChainedCallSite site, Object ctor, Object[] args) throws Throwable {
 		int arity = args.length;
 		if (ctor instanceof Class<?> clazz) {
@@ -3384,6 +3467,20 @@ public class JSLinker {
 				} else {
 					return newArrayInstanceN(componentType, args);
 				}
+			}
+
+			if (clazz.isInterface()) {
+				if (arity == 1) {
+					MethodHandle test = MH_IS_SAME_OBJECT.bindTo(clazz);
+					if (site.type().parameterCount() > 1) {
+						test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+					}
+					try {
+						site.installGuardOrSwitchMegamorphic(test, MH_INVOKE_INTERFACE_1.asType(site.type()));
+					} catch (Throwable ignored) { }
+					return invokeInterfaceAdapter1(clazz, args[0]);
+				}
+				throw new NoSuchMethodException("Interface " + clazz.getName() + " cannot be instantiated with " + arity + " arguments");
 			}
 
 			Constructor<?> targetCtor = MethodResolver.findBestMatchingConstructor(clazz, args);

@@ -4743,6 +4743,32 @@ public class MagicJIT implements Opcodes {
 
 	//region 动态接口适配器生成 (JIT Interface Adapters)
 
+	public static JSContext enterContext(JSContext cx) {
+		if (cx == null) return null;
+		JSContext prev = JSContext.CURRENT.get();
+		if (prev != cx) {
+			JSContext.CURRENT.set(cx);
+		}
+		return prev;
+	}
+
+	public static void exitContext(JSContext cx, JSContext prev) {
+		if (cx == null) return;
+		try {
+			if (prev != cx) {
+				cx.drainMicrotasks();
+			}
+		} finally {
+			if (prev != cx) {
+				if (prev != null) {
+					JSContext.CURRENT.set(prev);
+				} else {
+					JSContext.CURRENT.remove();
+				}
+			}
+		}
+	}
+
 	public static Object getFunctionAdapter(Class<?> targetType, JSFunction fn) {
 		if (targetType == null || fn == null) return null;
 		if (!targetType.isInterface()) return null;
@@ -4810,15 +4836,31 @@ public class MagicJIT implements Opcodes {
 
 			// public final JSFunction fn;
 			cw.visitField(ACC_PUBLIC | ACC_FINAL, "fn", "Lhope/magic/js/runtime/JSFunction;", null, null).visitEnd();
+			// public final JSContext cx;
+			cw.visitField(ACC_PUBLIC | ACC_FINAL, "cx", "Lhope/magic/js/runtime/JSContext;", null, null).visitEnd();
 
-			// <init>(JSFunction fn)
+			// <init>(JSFunction fn, JSContext cx)
+			MethodVisitor initMv2 = cw.visitMethod(ACC_PUBLIC, "<init>", "(Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSContext;)V", null, null);
+			initMv2.visitCode();
+			initMv2.visitVarInsn(ALOAD, 0);
+			initMv2.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+			initMv2.visitVarInsn(ALOAD, 0);
+			initMv2.visitVarInsn(ALOAD, 1);
+			initMv2.visitFieldInsn(PUTFIELD, className, "fn", "Lhope/magic/js/runtime/JSFunction;");
+			initMv2.visitVarInsn(ALOAD, 0);
+			initMv2.visitVarInsn(ALOAD, 2);
+			initMv2.visitFieldInsn(PUTFIELD, className, "cx", "Lhope/magic/js/runtime/JSContext;");
+			initMv2.visitInsn(RETURN);
+			initMv2.visitMaxs(0, 0);
+			initMv2.visitEnd();
+
+			// <init>(JSFunction fn) -> this(fn, JSContext.current())
 			MethodVisitor initMv = cw.visitMethod(ACC_PUBLIC, "<init>", "(Lhope/magic/js/runtime/JSFunction;)V", null, null);
 			initMv.visitCode();
 			initMv.visitVarInsn(ALOAD, 0);
-			initMv.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
-			initMv.visitVarInsn(ALOAD, 0);
 			initMv.visitVarInsn(ALOAD, 1);
-			initMv.visitFieldInsn(PUTFIELD, className, "fn", "Lhope/magic/js/runtime/JSFunction;");
+			initMv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSContext", "current", "()Lhope/magic/js/runtime/JSContext;", false);
+			initMv.visitMethodInsn(INVOKESPECIAL, className, "<init>", "(Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSContext;)V", false);
 			initMv.visitInsn(RETURN);
 			initMv.visitMaxs(0, 0);
 			initMv.visitEnd();
@@ -4891,8 +4933,8 @@ public class MagicJIT implements Opcodes {
 			mv.visitMethodInsn(INVOKEINTERFACE, "hope/magic/js/runtime/JSFunction", "call", "(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", true);
 		}
 
-		// 返回值拆箱 / 转换
-		emitAdapterReturn(mv, retType);
+		// 返回值拆箱 / 转换 (留栈顶)
+		emitAdapterResultConversion(mv, retType);
 	}
 
 	private static void emitAdapterSAMMethod(ClassWriter cw, String className, Method sam) {
@@ -4904,21 +4946,70 @@ public class MagicJIT implements Opcodes {
 		MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, methodName, methodDesc, null, getExceptionNames(sam));
 		mv.visitCode();
 
+		int paramCountSlots = calcTotalParamSlots(paramTypes);
+		int cxSlot          = 1 + paramCountSlots;
+		int prevSlot        = cxSlot + 1;
+		int resSlot         = prevSlot + 1;
+		int resSlots        = (retType == long.class || retType == double.class) ? 2 : (retType == void.class ? 0 : 1);
+		int exSlot          = resSlot + resSlots;
+
+		// cx = this.cx;
+		mv.visitVarInsn(ALOAD, 0);
+		mv.visitFieldInsn(GETFIELD, className, "cx", "Lhope/magic/js/runtime/JSContext;");
+		mv.visitVarInsn(ASTORE, cxSlot);
+
+		// prev = enterContext(cx);
+		mv.visitVarInsn(ALOAD, cxSlot);
+		mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/MagicJIT", "enterContext", "(Lhope/magic/js/runtime/JSContext;)Lhope/magic/js/runtime/JSContext;", false);
+		mv.visitVarInsn(ASTORE, prevSlot);
+
+		org.objectweb.asm.Label tryStart     = new org.objectweb.asm.Label();
+		org.objectweb.asm.Label tryEnd       = new org.objectweb.asm.Label();
+		org.objectweb.asm.Label catchHandler = new org.objectweb.asm.Label();
+		mv.visitTryCatchBlock(tryStart, tryEnd, catchHandler, null);
+
+		mv.visitLabel(tryStart);
+
 		if (isPrimitiveSAM(paramTypes, retType)) {
 			// Primitive 特化直调 (Zero-Allocation, 无装箱)
-			emitPrimitiveSAMMethodCall(mv, className, paramTypes, retType);
+			emitPrimitiveSAMMethodCall(mv, className, paramTypes, retType, cxSlot);
 		} else {
 			// 1. 获取 fn
 			mv.visitVarInsn(ALOAD, 0);
 			mv.visitFieldInsn(GETFIELD, className, "fn", "Lhope/magic/js/runtime/JSFunction;");
 
 			// 2. 参数压栈: cx, thisObj
-			mv.visitInsn(ACONST_NULL); // cx
+			mv.visitVarInsn(ALOAD, cxSlot);
 			mv.visitInsn(ACONST_NULL); // thisObj
 
 			// 3. Zero-Allocation 特化直调 (call0, call1, call2, call3, call4)
 			emitOptimizedJSFunctionCall(mv, paramTypes, retType);
 		}
+
+		if (retType == void.class) {
+			mv.visitLabel(tryEnd);
+			mv.visitVarInsn(ALOAD, cxSlot);
+			mv.visitVarInsn(ALOAD, prevSlot);
+			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/MagicJIT", "exitContext", "(Lhope/magic/js/runtime/JSContext;Lhope/magic/js/runtime/JSContext;)V", false);
+			mv.visitInsn(RETURN);
+		} else {
+			emitStoreLocal(mv, retType, resSlot);
+			mv.visitLabel(tryEnd);
+			mv.visitVarInsn(ALOAD, cxSlot);
+			mv.visitVarInsn(ALOAD, prevSlot);
+			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/MagicJIT", "exitContext", "(Lhope/magic/js/runtime/JSContext;Lhope/magic/js/runtime/JSContext;)V", false);
+			emitLoadLocal(mv, retType, resSlot);
+			emitReturn(mv, retType);
+		}
+
+		// catch block
+		mv.visitLabel(catchHandler);
+		mv.visitVarInsn(ASTORE, exSlot);
+		mv.visitVarInsn(ALOAD, cxSlot);
+		mv.visitVarInsn(ALOAD, prevSlot);
+		mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/MagicJIT", "exitContext", "(Lhope/magic/js/runtime/JSContext;Lhope/magic/js/runtime/JSContext;)V", false);
+		mv.visitVarInsn(ALOAD, exSlot);
+		mv.visitInsn(ATHROW);
 
 		mv.visitMaxs(0, 0);
 		mv.visitEnd();
@@ -4935,13 +5026,13 @@ public class MagicJIT implements Opcodes {
 	}
 
 	private static void emitPrimitiveSAMMethodCall(MethodVisitor mv, String className, Class<?>[] paramTypes,
-	                                               Class<?> retType) {
+	                                               Class<?> retType, int cxSlot) {
 		// 1. 获取 fn
 		mv.visitVarInsn(ALOAD, 0);
 		mv.visitFieldInsn(GETFIELD, className, "fn", "Lhope/magic/js/runtime/JSFunction;");
 
-		// 2. 参数压栈: cx (null)
-		mv.visitInsn(ACONST_NULL);
+		// 2. 参数压栈: cx
+		mv.visitVarInsn(ALOAD, cxSlot);
 
 		// 3. 逐个将 primitive 参数加载并转为 double
 		int slot = 1;
@@ -4956,8 +5047,8 @@ public class MagicJIT implements Opcodes {
 		String callDesc = getPrimCallDesc(arity);
 		mv.visitMethodInsn(INVOKEINTERFACE, "hope/magic/js/runtime/JSFunction", callName, callDesc, true);
 
-		// 5. 将返回的 double 转为 retType 并返回
-		emitPrimitiveReturn(mv, retType);
+		// 5. 将返回的 double 转为 retType (留栈顶)
+		emitPrimitiveResultConversion(mv, retType);
 	}
 
 	private static String getPrimCallDesc(int arity) {
@@ -4988,36 +5079,28 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
-	private static void emitPrimitiveReturn(MethodVisitor mv, Class<?> retType) {
+	private static void emitPrimitiveResultConversion(MethodVisitor mv, Class<?> retType) {
 		if (retType == void.class) {
 			mv.visitInsn(POP2);
-			mv.visitInsn(RETURN);
 		} else if (retType == double.class) {
-			mv.visitInsn(DRETURN);
+			// already double
 		} else if (retType == float.class) {
 			mv.visitInsn(D2F);
-			mv.visitInsn(FRETURN);
 		} else if (retType == long.class) {
 			mv.visitInsn(D2L);
-			mv.visitInsn(LRETURN);
 		} else if (retType == int.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(D)I", false);
-			mv.visitInsn(IRETURN);
 		} else if (retType == short.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(D)I", false);
 			mv.visitInsn(I2S);
-			mv.visitInsn(IRETURN);
 		} else if (retType == byte.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(D)I", false);
 			mv.visitInsn(I2B);
-			mv.visitInsn(IRETURN);
 		} else if (retType == char.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(D)I", false);
 			mv.visitInsn(I2C);
-			mv.visitInsn(IRETURN);
 		} else if (retType == boolean.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toBoolean", "(D)Z", false);
-			mv.visitInsn(IRETURN);
 		} else {
 			throw new IllegalArgumentException("Not a primitive return type: " + retType);
 		}
@@ -5041,15 +5124,31 @@ public class MagicJIT implements Opcodes {
 
 			// public final JSObject jsObj;
 			cw.visitField(ACC_PUBLIC | ACC_FINAL, "jsObj", "Lhope/magic/js/runtime/JSObject;", null, null).visitEnd();
+			// public final JSContext cx;
+			cw.visitField(ACC_PUBLIC | ACC_FINAL, "cx", "Lhope/magic/js/runtime/JSContext;", null, null).visitEnd();
 
-			// <init>(JSObject jsObj)
+			// <init>(JSObject jsObj, JSContext cx)
+			MethodVisitor initMv2 = cw.visitMethod(ACC_PUBLIC, "<init>", "(Lhope/magic/js/runtime/JSObject;Lhope/magic/js/runtime/JSContext;)V", null, null);
+			initMv2.visitCode();
+			initMv2.visitVarInsn(ALOAD, 0);
+			initMv2.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+			initMv2.visitVarInsn(ALOAD, 0);
+			initMv2.visitVarInsn(ALOAD, 1);
+			initMv2.visitFieldInsn(PUTFIELD, className, "jsObj", "Lhope/magic/js/runtime/JSObject;");
+			initMv2.visitVarInsn(ALOAD, 0);
+			initMv2.visitVarInsn(ALOAD, 2);
+			initMv2.visitFieldInsn(PUTFIELD, className, "cx", "Lhope/magic/js/runtime/JSContext;");
+			initMv2.visitInsn(RETURN);
+			initMv2.visitMaxs(0, 0);
+			initMv2.visitEnd();
+
+			// <init>(JSObject jsObj) -> this(jsObj, JSContext.current())
 			MethodVisitor initMv = cw.visitMethod(ACC_PUBLIC, "<init>", "(Lhope/magic/js/runtime/JSObject;)V", null, null);
 			initMv.visitCode();
 			initMv.visitVarInsn(ALOAD, 0);
-			initMv.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
-			initMv.visitVarInsn(ALOAD, 0);
 			initMv.visitVarInsn(ALOAD, 1);
-			initMv.visitFieldInsn(PUTFIELD, className, "jsObj", "Lhope/magic/js/runtime/JSObject;");
+			initMv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/JSContext", "current", "()Lhope/magic/js/runtime/JSContext;", false);
+			initMv.visitMethodInsn(INVOKESPECIAL, className, "<init>", "(Lhope/magic/js/runtime/JSObject;Lhope/magic/js/runtime/JSContext;)V", false);
 			initMv.visitInsn(RETURN);
 			initMv.visitMaxs(0, 0);
 			initMv.visitEnd();
@@ -5084,15 +5183,37 @@ public class MagicJIT implements Opcodes {
 		MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, methodName, methodDesc, null, getExceptionNames(m));
 		mv.visitCode();
 
+		int paramCountSlots = calcTotalParamSlots(paramTypes);
+		int cxSlot          = 1 + paramCountSlots;
+		int prevSlot        = cxSlot + 1;
+		int memberSlot      = prevSlot + 1;
+		int resSlot         = memberSlot + 1;
+		int resSlots        = (retType == long.class || retType == double.class) ? 2 : (retType == void.class ? 0 : 1);
+		int exSlot          = resSlot + resSlots;
+
+		// cx = this.cx;
+		mv.visitVarInsn(ALOAD, 0);
+		mv.visitFieldInsn(GETFIELD, className, "cx", "Lhope/magic/js/runtime/JSContext;");
+		mv.visitVarInsn(ASTORE, cxSlot);
+
+		// prev = enterContext(cx);
+		mv.visitVarInsn(ALOAD, cxSlot);
+		mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/MagicJIT", "enterContext", "(Lhope/magic/js/runtime/JSContext;)Lhope/magic/js/runtime/JSContext;", false);
+		mv.visitVarInsn(ASTORE, prevSlot);
+
+		org.objectweb.asm.Label tryStart     = new org.objectweb.asm.Label();
+		org.objectweb.asm.Label tryEnd       = new org.objectweb.asm.Label();
+		org.objectweb.asm.Label catchHandler = new org.objectweb.asm.Label();
+		mv.visitTryCatchBlock(tryStart, tryEnd, catchHandler, null);
+
+		mv.visitLabel(tryStart);
+
 		// 1. Object member = this.jsObj.get(propId);
 		int propId = SymbolTable.id(methodName);
 		mv.visitVarInsn(ALOAD, 0);
 		mv.visitFieldInsn(GETFIELD, className, "jsObj", "Lhope/magic/js/runtime/JSObject;");
 		pushInt(mv, propId);
 		mv.visitMethodInsn(INVOKEVIRTUAL, "hope/magic/js/runtime/JSObject", "get", "(I)Ljava/lang/Object;", false);
-
-		// Calculate slot for member
-		int memberSlot = calcTotalParamSlots(paramTypes) + 1;
 		mv.visitVarInsn(ASTORE, memberSlot);
 
 		// 2. if (member instanceof JSFunction)
@@ -5101,13 +5222,16 @@ public class MagicJIT implements Opcodes {
 		org.objectweb.asm.Label notFnLabel = new org.objectweb.asm.Label();
 		mv.visitJumpInsn(IFEQ, notFnLabel);
 
-		// member.call*(null, this.jsObj, ...)
+		// member.call*(cx, this.jsObj, ...)
 		mv.visitVarInsn(ALOAD, memberSlot);
 		mv.visitTypeInsn(CHECKCAST, "hope/magic/js/runtime/JSFunction");
-		mv.visitInsn(ACONST_NULL); // cx
+		mv.visitVarInsn(ALOAD, cxSlot); // cx
 		mv.visitVarInsn(ALOAD, 0);
 		mv.visitFieldInsn(GETFIELD, className, "jsObj", "Lhope/magic/js/runtime/JSObject;"); // thisObj = jsObj
 		emitOptimizedJSFunctionCall(mv, paramTypes, retType);
+
+		org.objectweb.asm.Label doneLabel = new org.objectweb.asm.Label();
+		mv.visitJumpInsn(GOTO, doneLabel);
 
 		// 3. else if (member != JSUndefined.INSTANCE)
 		mv.visitLabel(notFnLabel);
@@ -5117,11 +5241,38 @@ public class MagicJIT implements Opcodes {
 		mv.visitJumpInsn(IF_ACMPEQ, undefLabel);
 
 		mv.visitVarInsn(ALOAD, memberSlot);
-		emitAdapterReturn(mv, retType);
+		emitAdapterResultConversion(mv, retType);
+		mv.visitJumpInsn(GOTO, doneLabel);
 
-		// 4. Default return
+		// 4. Default return value
 		mv.visitLabel(undefLabel);
-		emitDefaultReturn(mv, retType);
+		emitDefaultValue(mv, retType);
+
+		mv.visitLabel(doneLabel);
+		if (retType == void.class) {
+			mv.visitLabel(tryEnd);
+			mv.visitVarInsn(ALOAD, cxSlot);
+			mv.visitVarInsn(ALOAD, prevSlot);
+			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/MagicJIT", "exitContext", "(Lhope/magic/js/runtime/JSContext;Lhope/magic/js/runtime/JSContext;)V", false);
+			mv.visitInsn(RETURN);
+		} else {
+			emitStoreLocal(mv, retType, resSlot);
+			mv.visitLabel(tryEnd);
+			mv.visitVarInsn(ALOAD, cxSlot);
+			mv.visitVarInsn(ALOAD, prevSlot);
+			mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/MagicJIT", "exitContext", "(Lhope/magic/js/runtime/JSContext;Lhope/magic/js/runtime/JSContext;)V", false);
+			emitLoadLocal(mv, retType, resSlot);
+			emitReturn(mv, retType);
+		}
+
+		// catch block
+		mv.visitLabel(catchHandler);
+		mv.visitVarInsn(ASTORE, exSlot);
+		mv.visitVarInsn(ALOAD, cxSlot);
+		mv.visitVarInsn(ALOAD, prevSlot);
+		mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/MagicJIT", "exitContext", "(Lhope/magic/js/runtime/JSContext;Lhope/magic/js/runtime/JSContext;)V", false);
+		mv.visitVarInsn(ALOAD, exSlot);
+		mv.visitInsn(ATHROW);
 
 		mv.visitMaxs(0, 0);
 		mv.visitEnd();
@@ -5133,6 +5284,66 @@ public class MagicJIT implements Opcodes {
 			count += (p == long.class || p == double.class) ? 2 : 1;
 		}
 		return count;
+	}
+
+	private static void emitStoreLocal(MethodVisitor mv, Class<?> type, int slot) {
+		if (type == int.class || type == boolean.class || type == byte.class || type == short.class || type == char.class) {
+			mv.visitVarInsn(ISTORE, slot);
+		} else if (type == long.class) {
+			mv.visitVarInsn(LSTORE, slot);
+		} else if (type == float.class) {
+			mv.visitVarInsn(FSTORE, slot);
+		} else if (type == double.class) {
+			mv.visitVarInsn(DSTORE, slot);
+		} else {
+			mv.visitVarInsn(ASTORE, slot);
+		}
+	}
+
+	private static void emitLoadLocal(MethodVisitor mv, Class<?> type, int slot) {
+		if (type == int.class || type == boolean.class || type == byte.class || type == short.class || type == char.class) {
+			mv.visitVarInsn(ILOAD, slot);
+		} else if (type == long.class) {
+			mv.visitVarInsn(LLOAD, slot);
+		} else if (type == float.class) {
+			mv.visitVarInsn(FLOAD, slot);
+		} else if (type == double.class) {
+			mv.visitVarInsn(DLOAD, slot);
+		} else {
+			mv.visitVarInsn(ALOAD, slot);
+		}
+	}
+
+	private static void emitReturn(MethodVisitor mv, Class<?> type) {
+		if (type == void.class) {
+			mv.visitInsn(RETURN);
+		} else if (type == int.class || type == boolean.class || type == byte.class || type == short.class || type == char.class) {
+			mv.visitInsn(IRETURN);
+		} else if (type == long.class) {
+			mv.visitInsn(LRETURN);
+		} else if (type == float.class) {
+			mv.visitInsn(FRETURN);
+		} else if (type == double.class) {
+			mv.visitInsn(DRETURN);
+		} else {
+			mv.visitInsn(ARETURN);
+		}
+	}
+
+	private static void emitDefaultValue(MethodVisitor mv, Class<?> retType) {
+		if (retType == void.class) {
+			// nothing
+		} else if (retType == int.class || retType == boolean.class || retType == byte.class || retType == short.class || retType == char.class) {
+			mv.visitInsn(ICONST_0);
+		} else if (retType == long.class) {
+			mv.visitInsn(LCONST_0);
+		} else if (retType == float.class) {
+			mv.visitInsn(FCONST_0);
+		} else if (retType == double.class) {
+			mv.visitInsn(DCONST_0);
+		} else {
+			mv.visitInsn(ACONST_NULL);
+		}
 	}
 
 	private static void emitLoadAndBox(MethodVisitor mv, Class<?> pt, int localSlot) {
@@ -5165,66 +5376,34 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
-	private static void emitAdapterReturn(MethodVisitor mv, Class<?> retType) {
+	private static void emitAdapterResultConversion(MethodVisitor mv, Class<?> retType) {
 		if (retType == void.class) {
 			mv.visitInsn(POP);
-			mv.visitInsn(RETURN);
 		} else if (retType == int.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
-			mv.visitInsn(IRETURN);
 		} else if (retType == long.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toLong", "(Ljava/lang/Object;)J", false);
-			mv.visitInsn(LRETURN);
 		} else if (retType == double.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toDouble", "(Ljava/lang/Object;)D", false);
-			mv.visitInsn(DRETURN);
 		} else if (retType == float.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toDouble", "(Ljava/lang/Object;)D", false);
 			mv.visitInsn(D2F);
-			mv.visitInsn(FRETURN);
 		} else if (retType == boolean.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "isTruthy", "(Ljava/lang/Object;)Z", false);
-			mv.visitInsn(IRETURN);
 		} else if (retType == short.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
 			mv.visitInsn(I2S);
-			mv.visitInsn(IRETURN);
 		} else if (retType == byte.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toInt", "(Ljava/lang/Object;)I", false);
 			mv.visitInsn(I2B);
-			mv.visitInsn(IRETURN);
 		} else if (retType == char.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toChar", "(Ljava/lang/Object;)C", false);
-			mv.visitInsn(IRETURN);
 		} else if (retType == String.class) {
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "toStr", "(Ljava/lang/Object;)Ljava/lang/String;", false);
-			mv.visitInsn(ARETURN);
 		} else {
 			mv.visitLdcInsn(Type.getType(retType));
 			mv.visitMethodInsn(INVOKESTATIC, IN_JSOps, "castValue", "(Ljava/lang/Object;Ljava/lang/Class;)Ljava/lang/Object;", false);
 			mv.visitTypeInsn(CHECKCAST, Type.getInternalName(retType));
-			mv.visitInsn(ARETURN);
-		}
-	}
-
-	private static void emitDefaultReturn(MethodVisitor mv, Class<?> retType) {
-		if (retType == void.class) {
-			mv.visitInsn(RETURN);
-		} else if (retType == int.class || retType == boolean.class || retType == byte.class || retType == short.class || retType == char.class) {
-			mv.visitInsn(ICONST_0);
-			mv.visitInsn(IRETURN);
-		} else if (retType == long.class) {
-			mv.visitInsn(LCONST_0);
-			mv.visitInsn(LRETURN);
-		} else if (retType == float.class) {
-			mv.visitInsn(FCONST_0);
-			mv.visitInsn(FRETURN);
-		} else if (retType == double.class) {
-			mv.visitInsn(DCONST_0);
-			mv.visitInsn(DRETURN);
-		} else {
-			mv.visitInsn(ACONST_NULL);
-			mv.visitInsn(ARETURN);
 		}
 	}
 
@@ -5282,6 +5461,10 @@ public class MagicJIT implements Opcodes {
 	}
 
 	public static Object createProxyFunctionAdapter(Class<?> targetType, JSFunction fn) {
+		return createProxyFunctionAdapter(targetType, fn, JSContext.current());
+	}
+
+	public static Object createProxyFunctionAdapter(Class<?> targetType, JSFunction fn, JSContext cx) {
 		ClassLoader cl = targetType.getClassLoader() != null ? targetType.getClassLoader() : MagicJIT.class.getClassLoader();
 		return java.lang.reflect.Proxy.newProxyInstance(cl, new Class<?>[]{targetType}, (proxy, method, methodArgs) -> {
 			if (method.getDeclaringClass() == Object.class) {
@@ -5292,15 +5475,24 @@ public class MagicJIT implements Opcodes {
 					case "equals" -> { return proxy == (methodArgs != null && methodArgs.length > 0 ? methodArgs[0] : null); }
 				}
 			}
-			Object[] safeArgs = methodArgs == null ? new Object[0] : methodArgs;
-			Object   result   = fn.call(null, null, safeArgs);
-			Class<?> retType  = method.getReturnType();
-			if (retType == void.class) return null;
-			return JSOps.castValue(result, retType);
+			Object[]  safeArgs = methodArgs == null ? new Object[0] : methodArgs;
+			JSContext prev     = enterContext(cx);
+			try {
+				Object   result  = fn.call(cx, null, safeArgs);
+				Class<?> retType = method.getReturnType();
+				if (retType == void.class) return null;
+				return JSOps.castValue(result, retType);
+			} finally {
+				exitContext(cx, prev);
+			}
 		});
 	}
 
 	public static Object createProxyObjectAdapter(Class<?> targetType, JSObject jsObj) {
+		return createProxyObjectAdapter(targetType, jsObj, JSContext.current());
+	}
+
+	public static Object createProxyObjectAdapter(Class<?> targetType, JSObject jsObj, JSContext cx) {
 		ClassLoader cl = targetType.getClassLoader() != null ? targetType.getClassLoader() : MagicJIT.class.getClassLoader();
 		return java.lang.reflect.Proxy.newProxyInstance(cl, new Class<?>[]{targetType}, (proxy, method, methodArgs) -> {
 			if (method.getDeclaringClass() == Object.class) {
@@ -5314,11 +5506,16 @@ public class MagicJIT implements Opcodes {
 			String methodName = method.getName();
 			Object member     = jsObj.get(methodName);
 			if (member instanceof JSFunction fn) {
-				Object[] safeArgs = methodArgs == null ? new Object[0] : methodArgs;
-				Object   result   = fn.call(null, jsObj, safeArgs);
-				Class<?> retType  = method.getReturnType();
-				if (retType == void.class) return null;
-				return JSOps.castValue(result, retType);
+				Object[]  safeArgs = methodArgs == null ? new Object[0] : methodArgs;
+				JSContext prev     = enterContext(cx);
+				try {
+					Object   result  = fn.call(cx, jsObj, safeArgs);
+					Class<?> retType = method.getReturnType();
+					if (retType == void.class) return null;
+					return JSOps.castValue(result, retType);
+				} finally {
+					exitContext(cx, prev);
+				}
 			}
 			if (method.isDefault()) {
 				return java.lang.reflect.InvocationHandler.invokeDefault(proxy, method, methodArgs);

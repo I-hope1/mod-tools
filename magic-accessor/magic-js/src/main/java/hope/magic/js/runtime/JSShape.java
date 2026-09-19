@@ -75,6 +75,7 @@ public final class JSShape {
 	public final  int     id;
 	public final  boolean hasAccessors;
 	public final  int     propertyCount;
+	public final  JSShape parent;
 
 	public boolean isBuiltin() {
 		return id < 0;
@@ -107,6 +108,7 @@ public final class JSShape {
 	}
 
 	private JSShape(JSShape parent, int propId, byte propType, boolean isBuiltin) {
+		this.parent = parent;
 		this.hasAccessors = (parent != null && parent.hasAccessors) || ((propType & FLAG_ACCESSOR) != 0);
 		this.id = isBuiltin ? BUILTIN_ID_GEN.getAndDecrement() : USER_ID_GEN.getAndIncrement();
 		int count = (parent == null ? 0 : parent.propertyCount) + (propId >= 0 ? 1 : 0);
@@ -184,6 +186,7 @@ public final class JSShape {
 	}
 
 	private JSShape(int[] propIds, byte[] types, boolean isBuiltin) {
+		this.parent = null;
 		boolean hasAcc = false;
 		for (byte t : types) {
 			if ((t & FLAG_ACCESSOR) != 0) {
@@ -523,5 +526,32 @@ public final class JSShape {
 			if (name != null) set.add(name);
 		}
 		return Collections.unmodifiableSet(set);
+	}
+
+	/**
+	 * 当对象的属性被删除时，计算删除该槽位后的新 Shape。
+	 *
+	 * <p>【JIT 内联与单态去优化设计】：
+	 * 属性删除破坏了现有 Shape 的属性全集与偏移布局契约。若属性为尾部追加属性且父节点存在，
+	 * 直接极速回退到 {@link #parent}；否则沿着 {@link #ROOT} 重新按既有单迁移缓存派发。
+	 * 确保新 Shape 与旧 Shape 拥有不同的 {@link #id}，使所有已内联特化机器码的 CallSite 守卫立即失效并自愈去优化。
+	 */
+	public JSShape removeProperty(int offset) {
+		int n = propertyCount;
+		if (offset < 0 || offset >= n) {
+			return this;
+		}
+		if (n == 1) {
+			return ROOT;
+		}
+		if (offset == n - 1 && this.parent != null) {
+			return this.parent;
+		}
+		JSShape next = ROOT;
+		for (int i = 0; i < n; i++) {
+			if (i == offset) continue;
+			next = next.addProperty(getKeyId(i), getSlotType(i));
+		}
+		return next;
 	}
 }

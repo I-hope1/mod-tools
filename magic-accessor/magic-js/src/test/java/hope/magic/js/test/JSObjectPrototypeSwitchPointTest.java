@@ -338,4 +338,23 @@ public class JSObjectPrototypeSwitchPointTest {
 		Assertions.assertEquals(8, site.dynamicInvoker().invokeExact((Object) fn1, (Object) 7));
 		Assertions.assertEquals(14, site.dynamicInvoker().invokeExact((Object) fn2, (Object) 7));
 	}
+
+	@Test
+	public void testDeleteDoublePropertyJITInliningBug() {
+		JSContext cx = new JSContext();
+		String script = """
+			function compute(p) {
+				return p.x + 1;
+			}
+			let p = { x: 10.0 };
+			for (let i = 0; i < 20000; i++) {
+				compute(p);
+			}
+			delete p.x;
+			compute(p);
+		""";
+		Object res = cx.eval(script);
+		System.out.println("Result of compute(p) after delete: " + res);
+		Assertions.assertTrue(res instanceof Double && Double.isNaN((Double) res), "Result should be NaN, but was: " + res);
+	}
 }

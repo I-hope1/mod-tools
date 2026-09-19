@@ -756,9 +756,43 @@ public class JSObject {
 			if (!shape.isConfigurable(offset)) {
 				return;
 			}
-			clearPrimSlot(offset);
-			setSlot(offset, DELETED); // setSlot 里有 clearDoubleMask(offset);
+			int n = shape.propertyCount;
+			JSShape newShape = shape.removeProperty(offset);
+			for (int i = offset; i < n - 1; i++) {
+				moveSlot(i + 1, i);
+			}
+			clearSlot(n - 1);
+			this.shape = newShape;
 			onStructuralOrPropertyChange();
+		}
+	}
+
+	private void moveSlot(int from, int to) {
+		if (isDoubleSlot(from)) {
+			setDoubleSlot(to, getDoubleSlot(from));
+		} else {
+			setSlot(to, getRawObjectSlot(from));
+		}
+	}
+
+	private void clearSlot(int idx) {
+		if (idx < 0) return;
+		clearDoubleMask(idx);
+		clearPrimSlot(idx);
+		switch (idx) {
+			case 0 -> obj0 = null;
+			case 1 -> obj1 = null;
+			case 2 -> obj2 = null;
+			case 3 -> obj3 = null;
+			case 4 -> obj4 = null;
+			case 5 -> obj5 = null;
+			case 6 -> obj6 = null;
+			case 7 -> obj7 = null;
+			default -> {
+				if (overflowObj != null && idx - IN_OBJECT_FIELD_COUNT < overflowObj.length) {
+					overflowObj[idx - IN_OBJECT_FIELD_COUNT] = null;
+				}
+			}
 		}
 	}
 

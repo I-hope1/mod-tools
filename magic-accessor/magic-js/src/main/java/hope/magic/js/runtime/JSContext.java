@@ -14,10 +14,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 public class JSContext {
-	public static final  int                         INITIAL_GLOBAL_SLOTS_CAPACITY = 64;
-	private static final ConcurrentHashMap<String, Integer> GLOBAL_SLOT_REGISTRY           = new ConcurrentHashMap<>();
-	private static final AtomicInteger                      NEXT_GLOBAL_SLOT               = new AtomicInteger(0);
-	private static volatile String[]                        GLOBAL_SLOT_NAMES              = new String[INITIAL_GLOBAL_SLOTS_CAPACITY];
+	public static final     int                                INITIAL_GLOBAL_SLOTS_CAPACITY = 64;
+	private static final    ConcurrentHashMap<String, Integer> GLOBAL_SLOT_REGISTRY          = new ConcurrentHashMap<>();
+	private static final    AtomicInteger                      NEXT_GLOBAL_SLOT              = new AtomicInteger(0);
+	private static volatile String[]                           GLOBAL_SLOT_NAMES             = new String[INITIAL_GLOBAL_SLOTS_CAPACITY];
 
 	public static int getGlobalSlot(String name) {
 		return GLOBAL_SLOT_REGISTRY.computeIfAbsent(name, k -> {
@@ -41,7 +41,7 @@ public class JSContext {
 
 	private static final Object NULL_VALUE = new Object();
 
-	public volatile     Object[]            globalSlots                   = new Object[INITIAL_GLOBAL_SLOTS_CAPACITY];
+	public volatile Object[]            globalSlots        = new Object[INITIAL_GLOBAL_SLOTS_CAPACITY];
 	// 架构优化说明：
 	// 原 globals 采用 ConcurrentHashMap<String, Object> 作为实例字段，
 	// 导致每个 JSContext 实例化时均需要分配包含并发分段/计数器单元的重型哈希表，增加了堆分配与 GC 压力。
@@ -49,9 +49,9 @@ public class JSContext {
 	// 仅在首次冷加载或反射兜底时才会访问 globals。
 	// 故将其替换为轻量 HashMap<String, Object>，写操作集中在 synchronized 的 set() 中，
 	// 读操作通过 synchronized (globals) 块保证复合原子性与线程安全，大幅减少 Context 创建开销。
-	private final       Map<String, Object> globals                       = new HashMap<>();
-	private final       Set<String>         negativeClassCache            = new HashSet<>();
-	private final       List<String>        importedPackages              = new CopyOnWriteArrayList<>();
+	private final   Map<String, Object> globals            = new HashMap<>();
+	private final   Set<String>         negativeClassCache = new HashSet<>();
+	private final   List<String>        importedPackages   = new CopyOnWriteArrayList<>();
 
 	public void addImportedPackage(String packageName) {
 		if (packageName != null && !packageName.isEmpty() && !importedPackages.contains(packageName)) {
@@ -285,11 +285,43 @@ public class JSContext {
 		}
 
 		@Override
-    public void onStructuralOrPropertyChange() {
-        super.onStructuralOrPropertyChange();
-        // 当且仅当修改 Array 构造函数自身时，精确触发失效，绝不引发任何类加载副作用
-        BuiltinProtector.invalidateArraySpeciesProtector();
-    }
+		public void put(int propId, Object value) {
+			if (propId == JSSymbol.SPECIES.getSymbolId()) {
+				BuiltinProtector.invalidateArraySpeciesProtector();
+			}
+			super.put(propId, value);
+		}
+
+		@Override
+		public void put(JSSymbol sym, Object value) {
+			if (sym == JSSymbol.SPECIES) {
+				BuiltinProtector.invalidateArraySpeciesProtector();
+			}
+			super.put(sym, value);
+		}
+
+		@Override
+		public void delete(int propId) {
+			if (propId == JSSymbol.SPECIES.getSymbolId()) {
+				BuiltinProtector.invalidateArraySpeciesProtector();
+			}
+			super.delete(propId);
+		}
+
+		@Override
+		public void delete(JSSymbol sym) {
+			if (sym == JSSymbol.SPECIES) {
+				BuiltinProtector.invalidateArraySpeciesProtector();
+			}
+			super.delete(sym);
+		}
+
+		@Override
+		public void onStructuralOrPropertyChange() {
+			super.onStructuralOrPropertyChange();
+			// 当且仅当修改 Array 构造函数自身时，精确触发失效，绝不引发任何类加载副作用
+			BuiltinProtector.invalidateArraySpeciesProtector();
+		}
 
 		@Override
 		public String toString() {
@@ -297,46 +329,46 @@ public class JSContext {
 		}
 	}
 
-	public static final int SLOT_NAN             = getGlobalSlot("NaN");
-	public static final int SLOT_INFINITY        = getGlobalSlot("Infinity");
-	public static final int SLOT_UNDEFINED       = getGlobalSlot("undefined");
-	public static final int SLOT_JSOPS           = getGlobalSlot("JSOps");
-	public static final int SLOT_PRINT           = getGlobalSlot("print");
-	public static final int SLOT_CONSOLE         = getGlobalSlot("console");
-	public static final int SLOT_MATH            = getGlobalSlot("Math");
-	public static final int SLOT_IMPORT_CLASS    = getGlobalSlot("importClass");
-	public static final int SLOT_IMPORT_PACKAGE  = getGlobalSlot("importPackage");
-	public static final int SLOT_IMPORT_PACKAGES = getGlobalSlot("importPackages");
-	public static final int SLOT_PACKAGES        = getGlobalSlot("Packages");
-	public static final int SLOT_REGEXP          = getGlobalSlot("RegExp");
-	public static final int SLOT_OBJECT          = getGlobalSlot("Object");
-	public static final int SLOT_ARRAY           = getGlobalSlot("Array");
-	public static final int SLOT_JAVA            = getGlobalSlot("Java");
-	public static final int SLOT_JAVA_PKG        = getGlobalSlot("java");
-	public static final int SLOT_JAVAX_PKG       = getGlobalSlot("javax");
-	public static final int SLOT_ERROR           = getGlobalSlot("Error");
-	public static final int SLOT_TYPE_ERROR      = getGlobalSlot("TypeError");
-	public static final int SLOT_RANGE_ERROR     = getGlobalSlot("RangeError");
-	public static final int SLOT_SYNTAX_ERROR    = getGlobalSlot("SyntaxError");
-	public static final int SLOT_REFERENCE_ERROR = getGlobalSlot("ReferenceError");
-	public static final int SLOT_URI_ERROR       = getGlobalSlot("URIError");
-	public static final int SLOT_EVAL_ERROR      = getGlobalSlot("EvalError");
-	public static final int SLOT_BOOLEAN         = getGlobalSlot("Boolean");
-	public static final int SLOT_NUMBER          = getGlobalSlot("Number");
-	public static final int SLOT_STRING          = getGlobalSlot("String");
-	public static final int SLOT_FUNCTION        = getGlobalSlot("Function");
-	public static final int SLOT_PROXY           = getGlobalSlot("Proxy");
-	public static final int SLOT_REFLECT         = getGlobalSlot("Reflect");
-	public static final int SLOT_DATE            = getGlobalSlot("Date");
-	public static final int SLOT_PROMISE         = getGlobalSlot("Promise");
-	public static final int SLOT_QUEUE_MICROTASK = getGlobalSlot("queueMicrotask");
-	public static final int SLOT_GLOBAL_THIS     = getGlobalSlot("globalThis");
-	public static final int SLOT_THIS            = getGlobalSlot("this");
-	public static final int SLOT_WINDOW          = getGlobalSlot("window");
-	public static final int SLOT_GLOBAL          = getGlobalSlot("global");
-	public static final int SLOT_DOLLAR_262      = getGlobalSlot("$262");
-	public static final int SLOT_SYMBOL          = getGlobalSlot("Symbol");
-	public static final int SLOT_REQUIRE         = getGlobalSlot("require");
+	public static final    int                 SLOT_NAN             = getGlobalSlot("NaN");
+	public static final    int                 SLOT_INFINITY        = getGlobalSlot("Infinity");
+	public static final    int                 SLOT_UNDEFINED       = getGlobalSlot("undefined");
+	public static final    int                 SLOT_JSOPS           = getGlobalSlot("JSOps");
+	public static final    int                 SLOT_PRINT           = getGlobalSlot("print");
+	public static final    int                 SLOT_CONSOLE         = getGlobalSlot("console");
+	public static final    int                 SLOT_MATH            = getGlobalSlot("Math");
+	public static final    int                 SLOT_IMPORT_CLASS    = getGlobalSlot("importClass");
+	public static final    int                 SLOT_IMPORT_PACKAGE  = getGlobalSlot("importPackage");
+	public static final    int                 SLOT_IMPORT_PACKAGES = getGlobalSlot("importPackages");
+	public static final    int                 SLOT_PACKAGES        = getGlobalSlot("Packages");
+	public static final    int                 SLOT_REGEXP          = getGlobalSlot("RegExp");
+	public static final    int                 SLOT_OBJECT          = getGlobalSlot("Object");
+	public static final    int                 SLOT_ARRAY           = getGlobalSlot("Array");
+	public static final    int                 SLOT_JAVA            = getGlobalSlot("Java");
+	public static final    int                 SLOT_JAVA_PKG        = getGlobalSlot("java");
+	public static final    int                 SLOT_JAVAX_PKG       = getGlobalSlot("javax");
+	public static final    int                 SLOT_ERROR           = getGlobalSlot("Error");
+	public static final    int                 SLOT_TYPE_ERROR      = getGlobalSlot("TypeError");
+	public static final    int                 SLOT_RANGE_ERROR     = getGlobalSlot("RangeError");
+	public static final    int                 SLOT_SYNTAX_ERROR    = getGlobalSlot("SyntaxError");
+	public static final    int                 SLOT_REFERENCE_ERROR = getGlobalSlot("ReferenceError");
+	public static final    int                 SLOT_URI_ERROR       = getGlobalSlot("URIError");
+	public static final    int                 SLOT_EVAL_ERROR      = getGlobalSlot("EvalError");
+	public static final    int                 SLOT_BOOLEAN         = getGlobalSlot("Boolean");
+	public static final    int                 SLOT_NUMBER          = getGlobalSlot("Number");
+	public static final    int                 SLOT_STRING          = getGlobalSlot("String");
+	public static final    int                 SLOT_FUNCTION        = getGlobalSlot("Function");
+	public static final    int                 SLOT_PROXY           = getGlobalSlot("Proxy");
+	public static final    int                 SLOT_REFLECT         = getGlobalSlot("Reflect");
+	public static final    int                 SLOT_DATE            = getGlobalSlot("Date");
+	public static final    int                 SLOT_PROMISE         = getGlobalSlot("Promise");
+	public static final    int                 SLOT_QUEUE_MICROTASK = getGlobalSlot("queueMicrotask");
+	public static final    int                 SLOT_GLOBAL_THIS     = getGlobalSlot("globalThis");
+	public static final    int                 SLOT_THIS            = getGlobalSlot("this");
+	public static final    int                 SLOT_WINDOW          = getGlobalSlot("window");
+	public static final    int                 SLOT_GLOBAL          = getGlobalSlot("global");
+	public static final    int                 SLOT_DOLLAR_262      = getGlobalSlot("$262");
+	public static final    int                 SLOT_SYMBOL          = getGlobalSlot("Symbol");
+	public static final    int                 SLOT_REQUIRE         = getGlobalSlot("require");
 	public static volatile Consumer<JSContext> realmCreatedListener;
 
 	public static class JSBuiltinMethod extends JSObject implements JSFunction {
@@ -617,7 +649,7 @@ public class JSContext {
 				Object arg = args[0];
 				if (arg instanceof JSObject) return arg;
 				if (arg.getClass().isArray()) {
-					int len = java.lang.reflect.Array.getLength(arg);
+					int     len   = java.lang.reflect.Array.getLength(arg);
 					JSArray jsArr = new JSArray(len);
 					for (int i = 0; i < len; i++) {
 						jsArr.push(java.lang.reflect.Array.get(arg, i));
@@ -645,8 +677,8 @@ public class JSContext {
 					return jsArr;
 				}
 				if (arg instanceof java.util.stream.BaseStream<?, ?> stream) {
-					JSArray jsArr = new JSArray();
-					java.util.Iterator<?> it = stream.iterator();
+					JSArray               jsArr = new JSArray();
+					java.util.Iterator<?> it    = stream.iterator();
 					while (it.hasNext()) {
 						jsArr.push(it.next());
 					}
@@ -664,7 +696,7 @@ public class JSContext {
 
 			javaObj.put("to", (JSFunction) (cx, thisObj, args) -> {
 				if (args.length == 0) return JSUndefined.INSTANCE;
-				Object jsVal = args[0];
+				Object   jsVal       = args[0];
 				Class<?> targetClass = Object[].class;
 				if (args.length > 1 && args[1] != null) {
 					if (args[1] instanceof Class<?> c) {
@@ -678,7 +710,7 @@ public class JSContext {
 				}
 				Class<?> comp = targetClass.getComponentType();
 				if (jsVal instanceof JSArray jsArr) {
-					int len = (int) jsArr.length();
+					int    len = (int) jsArr.length();
 					Object arr = java.lang.reflect.Array.newInstance(comp, len);
 					for (int i = 0; i < len; i++) {
 						java.lang.reflect.Array.set(arr, i, JSOps.castValue(jsArr.getElement(i), comp));
@@ -686,9 +718,9 @@ public class JSContext {
 					return arr;
 				}
 				if (jsVal instanceof Collection<?> col) {
-					int len = col.size();
+					int    len = col.size();
 					Object arr = java.lang.reflect.Array.newInstance(comp, len);
-					int idx = 0;
+					int    idx = 0;
 					for (Object item : col) {
 						java.lang.reflect.Array.set(arr, idx++, JSOps.castValue(item, comp));
 					}
@@ -725,20 +757,29 @@ public class JSContext {
 			typeName = typeName.trim();
 			// 1. 基础数据类型映射
 			switch (typeName) {
-				case "int": return int.class;
-				case "boolean": return boolean.class;
-				case "byte": return byte.class;
-				case "char": return char.class;
-				case "short": return short.class;
-				case "long": return long.class;
-				case "float": return float.class;
-				case "double": return double.class;
-				case "void": return void.class;
+				case "int":
+					return int.class;
+				case "boolean":
+					return boolean.class;
+				case "byte":
+					return byte.class;
+				case "char":
+					return char.class;
+				case "short":
+					return short.class;
+				case "long":
+					return long.class;
+				case "float":
+					return float.class;
+				case "double":
+					return double.class;
+				case "void":
+					return void.class;
 			}
 
 			// 2. 数组类型判断 (e.g. "int[]", "java.lang.String[][]")
 			if (typeName.endsWith("[]")) {
-				int dims = 0;
+				int    dims     = 0;
 				String baseName = typeName;
 				while (baseName.endsWith("[]")) {
 					dims++;
@@ -1073,7 +1114,7 @@ public class JSContext {
 		}
 
 		private static Object definePropertyCore(JSContext cx, Object target, Object propKey, Object descObj) {
-			if (target == null || target == JSUndefined.INSTANCE || !(target instanceof JSObject || target instanceof JSBridgedObject)) {
+			if (!(target instanceof JSObject || target instanceof JSBridgedObject)) {
 				throw new RuntimeException("TypeError: Object.defineProperty called on non-object");
 			}
 			JSObject jsObj = (target instanceof JSBridgedObject bridged) ? bridged.getJSObject() : (JSObject) target;
@@ -1109,8 +1150,15 @@ public class JSContext {
 			JSFunction getter = (getVal instanceof JSFunction fn) ? fn : null;
 			JSFunction setter = (setVal instanceof JSFunction fn) ? fn : null;
 
-			String key    = JSArray.toPropertyKey(propKey);
-			int    propId = SymbolTable.id(key);
+			String key;
+			int    propId;
+			if (propKey instanceof JSSymbol sym) {
+				key = sym.getKey();
+				propId = sym.getSymbolId();
+			} else {
+				key = JSArray.toPropertyKey(propKey);
+				propId = SymbolTable.id(key);
+			}
 
 			int     offset = jsObj.shape.getOffset(propId);
 			boolean exists = offset >= 0 && (jsObj.isDoubleSlot(offset) || jsObj.getRawObjectSlot(offset) != JSObject.NOT_FOUND);
@@ -1291,8 +1339,15 @@ public class JSContext {
 			 : (target instanceof JSObject obj ? obj : null);
 			if (jsObj == null) return JSUndefined.INSTANCE;
 
-			String key    = JSArray.toPropertyKey(propKey);
-			int    propId = SymbolTable.id(key);
+			String key;
+			int    propId;
+			if (propKey instanceof JSSymbol sym) {
+				key = sym.getKey();
+				propId = sym.getSymbolId();
+			} else {
+				key = JSArray.toPropertyKey(propKey);
+				propId = SymbolTable.id(key);
+			}
 
 			if (jsObj instanceof JSGlobalThis globalThis) {
 				if (globalThis.deletedGlobals.contains(key)) {
@@ -1316,10 +1371,10 @@ public class JSContext {
 					return desc;
 				}
 				if (globalThis.hasOwnProperty(key)) {
-					Object  val       = globalThis.get(key);
-					boolean isBuiltin = globalThis.isBuiltinGlobal(key);
-					boolean nonConfig = isBuiltin && globalThis.isNonConfigurable(key);
-					JSObject desc     = new JSObject();
+					Object   val       = globalThis.get(key);
+					boolean  isBuiltin = globalThis.isBuiltinGlobal(key);
+					boolean  nonConfig = isBuiltin && globalThis.isNonConfigurable(key);
+					JSObject desc      = new JSObject();
 					desc.put("value", val);
 					desc.put("writable", !nonConfig);
 					desc.put("enumerable", !isBuiltin);
@@ -1329,7 +1384,7 @@ public class JSContext {
 				return JSUndefined.INSTANCE;
 			}
 
-			int    offset = jsObj.shape.getOffset(propId);
+			int offset = jsObj.shape.getOffset(propId);
 			if (offset < 0 || (!jsObj.isDoubleSlot(offset) && jsObj.getRawObjectSlot(offset) == JSObject.NOT_FOUND)) {
 				return JSUndefined.INSTANCE;
 			}
@@ -1376,7 +1431,7 @@ public class JSContext {
 		static final JSArrayConstructor ARRAY           = createArrayConstructor(ARRAY_PROTOTYPE);
 
 		private static JSArray createArrayPrototype(JSObject objectProto) {
-			JSShape shape = JSShape.createStaticPrototypeShape(ARRAY_PROTO_PROPS);
+			JSShape  shape = JSShape.createStaticPrototypeShape(ARRAY_PROTO_PROPS);
 			JSObject proto = objectProto != null ? objectProto : LazyObject.OBJECT_PROTOTYPE;
 			return new JSArray(shape, objectProto);
 		}
@@ -1529,11 +1584,11 @@ public class JSContext {
 					}
 					return res;
 				}
-				long len = toLength(items);
+				long   len = toLength(items);
 				Object res;
 				if (isCtor) {
 					try {
-						res = JSLinker.newGeneric(thisObj, new Object[]{ (double) len });
+						res = JSLinker.newGeneric(thisObj, new Object[]{(double) len});
 					} catch (Throwable t) {
 						if (t instanceof RuntimeException re) throw re;
 						throw new RuntimeException(t);
@@ -1565,8 +1620,8 @@ public class JSContext {
 			// constructor is used in map/filter/slice/concat/flat.
 			// Overriding this property invalidates the arraySpeciesSwitchPoint.
 			ctor.defineAccessor(JSSymbol.SPECIES,
-				(cx2, thisObj2, args2) -> thisObj2,
-				null, false);
+			 (cx2, thisObj2, args2) -> thisObj2,
+			 null, false);
 
 			mountArrayPrototypeMethods(proto);
 			proto.setIsArrayPrototype(true);
@@ -1704,7 +1759,8 @@ public class JSContext {
 				long    len     = toLength(O);
 				JSArray result;
 				try { result = speciesConstruct(cx, O, len); } catch (Throwable t) {
-					if (t instanceof RuntimeException re) throw re; throw new RuntimeException(t);
+					if (t instanceof RuntimeException re) throw re;
+					throw new RuntimeException(t);
 				}
 				result.setLength((double) len);
 				for (long k = 0; k < len; k++) {
@@ -1942,7 +1998,8 @@ public class JSContext {
 				JSArray result;
 				// size=0: result is filled via push(), pre-sizing would create holes before the elements
 				try { result = speciesConstruct(cx, O, 0); } catch (Throwable t) {
-					if (t instanceof RuntimeException re) throw re; throw new RuntimeException(t);
+					if (t instanceof RuntimeException re) throw re;
+					throw new RuntimeException(t);
 				}
 				for (long k = start; k < end; k++) {
 					if (hasProperty(O, k)) {
@@ -2022,10 +2079,11 @@ public class JSContext {
 			}));
 
 			proto.put("concat", makeMethod("concat", 1, (cx, thisObj, args) -> {
-				Object  O      = toObject(thisObj);
+				Object  O = toObject(thisObj);
 				JSArray result;
 				try { result = speciesConstruct(cx, O, 0); } catch (Throwable t) {
-					if (t instanceof RuntimeException re) throw re; throw new RuntimeException(t);
+					if (t instanceof RuntimeException re) throw re;
+					throw new RuntimeException(t);
 				}
 				appendConcatItem(result, O);
 				for (Object arg : args) {
@@ -2165,7 +2223,8 @@ public class JSContext {
 				if (Double.isNaN(depth) || depth < 0) depth = 0;
 				JSArray result;
 				try { result = speciesConstruct(cx, O, 0); } catch (Throwable t) {
-					if (t instanceof RuntimeException re) throw re; throw new RuntimeException(t);
+					if (t instanceof RuntimeException re) throw re;
+					throw new RuntimeException(t);
 				}
 				flattenIntoArray(cx, result, O, (int) Math.min(depth, 1000));
 				return result;
@@ -2200,9 +2259,9 @@ public class JSContext {
 		 * Fast path: if the arraySpeciesSwitchPoint is still valid (Array[Symbol.species] was never
 		 * overridden), allocate a plain JSArray directly — zero branches, zero virtual dispatch.
 		 * Slow path: perform full species lookup:
-		 *   1. if O.constructor is Array (the built-in), return new JSArray(size)
-		 *   2. if O.constructor[Symbol.species] is null/undefined/not-a-function, return new JSArray(size)
-		 *   3. otherwise invoke the species constructor with `size` as argument
+		 * 1. if O.constructor is Array (the built-in), return new JSArray(size)
+		 * 2. if O.constructor[Symbol.species] is null/undefined/not-a-function, return new JSArray(size)
+		 * 3. otherwise invoke the species constructor with `size` as argument
 		 */
 		static JSArray speciesConstruct(JSContext cx, Object O, long size) throws Throwable {
 			if (BuiltinProtector.isArraySpeciesValid()) {
@@ -2223,7 +2282,7 @@ public class JSContext {
 							throw makeTypeError("Symbol.species must be a constructor");
 						}
 						try {
-							Object result = JSLinker.newGeneric(speciesFn, size > 0 ? new Object[]{ (double) size } : JSFunction.EMPTY_ARGS);
+							Object result = JSLinker.newGeneric(speciesFn, size > 0 ? new Object[]{(double) size} : JSFunction.EMPTY_ARGS);
 							if (result instanceof JSArray arr) return arr;
 							if (result instanceof JSObject resObj) {
 								JSArray arr = new JSArray();
@@ -2334,7 +2393,7 @@ public class JSContext {
 					return result;
 				}
 				if (!jsArr.hasElement(i)) continue;
-				Object kValue = jsArr.getElement(i);
+				Object kValue   = jsArr.getElement(i);
 				Object selected = callback.call3(cx, thisArg, kValue, (double) i, jsArr);
 				if (JSOps.toBoolean(selected)) {
 					result.push(kValue);
@@ -2464,10 +2523,10 @@ public class JSContext {
 		}
 
 		public static class JSArrayIterator extends JSObject {
-			private final Object target;
-			private final long length;
-			private long index = 0;
-			private boolean done = false;
+			private final Object  target;
+			private final long    length;
+			private       long    index = 0;
+			private       boolean done  = false;
 
 			public JSArrayIterator(Object target) {
 				super(LazyObject.OBJECT_PROTOTYPE);
@@ -2492,9 +2551,9 @@ public class JSContext {
 		}
 
 		public static class JSStringIterator extends JSObject {
-			private final String str;
-			private int index = 0;
-			private boolean done = false;
+			private final String  str;
+			private       int     index = 0;
+			private       boolean done  = false;
 
 			public JSStringIterator(String str) {
 				super(LazyObject.OBJECT_PROTOTYPE);
@@ -2506,7 +2565,7 @@ public class JSContext {
 						res.put("value", JSUndefined.INSTANCE);
 						res.put("done", Boolean.TRUE);
 					} else {
-						int cp = Character.codePointAt(str, index);
+						int    cp = Character.codePointAt(str, index);
 						String ch = new String(Character.toChars(cp));
 						index += Character.charCount(cp);
 						res.put("value", ch);
@@ -2534,9 +2593,9 @@ public class JSContext {
 		return CURRENT.get();
 	}
 
-	private final ArrayDeque<Runnable> microtaskQueue = new ArrayDeque<>();
-	private final Object               microtaskLock  = new Object();
-	private volatile boolean           hasMicrotasks  = false;
+	private final    ArrayDeque<Runnable> microtaskQueue = new ArrayDeque<>();
+	private final    Object               microtaskLock  = new Object();
+	private volatile boolean              hasMicrotasks  = false;
 
 	public void queueMicrotask(Runnable task) {
 		synchronized (microtaskLock) {
@@ -3367,7 +3426,7 @@ public class JSContext {
 			}));
 			proto.put("setFullYear", makeMethod("setFullYear", 3, (cx, thisObj, args) -> {
 				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
-				double t = d.getTime();
+				double   t   = d.getTime();
 				Calendar cal = Calendar.getInstance();
 				if (!Double.isNaN(t)) cal.setTimeInMillis((long) t);
 				if (args.length > 0) cal.set(Calendar.YEAR, JSOps.toInt(args[0]));
@@ -3379,7 +3438,7 @@ public class JSContext {
 			}));
 			proto.put("setUTCFullYear", makeMethod("setUTCFullYear", 3, (cx, thisObj, args) -> {
 				if (!(thisObj instanceof JSDate d)) throw makeTypeError("this is not a Date object");
-				double t = d.getTime();
+				double   t   = d.getTime();
 				Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
 				if (!Double.isNaN(t)) cal.setTimeInMillis((long) t);
 				if (args.length > 0) cal.set(Calendar.YEAR, JSOps.toInt(args[0]));
@@ -3400,14 +3459,14 @@ public class JSContext {
 				} else if (args.length == 1) {
 					time = JSOps.toDouble(args[0]);
 				} else {
-					int                year  = JSOps.toInt(args[0]);
-					int                month = JSOps.toInt(args[1]);
-					int                day   = args.length > 2 ? JSOps.toInt(args[2]) : 1;
-					int                hour  = args.length > 3 ? JSOps.toInt(args[3]) : 0;
-					int                min   = args.length > 4 ? JSOps.toInt(args[4]) : 0;
-					int                sec   = args.length > 5 ? JSOps.toInt(args[5]) : 0;
-					int                ms    = args.length > 6 ? JSOps.toInt(args[6]) : 0;
-					Calendar           cal   = Calendar.getInstance();
+					int      year  = JSOps.toInt(args[0]);
+					int      month = JSOps.toInt(args[1]);
+					int      day   = args.length > 2 ? JSOps.toInt(args[2]) : 1;
+					int      hour  = args.length > 3 ? JSOps.toInt(args[3]) : 0;
+					int      min   = args.length > 4 ? JSOps.toInt(args[4]) : 0;
+					int      sec   = args.length > 5 ? JSOps.toInt(args[5]) : 0;
+					int      ms    = args.length > 6 ? JSOps.toInt(args[6]) : 0;
+					Calendar cal   = Calendar.getInstance();
 					cal.set(year < 100 ? 1900 + year : year, month, day, hour, min, sec);
 					cal.set(Calendar.MILLISECOND, ms);
 					time = (double) cal.getTimeInMillis();
@@ -3438,14 +3497,14 @@ public class JSContext {
 			}));
 			ctor.put("UTC", makeMethod("UTC", 7, (cx, thisObj, args) -> {
 				if (args.length == 0) return Double.NaN;
-				int year = JSOps.toInt(args[0]);
-				int month = args.length > 1 ? JSOps.toInt(args[1]) : 0;
-				int day = args.length > 2 ? JSOps.toInt(args[2]) : 1;
-				int hour = args.length > 3 ? JSOps.toInt(args[3]) : 0;
-				int min = args.length > 4 ? JSOps.toInt(args[4]) : 0;
-				int sec = args.length > 5 ? JSOps.toInt(args[5]) : 0;
-				int ms = args.length > 6 ? JSOps.toInt(args[6]) : 0;
-				Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+				int      year  = JSOps.toInt(args[0]);
+				int      month = args.length > 1 ? JSOps.toInt(args[1]) : 0;
+				int      day   = args.length > 2 ? JSOps.toInt(args[2]) : 1;
+				int      hour  = args.length > 3 ? JSOps.toInt(args[3]) : 0;
+				int      min   = args.length > 4 ? JSOps.toInt(args[4]) : 0;
+				int      sec   = args.length > 5 ? JSOps.toInt(args[5]) : 0;
+				int      ms    = args.length > 6 ? JSOps.toInt(args[6]) : 0;
+				Calendar cal   = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
 				cal.set(year < 100 ? 1900 + year : year, month, day, hour, min, sec);
 				cal.set(Calendar.MILLISECOND, ms);
 				return (double) cal.getTimeInMillis();
@@ -3516,9 +3575,9 @@ public class JSContext {
 				sb.append(") {\n");
 				if (args.length > 0) sb.append(JSOps.toStr(args[args.length - 1]));
 				sb.append("\n})");
-				JSScript script = JSCompiler.compile(sb.toString());
+				JSScript  script = JSCompiler.compile(sb.toString());
 				JSContext evalCx = (realm != null) ? realm : (cx != null ? cx : JSContext.current());
-				Object fn = script.run(evalCx);
+				Object    fn     = script.run(evalCx);
 				if (fn instanceof JSObject jo) {
 					jo.realm = evalCx;
 				}
@@ -3553,8 +3612,8 @@ public class JSContext {
 			proto.put("then", makeMethod("then", 2, (cx, thisObj, args) -> {
 				if (thisObj instanceof JSPromise p) {
 					JSContext current = cx != null ? cx : (p.cx != null ? p.cx : JSContext.current());
-					Object onF = args.length > 0 ? args[0] : null;
-					Object onR = args.length > 1 ? args[1] : null;
+					Object    onF     = args.length > 0 ? args[0] : null;
+					Object    onR     = args.length > 1 ? args[1] : null;
 					return p.then(current, onF, onR);
 				}
 				throw makeTypeError("Promise.prototype.then called on non-promise");
@@ -3562,7 +3621,7 @@ public class JSContext {
 			proto.put("catch", makeMethod("catch", 1, (cx, thisObj, args) -> {
 				if (thisObj instanceof JSPromise p) {
 					JSContext current = cx != null ? cx : (p.cx != null ? p.cx : JSContext.current());
-					Object onR = args.length > 0 ? args[0] : null;
+					Object    onR     = args.length > 0 ? args[0] : null;
 					return p.catch_(current, onR);
 				}
 				throw makeTypeError("Promise.prototype.catch called on non-promise");
@@ -3570,7 +3629,7 @@ public class JSContext {
 			proto.put("finally", makeMethod("finally", 1, (cx, thisObj, args) -> {
 				if (thisObj instanceof JSPromise p) {
 					JSContext current = cx != null ? cx : (p.cx != null ? p.cx : JSContext.current());
-					Object onFin = args.length > 0 ? args[0] : null;
+					Object    onFin   = args.length > 0 ? args[0] : null;
 					return p.finally_(current, onFin);
 				}
 				throw makeTypeError("Promise.prototype.finally called on non-promise");
@@ -3583,9 +3642,9 @@ public class JSContext {
 				if (args.length == 0 || !(args[0] instanceof JSFunction executor)) {
 					throw makeTypeError("Promise resolver undefined is not a function");
 				}
-				JSContext current = cx != null ? cx : JSContext.current();
-				JSPromise promise = (thisObj instanceof JSPromise p && p.getPrototype() == proto) ? p : new JSPromise(current, proto);
-				java.util.concurrent.atomic.AtomicBoolean called = new java.util.concurrent.atomic.AtomicBoolean(false);
+				JSContext                                 current = cx != null ? cx : JSContext.current();
+				JSPromise                                 promise = (thisObj instanceof JSPromise p && p.getPrototype() == proto) ? p : new JSPromise(current, proto);
+				java.util.concurrent.atomic.AtomicBoolean called  = new java.util.concurrent.atomic.AtomicBoolean(false);
 				JSFunction resolveFn = (c, self, a) -> {
 					if (called.compareAndSet(false, true)) {
 						promise.resolve(a.length > 0 ? a[0] : JSUndefined.INSTANCE);
@@ -3610,57 +3669,57 @@ public class JSContext {
 
 			ctor.put("resolve", makeMethod("resolve", 1, (cx, thisObj, args) -> {
 				JSContext current = cx != null ? cx : JSContext.current();
-				Object val = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
+				Object    val     = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
 				return JSPromise.resolve(current, val);
 			}));
 			ctor.put("reject", makeMethod("reject", 1, (cx, thisObj, args) -> {
 				JSContext current = cx != null ? cx : JSContext.current();
-				Object reason = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
+				Object    reason  = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
 				return JSPromise.reject(current, reason);
 			}));
 			ctor.put("all", makeMethod("all", 1, (cx, thisObj, args) -> {
-				JSContext current = cx != null ? cx : JSContext.current();
-				Object iterable = args.length > 0 ? args[0] : null;
+				JSContext current  = cx != null ? cx : JSContext.current();
+				Object    iterable = args.length > 0 ? args[0] : null;
 				return JSPromise.all(current, iterable);
 			}));
 			ctor.put("allSettled", makeMethod("allSettled", 1, (cx, thisObj, args) -> {
-				JSContext current = cx != null ? cx : JSContext.current();
-				Object iterable = args.length > 0 ? args[0] : null;
+				JSContext current  = cx != null ? cx : JSContext.current();
+				Object    iterable = args.length > 0 ? args[0] : null;
 				return JSPromise.allSettled(current, iterable);
 			}));
 			ctor.put("race", makeMethod("race", 1, (cx, thisObj, args) -> {
-				JSContext current = cx != null ? cx : JSContext.current();
-				Object iterable = args.length > 0 ? args[0] : null;
+				JSContext current  = cx != null ? cx : JSContext.current();
+				Object    iterable = args.length > 0 ? args[0] : null;
 				return JSPromise.race(current, iterable);
 			}));
 			ctor.put("any", makeMethod("any", 1, (cx, thisObj, args) -> {
-				JSContext current = cx != null ? cx : JSContext.current();
-				Object iterable = args.length > 0 ? args[0] : null;
+				JSContext current  = cx != null ? cx : JSContext.current();
+				Object    iterable = args.length > 0 ? args[0] : null;
 				return JSPromise.any(current, iterable);
 			}));
-				// Promise[Symbol.species] = get [Symbol.species]() { return this; }
+			// Promise[Symbol.species] = get [Symbol.species]() { return this; }
 			// Per ECMAScript spec 25.6.4.5: Promise[@@species] is an accessor whose
 			// getter returns `this`. Overriding invalidates the promiseSpeciesSwitchPoint.
 			ctor.defineAccessor(JSSymbol.SPECIES,
-				(cx2, thisObj2, args2) -> thisObj2,
-				null, false);
+			 (cx2, thisObj2, args2) -> thisObj2,
+			 null, false);
 			return ctor;
 		}
 	}
 
 	public static class JSGlobalThis extends JSObject {
-		private final JSContext cx;
-		public final Set<String> deletedGlobals = new HashSet<>();
+		private final JSContext   cx;
+		public final  Set<String> deletedGlobals = new HashSet<>();
 
 		private static final Set<String> BUILTIN_GLOBALS = Set.of(
-			"NaN", "Infinity", "undefined",
-			"Object", "Function", "Array", "String", "Boolean", "Number", "Symbol",
-			"Date", "RegExp", "Error", "EvalError", "RangeError", "ReferenceError",
-			"SyntaxError", "TypeError", "URIError", "Math",
-			"Promise", "Proxy", "Reflect",
-			"console", "print", "queueMicrotask",
-			"globalThis", "window", "global",
-			"Packages", "Java", "java", "javax", "importClass", "importPackage", "importPackages", "JSOps", "$262"
+		 "NaN", "Infinity", "undefined",
+		 "Object", "Function", "Array", "String", "Boolean", "Number", "Symbol",
+		 "Date", "RegExp", "Error", "EvalError", "RangeError", "ReferenceError",
+		 "SyntaxError", "TypeError", "URIError", "Math",
+		 "Promise", "Proxy", "Reflect",
+		 "console", "print", "queueMicrotask",
+		 "globalThis", "window", "global",
+		 "Packages", "Java", "java", "javax", "importClass", "importPackage", "importPackages", "JSOps", "$262"
 		);
 
 		public boolean isBuiltinGlobal(String name) {
@@ -3712,7 +3771,7 @@ public class JSContext {
 		@Override
 		public void put(String name, Object value) {
 			deletedGlobals.remove(name);
-			int symId = SymbolTable.id(name);
+			int symId  = SymbolTable.id(name);
 			int offset = shape.getOffset(symId);
 			if (offset >= 0) {
 				if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
@@ -3835,11 +3894,11 @@ public class JSContext {
 		@Override
 		public Set<String> keys() {
 			Set<String> activeKeys = new LinkedHashSet<>();
-			int count = shape.propertyCount;
+			int         count      = shape.propertyCount;
 			for (int i = 0; i < count; i++) {
 				if (shape.isEnumerable(i) && (isDoubleSlot(i) || getRawObjectSlot(i) != NOT_FOUND)) {
-					int keyId = shape.getKeyId(i);
-					String name = SymbolTable.name(keyId);
+					int    keyId = shape.getKeyId(i);
+					String name  = SymbolTable.name(keyId);
 					if (name != null && !deletedGlobals.contains(name)) {
 						activeKeys.add(name);
 					}
@@ -3859,11 +3918,11 @@ public class JSContext {
 		@Override
 		public Set<String> getOwnPropertyNames() {
 			Set<String> allKeys = new LinkedHashSet<>();
-			int count = shape.propertyCount;
+			int         count   = shape.propertyCount;
 			for (int i = 0; i < count; i++) {
 				if (isDoubleSlot(i) || getRawObjectSlot(i) != NOT_FOUND) {
-					int keyId = shape.getKeyId(i);
-					String name = SymbolTable.name(keyId);
+					int    keyId = shape.getKeyId(i);
+					String name  = SymbolTable.name(keyId);
 					if (name != null && !deletedGlobals.contains(name)) {
 						allKeys.add(name);
 					}
@@ -4201,17 +4260,17 @@ public class JSContext {
 		JSContext old = CURRENT.get();
 		CURRENT.set(this);
 		try {
-			JSFunction moduleFunc = JSCompiler.compileModule(code, "eval_module.js");
-			JSObject exports = new JSObject();
-			hope.magic.js.module.JSModule module = new hope.magic.js.module.JSModule("eval_module", "eval_module.js", "", null);
+			JSFunction                    moduleFunc = JSCompiler.compileModule(code, "eval_module.js");
+			JSObject                      exports    = new JSObject();
+			hope.magic.js.module.JSModule module     = new hope.magic.js.module.JSModule("eval_module", "eval_module.js", "", null);
 			module.setExports(exports);
 			hope.magic.js.module.JSModuleManager.RequireFunction localRequire = getModuleManager().createRequireFunction(module);
 			Object[] args = new Object[]{
-					exports,
-					localRequire,
-					module,
-					"eval_module.js",
-					""
+			 exports,
+			 localRequire,
+			 module,
+			 "eval_module.js",
+			 ""
 			};
 			moduleFunc.call(this, exports, args);
 			return module.getExports();

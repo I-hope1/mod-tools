@@ -16,12 +16,12 @@ public class JSObjectPrototypeSwitchPointTest {
 		JSObject proto = new JSObject();
 		proto.put("sayHello", (JSFunction) (cx, thisObj, args) -> "hello v1");
 
-		JSObject inst = new JSObject(proto);
+		JSObject             inst   = new JSObject(proto);
 		MethodHandles.Lookup lookup = MethodHandles.lookup();
-		MethodType type = MethodType.methodType(Object.class, Object.class);
+		MethodType           type   = MethodType.methodType(Object.class, Object.class);
 
-		CallSite callSite = JSLinker.bootstrapInvoke(lookup, "sayHello", type, "sayHello");
-		ChainedCallSite site = (ChainedCallSite) callSite;
+		CallSite        callSite = JSLinker.bootstrapInvoke(lookup, "sayHello", type, "sayHello");
+		ChainedCallSite site     = (ChainedCallSite) callSite;
 
 		// 首次调用：绑定原型方法，挂载 protoSwitchPoint
 		Object res1 = site.dynamicInvoker().invokeExact((Object) inst);
@@ -44,16 +44,16 @@ public class JSObjectPrototypeSwitchPointTest {
 
 	@Test
 	public void testPrototypePropertyGetInvalidation() throws Throwable {
-		JSObject proto = new JSObject();
-		JSFunction fn1 = (cx, thisObj, args) -> "v1";
+		JSObject   proto = new JSObject();
+		JSFunction fn1   = (cx, thisObj, args) -> "v1";
 		proto.put("myFunc", fn1);
 
-		JSObject inst = new JSObject(proto);
+		JSObject             inst   = new JSObject(proto);
 		MethodHandles.Lookup lookup = MethodHandles.lookup();
-		MethodType type = MethodType.methodType(Object.class, Object.class);
+		MethodType           type   = MethodType.methodType(Object.class, Object.class);
 
-		CallSite callSite = JSLinker.bootstrapGetProp(lookup, "myFunc", type, "myFunc");
-		ChainedCallSite site = (ChainedCallSite) callSite;
+		CallSite        callSite = JSLinker.bootstrapGetProp(lookup, "myFunc", type, "myFunc");
+		ChainedCallSite site     = (ChainedCallSite) callSite;
 
 		Object got1 = site.dynamicInvoker().invokeExact((Object) inst);
 		Assertions.assertSame(fn1, got1);
@@ -76,12 +76,12 @@ public class JSObjectPrototypeSwitchPointTest {
 		JSObject protoB = new JSObject();
 		protoB.put("whoAmI", (JSFunction) (cx, thisObj, args) -> "I am B");
 
-		JSObject inst = new JSObject(protoA);
+		JSObject             inst   = new JSObject(protoA);
 		MethodHandles.Lookup lookup = MethodHandles.lookup();
-		MethodType type = MethodType.methodType(Object.class, Object.class);
+		MethodType           type   = MethodType.methodType(Object.class, Object.class);
 
-		CallSite callSite = JSLinker.bootstrapInvoke(lookup, "whoAmI", type, "whoAmI");
-		ChainedCallSite site = (ChainedCallSite) callSite;
+		CallSite        callSite = JSLinker.bootstrapInvoke(lookup, "whoAmI", type, "whoAmI");
+		ChainedCallSite site     = (ChainedCallSite) callSite;
 
 		Object res1 = site.dynamicInvoker().invokeExact((Object) inst);
 		Assertions.assertEquals("I am A", res1);
@@ -98,23 +98,23 @@ public class JSObjectPrototypeSwitchPointTest {
 	public void testFullJSScriptPrototypeMonkeyPatching() {
 		JSContext cx = new JSContext();
 		String script = """
-			function Person(name) {
-				this.name = name;
-			}
-			Person.prototype.greet = function() {
-				return "hi " + this.name;
-			};
-			var p = new Person("Alice");
-			var r1 = p.greet();
-			
-			// 动态猴子补丁 (Monkey-patching prototype)
-			Person.prototype.greet = function() {
-				return "hello " + this.name;
-			};
-			var r2 = p.greet();
-			
-			r1 + " | " + r2;
-		""";
+		 	function Person(name) {
+		 		this.name = name;
+		 	}
+		 	Person.prototype.greet = function() {
+		 		return "hi " + this.name;
+		 	};
+		 	var p = new Person("Alice");
+		 	var r1 = p.greet();
+		 
+		 	// 动态猴子补丁 (Monkey-patching prototype)
+		 	Person.prototype.greet = function() {
+		 		return "hello " + this.name;
+		 	};
+		 	var r2 = p.greet();
+		 
+		 	r1 + " | " + r2;
+		 """;
 		Object result = cx.eval(script);
 		Assertions.assertEquals("hi Alice | hello Alice", result);
 	}
@@ -126,13 +126,13 @@ public class JSObjectPrototypeSwitchPointTest {
 
 		JSObject proto2 = new JSObject(proto3);
 		JSObject proto1 = new JSObject(proto2);
-		JSObject inst = new JSObject(proto1);
+		JSObject inst   = new JSObject(proto1);
 
 		MethodHandles.Lookup lookup = MethodHandles.lookup();
-		MethodType type = MethodType.methodType(Object.class, Object.class);
+		MethodType           type   = MethodType.methodType(Object.class, Object.class);
 
-		CallSite callSite = JSLinker.bootstrapGetProp(lookup, "deepVal", type, "deepVal");
-		ChainedCallSite site = (ChainedCallSite) callSite;
+		CallSite        callSite = JSLinker.bootstrapGetProp(lookup, "deepVal", type, "deepVal");
+		ChainedCallSite site     = (ChainedCallSite) callSite;
 
 		// 1. 跨 3 层原型链初次读取：应当折叠为常量并为 proto1, proto2, proto3 全部装载 SwitchPoint 保护
 		Object got1 = site.dynamicInvoker().invokeExact((Object) inst);
@@ -175,12 +175,12 @@ public class JSObjectPrototypeSwitchPointTest {
 		proto.putDouble("gravity", 9.8);
 		proto.putDouble("maxCount", 100.0);
 
-		JSObject inst = new JSObject(proto);
+		JSObject             inst   = new JSObject(proto);
 		MethodHandles.Lookup lookup = MethodHandles.lookup();
 
 		// A. 测试 bootstrapGetPropDouble 原型链 IC
-		MethodType doubleType = MethodType.methodType(double.class, Object.class);
-		CallSite doubleSite = JSLinker.bootstrapGetPropDouble(lookup, "gravity", doubleType, "gravity");
+		MethodType      doubleType  = MethodType.methodType(double.class, Object.class);
+		CallSite        doubleSite  = JSLinker.bootstrapGetPropDouble(lookup, "gravity", doubleType, "gravity");
 		ChainedCallSite cDoubleSite = (ChainedCallSite) doubleSite;
 
 		double d1 = (double) cDoubleSite.dynamicInvoker().invokeExact((Object) inst);
@@ -194,8 +194,8 @@ public class JSObjectPrototypeSwitchPointTest {
 		Assertions.assertEquals(1, cDoubleSite.getChainDepth());
 
 		// B. 测试 bootstrapGetPropInt 原型链 IC
-		MethodType intType = MethodType.methodType(int.class, Object.class);
-		CallSite intSite = JSLinker.bootstrapGetPropInt(lookup, "maxCount", intType, "maxCount");
+		MethodType      intType  = MethodType.methodType(int.class, Object.class);
+		CallSite        intSite  = JSLinker.bootstrapGetPropInt(lookup, "maxCount", intType, "maxCount");
 		ChainedCallSite cIntSite = (ChainedCallSite) intSite;
 
 		int i1 = (int) cIntSite.dynamicInvoker().invokeExact((Object) inst);
@@ -216,11 +216,11 @@ public class JSObjectPrototypeSwitchPointTest {
 		JSSymbol secretSym = new JSSymbol("secret");
 		proto.put(secretSym, "classified");
 
-		JSObject inst = new JSObject(proto);
+		JSObject             inst   = new JSObject(proto);
 		MethodHandles.Lookup lookup = MethodHandles.lookup();
-		MethodType type = MethodType.methodType(Object.class, Object.class, Object.class);
+		MethodType           type   = MethodType.methodType(Object.class, Object.class, Object.class);
 
-		CallSite indexSite = JSLinker.bootstrapGetIndex(lookup, "getIndex", type);
+		CallSite        indexSite  = JSLinker.bootstrapGetIndex(lookup, "getIndex", type);
 		ChainedCallSite cIndexSite = (ChainedCallSite) indexSite;
 
 		// 1. String Key 索引原型链查找
@@ -245,13 +245,13 @@ public class JSObjectPrototypeSwitchPointTest {
 
 	@Test
 	public void testProtectedSingletonMethodCallSiteSwitchPointAndDeopt() throws Throwable {
-		JSContext cx = new JSContext();
-		JSObject math = (JSObject) cx.eval("Math");
+		JSContext            cx     = new JSContext();
+		JSObject             math   = (JSObject) cx.eval("Math");
 		MethodHandles.Lookup lookup = MethodHandles.lookup();
-		MethodType type = MethodType.methodType(Object.class, Object.class, Object.class);
+		MethodType           type   = MethodType.methodType(Object.class, Object.class, Object.class);
 
-		CallSite callSite = JSLinker.bootstrapInvoke(lookup, "abs", type, "abs");
-		ChainedCallSite site = (ChainedCallSite) callSite;
+		CallSite        callSite = JSLinker.bootstrapInvoke(lookup, "abs", type, "abs");
+		ChainedCallSite site     = (ChainedCallSite) callSite;
 
 		// 1. 首次调用受保护单例方法 Math.abs(-42)
 		Object res1 = site.dynamicInvoker().invokeExact((Object) math, (Object) (-42));
@@ -275,10 +275,10 @@ public class JSObjectPrototypeSwitchPointTest {
 	@Test
 	public void testPlainInstanceOwnMethodInlineCache() throws Throwable {
 		MethodHandles.Lookup lookup = MethodHandles.lookup();
-		MethodType type = MethodType.methodType(Object.class, Object.class);
+		MethodType           type   = MethodType.methodType(Object.class, Object.class);
 
-		CallSite callSite = JSLinker.bootstrapInvoke(lookup, "getX", type, "getX");
-		ChainedCallSite site = (ChainedCallSite) callSite;
+		CallSite        callSite = JSLinker.bootstrapInvoke(lookup, "getX", type, "getX");
+		ChainedCallSite site     = (ChainedCallSite) callSite;
 
 		JSObject p1 = new JSObject();
 		p1.put("x", 10);
@@ -311,10 +311,10 @@ public class JSObjectPrototypeSwitchPointTest {
 	@Test
 	public void testDirectFunctionCallMonomorphicAndPolymorphic() throws Throwable {
 		MethodHandles.Lookup lookup = MethodHandles.lookup();
-		MethodType type = MethodType.methodType(Object.class, Object.class, Object.class);
+		MethodType           type   = MethodType.methodType(Object.class, Object.class, Object.class);
 
-		CallSite callSite = JSLinker.bootstrapInvoke(lookup, "$invoke$", type, "$invoke$");
-		ChainedCallSite site = (ChainedCallSite) callSite;
+		CallSite        callSite = JSLinker.bootstrapInvoke(lookup, "$invoke$", type, "$invoke$");
+		ChainedCallSite site     = (ChainedCallSite) callSite;
 
 		JSFunction fn1 = (cx, thisObj, args) -> ((int) args[0]) + 1;
 		JSFunction fn2 = (cx, thisObj, args) -> ((int) args[0]) * 2;
@@ -343,16 +343,16 @@ public class JSObjectPrototypeSwitchPointTest {
 	public void testDeleteDoublePropertyJITInliningBug() {
 		JSContext cx = new JSContext();
 		String script = """
-			function compute(p) {
-				return p.x + 1;
-			}
-			let p = { x: 10.0 };
-			for (let i = 0; i < 20000; i++) {
-				compute(p);
-			}
-			delete p.x;
-			compute(p);
-		""";
+		 	function compute(p) {
+		 		return p.x + 1;
+		 	}
+		 	let p = { x: 10.0 };
+		 	for (let i = 0; i < 20000; i++) {
+		 		compute(p);
+		 	}
+		 	delete p.x;
+		 	compute(p);
+		 """;
 		Object res = cx.eval(script);
 		System.out.println("Result of compute(p) after delete: " + res);
 		Assertions.assertTrue(res instanceof Double && Double.isNaN((Double) res), "Result should be NaN, but was: " + res);
@@ -370,23 +370,23 @@ public class JSObjectPrototypeSwitchPointTest {
 	public void testArrayMethodsFastPathWhenSpeciesUntouched() {
 		JSContext cx = new JSContext();
 		String script = """
-			let arr = [1, 2, 3];
-			let mapped  = arr.map(x => x * 2);
-			let filtered = arr.filter(x => x > 1);
-			let sliced   = arr.slice(1);
-			let concatted = arr.concat([4]);
-			let flatted   = [[1],[2]].flat();
-			[
-			  mapped.join(","),
-			  filtered.join(","),
-			  sliced.join(","),
-			  concatted.join(","),
-			  flatted.join(",")
-			].join("|")
-			""";
+		 let arr = [1, 2, 3];
+		 let mapped  = arr.map(x => x * 2);
+		 let filtered = arr.filter(x => x > 1);
+		 let sliced   = arr.slice(1);
+		 let concatted = arr.concat([4]);
+		 let flatted   = [[1],[2]].flat();
+		 [
+		   mapped.join(","),
+		   filtered.join(","),
+		   sliced.join(","),
+		   concatted.join(","),
+		   flatted.join(",")
+		 ].join("|")
+		 """;
 		Object res = cx.eval(script);
 		Assertions.assertEquals("2,4,6|2,3|2,3|1,2,3,4|1,2", res,
-			"All array methods should return correct values on fast path");
+		 "All array methods should return correct values on fast path");
 	}
 
 	/**
@@ -407,7 +407,7 @@ public class JSObjectPrototypeSwitchPointTest {
 		// Reset for other tests
 		BuiltinProtector.resetAll();
 		Assertions.assertFalse(BuiltinProtector.getArraySpeciesSwitchPoint().hasBeenInvalidated(),
-			"Species SP must be fresh after resetAll()");
+		 "Species SP must be fresh after resetAll()");
 	}
 
 	/**
@@ -426,20 +426,20 @@ public class JSObjectPrototypeSwitchPointTest {
 		// This mutation (writing Symbol.species on the Array constructor) should
 		// trigger onStructuralOrPropertyChange on LazyArray.ARRAY and invalidate the SP.
 		cx.eval("""
-			// Override Array[Symbol.species] on the constructor object
-			Object.defineProperty(Array, Symbol.species, {
-			  get: function() { return Array; }
-			});
-			""");
+		 // Override Array[Symbol.species] on the constructor object
+		 Object.defineProperty(Array, Symbol.species, {
+		   get: function() { return Array; }
+		 });
+		 """);
 
 		// The SP should now be invalidated
 		Assertions.assertTrue(sp.hasBeenInvalidated(),
-			"arraySpeciesSwitchPoint must be invalidated after Array[Symbol.species] override");
+		 "arraySpeciesSwitchPoint must be invalidated after Array[Symbol.species] override");
 
 		// map should still produce correct results (falls back to slow spec path)
 		Object result = cx.eval("[1,2,3].map(x => x + 10).join(',')");
 		Assertions.assertEquals("11,12,13", result,
-			"map must still produce correct results even after species override");
+		 "map must still produce correct results even after species override");
 
 		// Reset for other tests
 		BuiltinProtector.resetAll();

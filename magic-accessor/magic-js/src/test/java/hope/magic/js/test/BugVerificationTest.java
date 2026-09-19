@@ -583,10 +583,10 @@ public class BugVerificationTest {
 			let polyNs = (t2 - t1) / 5000000.0;
 			"mono: " + monoNs + " ns/op, poly: " + polyNs + " ns/op, s1=" + s1 + ", s2=" + s2;
 		""";
-		Object res = cx.eval(script);
+		var res = (String) cx.eval(script);
 		System.out.println("PROTOTYPE IC RESULT: " + res);
-		Assertions.assertTrue(((String) res).contains("s1=5000000"));
-		Assertions.assertTrue(((String) res).contains("s2=7500000"));
+		Assertions.assertTrue(res.contains("s1=5000000"));
+		Assertions.assertTrue(res.contains("s2=7500000"));
 	}
 
 	@Test

@@ -357,4 +357,92 @@ public class JSObjectPrototypeSwitchPointTest {
 		System.out.println("Result of compute(p) after delete: " + res);
 		Assertions.assertTrue(res instanceof Double && Double.isNaN((Double) res), "Result should be NaN, but was: " + res);
 	}
+
+	// -----------------------------------------------------------------------
+	// P5: Symbol.species protector tests
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Baseline: when nobody overrides Array[Symbol.species], map/filter/slice/concat/flat
+	 * should all return plain JSArray instances (fast path active).
+	 */
+	@Test
+	public void testArrayMethodsFastPathWhenSpeciesUntouched() {
+		JSContext cx = new JSContext();
+		String script = """
+			let arr = [1, 2, 3];
+			let mapped  = arr.map(x => x * 2);
+			let filtered = arr.filter(x => x > 1);
+			let sliced   = arr.slice(1);
+			let concatted = arr.concat([4]);
+			let flatted   = [[1],[2]].flat();
+			[
+			  mapped.join(","),
+			  filtered.join(","),
+			  sliced.join(","),
+			  concatted.join(","),
+			  flatted.join(",")
+			].join("|")
+			""";
+		Object res = cx.eval(script);
+		Assertions.assertEquals("2,4,6|2,3|2,3|1,2,3,4|1,2", res,
+			"All array methods should return correct values on fast path");
+	}
+
+	/**
+	 * Overriding Array[Symbol.species] must invalidate the species protector SwitchPoint.
+	 * After invalidation, hasBeenInvalidated() must return true.
+	 */
+	@Test
+	public void testArraySpeciesProtectorInvalidatedOnOverride() {
+		// Grab the current SwitchPoint before any modification
+		java.lang.invoke.SwitchPoint spBefore = BuiltinProtector.getArraySpeciesSwitchPoint();
+		Assertions.assertFalse(spBefore.hasBeenInvalidated(), "Species SP must start valid");
+
+		// Force invalidation (as would happen when user mutates Array[Symbol.species])
+		BuiltinProtector.invalidateArraySpeciesProtector();
+
+		Assertions.assertTrue(spBefore.hasBeenInvalidated(), "Species SP must be invalidated after explicit call");
+
+		// Reset for other tests
+		BuiltinProtector.resetAll();
+		Assertions.assertFalse(BuiltinProtector.getArraySpeciesSwitchPoint().hasBeenInvalidated(),
+			"Species SP must be fresh after resetAll()");
+	}
+
+	/**
+	 * Full end-to-end: set Array[Symbol.species] to a subclass constructor,
+	 * then call [1,2,3].map(...) and verify the protector was invalidated.
+	 * (The species slow-path kicks in when isArraySpeciesValid() == false.)
+	 */
+	@Test
+	public void testArraySpeciesOverrideInvalidatesProtector() {
+		JSContext cx = new JSContext();
+		// First reset to get a fresh SP
+		BuiltinProtector.resetAll();
+		java.lang.invoke.SwitchPoint sp = BuiltinProtector.getArraySpeciesSwitchPoint();
+		Assertions.assertFalse(sp.hasBeenInvalidated(), "Must start valid");
+
+		// This mutation (writing Symbol.species on the Array constructor) should
+		// trigger onStructuralOrPropertyChange on LazyArray.ARRAY and invalidate the SP.
+		cx.eval("""
+			// Override Array[Symbol.species] on the constructor object
+			Object.defineProperty(Array, Symbol.species, {
+			  get: function() { return Array; }
+			});
+			""");
+
+		// The SP should now be invalidated
+		Assertions.assertTrue(sp.hasBeenInvalidated(),
+			"arraySpeciesSwitchPoint must be invalidated after Array[Symbol.species] override");
+
+		// map should still produce correct results (falls back to slow spec path)
+		Object result = cx.eval("[1,2,3].map(x => x + 10).join(',')");
+		Assertions.assertEquals("11,12,13", result,
+			"map must still produce correct results even after species override");
+
+		// Reset for other tests
+		BuiltinProtector.resetAll();
+	}
 }
+

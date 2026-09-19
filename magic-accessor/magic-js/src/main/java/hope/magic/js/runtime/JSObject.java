@@ -2,18 +2,19 @@ package hope.magic.js.runtime;
 
 import java.lang.invoke.SwitchPoint;
 import java.util.*;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 public class JSObject {
 	//region 初始化
-	/** 内部删除/未命中哨兵（Tombstone），专用于区分“属性不存在”与“属性值为 undefined” */
-	public static final Object DELETED = new Object() {
+	/**
+	 * 内部未命中哨兵（Sentinel），专用于在 get/getOwn 读取流程中区分“属性不存在（需回溯原型链）”与“属性存在但其值为 undefined/null”。
+	 * 注意：本哨兵仅用作方法调用返回值，绝不在任何字段/槽位中持久化存储。
+	 */
+	public static final Object NOT_FOUND = new Object() {
 		@Override
 		public String toString() {
-			return "<deleted>";
+			return "<not-found>";
 		}
 	};
-	public static final Object NOT_FOUND = DELETED;
 
 	public static final int IN_OBJECT_FIELD_COUNT     = 8;
 	public static final int IN_OBJECT_SLOTS           = IN_OBJECT_FIELD_COUNT;
@@ -53,7 +54,7 @@ public class JSObject {
 	public Object obj0, obj1, obj2, obj3, obj4, obj5, obj6, obj7;
 	public Object[] overflowObj/*  = null */;
 
-	private JSObject prototype/*  = null */;
+	private          JSObject    prototype/*  = null */;
 	private volatile SwitchPoint protoSwitchPoint;
 
 	public SwitchPoint getOrCreateProtoSwitchPoint() {
@@ -79,11 +80,11 @@ public class JSObject {
 			synchronized (this) {
 				sp = this.protoSwitchPoint;
 				if (sp != null) {
-					this.protoSwitchPoint = new SwitchPoint();
+					this.protoSwitchPoint = null; // 置空，后续访问按需惰性重新创建
 				}
 			}
 			if (sp != null) {
-				SwitchPoint.invalidateAll(new SwitchPoint[]{ sp });
+				SwitchPoint.invalidateAll(new SwitchPoint[]{sp});
 			}
 		}
 	}
@@ -105,6 +106,13 @@ public class JSObject {
 		if (this.isArrayPrototype) {
 			BuiltinProtector.invalidateArrayProtector();
 			BuiltinProtector.invalidateIteratorProtector();
+			BuiltinProtector.invalidateArraySpeciesProtector();
+		}
+		if (this == JSContext.LazyArray.ARRAY) {
+			BuiltinProtector.invalidateArraySpeciesProtector();
+		}
+		if (this == JSContext.LazyBuiltins.PROMISE || this == JSContext.LazyBuiltins.PROMISE_PROTOTYPE) {
+			BuiltinProtector.invalidatePromiseSpeciesProtector();
 		}
 	}
 
@@ -118,6 +126,22 @@ public class JSObject {
 	public void setPrototype(JSObject prototype) {
 		if (this == JSContext.LazyObject.OBJECT_PROTOTYPE) {
 			throw new RuntimeException("TypeError: Immutable prototype object '#<Object>' cannot have their prototype set");
+		}
+		// ECMAScript 原型链成环防护检测
+		if (prototype == this.prototype) {
+			return;
+		}
+		if (prototype == this) {
+			throw new RuntimeException("TypeError: Cyclic __proto__ value");
+		}
+		if (prototype != null) {
+			JSObject cur = prototype;
+			while (cur != null) {
+				if (cur == this) {
+					throw new RuntimeException("TypeError: Cyclic __proto__ value");
+				}
+				cur = cur.getPrototype();
+			}
 		}
 		this.prototype = prototype;
 		onStructuralOrPropertyChange();
@@ -259,12 +283,11 @@ public class JSObject {
 
 	private Object getOverflowObject(int idx) {
 		Object[] of = overflowObj;
-		return (of != null && idx < of.length) ? of[idx] : DELETED;
+		return (of != null && idx < of.length) ? of[idx] : null;
 	}
 
 	public Object getObjectSlot(int offset) {
-		Object val = getRawObjectSlot(offset);
-		return (val == DELETED) ? JSUndefined.INSTANCE : val;
+		return getRawObjectSlot(offset);
 	}
 
 	/**
@@ -337,7 +360,7 @@ public class JSObject {
 	}
 
 	/**
-	 * 供 Linker / IC 快速读槽位：若为 DELETED，严格返回 JSUndefined.INSTANCE，绝不泄露内部哨兵
+	 * 供 Linker / IC 快速读槽位：若为 NOT_FOUND，严格返回 JSUndefined.INSTANCE，绝不泄露内部哨兵
 	 */
 	public Object getSlot(int offset) {
 		if (!isDoubleSlot(offset)) {
@@ -351,14 +374,13 @@ public class JSObject {
 	}
 
 	//endregion
-	//region 通用读 API (遇 DELETED 视为自身无属性，回退原型链)
+	//region 通用读 API (遇 NOT_FOUND 视为自身无属性，回退原型链)
 
 	/**
 	 * 读取当前对象自有的属性值（不溯源原型链）。
-	 *
-	 * @param propId 属性符号 ID
+	 * @param propId   属性符号 ID
 	 * @param receiver this 接收者对象（供访问器 getter 调用）
-	 * @return 属性值；若对象自身不存在该属性（未定义或已标记为 DELETED），返回 {@link #DELETED}（即 {@link #NOT_FOUND}）
+	 * @return 属性值；若对象自身不存在该属性（未定义或已标记为 NOT_FOUND），返回 {@link #NOT_FOUND}（即 {@link #NOT_FOUND}）
 	 */
 	public Object getOwn(int propId, Object receiver) {
 		return getOwn(propId, receiver, realm);
@@ -366,20 +388,17 @@ public class JSObject {
 
 	public Object getOwn(int propId, Object receiver, JSContext cx) {
 		int offset = shape.getOffset(propId);
-		if (offset >= 0) {
-			if (isDoubleSlot(offset)) {
-				return getBoxedDouble(offset);
-			}
-			Object val = getRawObjectSlot(offset);
-			if (val != DELETED) {
-				if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
-					PropertyAccessor acc = (PropertyAccessor) val;
-					return acc.callGetter(cx, receiver);
-				}
-				return val; // 包括 null 与 JSUndefined.INSTANCE 均属于合法属性值
-			}
+		if (offset < 0) return NOT_FOUND;
+
+		if (isDoubleSlot(offset)) {
+			return getBoxedDouble(offset);
 		}
-		return DELETED;
+		Object val = getRawObjectSlot(offset);
+		if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
+			PropertyAccessor acc = (PropertyAccessor) val;
+			return acc.callGetter(cx, receiver);
+		}
+		return val; // 包括 null 与 JSUndefined.INSTANCE 均属于合法属性值
 	}
 
 	public Object getOwn(String key, Object receiver) {
@@ -387,9 +406,8 @@ public class JSObject {
 	}
 
 	public Object getOwn(String key, Object receiver, JSContext cx) {
-		if (key == null) return DELETED;
-		int symId = SymbolTable.lookupId(key);
-		if (symId == SymbolTable.NO_SYMBOL) return DELETED;
+		int symId = SymbolTable.lookupId(key); // key 为 null 返回 NO_SYMBOL
+		if (symId == SymbolTable.NO_SYMBOL) return NOT_FOUND;
 		return getOwn(symId, receiver, cx);
 	}
 
@@ -399,7 +417,7 @@ public class JSObject {
 
 	public Object get(int propId, Object receiver) {
 		Object val = getOwn(propId, receiver);
-		if (val != DELETED) {
+		if (val != NOT_FOUND) {
 			return val;
 		}
 		return getSlow(propId, receiver);
@@ -410,7 +428,7 @@ public class JSObject {
 	}
 
 	public Object get(String key, Object receiver) {
-		int symId = SymbolTable.lookupId(key);
+		int symId = SymbolTable.lookupId(key); // key 为 null 返回 NO_SYMBOL
 		if (symId == SymbolTable.NO_SYMBOL) {
 			JSObject proto = getPrototype();
 			return (proto != null) ? proto.get(key, receiver) : JSUndefined.INSTANCE;
@@ -429,13 +447,11 @@ public class JSObject {
 				return getDoubleSlot(offset);
 			}
 			Object val = getRawObjectSlot(offset);
-			if (val != DELETED) {
-				if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
-					PropertyAccessor acc = (PropertyAccessor) val;
-					return JSOps.toDouble(acc.callGetter(null, receiver));
-				}
-				return JSOps.toDouble(val);
+			if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
+				PropertyAccessor acc = (PropertyAccessor) val;
+				return JSOps.toDouble(acc.callGetter(realm, receiver));
 			}
+			return JSOps.toDouble(val);
 		}
 		return JSOps.toDouble(getSlow(propId, receiver));
 	}
@@ -445,7 +461,7 @@ public class JSObject {
 	}
 
 	public double getAsDouble(String key, Object receiver) {
-		int symId = SymbolTable.lookupId(key);
+		int symId = SymbolTable.lookupId(key); // key 为 null 返回 NO_SYMBOL
 		if (symId == SymbolTable.NO_SYMBOL) {
 			JSObject proto = getPrototype();
 			return (proto != null) ? proto.getAsDouble(key, receiver) : Double.NaN;
@@ -460,27 +476,24 @@ public class JSObject {
 	}
 
 	//endregion
-	//region 通用写 API (覆盖原值或 DELETED 槽位)
+	//region 通用写 API
 
 	public void putDouble(int propId, double value) {
 		int offset = shape.getOffset(propId);
 		if (offset >= 0) {
-			Object currentRaw = isDoubleSlot(offset) ? null : getRawObjectSlot(offset);
-			if (currentRaw == DELETED) {
+
+			byte slotType = shape.getSlotType(offset);
+			if ((slotType & JSShape.FLAG_ACCESSOR) != 0) {
+				Object           currentRaw = isDoubleSlot(offset) ? null : getRawObjectSlot(offset);
+				PropertyAccessor acc        = (PropertyAccessor) currentRaw;
+				acc.callSetter(realm, this, value);
+				return;
+			}
+			if ((slotType & JSShape.FLAG_NOT_WRITABLE) != 0) {
+				return;
+			}
+			if (shape.getBaseType(offset) != JSShape.TYPE_DOUBLE) {
 				shape = shape.updatePropertyType(offset, JSShape.TYPE_DOUBLE);
-			} else {
-				byte slotType = shape.getSlotType(offset);
-				if ((slotType & JSShape.FLAG_ACCESSOR) != 0) {
-					PropertyAccessor acc = (PropertyAccessor) currentRaw;
-					acc.callSetter(null, this, value);
-					return;
-				}
-				if ((slotType & JSShape.FLAG_NOT_WRITABLE) != 0) {
-					return;
-				}
-				if (shape.getBaseType(offset) != JSShape.TYPE_DOUBLE) {
-					shape = shape.updatePropertyType(offset, JSShape.TYPE_DOUBLE);
-				}
 			}
 			setDoubleSlot(offset, value);
 			onStructuralOrPropertyChange();
@@ -497,11 +510,10 @@ public class JSObject {
 
 	@SuppressWarnings({"DataFlowIssue", "DuplicatedCode"})
 	private void putDoubleSlow(int propId, double value) {
-		int offset = shape.getOffset(propId);
-		if (offset < 0) {
-			shape = shape.addProperty(propId, JSShape.TYPE_DOUBLE);
-			offset = shape.propertyCount - 1;
-		}
+		// 前面验证了offset < 0，直接添加就行
+		shape = shape.addProperty(propId, JSShape.TYPE_DOUBLE);
+		int offset = shape.propertyCount - 1;
+
 		setDoubleSlot(offset, value);
 		onStructuralOrPropertyChange();
 
@@ -526,14 +538,14 @@ public class JSObject {
 
 	public boolean handlePrototypePut(int propId, Object receiver, Object value) {
 		JSObject proto = this;
-		int depth = 0;
+		int      depth = 0;
 		while (proto != null && depth++ < 1000) {
 			int offset = proto.shape.getOffset(propId);
 			if (offset >= 0) {
 				byte slotType = proto.shape.getSlotType(offset);
 				if ((slotType & JSShape.FLAG_ACCESSOR) != 0) {
 					PropertyAccessor acc = (PropertyAccessor) proto.getRawObjectSlot(offset);
-					acc.callSetter(null, receiver, value);
+					acc.callSetter(proto.realm, receiver, value);
 					return true;
 				}
 				if ((slotType & JSShape.FLAG_NOT_WRITABLE) != 0) {
@@ -547,16 +559,28 @@ public class JSObject {
 	}
 
 	public void defineAccessor(String key, JSFunction getter, JSFunction setter, boolean enumerable) {
-		int     propId = SymbolTable.id(key);
-		int     offset = shape.getOffset(propId);
-		boolean exists = offset >= 0 && (isDoubleSlot(offset) || getRawObjectSlot(offset) != DELETED);
-		if (exists) {
+		defineAccessor(SymbolTable.id(key), getter, setter, enumerable);
+	}
+
+	public void defineAccessor(JSSymbol sym, JSFunction getter, JSFunction setter, boolean enumerable) {
+		if (sym == null) return;
+		defineAccessor(sym.getSymbolId(), getter, setter, enumerable);
+	}
+
+	private void defineAccessor(int propId, JSFunction getter, JSFunction setter, boolean enumerable) {
+		int offset = shape.getOffset(propId);
+		if (offset >= 0) {
 			byte currentType = shape.getSlotType(offset);
 			if ((currentType & JSShape.FLAG_ACCESSOR) != 0) {
 				PropertyAccessor current   = (PropertyAccessor) getRawObjectSlot(offset);
 				JSFunction       newGetter = getter != null ? getter : (current != null ? current.getter : null);
 				JSFunction       newSetter = setter != null ? setter : (current != null ? current.setter : null);
 				setSlot(offset, new PropertyAccessor(newGetter, newSetter));
+				byte newType = JSShape.FLAG_ACCESSOR;
+				if (!enumerable) newType |= JSShape.FLAG_NOT_ENUMERABLE;
+				if (currentType != newType) {
+					shape = shape.updatePropertyType(offset, newType);
+				}
 				onStructuralOrPropertyChange();
 				return;
 			}
@@ -577,23 +601,17 @@ public class JSObject {
 
 		int offset = shape.getOffset(propId);
 		if (offset >= 0) {
-			Object currentRaw = isDoubleSlot(offset) ? null : getRawObjectSlot(offset);
-			if (currentRaw == DELETED) {
-				byte newType = JSShape.TYPE_OBJECT; // 前面已知value不为Number
-				shape = shape.updatePropertyType(offset, newType);
-			} else {
-				byte slotType = shape.getSlotType(offset);
-				if ((slotType & JSShape.FLAG_ACCESSOR) != 0) {
-					PropertyAccessor acc = (PropertyAccessor) currentRaw;
-					acc.callSetter(null, this, value);
-					return;
-				}
-				if ((slotType & JSShape.FLAG_NOT_WRITABLE) != 0) {
-					return; // 只读属性，写入静默忽略
-				}
-				if (shape.getBaseType(offset) != JSShape.TYPE_OBJECT) {
-					shape = shape.updatePropertyType(offset, JSShape.TYPE_OBJECT);
-				}
+			byte slotType = shape.getSlotType(offset);
+			if ((slotType & JSShape.FLAG_ACCESSOR) != 0) {
+				PropertyAccessor acc = (PropertyAccessor) getRawObjectSlot(offset);
+				acc.callSetter(realm, this, value);
+				return;
+			}
+			if ((slotType & JSShape.FLAG_NOT_WRITABLE) != 0) {
+				return; // 只读属性，写入静默忽略
+			}
+			if (shape.getBaseType(offset) != JSShape.TYPE_OBJECT) {
+				shape = shape.updatePropertyType(offset, JSShape.TYPE_OBJECT);
 			}
 			setSlot(offset, value);
 			onStructuralOrPropertyChange();
@@ -629,33 +647,7 @@ public class JSObject {
 		}
 	}
 
-	private static final Map<JSObject, List<JSSymbol>> OBJECT_SYMBOLS = Collections.synchronizedMap(new WeakHashMap<>());
-
-	private void registerSymbolProperty(JSSymbol sym) {
-		if (sym != null && !sym.isWellKnown()) {
-			List<JSSymbol> list = OBJECT_SYMBOLS.computeIfAbsent(this, k -> new CopyOnWriteArrayList<>());
-			if (!list.contains(sym)) {
-				list.add(sym);
-			}
-		}
-	}
-
-	private void unregisterSymbolProperty(JSSymbol sym) {
-		if (sym != null && !sym.isWellKnown()) {
-			List<JSSymbol> list = OBJECT_SYMBOLS.get(this);
-			if (list != null) {
-				list.remove(sym);
-				if (list.isEmpty()) {
-					OBJECT_SYMBOLS.remove(this);
-				}
-			}
-		}
-	}
-
 	public void put(String key, Object value) {
-		if (JSSymbol.isSymbolKey(key)) {
-			registerSymbolProperty(JSSymbol.fromKey(key));
-		}
 		put(SymbolTable.id(key), value);
 	}
 
@@ -663,20 +655,15 @@ public class JSObject {
 	//region 查询与删除 API
 
 	public boolean has(int propId) {
-		int offset = shape.getOffset(propId);
-		if (offset >= 0) {
-			if (isDoubleSlot(offset)) {
-				return true;
-			}
-			// 只有 DELETED 表示不存在；null 和 undefined 均为对象上的有效属性
-			return getRawObjectSlot(offset) != DELETED;
+		if (hasOwn(propId)) {
+			return true;
 		}
 		JSObject proto = getPrototype();
 		return proto != null && propId >= 0 && proto.has(propId);
 	}
 
 	public boolean has(String key) {
-		int symId = SymbolTable.lookupId(key);
+		int symId = SymbolTable.lookupId(key); // key 为 null 返回 NO_SYMBOL
 		if (symId == SymbolTable.NO_SYMBOL) {
 			JSObject proto = getPrototype();
 			return proto != null && proto.has(key);
@@ -685,15 +672,11 @@ public class JSObject {
 	}
 
 	public boolean hasOwn(int propId) {
-		if (propId < 0) return false;
-		int offset = shape.getOffset(propId);
-		if (offset < 0) return false;
-		return isDoubleSlot(offset) || getRawObjectSlot(offset) != DELETED;
+		return propId >= 0 && shape.getOffset(propId) >= 0;
 	}
 
 	public boolean hasOwn(String key) {
-		if (key == null) return false;
-		int symId = SymbolTable.lookupId(key);
+		int symId = SymbolTable.lookupId(key); // key 为 null 返回 NO_SYMBOL
 		return symId != SymbolTable.NO_SYMBOL && hasOwn(symId);
 	}
 
@@ -720,7 +703,6 @@ public class JSObject {
 
 	public void put(JSSymbol sym, Object value) {
 		if (sym != null) {
-			registerSymbolProperty(sym);
 			put(sym.getSymbolId(), value);
 		}
 	}
@@ -731,23 +713,16 @@ public class JSObject {
 
 	public void delete(JSSymbol sym) {
 		if (sym != null) {
-			unregisterSymbolProperty(sym);
 			delete(sym.getSymbolId());
 		}
 	}
 
 	public boolean hasOwnProperty(String key) {
-		int symId = SymbolTable.lookupId(key);
-		if (symId == SymbolTable.NO_SYMBOL) return false;
-		return hasOwnProperty(symId);
+		return hasOwn(key);
 	}
 
 	public boolean hasOwnProperty(int propId) {
-		if (propId < 0) return false;
-		int offset = shape.getOffset(propId);
-		if (offset < 0) return false;
-		if (isDoubleSlot(offset)) return true;
-		return getRawObjectSlot(offset) != DELETED;
+		return hasOwn(propId);
 	}
 
 	public void delete(int propId) {
@@ -756,7 +731,7 @@ public class JSObject {
 			if (!shape.isConfigurable(offset)) {
 				return;
 			}
-			int n = shape.propertyCount;
+			int     n        = shape.propertyCount;
 			JSShape newShape = shape.removeProperty(offset);
 			for (int i = offset; i < n - 1; i++) {
 				moveSlot(i + 1, i);
@@ -797,14 +772,14 @@ public class JSObject {
 	}
 
 	public void delete(String key) {
-		if (JSSymbol.isSymbolKey(key)) {
-			unregisterSymbolProperty(JSSymbol.fromKey(key));
+		int symId = SymbolTable.lookupId(key); // key 为 null 返回 NO_SYMBOL
+		if (symId != SymbolTable.NO_SYMBOL) {
+			delete(symId);
 		}
-		delete(SymbolTable.id(key));
 	}
 
 	//endregion
-	//region 反射与遍历 API (仅过滤 DELETED，保留 undefined 属性)
+	//region 反射与遍历 API (仅过滤 NOT_FOUND，保留 undefined 属性)
 
 	public Set<String> keys() {
 		int count = shape.propertyCount;
@@ -814,10 +789,12 @@ public class JSObject {
 
 		Set<String> activeKeys = new LinkedHashSet<>(count);
 		for (int i = 0; i < count; i++) {
-			if (shape.isEnumerable(i) && (isDoubleSlot(i) || getRawObjectSlot(i) != DELETED)) {
+			if (shape.isEnumerable(i)) {
 				int    keyId = shape.getKeyId(i);
 				String name  = SymbolTable.name(keyId);
-				if (name != null && !JSSymbol.isSymbolKey(name)) activeKeys.add(name);
+				if (name != null && !JSSymbol.isSymbolKey(name)) {
+					activeKeys.add(name);
+				}
 			}
 		}
 		return activeKeys;
@@ -831,10 +808,10 @@ public class JSObject {
 
 		Set<String> allKeys = new LinkedHashSet<>(count);
 		for (int i = 0; i < count; i++) {
-			if (isDoubleSlot(i) || getRawObjectSlot(i) != DELETED) {
-				int    keyId = shape.getKeyId(i);
-				String name  = SymbolTable.name(keyId);
-				if (name != null && !JSSymbol.isSymbolKey(name)) allKeys.add(name);
+			int    keyId = shape.getKeyId(i);
+			String name  = SymbolTable.name(keyId);
+			if (name != null && !JSSymbol.isSymbolKey(name)) {
+				allKeys.add(name);
 			}
 		}
 		return allKeys;
@@ -848,13 +825,11 @@ public class JSObject {
 
 		List<JSSymbol> symbols = new ArrayList<>();
 		for (int i = 0; i < count; i++) {
-			if (isDoubleSlot(i) || getRawObjectSlot(i) != DELETED) {
-				int    keyId = shape.getKeyId(i);
-				String name  = SymbolTable.name(keyId);
-				if (JSSymbol.isSymbolKey(name)) {
-					JSSymbol sym = JSSymbol.fromKey(name);
-					if (sym != null) symbols.add(sym);
-				}
+			int    keyId = shape.getKeyId(i);
+			String name  = SymbolTable.name(keyId);
+			if (JSSymbol.isSymbolKey(name)) { /* 包括name != null */
+				JSSymbol sym = JSSymbol.fromKey(name);
+				if (sym != null) symbols.add(sym);
 			}
 		}
 		return symbols;
@@ -869,41 +844,47 @@ public class JSObject {
 		Map<String, Object> map = new LinkedHashMap<>(count);
 		for (int i = 0; i < count; i++) {
 			if (!shape.isEnumerable(i)) continue;
+			int    keyId = shape.getKeyId(i);
+			String name  = SymbolTable.name(keyId);
+			if (name == null || JSSymbol.isSymbolKey(name)) continue;
 			if (isDoubleSlot(i)) {
-				int    keyId = shape.getKeyId(i);
-				String name  = SymbolTable.name(keyId);
-				if (name != null && !JSSymbol.isSymbolKey(name)) {
-					map.put(name, getBoxedDouble(i));
-				}
+				map.put(name, getBoxedDouble(i));
 			} else {
 				Object raw = getRawObjectSlot(i);
-				if (raw != DELETED) {
-					int    keyId = shape.getKeyId(i);
-					String name  = SymbolTable.name(keyId);
-					if (name != null && !JSSymbol.isSymbolKey(name)) {
-						if (shape.isAccessor(i) && raw instanceof PropertyAccessor acc) {
-							map.put(name, acc.callGetter(null, this));
-						} else {
-							map.put(name, raw);
-						}
-					}
+				if (shape.hasAccessors && (shape.getSlotType(i) & JSShape.FLAG_ACCESSOR) != 0 && raw instanceof PropertyAccessor acc) {
+					map.put(name, acc.callGetter(realm, this));
+				} else {
+					map.put(name, raw);
 				}
 			}
 		}
 		return map;
 	}
 
+	private static final ThreadLocal<Set<JSObject>> TO_STRING_VISITING = ThreadLocal.withInitial(() -> Collections.newSetFromMap(new IdentityHashMap<>()));
+
 	@Override
 	public String toString() {
-		StringBuilder sb    = new StringBuilder("{");
-		boolean       first = true;
-		for (String key : keys()) {
-			if (!first) sb.append(", ");
-			first = false;
-			sb.append(key).append(": ").append(get(key));
+		Set<JSObject> visiting = TO_STRING_VISITING.get();
+		if (!visiting.add(this)) {
+			return "[Circular]";
 		}
-		sb.append("}");
-		return sb.toString();
+		try {
+			StringBuilder sb    = new StringBuilder("{");
+			boolean       first = true;
+			for (String key : keys()) {
+				if (!first) sb.append(", ");
+				first = false;
+				sb.append(key).append(": ").append(get(key));
+			}
+			sb.append("}");
+			return sb.toString();
+		} finally {
+			visiting.remove(this);
+			if (visiting.isEmpty()) {
+				TO_STRING_VISITING.remove(); // 释放线程局部 Map，避免长期常驻线程池
+			}
+		}
 	}
 	//endregion
 }

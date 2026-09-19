@@ -1310,7 +1310,7 @@ public class JSLinker {
 
 						while (current != null) {
 							int pOff = current.shape.getOffset(strKey);
-							if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.DELETED)) {
+							if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.NOT_FOUND)) {
 								holder = current;
 								holderOffset = pOff;
 								break;
@@ -1372,7 +1372,7 @@ public class JSLinker {
 
 						while (current != null) {
 							int pOff = current.shape.getOffset(symKey.getSymbolId());
-							if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.DELETED)) {
+							if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.NOT_FOUND)) {
 								holder = current;
 								holderOffset = pOff;
 								break;
@@ -1604,7 +1604,7 @@ public class JSLinker {
 				if (ChainedCallSite.ENABLE_STATS) ChainedCallSite.STATS_HITS.increment();
 				int offset = (int) entry;
 				Object raw = jsObj.getRawObjectSlot(offset);
-				if (raw != JSObject.DELETED) {
+				if (raw != JSObject.NOT_FOUND) {
 					return jsObj.getSlot(offset);
 				}
 				return jsObj.get(propName);
@@ -1619,7 +1619,7 @@ public class JSLinker {
 					long newEntry = ((long) s.id << 32) | (offset & 0xFFFFFFFFL);
 					ChainedCallSite.CACHE_VH.setOpaque(cache, idx, newEntry);
 					Object raw = jsObj.getRawObjectSlot(offset);
-					if (raw != JSObject.DELETED) {
+					if (raw != JSObject.NOT_FOUND) {
 						return jsObj.getSlot(offset);
 					}
 				}
@@ -2182,7 +2182,7 @@ public class JSLinker {
 
 				while (current != null) {
 					int pOff = (propId >= 0) ? current.shape.getOffset(propId) : current.shape.getOffset(propName);
-					if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.DELETED)) {
+					if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.NOT_FOUND)) {
 						holder = current;
 						holderOffset = pOff;
 						break;
@@ -3479,7 +3479,7 @@ public class JSLinker {
 							List<JSObject> chain = null;
 							while (current != null) {
 								int mOff = current.shape.getOffset(methodName);
-								if (mOff >= 0 && (current.isDoubleSlot(mOff) || current.getRawObjectSlot(mOff) != JSObject.DELETED)) {
+								if (mOff >= 0 && (current.isDoubleSlot(mOff) || current.getRawObjectSlot(mOff) != JSObject.NOT_FOUND)) {
 									holder = current;
 									break;
 								}
@@ -4124,6 +4124,15 @@ public class JSLinker {
 		return newObj;
 	}
 
+	public static Object newJSFunctionN(JSFunction ctor, Object[] args, JSObject cachedProto) throws Throwable {
+		JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto) : new JSObject();
+		Object   res    = ctor.call(null, newObj, args);
+		if (res instanceof JSBridgedObject || (res != null && res != JSUndefined.INSTANCE && !(res instanceof Number || res instanceof Boolean || res instanceof String || res instanceof Character))) {
+			return res;
+		}
+		return newObj;
+	}
+
 	public static Object newArrayInstance0(Class<?> componentType) {
 		return Array.newInstance(componentType, 0);
 	}
@@ -4320,6 +4329,9 @@ public class JSLinker {
 				fastTarget = MethodHandles.insertArguments(NewMH.NEW_JS_FUNC3, 4, cachedProto);
 			} else if (arity == 4) {
 				fastTarget = MethodHandles.insertArguments(NewMH.NEW_JS_FUNC4, 5, cachedProto);
+			} else {
+				fastTarget = MethodHandles.insertArguments(NewMH.NEW_JS_FUNC_N, 2, cachedProto)
+				 .asCollector(1, Object[].class, arity);
 			}
 
 			if (fastTarget != null) {
@@ -4327,7 +4339,14 @@ public class JSLinker {
 				if (site.type().parameterCount() > 1) {
 					test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
 				}
-				site.installGuardOrSwitchMegamorphic(test, fastTarget.asType(site.type()));
+				MethodHandle guarded = fastTarget.asType(site.type());
+				if (ctor instanceof JSObject jsObj) {
+					MethodHandle fb = site.getInitialFallback();
+					if (fb != null) {
+						guarded = jsObj.getOrCreateProtoSwitchPoint().guardWithTest(guarded, fb.asType(site.type()));
+					}
+				}
+				site.installGuardOrSwitchMegamorphic(test, guarded);
 			}
 
 			JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto) : new JSObject();
@@ -5079,7 +5098,7 @@ public class JSLinker {
 
 					while (current != null) {
 						int pOff = (propId >= 0) ? current.shape.getOffset(propId) : current.shape.getOffset(propName);
-						if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.DELETED)) {
+						if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.NOT_FOUND)) {
 							holder = current;
 							holderOffset = pOff;
 							break;
@@ -5276,7 +5295,7 @@ public class JSLinker {
 
 					while (current != null) {
 						int pOff = (propId >= 0) ? current.shape.getOffset(propId) : current.shape.getOffset(propName);
-						if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.DELETED)) {
+						if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.NOT_FOUND)) {
 							holder = current;
 							holderOffset = pOff;
 							break;
@@ -5461,7 +5480,7 @@ public class JSLinker {
 
 					while (current != null) {
 						int pOff = (propId >= 0) ? current.shape.getOffset(propId) : current.shape.getOffset(propName);
-						if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.DELETED)) {
+						if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.NOT_FOUND)) {
 							holder = current;
 							holderOffset = pOff;
 							break;

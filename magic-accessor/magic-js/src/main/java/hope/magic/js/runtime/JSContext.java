@@ -884,7 +884,7 @@ public class JSContext {
 					int symId = SymbolTable.lookupId(key);
 					if (symId != SymbolTable.NO_SYMBOL) {
 						int offset = jsObj.shape.getOffset(symId);
-						if (offset >= 0 && (jsObj.isDoubleSlot(offset) || jsObj.getRawObjectSlot(offset) != JSObject.DELETED)) {
+						if (offset >= 0 && (jsObj.isDoubleSlot(offset) || jsObj.getRawObjectSlot(offset) != JSObject.NOT_FOUND)) {
 							return jsObj.shape.isEnumerable(offset) ? Boolean.TRUE : Boolean.FALSE;
 						}
 					}
@@ -894,7 +894,7 @@ public class JSContext {
 				int symId = SymbolTable.lookupId(key);
 				if (symId == SymbolTable.NO_SYMBOL) return Boolean.FALSE;
 				int offset = jsObj.shape.getOffset(symId);
-				if (offset < 0 || (!jsObj.isDoubleSlot(offset) && jsObj.getRawObjectSlot(offset) == JSObject.DELETED)) {
+				if (offset < 0 || (!jsObj.isDoubleSlot(offset) && jsObj.getRawObjectSlot(offset) == JSObject.NOT_FOUND)) {
 					return Boolean.FALSE;
 				}
 				return jsObj.shape.isEnumerable(offset) ? Boolean.TRUE : Boolean.FALSE;
@@ -1106,7 +1106,7 @@ public class JSContext {
 			int    propId = SymbolTable.id(key);
 
 			int     offset = jsObj.shape.getOffset(propId);
-			boolean exists = offset >= 0 && (jsObj.isDoubleSlot(offset) || jsObj.getRawObjectSlot(offset) != JSObject.DELETED);
+			boolean exists = offset >= 0 && (jsObj.isDoubleSlot(offset) || jsObj.getRawObjectSlot(offset) != JSObject.NOT_FOUND);
 
 			if (jsObj instanceof JSGlobalThis globalThis) {
 				globalThis.deletedGlobals.remove(key);
@@ -1292,7 +1292,7 @@ public class JSContext {
 					return JSUndefined.INSTANCE;
 				}
 				int offset = jsObj.shape.getOffset(propId);
-				if (offset >= 0 && (jsObj.isDoubleSlot(offset) || jsObj.getRawObjectSlot(offset) != JSObject.DELETED)) {
+				if (offset >= 0 && (jsObj.isDoubleSlot(offset) || jsObj.getRawObjectSlot(offset) != JSObject.NOT_FOUND)) {
 					JSObject desc = new JSObject();
 					if (jsObj.shape.isAccessor(offset)) {
 						PropertyAccessor acc = (PropertyAccessor) jsObj.getRawObjectSlot(offset);
@@ -1323,7 +1323,7 @@ public class JSContext {
 			}
 
 			int    offset = jsObj.shape.getOffset(propId);
-			if (offset < 0 || (!jsObj.isDoubleSlot(offset) && jsObj.getRawObjectSlot(offset) == JSObject.DELETED)) {
+			if (offset < 0 || (!jsObj.isDoubleSlot(offset) && jsObj.getRawObjectSlot(offset) == JSObject.NOT_FOUND)) {
 				return JSUndefined.INSTANCE;
 			}
 
@@ -1551,6 +1551,15 @@ public class JSContext {
 				return res;
 			}));
 
+			// Array[Symbol.species] = get [Symbol.species]() { return this; }
+			// Per ECMAScript spec 23.1.2.5: Array[Symbol.species] is an accessor
+			// whose getter returns `this`, allowing subclasses to override which
+			// constructor is used in map/filter/slice/concat/flat.
+			// Overriding this property invalidates the arraySpeciesSwitchPoint.
+			ctor.defineAccessor(JSSymbol.SPECIES,
+				(cx2, thisObj2, args2) -> thisObj2,
+				null, false);
+
 			mountArrayPrototypeMethods(proto);
 			proto.setIsArrayPrototype(true);
 			BuiltinProtector.resetAll();
@@ -1618,7 +1627,7 @@ public class JSContext {
 				}
 				Object thisArg = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
 				if (O instanceof JSArray jsArr && jsArr.isDense()) {
-					return fastDenseFilter(cx, jsArr, callback, thisArg);
+					return fastDenseFilter(cx, jsArr, callback, thisArg, O);
 				}
 				return genericFilter(cx, O, callback, thisArg);
 			}));
@@ -1685,7 +1694,10 @@ public class JSContext {
 				}
 				Object  thisArg = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
 				long    len     = toLength(O);
-				JSArray result  = new JSArray((int) Math.min(len, 65536));
+				JSArray result;
+				try { result = speciesConstruct(cx, O, len); } catch (Throwable t) {
+					if (t instanceof RuntimeException re) throw re; throw new RuntimeException(t);
+				}
 				result.setLength((double) len);
 				for (long k = 0; k < len; k++) {
 					if (hasProperty(O, k)) {
@@ -1919,7 +1931,11 @@ public class JSContext {
 					if (Double.isNaN(d)) d = 0;
 					end = d < 0 ? Math.max(0, len + (long) d) : Math.min(len, (long) d);
 				}
-				JSArray result = new JSArray();
+				JSArray result;
+				// size=0: result is filled via push(), pre-sizing would create holes before the elements
+				try { result = speciesConstruct(cx, O, 0); } catch (Throwable t) {
+					if (t instanceof RuntimeException re) throw re; throw new RuntimeException(t);
+				}
 				for (long k = start; k < end; k++) {
 					if (hasProperty(O, k)) {
 						result.push(getProperty(O, k));
@@ -1999,7 +2015,10 @@ public class JSContext {
 
 			proto.put("concat", makeMethod("concat", 1, (cx, thisObj, args) -> {
 				Object  O      = toObject(thisObj);
-				JSArray result = new JSArray();
+				JSArray result;
+				try { result = speciesConstruct(cx, O, 0); } catch (Throwable t) {
+					if (t instanceof RuntimeException re) throw re; throw new RuntimeException(t);
+				}
 				appendConcatItem(result, O);
 				for (Object arg : args) {
 					appendConcatItem(result, arg);
@@ -2136,7 +2155,10 @@ public class JSContext {
 				Object O     = toObject(thisObj);
 				double depth = args.length > 0 && args[0] != JSUndefined.INSTANCE ? JSOps.toDouble(args[0]) : 1.0;
 				if (Double.isNaN(depth) || depth < 0) depth = 0;
-				JSArray result = new JSArray();
+				JSArray result;
+				try { result = speciesConstruct(cx, O, 0); } catch (Throwable t) {
+					if (t instanceof RuntimeException re) throw re; throw new RuntimeException(t);
+				}
 				flattenIntoArray(cx, result, O, (int) Math.min(depth, 1000));
 				return result;
 			}));
@@ -2163,6 +2185,53 @@ public class JSContext {
 			});
 			proto.put("values", valuesFn);
 			proto.put(JSSymbol.ITERATOR, valuesFn);
+		}
+
+		/**
+		 * ECMAScript ArraySpeciesCreate (section 9.4.2.3 / 23.1.1.1.1).
+		 * Fast path: if the arraySpeciesSwitchPoint is still valid (Array[Symbol.species] was never
+		 * overridden), allocate a plain JSArray directly — zero branches, zero virtual dispatch.
+		 * Slow path: perform full species lookup:
+		 *   1. if O.constructor is Array (the built-in), return new JSArray(size)
+		 *   2. if O.constructor[Symbol.species] is null/undefined/not-a-function, return new JSArray(size)
+		 *   3. otherwise invoke the species constructor with `size` as argument
+		 */
+		static JSArray speciesConstruct(JSContext cx, Object O, long size) throws Throwable {
+			if (BuiltinProtector.isArraySpeciesValid()) {
+				// Common 99.999% case: no species override — zero overhead
+				return size > 0 ? new JSArray((int) Math.min(size, 1 << 20)) : new JSArray();
+			}
+			// Slow path: look up O.constructor[Symbol.species]
+			if (O instanceof JSObject jsO) {
+				Object ctor = jsO.get("constructor");
+				if (ctor instanceof JSObject jsCtor) {
+					if (ctor == ARRAY) {
+						// Explicitly the built-in Array constructor — fast exit
+						return size > 0 ? new JSArray((int) Math.min(size, 1 << 20)) : new JSArray();
+					}
+					Object species = jsCtor.get(JSSymbol.SPECIES);
+					if (species != null && species != JSUndefined.INSTANCE) {
+						if (!(species instanceof JSFunction speciesFn)) {
+							throw makeTypeError("Symbol.species must be a constructor");
+						}
+						try {
+							Object result = JSLinker.newGeneric(speciesFn, size > 0 ? new Object[]{ (double) size } : JSFunction.EMPTY_ARGS);
+							if (result instanceof JSArray arr) return arr;
+							if (result instanceof JSObject resObj) {
+								JSArray arr = new JSArray();
+								// copy result into JSArray wrapper is not needed — but per spec
+								// Array.prototype methods expect the result to BE the container
+								// so we just return a new JSArray and fill into it normally
+								return arr;
+							}
+						} catch (Throwable t) {
+							if (t instanceof RuntimeException re) throw re;
+							throw new RuntimeException(t);
+						}
+					}
+				}
+			}
+			return size > 0 ? new JSArray((int) Math.min(size, 1 << 20)) : new JSArray();
 		}
 
 		private static Object fastDenseReduce(JSContext cx, JSArray jsArr, JSFunction callback, Object[] args)
@@ -2241,10 +2310,10 @@ public class JSContext {
 			return accumulator;
 		}
 
-		private static JSArray fastDenseFilter(JSContext cx, JSArray jsArr, JSFunction callback, Object thisArg)
+		private static JSArray fastDenseFilter(JSContext cx, JSArray jsArr, JSFunction callback, Object thisArg, Object O)
 		 throws Throwable {
 			long    len    = jsArr.length();
-			JSArray result = new JSArray();
+			JSArray result = speciesConstruct(cx, O, 0);
 			for (int i = 0; i < len; i++) {
 				if (!jsArr.isDense() || i >= jsArr.denseSize) {
 					for (long k = i; k < len; k++) {
@@ -2268,7 +2337,7 @@ public class JSContext {
 
 		private static JSArray genericFilter(JSContext cx, Object O, JSFunction callback, Object thisArg) throws Throwable {
 			long    len    = toLength(O);
-			JSArray result = new JSArray();
+			JSArray result = speciesConstruct(cx, O, 0);
 			for (long k = 0; k < len; k++) {
 				if (hasProperty(O, k)) {
 					Object kValue   = getProperty(O, k);
@@ -3561,6 +3630,12 @@ public class JSContext {
 				Object iterable = args.length > 0 ? args[0] : null;
 				return JSPromise.any(current, iterable);
 			}));
+				// Promise[Symbol.species] = get [Symbol.species]() { return this; }
+			// Per ECMAScript spec 25.6.4.5: Promise[@@species] is an accessor whose
+			// getter returns `this`. Overriding invalidates the promiseSpeciesSwitchPoint.
+			ctor.defineAccessor(JSSymbol.SPECIES,
+				(cx2, thisObj2, args2) -> thisObj2,
+				null, false);
 			return ctor;
 		}
 	}
@@ -3610,7 +3685,7 @@ public class JSContext {
 				return get(name, receiver);
 			}
 			Object ownVal = getOwn(propId, receiver, cx);
-			if (ownVal != DELETED) return ownVal;
+			if (ownVal != NOT_FOUND) return ownVal;
 			JSObject proto = getPrototype();
 			return proto != null ? proto.get(propId, receiver) : JSUndefined.INSTANCE;
 		}
@@ -3619,7 +3694,7 @@ public class JSContext {
 		public Object get(String key, Object receiver) {
 			if (deletedGlobals.contains(key)) return JSUndefined.INSTANCE;
 			Object ownVal = getOwn(key, receiver, cx);
-			if (ownVal != DELETED) return ownVal;
+			if (ownVal != NOT_FOUND) return ownVal;
 			Object val = cx.get(key);
 			if (val != JSUndefined.INSTANCE) return val;
 			JSObject proto = getPrototype();
@@ -3710,7 +3785,7 @@ public class JSContext {
 				int offset = shape.getOffset(symId);
 				if (offset >= 0) {
 					if (isDoubleSlot(offset)) return true;
-					return getRawObjectSlot(offset) != DELETED;
+					return getRawObjectSlot(offset) != NOT_FOUND;
 				}
 			}
 			if (isBuiltinGlobal(key)) return true;
@@ -3754,7 +3829,7 @@ public class JSContext {
 			Set<String> activeKeys = new LinkedHashSet<>();
 			int count = shape.propertyCount;
 			for (int i = 0; i < count; i++) {
-				if (shape.isEnumerable(i) && (isDoubleSlot(i) || getRawObjectSlot(i) != DELETED)) {
+				if (shape.isEnumerable(i) && (isDoubleSlot(i) || getRawObjectSlot(i) != NOT_FOUND)) {
 					int keyId = shape.getKeyId(i);
 					String name = SymbolTable.name(keyId);
 					if (name != null && !deletedGlobals.contains(name)) {
@@ -3778,7 +3853,7 @@ public class JSContext {
 			Set<String> allKeys = new LinkedHashSet<>();
 			int count = shape.propertyCount;
 			for (int i = 0; i < count; i++) {
-				if (isDoubleSlot(i) || getRawObjectSlot(i) != DELETED) {
+				if (isDoubleSlot(i) || getRawObjectSlot(i) != NOT_FOUND) {
 					int keyId = shape.getKeyId(i);
 					String name = SymbolTable.name(keyId);
 					if (name != null && !deletedGlobals.contains(name)) {

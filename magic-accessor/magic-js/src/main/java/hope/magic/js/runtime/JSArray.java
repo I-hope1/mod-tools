@@ -288,7 +288,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		}
 		String key = JSLinker.fastIntToString((int) index);
 		Object val = getOwn(key, this);
-		if (val != DELETED) {
+		if (val != NOT_FOUND) {
 			return val;
 		}
 		JSObject proto = getPrototype();
@@ -505,7 +505,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			return (double) length;
 		}
 		Object val = getOwn(propId, receiver);
-		if (val != DELETED) {
+		if (val != NOT_FOUND) {
 			return val;
 		}
 		String name = SymbolTable.name(propId);
@@ -538,7 +538,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			}
 		}
 		Object val = getOwn(key, receiver);
-		if (val != DELETED) {
+		if (val != NOT_FOUND) {
 			return val;
 		}
 		JSObject proto = getPrototype();
@@ -564,7 +564,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 				return getDoubleSlot(offset);
 			}
 			Object val = getRawObjectSlot(offset);
-			if (val != DELETED) {
+			if (val != NOT_FOUND) {
 				if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
 					PropertyAccessor acc = (PropertyAccessor) val;
 					return JSOps.toDouble(acc.callGetter(null, receiver));
@@ -612,7 +612,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 					return getDoubleSlot(offset);
 				}
 				Object val = getRawObjectSlot(offset);
-				if (val != DELETED) {
+				if (val != NOT_FOUND) {
 					if (shape.hasAccessors && (shape.getSlotType(offset) & JSShape.FLAG_ACCESSOR) != 0) {
 						PropertyAccessor acc = (PropertyAccessor) val;
 						return JSOps.toDouble(acc.callGetter(null, receiver));
@@ -698,7 +698,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			int offset = shape.getOffset(symId);
 			if (offset >= 0) {
 				if (isDoubleSlot(offset)) return true;
-				return getRawObjectSlot(offset) != DELETED;
+				return getRawObjectSlot(offset) != NOT_FOUND;
 			}
 		}
 		JSObject proto = getPrototype();

@@ -21,6 +21,12 @@ public final class BuiltinProtector {
 	// 3. 全局核心单例槽位保护器 (Global Property Cells)
 	private static final ConcurrentHashMap<Integer, SwitchPoint> GLOBAL_SLOT_SWITCH_POINTS = new ConcurrentHashMap<>();
 
+	// 4. Array[Symbol.species] 协议保护器 (保护 Array[Symbol.species] 与 Array.prototype.constructor 未被重写)
+	private static volatile SwitchPoint arraySpeciesSwitchPoint = new SwitchPoint();
+
+	// 5. Promise[Symbol.species] 协议保护器 (保护 Promise[Symbol.species] 与 Promise.prototype.constructor 未被重载)
+	private static volatile SwitchPoint promiseSpeciesSwitchPoint = new SwitchPoint();
+
 	private BuiltinProtector() {}
 
 	//region Array Protector
@@ -119,6 +125,38 @@ public final class BuiltinProtector {
 		return null;
 	}
 
+	//region Species Protectors
+
+	public static SwitchPoint getArraySpeciesSwitchPoint() {
+		return arraySpeciesSwitchPoint;
+	}
+
+	public static boolean isArraySpeciesValid() {
+		return !arraySpeciesSwitchPoint.hasBeenInvalidated();
+	}
+
+	public static synchronized void invalidateArraySpeciesProtector() {
+		SwitchPoint sp = arraySpeciesSwitchPoint;
+		if (sp != null && !sp.hasBeenInvalidated()) {
+			SwitchPoint.invalidateAll(new SwitchPoint[]{ sp });
+		}
+	}
+
+	public static SwitchPoint getPromiseSpeciesSwitchPoint() {
+		return promiseSpeciesSwitchPoint;
+	}
+
+	public static boolean isPromiseSpeciesValid() {
+		return !promiseSpeciesSwitchPoint.hasBeenInvalidated();
+	}
+
+	public static synchronized void invalidatePromiseSpeciesProtector() {
+		SwitchPoint sp = promiseSpeciesSwitchPoint;
+		if (sp != null && !sp.hasBeenInvalidated()) {
+			SwitchPoint.invalidateAll(new SwitchPoint[]{ sp });
+		}
+	}
+
 	//endregion
 
 	public static synchronized void resetAll() {
@@ -139,5 +177,17 @@ public final class BuiltinProtector {
 			SwitchPoint.invalidateAll(new SwitchPoint[]{ spIter });
 		}
 		iteratorSwitchPoint = new SwitchPoint();
+
+		SwitchPoint spSpecies = arraySpeciesSwitchPoint;
+		if (spSpecies != null && !spSpecies.hasBeenInvalidated()) {
+			SwitchPoint.invalidateAll(new SwitchPoint[]{ spSpecies });
+		}
+		arraySpeciesSwitchPoint = new SwitchPoint();
+
+		SwitchPoint spPromise = promiseSpeciesSwitchPoint;
+		if (spPromise != null && !spPromise.hasBeenInvalidated()) {
+			SwitchPoint.invalidateAll(new SwitchPoint[]{ spPromise });
+		}
+		promiseSpeciesSwitchPoint = new SwitchPoint();
 	}
 }

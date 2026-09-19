@@ -143,42 +143,42 @@ public class FastAccessor {
 	public static void setSlot7Double(JSObject target, double val) { target.prim7 = Double.doubleToRawLongBits(val); }
 	public static Object getSlot0PureObject(JSObject obj) {
 		Object val;
-		if ((val = obj.obj0) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		if ((val = obj.obj0) == JSObject.NOT_FOUND) return JSUndefined.INSTANCE;
 		return val;
 	}
 	public static Object getSlot1PureObject(JSObject obj) {
 		Object val;
-		if ((val = obj.obj1) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		if ((val = obj.obj1) == JSObject.NOT_FOUND) return JSUndefined.INSTANCE;
 		return val;
 	}
 	public static Object getSlot2PureObject(JSObject obj) {
 		Object val;
-		if ((val = obj.obj2) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		if ((val = obj.obj2) == JSObject.NOT_FOUND) return JSUndefined.INSTANCE;
 		return val;
 	}
 	public static Object getSlot3PureObject(JSObject obj) {
 		Object val;
-		if ((val = obj.obj3) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		if ((val = obj.obj3) == JSObject.NOT_FOUND) return JSUndefined.INSTANCE;
 		return val;
 	}
 	public static Object getSlot4PureObject(JSObject obj) {
 		Object val;
-		if ((val = obj.obj4) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		if ((val = obj.obj4) == JSObject.NOT_FOUND) return JSUndefined.INSTANCE;
 		return val;
 	}
 	public static Object getSlot5PureObject(JSObject obj) {
 		Object val;
-		if ((val = obj.obj5) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		if ((val = obj.obj5) == JSObject.NOT_FOUND) return JSUndefined.INSTANCE;
 		return val;
 	}
 	public static Object getSlot6PureObject(JSObject obj) {
 		Object val;
-		if ((val = obj.obj6) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		if ((val = obj.obj6) == JSObject.NOT_FOUND) return JSUndefined.INSTANCE;
 		return val;
 	}
 	public static Object getSlot7PureObject(JSObject obj) {
 		Object val;
-		if ((val = obj.obj7) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		if ((val = obj.obj7) == JSObject.NOT_FOUND) return JSUndefined.INSTANCE;
 		return val;
 	}
 	public static void setSlot0PureObject(JSObject obj, Object val) { obj.obj0 = val; }
@@ -243,49 +243,49 @@ public class FastAccessor {
 	public static Object getSlot0Object(JSObject obj) {
 		if (((int) obj.doubleFieldMask & 1) != 0) return boxDoubleBits(obj.prim0);
 		Object val;
-		if ((val = obj.obj0) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		if ((val = obj.obj0) == JSObject.NOT_FOUND) return JSUndefined.INSTANCE;
 		return val;
 	}
 	public static Object getSlot1Object(JSObject obj) {
 		if (((int) obj.doubleFieldMask & 2) != 0) return boxDoubleBits(obj.prim1);
 		Object val;
-		if ((val = obj.obj1) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		if ((val = obj.obj1) == JSObject.NOT_FOUND) return JSUndefined.INSTANCE;
 		return val;
 	}
 	public static Object getSlot2Object(JSObject obj) {
 		if (((int) obj.doubleFieldMask & 4) != 0) return boxDoubleBits(obj.prim2);
 		Object val;
-		if ((val = obj.obj2) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		if ((val = obj.obj2) == JSObject.NOT_FOUND) return JSUndefined.INSTANCE;
 		return val;
 	}
 	public static Object getSlot3Object(JSObject obj) {
 		if (((int) obj.doubleFieldMask & 8) != 0) return boxDoubleBits(obj.prim3);
 		Object val;
-		if ((val = obj.obj3) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		if ((val = obj.obj3) == JSObject.NOT_FOUND) return JSUndefined.INSTANCE;
 		return val;
 	}
 	public static Object getSlot4Object(JSObject obj) {
 		if (((int) obj.doubleFieldMask & 16) != 0) return boxDoubleBits(obj.prim4);
 		Object val;
-		if ((val = obj.obj4) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		if ((val = obj.obj4) == JSObject.NOT_FOUND) return JSUndefined.INSTANCE;
 		return val;
 	}
 	public static Object getSlot5Object(JSObject obj) {
 		if (((int) obj.doubleFieldMask & 32) != 0) return boxDoubleBits(obj.prim5);
 		Object val;
-		if ((val = obj.obj5) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		if ((val = obj.obj5) == JSObject.NOT_FOUND) return JSUndefined.INSTANCE;
 		return val;
 	}
 	public static Object getSlot6Object(JSObject obj) {
 		if (((int) obj.doubleFieldMask & 64) != 0) return boxDoubleBits(obj.prim6);
 		Object val;
-		if ((val = obj.obj6) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		if ((val = obj.obj6) == JSObject.NOT_FOUND) return JSUndefined.INSTANCE;
 		return val;
 	}
 	public static Object getSlot7Object(JSObject obj) {
 		if (((int) obj.doubleFieldMask & 128) != 0) return boxDoubleBits(obj.prim7);
 		Object val;
-		if ((val = obj.obj7) == JSObject.DELETED) return JSUndefined.INSTANCE;
+		if ((val = obj.obj7) == JSObject.NOT_FOUND) return JSUndefined.INSTANCE;
 		return val;
 	}
 	public static void setSlot0Object(JSObject target, Object val) {

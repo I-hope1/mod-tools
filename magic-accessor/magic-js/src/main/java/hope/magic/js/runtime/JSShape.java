@@ -10,6 +10,22 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 2. 消除多余的 offsets 数组（offset 恒等于属性索引）。
  * 3. 采用单迁移内联缓存（Single-Transition Inline），消灭 Map 实例化与 Lambda 闭包分配。
  * 4. 支持物理 Offset 直通，配合 Unsafe 达成 1 指令寻址。
+ *
+ * <p><b>【核心架构约束与开发者修改注意事项 (Architectural Invariants)】</b>:
+ * <ul>
+ *   <li><b>红线 1：严格维护享元单例性（Canonical / Flyweight Pattern）</b>：
+ *       具有相同属性名称、添加顺序以及属性类型的对象，<b>必须全局共享同一个 JSShape 引用实例</b>。
+ *       JIT 编译后生成的快速路径机器码完全依赖引用指针比较 {@code target.shape == expectedShape}。
+ *       若重构迁移树时破坏了单例缓存，导致同一结构产生多个不同的 JSShape 实例，将导致调用点守卫永久失效并退化为 Megamorphic 慢路径。</li>
+ *   <li><b>红线 2：前 8 槽位顺序（0..7）连续分配约束</b>：
+ *       JSShape 为前 8 个属性分配的 {@code offset} 必须严格从 {@code 0, 1, 2, ... 7} 连续递增分配。
+ *       该分配规则与 {@link SlotMH#MH_GET_SLOT_DOUBLE}、{@link SlotMH#MH_SET_SLOT_DOUBLE}、
+ *       {@link SlotMH#MH_GET_SLOT_PURE_OBJECT} 以及 {@link FastAccessor} 的扁平无调用栈机器码强耦合。
+ *       任何打乱或跳过前 8 个 offset 的修改都会导致属性脱离单汇编指令直读特化。</li>
+ *   <li><b>红线 3：单向类型跃迁与类型反馈稳定性（Type Stability）</b>：
+ *       槽位类型变迁应保持单向单调性（如从未初始化 TYPE_UNKNOWN 升格为 TYPE_DOUBLE 或 TYPE_OBJECT），
+ *       避免在同一调用点引起频繁的 Deopt 去优化与重链震荡。</li>
+ * </ul>
  */
 public final class JSShape {
 	private static final AtomicInteger BUILTIN_ID_GEN = new AtomicInteger(-1);

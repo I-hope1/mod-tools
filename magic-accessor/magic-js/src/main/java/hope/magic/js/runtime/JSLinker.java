@@ -81,6 +81,12 @@ public class JSLinker {
 	public static final MethodHandle MH_JS_ARRAY_FAST_PUSH1;
 	public static final MethodHandle MH_JS_ARRAY_FAST_PUSH2;
 	public static final MethodHandle MH_JS_ARRAY_FAST_POP0;
+	public static final MethodHandle MH_CALL_OWN_METHOD0;
+	public static final MethodHandle MH_CALL_OWN_METHOD1;
+	public static final MethodHandle MH_CALL_OWN_METHOD2;
+	public static final MethodHandle MH_CALL_OWN_METHOD3;
+	public static final MethodHandle MH_CALL_OWN_METHOD4;
+	public static final MethodHandle MH_CALL_OWN_METHOD_N;
 
 	static {
 		try {
@@ -139,6 +145,12 @@ public class JSLinker {
 			MH_JS_ARRAY_FAST_PUSH1 = LOOKUP.findStatic(JSLinker.class, "jsArrayFastPush1", MethodType.methodType(Object.class, Object.class, Object.class));
 			MH_JS_ARRAY_FAST_PUSH2 = LOOKUP.findStatic(JSLinker.class, "jsArrayFastPush2", MethodType.methodType(Object.class, Object.class, Object.class, Object.class));
 			MH_JS_ARRAY_FAST_POP0 = LOOKUP.findStatic(JSLinker.class, "jsArrayFastPop0", MethodType.methodType(Object.class, Object.class));
+			MH_CALL_OWN_METHOD0 = LOOKUP.findStatic(JSLinker.class, "callOwnMethod0", MethodType.methodType(Object.class, int.class, Object.class));
+			MH_CALL_OWN_METHOD1 = LOOKUP.findStatic(JSLinker.class, "callOwnMethod1", MethodType.methodType(Object.class, int.class, Object.class, Object.class));
+			MH_CALL_OWN_METHOD2 = LOOKUP.findStatic(JSLinker.class, "callOwnMethod2", MethodType.methodType(Object.class, int.class, Object.class, Object.class, Object.class));
+			MH_CALL_OWN_METHOD3 = LOOKUP.findStatic(JSLinker.class, "callOwnMethod3", MethodType.methodType(Object.class, int.class, Object.class, Object.class, Object.class, Object.class));
+			MH_CALL_OWN_METHOD4 = LOOKUP.findStatic(JSLinker.class, "callOwnMethod4", MethodType.methodType(Object.class, int.class, Object.class, Object.class, Object.class, Object.class, Object.class));
+			MH_CALL_OWN_METHOD_N = LOOKUP.findStatic(JSLinker.class, "callOwnMethodN", MethodType.methodType(Object.class, int.class, Object.class, Object[].class));
 		} catch (Throwable e) {
 			throw new ExceptionInInitializerError(e);
 		}
@@ -3222,6 +3234,70 @@ public class JSLinker {
 		return isVoid ? JSUndefined.INSTANCE : res;
 	}
 
+	private static Object slowOwnMethod(JSObject obj, int offset, Object[] args) throws Throwable {
+		int propId = obj.shape.getPropertyId(offset);
+		String propName = propId >= 0 ? SymbolTable.name(propId) : "method";
+		Object member = obj.get(propName);
+		if (member instanceof JSFunction fn) {
+			return fn.call(null, obj, args != null ? args : new Object[0]);
+		}
+		throw new RuntimeException("TypeError: " + (obj != null ? obj.toString() : "object") + "." + propName + " is not a function");
+	}
+
+	public static Object callOwnMethod0(int offset, Object target) throws Throwable {
+		JSObject obj = (JSObject) target;
+		Object raw = (offset < 8) ? obj.getRawObjectSlot(offset) : obj.getSlot(offset);
+		if (raw instanceof JSFunction fn) {
+			return fn.call0(null, obj);
+		}
+		return slowOwnMethod(obj, offset, null);
+	}
+
+	public static Object callOwnMethod1(int offset, Object target, Object a0) throws Throwable {
+		JSObject obj = (JSObject) target;
+		Object raw = (offset < 8) ? obj.getRawObjectSlot(offset) : obj.getSlot(offset);
+		if (raw instanceof JSFunction fn) {
+			return fn.call1(null, obj, a0);
+		}
+		return slowOwnMethod(obj, offset, new Object[]{ a0 });
+	}
+
+	public static Object callOwnMethod2(int offset, Object target, Object a0, Object a1) throws Throwable {
+		JSObject obj = (JSObject) target;
+		Object raw = (offset < 8) ? obj.getRawObjectSlot(offset) : obj.getSlot(offset);
+		if (raw instanceof JSFunction fn) {
+			return fn.call2(null, obj, a0, a1);
+		}
+		return slowOwnMethod(obj, offset, new Object[]{ a0, a1 });
+	}
+
+	public static Object callOwnMethod3(int offset, Object target, Object a0, Object a1, Object a2) throws Throwable {
+		JSObject obj = (JSObject) target;
+		Object raw = (offset < 8) ? obj.getRawObjectSlot(offset) : obj.getSlot(offset);
+		if (raw instanceof JSFunction fn) {
+			return fn.call3(null, obj, a0, a1, a2);
+		}
+		return slowOwnMethod(obj, offset, new Object[]{ a0, a1, a2 });
+	}
+
+	public static Object callOwnMethod4(int offset, Object target, Object a0, Object a1, Object a2, Object a3) throws Throwable {
+		JSObject obj = (JSObject) target;
+		Object raw = (offset < 8) ? obj.getRawObjectSlot(offset) : obj.getSlot(offset);
+		if (raw instanceof JSFunction fn) {
+			return fn.call4(null, obj, a0, a1, a2, a3);
+		}
+		return slowOwnMethod(obj, offset, new Object[]{ a0, a1, a2, a3 });
+	}
+
+	public static Object callOwnMethodN(int offset, Object target, Object[] args) throws Throwable {
+		JSObject obj = (JSObject) target;
+		Object raw = (offset < 8) ? obj.getRawObjectSlot(offset) : obj.getSlot(offset);
+		if (raw instanceof JSFunction fn) {
+			return fn.call(null, obj, args);
+		}
+		return slowOwnMethod(obj, offset, args);
+	}
+
 	public static Object invokeFallback(ChainedCallSite site, Object target, Object[] args, String methodName)
 	 throws Throwable {
 		if (target == null || target == JSUndefined.INSTANCE) {
@@ -3252,11 +3328,20 @@ public class JSLinker {
 				directMh = directMh.asCollector(1, Object[].class, arity);
 			}
 
-			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
-			if (site.type().parameterCount() > 1) {
-				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+			if (site.getChainDepth() == 0) {
+				MethodHandle test = MH_IS_SAME_OBJECT.bindTo(target);
+				if (site.type().parameterCount() > 1) {
+					test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+				}
+				MethodHandle monomorphicTarget = MethodHandles.dropArguments(directMh.bindTo(func), 0, Object.class);
+				site.installGuardOrSwitchMegamorphic(test, monomorphicTarget.asType(site.type()));
+			} else {
+				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
+				if (site.type().parameterCount() > 1) {
+					test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+				}
+				site.installGuardOrSwitchMegamorphic(test, directMh.asType(site.type()));
 			}
-			site.installGuardOrSwitchMegamorphic(test, directMh.asType(site.type()));
 
 			JSContext cx = JSContext.current();
 			if (arity == 0) return func.call0(cx, JSUndefined.INSTANCE);
@@ -3309,11 +3394,20 @@ public class JSLinker {
 				directMh = directMh.asCollector(2, Object[].class, arity - 1);
 			}
 
-			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
-			if (site.type().parameterCount() > 1) {
-				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+			if (site.getChainDepth() == 0) {
+				MethodHandle test = MH_IS_SAME_OBJECT.bindTo(target);
+				if (site.type().parameterCount() > 1) {
+					test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+				}
+				MethodHandle monomorphicTarget = MethodHandles.dropArguments(directMh.bindTo(func), 0, Object.class);
+				site.installGuardOrSwitchMegamorphic(test, monomorphicTarget.asType(site.type()));
+			} else {
+				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
+				if (site.type().parameterCount() > 1) {
+					test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+				}
+				site.installGuardOrSwitchMegamorphic(test, directMh.asType(site.type()));
 			}
-			site.installGuardOrSwitchMegamorphic(test, directMh.asType(site.type()));
 
 			JSContext cx = JSContext.current();
 			Object thisArg = arity > 0 && args[0] != null ? args[0] : JSUndefined.INSTANCE;
@@ -3329,14 +3423,23 @@ public class JSLinker {
 			Object member = jsObj.get(methodName);
 			if (member instanceof JSFunction func) {
 				int ownOffset = jsObj.shape.getOffset(methodName);
-				// 当方法不在自身槽位上（offset < 0，即来自原型链），或为内置单例对象（如 JSObjectConstructor / JSArrayConstructor）时，函数实例恒定，方可绑定常量
-				if (ownOffset < 0 || jsObj instanceof JSContext.JSObjectConstructor || jsObj instanceof JSContext.JSArrayConstructor) {
+				// 当方法不在自身槽位上（offset < 0，即来自原型链），或为内置单例对象（如 JSObjectConstructor / JSArrayConstructor / Math / console 等）时，函数实例恒定，方可绑定常量
+				boolean isProtectedSingleton = (jsObj.getProtoSwitchPoint() != null
+					|| jsObj.isArrayPrototype()
+					|| jsObj instanceof JSContext.JSObjectConstructor
+					|| jsObj instanceof JSContext.JSArrayConstructor
+					|| jsObj == JSContext.LazyMath.MATH
+					|| jsObj == JSContext.LazyConsole.CONSOLE
+					|| jsObj == JSContext.LazyReflect.REFLECT
+					|| jsObj == JSContext.LazyMisc.JAVA
+					|| jsObj == JSContext.LazyMisc.PRINT);
+				if (ownOffset < 0 || isProtectedSingleton) {
 					MethodHandle test;
 					JSObject proto = (ownOffset < 0) ? jsObj.getPrototype() : null;
 					if (ownOffset < 0) {
 						test = (proto != null) ? MH_IS_EXACT_SHAPE_AND_PROTO.bindTo(jsObj.shape).bindTo(proto) : null;
 					} else {
-						test = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
+						test = (site.getChainDepth() == 0) ? MH_IS_SAME_OBJECT.bindTo(jsObj) : MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
 					}
 					if (test != null) {
 						if (site.type().parameterCount() > 1) {
@@ -3398,9 +3501,32 @@ public class JSLinker {
 								site.installGuardOrSwitchMegamorphic(test, exactFuncCall.asType(site.type()));
 							}
 						} else {
-							site.installGuardOrSwitchMegamorphic(test, exactFuncCall.asType(site.type()));
+							SwitchPoint sp = jsObj.getOrCreateProtoSwitchPoint();
+							site.installProtoGuard(jsObj.shape, sp, test, exactFuncCall.asType(site.type()));
 						}
 					}
+				} else if (ownOffset >= 0 && (jsObj.shape.getSlotType(ownOffset) & JSShape.FLAG_ACCESSOR) == 0 && site.getChainDepth() < 3) {
+					int arity = args.length;
+					MethodHandle callMh;
+					if (arity == 0) {
+						callMh = MethodHandles.insertArguments(MH_CALL_OWN_METHOD0, 0, ownOffset);
+					} else if (arity == 1) {
+						callMh = MethodHandles.insertArguments(MH_CALL_OWN_METHOD1, 0, ownOffset);
+					} else if (arity == 2) {
+						callMh = MethodHandles.insertArguments(MH_CALL_OWN_METHOD2, 0, ownOffset);
+					} else if (arity == 3) {
+						callMh = MethodHandles.insertArguments(MH_CALL_OWN_METHOD3, 0, ownOffset);
+					} else if (arity == 4) {
+						callMh = MethodHandles.insertArguments(MH_CALL_OWN_METHOD4, 0, ownOffset);
+					} else {
+						callMh = MethodHandles.insertArguments(MH_CALL_OWN_METHOD_N, 0, ownOffset)
+						 .asCollector(1, Object[].class, arity);
+					}
+					MethodHandle test = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
+					if (site.type().parameterCount() > 1) {
+						test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
+					}
+					site.installGuardOrSwitchMegamorphic(test, callMh.asType(site.type()));
 				}
 				if (jsObj instanceof JSArray jsArr && ownOffset < 0 && BuiltinProtector.isArrayProtoValid()) {
 					if ("push".equals(methodName)) {
@@ -3411,7 +3537,12 @@ public class JSLinker {
 						return jsArrayFastPop0(jsArr);
 					}
 				}
-				// 若为自有闭包属性，则不绑定死常量，保持动态调用
+				int arity = args.length;
+				if (arity == 0) return func.call0(null, jsObj);
+				if (arity == 1) return func.call1(null, jsObj, args[0]);
+				if (arity == 2) return func.call2(null, jsObj, args[0], args[1]);
+				if (arity == 3) return func.call3(null, jsObj, args[0], args[1], args[2]);
+				if (arity == 4) return func.call4(null, jsObj, args[0], args[1], args[2], args[3]);
 				return func.call(null, jsObj, args);
 			}
 			if (member instanceof Class<?> clazz) {

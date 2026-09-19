@@ -242,4 +242,100 @@ public class JSObjectPrototypeSwitchPointTest {
 		Object s2 = cIndexSite.dynamicInvoker().invokeExact((Object) inst, (Object) secretSym);
 		Assertions.assertEquals("top_secret", s2);
 	}
+
+	@Test
+	public void testProtectedSingletonMethodCallSiteSwitchPointAndDeopt() throws Throwable {
+		JSContext cx = new JSContext();
+		JSObject math = (JSObject) cx.eval("Math");
+		MethodHandles.Lookup lookup = MethodHandles.lookup();
+		MethodType type = MethodType.methodType(Object.class, Object.class, Object.class);
+
+		CallSite callSite = JSLinker.bootstrapInvoke(lookup, "abs", type, "abs");
+		ChainedCallSite site = (ChainedCallSite) callSite;
+
+		// 1. 首次调用受保护单例方法 Math.abs(-42)
+		Object res1 = site.dynamicInvoker().invokeExact((Object) math, (Object) (-42));
+		Assertions.assertEquals(42.0, ((Number) res1).doubleValue(), 0.0001);
+		Assertions.assertEquals(1, site.getChainDepth());
+
+		SwitchPoint sp = math.getProtoSwitchPoint();
+		Assertions.assertNotNull(sp);
+		Assertions.assertFalse(sp.hasBeenInvalidated());
+
+		// 2. 篡改单例方法 (Monkey patching Math.abs)
+		math.put("abs", (JSFunction) (ctx, thisObj, args) -> 999.0);
+		Assertions.assertTrue(sp.hasBeenInvalidated(), "SwitchPoint must be invalidated when Math is monkey-patched");
+
+		// 3. 再次调用：触发 Deopt 并执行新方法
+		Object res2 = site.dynamicInvoker().invokeExact((Object) math, (Object) (-42));
+		Assertions.assertEquals(999.0, ((Number) res2).doubleValue(), 0.0001);
+		Assertions.assertEquals(1, site.getChainDepth(), "Site should self-heal and reset depth to 1");
+	}
+
+	@Test
+	public void testPlainInstanceOwnMethodInlineCache() throws Throwable {
+		MethodHandles.Lookup lookup = MethodHandles.lookup();
+		MethodType type = MethodType.methodType(Object.class, Object.class);
+
+		CallSite callSite = JSLinker.bootstrapInvoke(lookup, "getX", type, "getX");
+		ChainedCallSite site = (ChainedCallSite) callSite;
+
+		JSObject p1 = new JSObject();
+		p1.put("x", 10);
+		p1.put("getX", (JSFunction) (cx, thisObj, args) -> ((JSObject) thisObj).get("x"));
+
+		// 1. 调用 p1.getX()，安装自有方法 Shape IC
+		Object res1 = site.dynamicInvoker().invokeExact((Object) p1);
+		Assertions.assertEquals(10.0, ((Number) res1).doubleValue(), 0.0001);
+		Assertions.assertEquals(1, site.getChainDepth());
+
+		// 2. 具有相同 Shape 的另一个实例 p2
+		JSObject p2 = new JSObject();
+		p2.put("x", 20);
+		p2.put("getX", (JSFunction) (cx, thisObj, args) -> ((JSObject) thisObj).get("x"));
+
+		// 验证 shape 相同
+		Assertions.assertEquals(p1.shape, p2.shape);
+
+		// 调用 p2.getX()：命中 Shape IC，无需重新链接，零额外开销
+		Object res2 = site.dynamicInvoker().invokeExact((Object) p2);
+		Assertions.assertEquals(20.0, ((Number) res2).doubleValue(), 0.0001);
+		Assertions.assertEquals(1, site.getChainDepth(), "Shape IC should hit without incrementing chain depth");
+
+		// 3. 将 p1.getX 替换为其它函数或删除
+		p1.put("getX", (JSFunction) (cx, thisObj, args) -> 888);
+		Object res3 = site.dynamicInvoker().invokeExact((Object) p1);
+		Assertions.assertEquals(888.0, ((Number) res3).doubleValue(), 0.0001);
+	}
+
+	@Test
+	public void testDirectFunctionCallMonomorphicAndPolymorphic() throws Throwable {
+		MethodHandles.Lookup lookup = MethodHandles.lookup();
+		MethodType type = MethodType.methodType(Object.class, Object.class, Object.class);
+
+		CallSite callSite = JSLinker.bootstrapInvoke(lookup, "$invoke$", type, "$invoke$");
+		ChainedCallSite site = (ChainedCallSite) callSite;
+
+		JSFunction fn1 = (cx, thisObj, args) -> ((int) args[0]) + 1;
+		JSFunction fn2 = (cx, thisObj, args) -> ((int) args[0]) * 2;
+
+		// 1. 单态调用：首个函数实例绑定 MH_IS_SAME_OBJECT 常量
+		Object res1 = site.dynamicInvoker().invokeExact((Object) fn1, (Object) 5);
+		Assertions.assertEquals(6, res1);
+		Assertions.assertEquals(1, site.getChainDepth());
+
+		// 再次调用相同函数
+		Object res2 = site.dynamicInvoker().invokeExact((Object) fn1, (Object) 10);
+		Assertions.assertEquals(11, res2);
+		Assertions.assertEquals(1, site.getChainDepth());
+
+		// 2. 多态调用：切换不同函数实例，演进到多态保护
+		Object res3 = site.dynamicInvoker().invokeExact((Object) fn2, (Object) 10);
+		Assertions.assertEquals(20, res3);
+		Assertions.assertEquals(2, site.getChainDepth());
+
+		// 两个不同函数均可正确调用
+		Assertions.assertEquals(8, site.dynamicInvoker().invokeExact((Object) fn1, (Object) 7));
+		Assertions.assertEquals(14, site.dynamicInvoker().invokeExact((Object) fn2, (Object) 7));
+	}
 }

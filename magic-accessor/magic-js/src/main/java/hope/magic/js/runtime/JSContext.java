@@ -285,6 +285,13 @@ public class JSContext {
 		}
 
 		@Override
+    public void onStructuralOrPropertyChange() {
+        super.onStructuralOrPropertyChange();
+        // 当且仅当修改 Array 构造函数自身时，精确触发失效，绝不引发任何类加载副作用
+        BuiltinProtector.invalidateArraySpeciesProtector();
+    }
+
+		@Override
 		public String toString() {
 			return "function Array() { [native code] }";
 		}
@@ -1370,6 +1377,7 @@ public class JSContext {
 
 		private static JSArray createArrayPrototype(JSObject objectProto) {
 			JSShape shape = JSShape.createStaticPrototypeShape(ARRAY_PROTO_PROPS);
+			JSObject proto = objectProto != null ? objectProto : LazyObject.OBJECT_PROTOTYPE;
 			return new JSArray(shape, objectProto);
 		}
 

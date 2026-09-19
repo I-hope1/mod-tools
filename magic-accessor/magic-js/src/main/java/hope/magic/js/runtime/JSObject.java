@@ -108,12 +108,13 @@ public class JSObject {
 			BuiltinProtector.invalidateIteratorProtector();
 			BuiltinProtector.invalidateArraySpeciesProtector();
 		}
-		if (this == JSContext.LazyArray.ARRAY) {
+		// 引发循环类加载死锁的静态引用
+		/* if (this == JSContext.LazyArray.ARRAY) {
 			BuiltinProtector.invalidateArraySpeciesProtector();
 		}
 		if (this == JSContext.LazyBuiltins.PROMISE || this == JSContext.LazyBuiltins.PROMISE_PROTOTYPE) {
 			BuiltinProtector.invalidatePromiseSpeciesProtector();
-		}
+		} */
 	}
 
 	public JSObject getPrototype() {

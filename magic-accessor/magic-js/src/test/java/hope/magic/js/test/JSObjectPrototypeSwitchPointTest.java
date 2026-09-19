@@ -118,4 +118,128 @@ public class JSObjectPrototypeSwitchPointTest {
 		Object result = cx.eval(script);
 		Assertions.assertEquals("hi Alice | hello Alice", result);
 	}
+
+	@Test
+	public void testDeepPrototypeChainConstantFoldingAndIntermediateShadowing() throws Throwable {
+		JSObject proto3 = new JSObject();
+		proto3.put("deepVal", "from_p3");
+
+		JSObject proto2 = new JSObject(proto3);
+		JSObject proto1 = new JSObject(proto2);
+		JSObject inst = new JSObject(proto1);
+
+		MethodHandles.Lookup lookup = MethodHandles.lookup();
+		MethodType type = MethodType.methodType(Object.class, Object.class);
+
+		CallSite callSite = JSLinker.bootstrapGetProp(lookup, "deepVal", type, "deepVal");
+		ChainedCallSite site = (ChainedCallSite) callSite;
+
+		// 1. 跨 3 层原型链初次读取：应当折叠为常量并为 proto1, proto2, proto3 全部装载 SwitchPoint 保护
+		Object got1 = site.dynamicInvoker().invokeExact((Object) inst);
+		Assertions.assertEquals("from_p3", got1);
+		Assertions.assertEquals(1, site.getChainDepth());
+
+		SwitchPoint sp1 = proto1.getProtoSwitchPoint();
+		SwitchPoint sp2 = proto2.getProtoSwitchPoint();
+		SwitchPoint sp3 = proto3.getProtoSwitchPoint();
+		Assertions.assertNotNull(sp1);
+		Assertions.assertNotNull(sp2);
+		Assertions.assertNotNull(sp3);
+
+		// 2. 中间原型 proto2 进行属性遮蔽 (Shadowing)
+		proto2.put("deepVal", "from_p2");
+		Assertions.assertTrue(sp2.hasBeenInvalidated(), "Intermediate prototype SwitchPoint must be invalidated upon property addition");
+
+		// 再次读取：中间原型 SwitchPoint 失效，Deopt 回退并自愈重链到 proto2
+		Object got2 = site.dynamicInvoker().invokeExact((Object) inst);
+		Assertions.assertEquals("from_p2", got2);
+		Assertions.assertEquals(1, site.getChainDepth());
+
+		// 3. 直接原型 proto1 再次遮蔽
+		proto1.put("deepVal", "from_p1");
+		Assertions.assertTrue(sp1.hasBeenInvalidated(), "Direct prototype SwitchPoint must be invalidated upon property addition");
+
+		Object got3 = site.dynamicInvoker().invokeExact((Object) inst);
+		Assertions.assertEquals("from_p1", got3);
+		Assertions.assertEquals(1, site.getChainDepth());
+
+		// 4. 实例自身写入自有属性遮蔽原型链
+		inst.put("deepVal", "from_inst");
+		Object got4 = site.dynamicInvoker().invokeExact((Object) inst);
+		Assertions.assertEquals("from_inst", got4);
+	}
+
+	@Test
+	public void testPrototypePrimitiveDoubleAndIntIC() throws Throwable {
+		JSObject proto = new JSObject();
+		proto.putDouble("gravity", 9.8);
+		proto.putDouble("maxCount", 100.0);
+
+		JSObject inst = new JSObject(proto);
+		MethodHandles.Lookup lookup = MethodHandles.lookup();
+
+		// A. 测试 bootstrapGetPropDouble 原型链 IC
+		MethodType doubleType = MethodType.methodType(double.class, Object.class);
+		CallSite doubleSite = JSLinker.bootstrapGetPropDouble(lookup, "gravity", doubleType, "gravity");
+		ChainedCallSite cDoubleSite = (ChainedCallSite) doubleSite;
+
+		double d1 = (double) cDoubleSite.dynamicInvoker().invokeExact((Object) inst);
+		Assertions.assertEquals(9.8, d1, 0.0001);
+		Assertions.assertEquals(1, cDoubleSite.getChainDepth());
+
+		// 原型篡改
+		proto.putDouble("gravity", 3.7);
+		double d2 = (double) cDoubleSite.dynamicInvoker().invokeExact((Object) inst);
+		Assertions.assertEquals(3.7, d2, 0.0001);
+		Assertions.assertEquals(1, cDoubleSite.getChainDepth());
+
+		// B. 测试 bootstrapGetPropInt 原型链 IC
+		MethodType intType = MethodType.methodType(int.class, Object.class);
+		CallSite intSite = JSLinker.bootstrapGetPropInt(lookup, "maxCount", intType, "maxCount");
+		ChainedCallSite cIntSite = (ChainedCallSite) intSite;
+
+		int i1 = (int) cIntSite.dynamicInvoker().invokeExact((Object) inst);
+		Assertions.assertEquals(100, i1);
+		Assertions.assertEquals(1, cIntSite.getChainDepth());
+
+		// 原型篡改
+		proto.putDouble("maxCount", 250.0);
+		int i2 = (int) cIntSite.dynamicInvoker().invokeExact((Object) inst);
+		Assertions.assertEquals(250, i2);
+		Assertions.assertEquals(1, cIntSite.getChainDepth());
+	}
+
+	@Test
+	public void testPrototypeDynamicIndexLookupIC() throws Throwable {
+		JSObject proto = new JSObject();
+		proto.put("theme", "dark");
+		JSSymbol secretSym = new JSSymbol("secret");
+		proto.put(secretSym, "classified");
+
+		JSObject inst = new JSObject(proto);
+		MethodHandles.Lookup lookup = MethodHandles.lookup();
+		MethodType type = MethodType.methodType(Object.class, Object.class, Object.class);
+
+		CallSite indexSite = JSLinker.bootstrapGetIndex(lookup, "getIndex", type);
+		ChainedCallSite cIndexSite = (ChainedCallSite) indexSite;
+
+		// 1. String Key 索引原型链查找
+		Object v1 = cIndexSite.dynamicInvoker().invokeExact((Object) inst, (Object) "theme");
+		Assertions.assertEquals("dark", v1);
+		Assertions.assertEquals(1, cIndexSite.getChainDepth());
+
+		// 篡改原型
+		proto.put("theme", "light");
+		Object v2 = cIndexSite.dynamicInvoker().invokeExact((Object) inst, (Object) "theme");
+		Assertions.assertEquals("light", v2);
+		Assertions.assertEquals(1, cIndexSite.getChainDepth());
+
+		// 2. Symbol Key 索引原型链查找
+		Object s1 = cIndexSite.dynamicInvoker().invokeExact((Object) inst, (Object) secretSym);
+		Assertions.assertEquals("classified", s1);
+
+		proto.put(secretSym, "top_secret");
+		Object s2 = cIndexSite.dynamicInvoker().invokeExact((Object) inst, (Object) secretSym);
+		Assertions.assertEquals("top_secret", s2);
+	}
 }

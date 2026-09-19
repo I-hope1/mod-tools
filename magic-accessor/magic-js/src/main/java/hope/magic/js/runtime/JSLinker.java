@@ -1245,6 +1245,22 @@ public class JSLinker {
 		       && key == expectedSymbol;
 	}
 
+	/** 原型链字符串属性守卫：Shape 相同、原型对象一致且 String Key 相同 */
+	public static boolean isExactShapeAndProtoAndStringKey(JSShape expectedShape, JSObject expectedProto, String expectedKey, Object target, Object key) {
+		return target instanceof JSObject jsObj
+		       && jsObj.shape == expectedShape
+		       && jsObj.getPrototype() == expectedProto
+		       && (key == expectedKey || (key instanceof String s && expectedKey.equals(s)));
+	}
+
+	/** 原型链符号属性守卫：Shape 相同、原型对象一致且 Symbol 引用指针完全一致 */
+	public static boolean isExactShapeAndProtoAndSymbol(JSShape expectedShape, JSObject expectedProto, JSSymbol expectedSymbol, Object target, Object key) {
+		return target instanceof JSObject jsObj
+		       && jsObj.shape == expectedShape
+		       && jsObj.getPrototype() == expectedProto
+		       && key == expectedSymbol;
+	}
+
 	/** 动态对象索引读取的通用 Fallback 入口 */
 	public static Object getIndexDynamicFallback(ChainedCallSite site, Object target, Object index) throws Throwable {
 		if (target instanceof JSContext.JSGlobalThis globalThis) {
@@ -1272,6 +1288,48 @@ public class JSLinker {
 
 					site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
 					return jsObj.getSlot(offset);
+				} else if (offset < 0 && site.getChainDepth() < 3) {
+					JSObject proto = jsObj.getPrototype();
+					if (proto != null) {
+						JSObject current = proto;
+						JSObject holder = null;
+						int holderOffset = -1;
+						List<JSObject> chain = null;
+
+						while (current != null) {
+							int pOff = current.shape.getOffset(strKey);
+							if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.DELETED)) {
+								holder = current;
+								holderOffset = pOff;
+								break;
+							}
+							if (chain == null) chain = new ArrayList<>(2);
+							chain.add(current);
+							current = current.getPrototype();
+						}
+
+						if (holder != null && (!holder.shape.hasAccessors || !holder.shape.isAccessor(holderOffset))) {
+							Object val = holder.getSlot(holderOffset);
+							MethodHandle test = LOOKUP.findStatic(
+							 JSLinker.class,
+							 "isExactShapeAndProtoAndStringKey",
+							 MethodType.methodType(boolean.class, JSShape.class, JSObject.class, String.class, Object.class, Object.class)
+							).bindTo(s).bindTo(proto).bindTo(strKey);
+
+							MethodHandle fb = site.getInitialFallback();
+							MethodHandle fbTyped = (fb != null) ? fb.asType(site.type()) : null;
+							MethodHandle constTarget = MethodHandles.dropArguments(
+								MethodHandles.constant(Object.class, val), 0, site.type().parameterList()
+							).asType(site.type());
+							if (chain != null && fbTyped != null) {
+								for (JSObject p : chain) {
+									constTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(constTarget, fbTyped);
+								}
+							}
+							site.installProtoGuard(s, holder.getOrCreateProtoSwitchPoint(), test, constTarget);
+							return val;
+						}
+					}
 				}
 			} else if (index instanceof JSSymbol symKey) {
 				JSShape s      = jsObj.shape;
@@ -1292,6 +1350,48 @@ public class JSLinker {
 
 					site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
 					return jsObj.getSlot(offset);
+				} else if (offset < 0 && site.getChainDepth() < 3) {
+					JSObject proto = jsObj.getPrototype();
+					if (proto != null) {
+						JSObject current = proto;
+						JSObject holder = null;
+						int holderOffset = -1;
+						List<JSObject> chain = null;
+
+						while (current != null) {
+							int pOff = current.shape.getOffset(symKey.getSymbolId());
+							if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.DELETED)) {
+								holder = current;
+								holderOffset = pOff;
+								break;
+							}
+							if (chain == null) chain = new ArrayList<>(2);
+							chain.add(current);
+							current = current.getPrototype();
+						}
+
+						if (holder != null && (!holder.shape.hasAccessors || !holder.shape.isAccessor(holderOffset))) {
+							Object val = holder.getSlot(holderOffset);
+							MethodHandle test = LOOKUP.findStatic(
+							 JSLinker.class,
+							 "isExactShapeAndProtoAndSymbol",
+							 MethodType.methodType(boolean.class, JSShape.class, JSObject.class, JSSymbol.class, Object.class, Object.class)
+							).bindTo(s).bindTo(proto).bindTo(symKey);
+
+							MethodHandle fb = site.getInitialFallback();
+							MethodHandle fbTyped = (fb != null) ? fb.asType(site.type()) : null;
+							MethodHandle constTarget = MethodHandles.dropArguments(
+								MethodHandles.constant(Object.class, val), 0, site.type().parameterList()
+							).asType(site.type());
+							if (chain != null && fbTyped != null) {
+								for (JSObject p : chain) {
+									constTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(constTarget, fbTyped);
+								}
+							}
+							site.installProtoGuard(s, holder.getOrCreateProtoSwitchPoint(), test, constTarget);
+							return val;
+						}
+					}
 				}
 			}
 		}
@@ -2070,7 +2170,7 @@ public class JSLinker {
 
 				while (current != null) {
 					int pOff = (propId >= 0) ? current.shape.getOffset(propId) : current.shape.getOffset(propName);
-					if (pOff >= 0) {
+					if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.DELETED)) {
 						holder = current;
 						holderOffset = pOff;
 						break;
@@ -2100,19 +2200,17 @@ public class JSLinker {
 						}
 					} else {
 						Object val = holder.getSlot(holderOffset);
-						if (val instanceof JSFunction fn) {
-							// 原型函数属性作为静态常量绑定
-							MethodHandle constTarget = MethodHandles.dropArguments(
-								MethodHandles.constant(Object.class, fn), 0, site.type().parameterList()
-							).asType(site.type());
-							if (chain != null && fbTyped != null) {
-								for (JSObject p : chain) {
-									constTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(constTarget, fbTyped);
-								}
+						// 原型属性作为静态常量绑定 (包括函数、基础包装类型及普通对象常量)
+						MethodHandle constTarget = MethodHandles.dropArguments(
+							MethodHandles.constant(Object.class, val), 0, site.type().parameterList()
+						).asType(site.type());
+						if (chain != null && fbTyped != null) {
+							for (JSObject p : chain) {
+								constTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(constTarget, fbTyped);
 							}
-							site.installProtoGuard(shape, holder.getOrCreateProtoSwitchPoint(), test, constTarget);
-							return fn;
 						}
+						site.installProtoGuard(shape, holder.getOrCreateProtoSwitchPoint(), test, constTarget);
+						return val;
 					}
 				}
 			}
@@ -2284,6 +2382,11 @@ public class JSLinker {
 		if (target == null || target == JSUndefined.INSTANCE) return;
 
 		if (target instanceof JSObject jsObj) {
+			boolean isPrototype = jsObj.getProtoSwitchPoint() != null || jsObj.isArrayPrototype();
+			if (isPrototype) {
+				jsObj.put(propName, value);
+				return;
+			}
 			if (target instanceof JSArray jsArr) {
 				jsArr.put(propName, value);
 				return;
@@ -2544,6 +2647,11 @@ public class JSLinker {
 		if (target == null || target == JSUndefined.INSTANCE) return;
 
 		if (target instanceof JSObject jsObj) {
+			boolean isPrototype = jsObj.getProtoSwitchPoint() != null || jsObj.isArrayPrototype();
+			if (isPrototype) {
+				jsObj.putDouble(propName, value);
+				return;
+			}
 			if (target instanceof JSArray jsArr) {
 				jsArr.put(propName, value);
 				return;
@@ -3267,7 +3375,8 @@ public class JSLinker {
 							JSObject holder = null;
 							List<JSObject> chain = null;
 							while (current != null) {
-								if (current.shape.getOffset(methodName) >= 0) {
+								int mOff = current.shape.getOffset(methodName);
+								if (mOff >= 0 && (current.isDoubleSlot(mOff) || current.getRawObjectSlot(mOff) != JSObject.DELETED)) {
 									holder = current;
 									break;
 								}
@@ -4828,6 +4937,66 @@ public class JSLinker {
 					site.installGuardOrSwitchMegamorphic(test, directSlotGetter);
 				}
 				return JSOps.toInt(jsObj.getSlot(offset));
+			} else {
+				// 原型链属性快速查找与 SwitchPoint 守卫挂载 (Int 专用快速路径)
+				JSObject proto = jsObj.getPrototype();
+				if (proto != null) {
+					JSObject current = proto;
+					JSObject holder = null;
+					int holderOffset = -1;
+					List<JSObject> chain = null;
+
+					while (current != null) {
+						int pOff = (propId >= 0) ? current.shape.getOffset(propId) : current.shape.getOffset(propName);
+						if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.DELETED)) {
+							holder = current;
+							holderOffset = pOff;
+							break;
+						}
+						if (chain == null) chain = new ArrayList<>(2);
+						chain.add(current);
+						current = current.getPrototype();
+					}
+
+					if (holder != null) {
+						byte slotType = holder.shape.getSlotType(holderOffset);
+						MethodHandle test = MH_IS_EXACT_SHAPE_AND_PROTO.bindTo(shape).bindTo(proto);
+						MethodHandle fb = site.getInitialFallback();
+						MethodHandle fbTyped = (fb != null) ? fb.asType(site.type()) : null;
+
+						if ((slotType & JSShape.FLAG_ACCESSOR) != 0) {
+							Object raw = holder.getRawObjectSlot(holderOffset);
+							if (raw instanceof PropertyAccessor acc) {
+								MethodHandle getterTarget = MethodHandles.filterReturnValue(
+									MethodHandles.insertArguments(MH_GET_PROTO_ACCESSOR_PROP, 0, acc),
+									MH_TO_INT
+								).asType(site.type());
+								if (chain != null && fbTyped != null) {
+									for (JSObject p : chain) {
+										getterTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(getterTarget, fbTyped);
+									}
+								}
+								site.installProtoGuard(shape, holder.getOrCreateProtoSwitchPoint(), test, getterTarget);
+								return JSOps.toInt(acc.callGetter(null, target));
+							}
+						} else {
+							int iVal = (slotType == JSShape.TYPE_DOUBLE || holder.isDoubleSlot(holderOffset))
+							 ? (int) holder.getDoubleSlot(holderOffset)
+							 : JSOps.toInt(holder.getSlot(holderOffset));
+
+							MethodHandle constTarget = MethodHandles.dropArguments(
+								MethodHandles.constant(int.class, iVal), 0, site.type().parameterList()
+							).asType(site.type());
+							if (chain != null && fbTyped != null) {
+								for (JSObject p : chain) {
+									constTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(constTarget, fbTyped);
+								}
+							}
+							site.installProtoGuard(shape, holder.getOrCreateProtoSwitchPoint(), test, constTarget);
+							return iVal;
+						}
+					}
+				}
 			}
 		}
 
@@ -4965,6 +5134,66 @@ public class JSLinker {
 				}
 
 				return (type == JSShape.TYPE_DOUBLE) ? jsObj.getDoubleSlot(offset) : JSOps.toDouble(jsObj.getSlot(offset));
+			} else {
+				// 原型链属性快速查找与 SwitchPoint 守卫挂载 (Double 专用零装箱快速路径)
+				JSObject proto = jsObj.getPrototype();
+				if (proto != null) {
+					JSObject current = proto;
+					JSObject holder = null;
+					int holderOffset = -1;
+					List<JSObject> chain = null;
+
+					while (current != null) {
+						int pOff = (propId >= 0) ? current.shape.getOffset(propId) : current.shape.getOffset(propName);
+						if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.DELETED)) {
+							holder = current;
+							holderOffset = pOff;
+							break;
+						}
+						if (chain == null) chain = new ArrayList<>(2);
+						chain.add(current);
+						current = current.getPrototype();
+					}
+
+					if (holder != null) {
+						byte slotType = holder.shape.getSlotType(holderOffset);
+						MethodHandle test = MH_IS_EXACT_SHAPE_AND_PROTO.bindTo(shape).bindTo(proto);
+						MethodHandle fb = site.getInitialFallback();
+						MethodHandle fbTyped = (fb != null) ? fb.asType(site.type()) : null;
+
+						if ((slotType & JSShape.FLAG_ACCESSOR) != 0) {
+							Object raw = holder.getRawObjectSlot(holderOffset);
+							if (raw instanceof PropertyAccessor acc) {
+								MethodHandle getterTarget = MethodHandles.filterReturnValue(
+									MethodHandles.insertArguments(MH_GET_PROTO_ACCESSOR_PROP, 0, acc),
+									MH_TO_DOUBLE
+								).asType(site.type());
+								if (chain != null && fbTyped != null) {
+									for (JSObject p : chain) {
+										getterTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(getterTarget, fbTyped);
+									}
+								}
+								site.installProtoGuard(shape, holder.getOrCreateProtoSwitchPoint(), test, getterTarget);
+								return JSOps.toDouble(acc.callGetter(null, target));
+							}
+						} else {
+							double dVal = (slotType == JSShape.TYPE_DOUBLE || holder.isDoubleSlot(holderOffset))
+							 ? holder.getDoubleSlot(holderOffset)
+							 : JSOps.toDouble(holder.getSlot(holderOffset));
+
+							MethodHandle constTarget = MethodHandles.dropArguments(
+								MethodHandles.constant(double.class, dVal), 0, site.type().parameterList()
+							).asType(site.type());
+							if (chain != null && fbTyped != null) {
+								for (JSObject p : chain) {
+									constTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(constTarget, fbTyped);
+								}
+							}
+							site.installProtoGuard(shape, holder.getOrCreateProtoSwitchPoint(), test, constTarget);
+							return dVal;
+						}
+					}
+				}
 			}
 		}
 
@@ -5090,6 +5319,66 @@ public class JSLinker {
 					site.installGuardOrSwitchMegamorphic(test, directSlotGetter);
 				}
 				return JSOps.toLong(jsObj.getSlot(offset));
+			} else {
+				// 原型链属性快速查找与 SwitchPoint 守卫挂载 (Long 专用快速路径)
+				JSObject proto = jsObj.getPrototype();
+				if (proto != null) {
+					JSObject current = proto;
+					JSObject holder = null;
+					int holderOffset = -1;
+					List<JSObject> chain = null;
+
+					while (current != null) {
+						int pOff = (propId >= 0) ? current.shape.getOffset(propId) : current.shape.getOffset(propName);
+						if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.DELETED)) {
+							holder = current;
+							holderOffset = pOff;
+							break;
+						}
+						if (chain == null) chain = new ArrayList<>(2);
+						chain.add(current);
+						current = current.getPrototype();
+					}
+
+					if (holder != null) {
+						byte slotType = holder.shape.getSlotType(holderOffset);
+						MethodHandle test = MH_IS_EXACT_SHAPE_AND_PROTO.bindTo(shape).bindTo(proto);
+						MethodHandle fb = site.getInitialFallback();
+						MethodHandle fbTyped = (fb != null) ? fb.asType(site.type()) : null;
+
+						if ((slotType & JSShape.FLAG_ACCESSOR) != 0) {
+							Object raw = holder.getRawObjectSlot(holderOffset);
+							if (raw instanceof PropertyAccessor acc) {
+								MethodHandle getterTarget = MethodHandles.filterReturnValue(
+									MethodHandles.insertArguments(MH_GET_PROTO_ACCESSOR_PROP, 0, acc),
+									MH_TO_LONG
+								).asType(site.type());
+								if (chain != null && fbTyped != null) {
+									for (JSObject p : chain) {
+										getterTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(getterTarget, fbTyped);
+									}
+								}
+								site.installProtoGuard(shape, holder.getOrCreateProtoSwitchPoint(), test, getterTarget);
+								return JSOps.toLong(acc.callGetter(null, target));
+							}
+						} else {
+							long lVal = (slotType == JSShape.TYPE_DOUBLE || holder.isDoubleSlot(holderOffset))
+							 ? (long) holder.getDoubleSlot(holderOffset)
+							 : JSOps.toLong(holder.getSlot(holderOffset));
+
+							MethodHandle constTarget = MethodHandles.dropArguments(
+								MethodHandles.constant(long.class, lVal), 0, site.type().parameterList()
+							).asType(site.type());
+							if (chain != null && fbTyped != null) {
+								for (JSObject p : chain) {
+									constTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(constTarget, fbTyped);
+								}
+							}
+							site.installProtoGuard(shape, holder.getOrCreateProtoSwitchPoint(), test, constTarget);
+							return lVal;
+						}
+					}
+				}
 			}
 		}
 

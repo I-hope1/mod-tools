@@ -3,6 +3,7 @@ package hope.magic.js.test;
 import hope.magic.js.runtime.*;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -11,7 +12,7 @@ public class BuiltinProtectorTest {
 	private static Object originalPush;
 	private static Object originalIterator;
 
-	@org.junit.jupiter.api.BeforeAll
+	@BeforeAll
 	public static void saveOriginalPrototypes() {
 		originalPush = JSContext.LazyBuiltins.ARRAY_PROTOTYPE.get("push");
 		originalIterator = JSContext.LazyBuiltins.ARRAY_PROTOTYPE.get(JSSymbol.ITERATOR);

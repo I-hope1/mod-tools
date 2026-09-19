@@ -557,6 +557,7 @@ public class JSObject {
 				JSFunction       newGetter = getter != null ? getter : (current != null ? current.getter : null);
 				JSFunction       newSetter = setter != null ? setter : (current != null ? current.setter : null);
 				setSlot(offset, new PropertyAccessor(newGetter, newSetter));
+				onStructuralOrPropertyChange();
 				return;
 			}
 		}
@@ -565,6 +566,7 @@ public class JSObject {
 		shape = offset >= 0 ? shape.updatePropertyType(offset, type) : shape.addProperty(propId, type);
 		int newOffset = shape.getOffset(propId);
 		setSlot(newOffset, new PropertyAccessor(getter, setter));
+		onStructuralOrPropertyChange();
 	}
 
 	public void put(int propId, Object value) {

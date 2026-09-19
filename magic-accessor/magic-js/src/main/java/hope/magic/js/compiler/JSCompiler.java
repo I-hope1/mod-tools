@@ -416,6 +416,9 @@ public class JSCompiler {
 	}
 
 	private static boolean isMathCall(Node node, CompileContext ctx) {
+		if (!BuiltinProtector.isGlobalSlotValid(JSContext.SLOT_MATH)) {
+			return false;
+		}
 		if (node instanceof Node.CallExpr call) {
 			if (call.callee instanceof Node.MemberAccessExpr member
 			    && member.target instanceof Node.IdentifierExpr targetIdent

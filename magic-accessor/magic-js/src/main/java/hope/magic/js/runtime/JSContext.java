@@ -1552,6 +1552,8 @@ public class JSContext {
 			}));
 
 			mountArrayPrototypeMethods(proto);
+			proto.setIsArrayPrototype(true);
+			BuiltinProtector.resetAll();
 			return ctor;
 		}
 
@@ -4057,7 +4059,15 @@ public class JSContext {
 		return JSUndefined.INSTANCE;
 	}
 
+	public static JSObject getArrayPrototype() {
+		return LazyArray.ARRAY_PROTOTYPE;
+	}
+
 	public final Object getSlot(int slot) {
+		if (BuiltinProtector.isGlobalSlotValid(slot)) {
+			Object constant = BuiltinProtector.getGlobalConstant(slot);
+			if (constant != null) return constant;
+		}
 		Object[] slots = this.globalSlots;
 		if (slot < slots.length) {
 			Object val = slots[slot];
@@ -4070,6 +4080,9 @@ public class JSContext {
 	public synchronized final void setSlot(int slot, Object value) {
 		ensureGlobalSlotCapacity(slot);
 		globalSlots[slot] = value == null ? NULL_VALUE : value;
+		if (BuiltinProtector.isProtectedGlobalSlot(slot)) {
+			BuiltinProtector.invalidateGlobalSlot(slot);
+		}
 	}
 
 	public Map<String, Object> getGlobals() {

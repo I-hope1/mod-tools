@@ -710,9 +710,11 @@ public class JSOps {
 		}
 		// 1. JSObject 自定义 Symbol.iterator 协议支持
 		if (target instanceof JSObject jo) {
-			// 原生 JSArray 在未被局部重写 Symbol.iterator 时走极速直接迭代器
+			// 原生 JSArray 在未被局部重写 Symbol.iterator 且全局迭代器保护器有效时走极速直接迭代器
 			if (jo instanceof JSArray arr && !arr.hasOwnProperty(JSSymbol.ITERATOR)) {
-				return arr.iterator();
+				if (BuiltinProtector.isIteratorValid()) {
+					return arr.iterator();
+				}
 			}
 			Object iterMethod = jo.get(JSSymbol.ITERATOR);
 			if (iterMethod instanceof JSFunction iterFn) {

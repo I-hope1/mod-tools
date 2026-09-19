@@ -88,9 +88,23 @@ public class JSObject {
 		}
 	}
 
+	private boolean isArrayPrototype;
+
+	public boolean isArrayPrototype() {
+		return isArrayPrototype;
+	}
+
+	public void setIsArrayPrototype(boolean isArrayPrototype) {
+		this.isArrayPrototype = isArrayPrototype;
+	}
+
 	public void onStructuralOrPropertyChange() {
 		if (this.protoSwitchPoint != null) {
 			invalidatePrototype();
+		}
+		if (this.isArrayPrototype) {
+			BuiltinProtector.invalidateArrayProtector();
+			BuiltinProtector.invalidateIteratorProtector();
 		}
 	}
 
@@ -511,21 +525,25 @@ public class JSObject {
 	}
 
 	public boolean handlePrototypePut(int propId, Object receiver, Object value) {
-		int offset = shape.getOffset(propId);
-		if (offset >= 0) {
-			byte slotType = shape.getSlotType(offset);
-			if ((slotType & JSShape.FLAG_ACCESSOR) != 0) {
-				PropertyAccessor acc = (PropertyAccessor) getRawObjectSlot(offset);
-				acc.callSetter(null, receiver, value);
-				return true;
+		JSObject proto = this;
+		int depth = 0;
+		while (proto != null && depth++ < 1000) {
+			int offset = proto.shape.getOffset(propId);
+			if (offset >= 0) {
+				byte slotType = proto.shape.getSlotType(offset);
+				if ((slotType & JSShape.FLAG_ACCESSOR) != 0) {
+					PropertyAccessor acc = (PropertyAccessor) proto.getRawObjectSlot(offset);
+					acc.callSetter(null, receiver, value);
+					return true;
+				}
+				if ((slotType & JSShape.FLAG_NOT_WRITABLE) != 0) {
+					return true; // 原型只读属性阻止赋值
+				}
+				return false;
 			}
-			if ((slotType & JSShape.FLAG_NOT_WRITABLE) != 0) {
-				return true; // 原型只读属性阻止赋值
-			}
-			return false;
+			proto = proto.getPrototype();
 		}
-		JSObject proto = getPrototype();
-		return proto != null && proto.handlePrototypePut(propId, receiver, value);
+		return false;
 	}
 
 	public void defineAccessor(String key, JSFunction getter, JSFunction setter, boolean enumerable) {

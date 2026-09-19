@@ -542,7 +542,10 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			return val;
 		}
 		JSObject proto = getPrototype();
-		return proto != null ? proto.get(key, receiver) : JSUndefined.INSTANCE;
+		if (proto != null && proto != this) {
+			return proto.get(key, receiver);
+		}
+		return JSUndefined.INSTANCE;
 	}
 
 	@Override
@@ -579,7 +582,10 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			}
 		}
 		JSObject proto = getPrototype();
-		return proto != null ? proto.getAsDouble(propId, receiver) : Double.NaN;
+		if (proto != null && proto != this) {
+			return proto.getAsDouble(propId, receiver);
+		}
+		return Double.NaN;
 	}
 
 	@Override
@@ -616,7 +622,10 @@ public class JSArray extends JSObject implements Iterable<Object> {
 			}
 		}
 		JSObject proto = getPrototype();
-		return proto != null ? proto.getAsDouble(key, receiver) : Double.NaN;
+		if (proto != null && proto != this) {
+			return proto.getAsDouble(key, receiver);
+		}
+		return Double.NaN;
 	}
 
 	@Override
@@ -784,6 +793,9 @@ public class JSArray extends JSObject implements Iterable<Object> {
 
 	@Override
 	public JSObject getPrototype() {
+		if (this == JSContext.LazyArray.ARRAY_PROTOTYPE) {
+			return super.getPrototype();
+		}
 		JSObject p = super.getPrototype();
 		return p != null ? p : JSContext.LazyArray.ARRAY_PROTOTYPE;
 	}

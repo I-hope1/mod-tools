@@ -73,6 +73,14 @@ public class JSLinker {
 	public static final MethodHandle MH_NEW_ARRAY_1;
 	public static final MethodHandle MH_NEW_ARRAY_N;
 	public static final MethodHandle MH_CREATE_BOUND_INSTANCE_METHOD;
+	public static final MethodHandle MH_JS_ARRAY_LENGTH_OBJ;
+	public static final MethodHandle MH_JS_ARRAY_LENGTH_DOUBLE;
+	public static final MethodHandle MH_JS_ARRAY_LENGTH_LONG;
+	public static final MethodHandle MH_JS_ARRAY_LENGTH_INT;
+	public static final MethodHandle MH_JS_ARRAY_FAST_PUSH0;
+	public static final MethodHandle MH_JS_ARRAY_FAST_PUSH1;
+	public static final MethodHandle MH_JS_ARRAY_FAST_PUSH2;
+	public static final MethodHandle MH_JS_ARRAY_FAST_POP0;
 
 	static {
 		try {
@@ -123,6 +131,14 @@ public class JSLinker {
 			MH_NEW_ARRAY_N = LOOKUP.findStatic(JSLinker.class, "newArrayInstanceN", MethodType.methodType(Object.class, Class.class, Object[].class));
 			MH_INVOKE_INTERFACE_1 = LOOKUP.findStatic(JSLinker.class, "invokeInterfaceAdapter1", MethodType.methodType(Object.class, Object.class, Object.class));
 			MH_CREATE_BOUND_INSTANCE_METHOD = LOOKUP.findStatic(JSLinker.class, "createBoundInstanceMethod", MethodType.methodType(Object.class, Object.class, Class.class, String.class, int.class));
+			MH_JS_ARRAY_LENGTH_OBJ = LOOKUP.findStatic(JSLinker.class, "getJSArrayLengthObj", MethodType.methodType(Object.class, Object.class));
+			MH_JS_ARRAY_LENGTH_DOUBLE = LOOKUP.findStatic(JSLinker.class, "getJSArrayLengthDouble", MethodType.methodType(double.class, Object.class));
+			MH_JS_ARRAY_LENGTH_LONG = LOOKUP.findStatic(JSLinker.class, "getJSArrayLengthLong", MethodType.methodType(long.class, Object.class));
+			MH_JS_ARRAY_LENGTH_INT = LOOKUP.findStatic(JSLinker.class, "getJSArrayLengthInt", MethodType.methodType(int.class, Object.class));
+			MH_JS_ARRAY_FAST_PUSH0 = LOOKUP.findStatic(JSLinker.class, "jsArrayFastPush0", MethodType.methodType(Object.class, Object.class));
+			MH_JS_ARRAY_FAST_PUSH1 = LOOKUP.findStatic(JSLinker.class, "jsArrayFastPush1", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_JS_ARRAY_FAST_PUSH2 = LOOKUP.findStatic(JSLinker.class, "jsArrayFastPush2", MethodType.methodType(Object.class, Object.class, Object.class, Object.class));
+			MH_JS_ARRAY_FAST_POP0 = LOOKUP.findStatic(JSLinker.class, "jsArrayFastPop0", MethodType.methodType(Object.class, Object.class));
 		} catch (Throwable e) {
 			throw new ExceptionInInitializerError(e);
 		}
@@ -1334,6 +1350,7 @@ public class JSLinker {
 			return;
 		}
 		if (target instanceof JSObject jsObj) {
+			boolean isPrototype = jsObj.getProtoSwitchPoint() != null || jsObj == JSContext.LazyArray.ARRAY_PROTOTYPE;
 			if (index instanceof String strKey) {
 				JSShape s      = jsObj.shape;
 				int     offset = s.getOffset(strKey);
@@ -1344,28 +1361,31 @@ public class JSLinker {
 					byte newBaseType = (value instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
 					if (currentBaseType == newBaseType) {
 						boolean isDouble = currentBaseType == JSShape.TYPE_DOUBLE;
-						MethodHandle test = LOOKUP.findStatic(
-							JSLinker.class,
-							"isExactShapeAndStringKey",
-							MethodType.methodType(boolean.class, JSShape.class, String.class, Object.class, Object.class)
-						).bindTo(s).bindTo(strKey);
-						test = MethodHandles.dropArguments(test, 2, Object.class);
+						if (!isPrototype) {
+							MethodHandle test = LOOKUP.findStatic(
+								JSLinker.class,
+								"isExactShapeAndStringKey",
+								MethodType.methodType(boolean.class, JSShape.class, String.class, Object.class, Object.class)
+							).bindTo(s).bindTo(strKey);
+							test = MethodHandles.dropArguments(test, 2, Object.class);
 
-						MethodHandle directSlotSetter;
-						if (offset < 8) {
-							directSlotSetter = isDouble ? MH_SET_SLOT_DOUBLE_AS_OBJ[offset] : MH_SET_SLOT_OBJECT[offset];
-						} else {
-							directSlotSetter = isDouble
-								? MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT_DOUBLE_AS_OBJ, 0, offset)
-								: MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT, 0, offset);
+							MethodHandle directSlotSetter;
+							if (offset < 8) {
+								directSlotSetter = isDouble ? MH_SET_SLOT_DOUBLE_AS_OBJ[offset] : MH_SET_SLOT_OBJECT[offset];
+							} else {
+								directSlotSetter = isDouble
+									? MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT_DOUBLE_AS_OBJ, 0, offset)
+									: MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT, 0, offset);
+							}
+							MethodHandle directTarget = MethodHandles.dropArguments(directSlotSetter, 1, Object.class);
+							site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
 						}
-						MethodHandle directTarget = MethodHandles.dropArguments(directSlotSetter, 1, Object.class);
-						site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
 						if (isDouble) {
 							jsObj.setDoubleSlot(offset, JSOps.toDouble(value));
 						} else {
 							jsObj.setSlot(offset, value);
 						}
+						jsObj.onStructuralOrPropertyChange();
 						return;
 					}
 				}
@@ -1379,28 +1399,31 @@ public class JSLinker {
 					byte newBaseType = (value instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
 					if (currentBaseType == newBaseType) {
 						boolean isDouble = currentBaseType == JSShape.TYPE_DOUBLE;
-						MethodHandle test = LOOKUP.findStatic(
-							JSLinker.class,
-							"isExactShapeAndSymbol",
-							MethodType.methodType(boolean.class, JSShape.class, JSSymbol.class, Object.class, Object.class)
-						).bindTo(s).bindTo(symKey);
-						test = MethodHandles.dropArguments(test, 2, Object.class);
+						if (!isPrototype) {
+							MethodHandle test = LOOKUP.findStatic(
+								JSLinker.class,
+								"isExactShapeAndSymbol",
+								MethodType.methodType(boolean.class, JSShape.class, JSSymbol.class, Object.class, Object.class)
+							).bindTo(s).bindTo(symKey);
+							test = MethodHandles.dropArguments(test, 2, Object.class);
 
-						MethodHandle directSlotSetter;
-						if (offset < 8) {
-							directSlotSetter = isDouble ? MH_SET_SLOT_DOUBLE_AS_OBJ[offset] : MH_SET_SLOT_OBJECT[offset];
-						} else {
-							directSlotSetter = isDouble
-								? MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT_DOUBLE_AS_OBJ, 0, offset)
-								: MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT, 0, offset);
+							MethodHandle directSlotSetter;
+							if (offset < 8) {
+								directSlotSetter = isDouble ? MH_SET_SLOT_DOUBLE_AS_OBJ[offset] : MH_SET_SLOT_OBJECT[offset];
+							} else {
+								directSlotSetter = isDouble
+									? MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT_DOUBLE_AS_OBJ, 0, offset)
+									: MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT, 0, offset);
+							}
+							MethodHandle directTarget = MethodHandles.dropArguments(directSlotSetter, 1, Object.class);
+							site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
 						}
-						MethodHandle directTarget = MethodHandles.dropArguments(directSlotSetter, 1, Object.class);
-						site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
 						if (isDouble) {
 							jsObj.setDoubleSlot(offset, JSOps.toDouble(value));
 						} else {
 							jsObj.setSlot(offset, value);
 						}
+						jsObj.onStructuralOrPropertyChange();
 						return;
 					}
 				}
@@ -1908,6 +1931,43 @@ public class JSLinker {
 		return JSUndefined.INSTANCE;
 	}
 
+	public static Object getJSArrayLengthObj(Object target) {
+		return (double) ((JSArray) target).length();
+	}
+
+	public static double getJSArrayLengthDouble(Object target) {
+		return (double) ((JSArray) target).length();
+	}
+
+	public static long getJSArrayLengthLong(Object target) {
+		return ((JSArray) target).length();
+	}
+
+	public static int getJSArrayLengthInt(Object target) {
+		return (int) ((JSArray) target).length();
+	}
+
+	public static Object jsArrayFastPush0(Object target) {
+		return (double) ((JSArray) target).length();
+	}
+
+	public static Object jsArrayFastPush1(Object target, Object val) {
+		JSArray arr = (JSArray) target;
+		arr.push(val);
+		return (double) arr.length();
+	}
+
+	public static Object jsArrayFastPush2(Object target, Object v1, Object v2) {
+		JSArray arr = (JSArray) target;
+		arr.push(v1);
+		arr.push(v2);
+		return (double) arr.length();
+	}
+
+	public static Object jsArrayFastPop0(Object target) {
+		return ((JSArray) target).pop();
+	}
+
 	public static void setAccessorProp(int offset, Object target, Object value) {
 		if (target instanceof JSObject jsObj) {
 			Object raw = jsObj.getRawObjectSlot(offset);
@@ -1930,6 +1990,11 @@ public class JSLinker {
 		if (target instanceof JSObject jsObj) {
 			if (target instanceof JSContext.JSGlobalThis globalThis) {
 				return globalThis.get(propName);
+			}
+			if (target instanceof JSArray jsArr && "length".equals(propName)) {
+				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(JSArray.class);
+				site.installGuardOrSwitchMegamorphic(test, MH_JS_ARRAY_LENGTH_OBJ.asType(site.type()));
+				return (double) jsArr.length();
 			}
 			JSShape shape  = jsObj.shape;
 			int     propId = site.getPropId();
@@ -3170,21 +3235,32 @@ public class JSLinker {
 							test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
 						}
 						int          arity = args.length;
-						MethodHandle exactFuncCall;
-						if (arity == 0) {
-							exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL0, 1, (Object) null).bindTo(func);
-						} else if (arity == 1) {
-							exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL1, 1, (Object) null).bindTo(func);
-						} else if (arity == 2) {
-							exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL2, 1, (Object) null).bindTo(func);
-						} else if (arity == 3) {
-							exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL3, 1, (Object) null).bindTo(func);
-						} else if (arity == 4) {
-							exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL4, 1, (Object) null).bindTo(func);
-						} else {
-							exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL, 1, (Object) null)
-							 .bindTo(func)
-							 .asCollector(1, Object[].class, arity);
+						MethodHandle exactFuncCall = null;
+						if (jsObj instanceof JSArray && ownOffset < 0 && BuiltinProtector.isArrayProtoValid()) {
+							if ("push".equals(methodName)) {
+								if (arity == 0) exactFuncCall = MH_JS_ARRAY_FAST_PUSH0;
+								else if (arity == 1) exactFuncCall = MH_JS_ARRAY_FAST_PUSH1;
+								else if (arity == 2) exactFuncCall = MH_JS_ARRAY_FAST_PUSH2;
+							} else if ("pop".equals(methodName) && arity == 0) {
+								exactFuncCall = MH_JS_ARRAY_FAST_POP0;
+							}
+						}
+						if (exactFuncCall == null) {
+							if (arity == 0) {
+								exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL0, 1, (Object) null).bindTo(func);
+							} else if (arity == 1) {
+								exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL1, 1, (Object) null).bindTo(func);
+							} else if (arity == 2) {
+								exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL2, 1, (Object) null).bindTo(func);
+							} else if (arity == 3) {
+								exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL3, 1, (Object) null).bindTo(func);
+							} else if (arity == 4) {
+								exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL4, 1, (Object) null).bindTo(func);
+							} else {
+								exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL, 1, (Object) null)
+								 .bindTo(func)
+								 .asCollector(1, Object[].class, arity);
+							}
 						}
 						if (ownOffset < 0 && proto != null) {
 							JSObject current = proto;
@@ -3215,6 +3291,15 @@ public class JSLinker {
 						} else {
 							site.installGuardOrSwitchMegamorphic(test, exactFuncCall.asType(site.type()));
 						}
+					}
+				}
+				if (jsObj instanceof JSArray jsArr && ownOffset < 0 && BuiltinProtector.isArrayProtoValid()) {
+					if ("push".equals(methodName)) {
+						if (args.length == 0) return jsArrayFastPush0(jsArr);
+						if (args.length == 1) return jsArrayFastPush1(jsArr, args[0]);
+						if (args.length == 2) return jsArrayFastPush2(jsArr, args[0], args[1]);
+					} else if ("pop".equals(methodName) && args.length == 0) {
+						return jsArrayFastPop0(jsArr);
 					}
 				}
 				// 若为自有闭包属性，则不绑定死常量，保持动态调用
@@ -3643,6 +3728,12 @@ public class JSLinker {
 	public static Object getScopeOrGlobal(JSObject scope, JSContext cx, String name, int slot) {
 		if (scope != null && scope.has(name)) {
 			return scope.get(name);
+		}
+		if (BuiltinProtector.isGlobalSlotValid(slot)) {
+			Object constant = BuiltinProtector.getGlobalConstant(slot);
+			if (constant != null) {
+				return constant;
+			}
 		}
 		if (cx != null) {
 			return cx.getSlot(slot);
@@ -4175,9 +4266,15 @@ public class JSLinker {
 			if (idx != null) {
 				return jsArr.getElement(idx);
 			}
+			if (index instanceof JSSymbol sym) {
+				return jsArr.get(sym);
+			}
 			return jsArr.get(JSArray.toPropertyKey(index));
 		}
 		if (target instanceof JSObject jsObj) {
+			if (index instanceof JSSymbol sym) {
+				return jsObj.get(sym);
+			}
 			return jsObj.get(JSArray.toPropertyKey(index));
 		}
 		if (target.getClass().isArray()) {
@@ -4230,10 +4327,18 @@ public class JSLinker {
 				jsArr.setElement(idx, value);
 				return;
 			}
+			if (index instanceof JSSymbol sym) {
+				jsArr.put(sym, value);
+				return;
+			}
 			jsArr.put(JSArray.toPropertyKey(index), value);
 			return;
 		}
 		if (target instanceof JSObject jsObj) {
+			if (index instanceof JSSymbol sym) {
+				jsObj.put(sym, value);
+				return;
+			}
 			jsObj.put(JSArray.toPropertyKey(index), value);
 			return;
 		}
@@ -4322,6 +4427,9 @@ public class JSLinker {
 		Long idx = JSArray.toValidArrayIndex(index);
 		if (idx != null) {
 			return jsArr.getElement(idx);
+		}
+		if (index instanceof JSSymbol sym) {
+			return jsArr.get(sym);
 		}
 		return jsArr.get(JSArray.toPropertyKey(index));
 	}
@@ -4461,6 +4569,10 @@ public class JSLinker {
 		Long idx = JSArray.toValidArrayIndex(index);
 		if (idx != null) {
 			jsArr.setElement(idx, value);
+			return;
+		}
+		if (index instanceof JSSymbol sym) {
+			jsArr.put(sym, value);
 			return;
 		}
 		jsArr.put(JSArray.toPropertyKey(index), value);
@@ -4682,6 +4794,11 @@ public class JSLinker {
 			if (target instanceof JSContext.JSGlobalThis globalThis) {
 				return JSOps.toInt(globalThis.get(propName));
 			}
+			if (target instanceof JSArray jsArr && "length".equals(propName)) {
+				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(JSArray.class);
+				site.installGuardOrSwitchMegamorphic(test, MH_JS_ARRAY_LENGTH_INT.asType(site.type()));
+				return (int) jsArr.length();
+			}
 			JSShape shape  = jsObj.shape;
 			int     propId = site.getPropId();
 			int     offset = (propId >= 0) ? shape.getOffset(propId) : shape.getOffset(propName);
@@ -4799,6 +4916,11 @@ public class JSLinker {
 		if (target instanceof JSObject jsObj) {
 			if (target instanceof JSContext.JSGlobalThis globalThis) {
 				return JSOps.toDouble(globalThis.get(propName));
+			}
+			if (target instanceof JSArray jsArr && "length".equals(propName)) {
+				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(JSArray.class);
+				site.installGuardOrSwitchMegamorphic(test, MH_JS_ARRAY_LENGTH_DOUBLE.asType(site.type()));
+				return (double) jsArr.length();
 			}
 			JSShape shape  = jsObj.shape;
 			int     propId = site.getPropId();
@@ -4933,6 +5055,11 @@ public class JSLinker {
 		if (target instanceof JSObject jsObj) {
 			if (target instanceof JSContext.JSGlobalThis globalThis) {
 				return JSOps.toLong(globalThis.get(propName));
+			}
+			if (target instanceof JSArray jsArr && "length".equals(propName)) {
+				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(JSArray.class);
+				site.installGuardOrSwitchMegamorphic(test, MH_JS_ARRAY_LENGTH_LONG.asType(site.type()));
+				return jsArr.length();
 			}
 			JSShape shape  = jsObj.shape;
 			int     propId = site.getPropId();

@@ -1338,7 +1338,7 @@ public class JSLinker {
 									constTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(constTarget, fbTyped);
 								}
 							}
-							site.installProtoGuard(s, holder.getOrCreateProtoSwitchPoint(), test, constTarget);
+							site.installProtoGuard(holder.getOrCreateProtoSwitchPoint(), test, constTarget);
 							return val;
 						}
 					}
@@ -1400,7 +1400,7 @@ public class JSLinker {
 									constTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(constTarget, fbTyped);
 								}
 							}
-							site.installProtoGuard(s, holder.getOrCreateProtoSwitchPoint(), test, constTarget);
+							site.installProtoGuard(holder.getOrCreateProtoSwitchPoint(), test, constTarget);
 							return val;
 						}
 					}
@@ -2212,7 +2212,7 @@ public class JSLinker {
 							}
 							SwitchPoint holderSp = holder.getOrCreateProtoSwitchPoint();
 							allSps.add(holderSp);
-							site.installProtoGuard(shape, holderSp, allSps, test, getterTarget);
+							site.installProtoGuard(holderSp, allSps, test, getterTarget);
 							return acc.callGetter(null, target);
 						}
 					} else {
@@ -2231,7 +2231,7 @@ public class JSLinker {
 						}
 						SwitchPoint holderSp = holder.getOrCreateProtoSwitchPoint();
 						allSps.add(holderSp);
-						site.installProtoGuard(shape, holderSp, allSps, test, constTarget);
+						site.installProtoGuard(holderSp, allSps, test, constTarget);
 						return val;
 					}
 				}
@@ -3520,13 +3520,13 @@ public class JSLinker {
 								}
 								SwitchPoint holderSp = holder.getOrCreateProtoSwitchPoint();
 								allSps.add(holderSp);
-								site.installProtoGuard(jsObj.shape, holderSp, allSps, test, guardedCall);
+								site.installProtoGuard(holderSp, allSps, test, guardedCall);
 							} else {
 								site.installGuardOrSwitchMegamorphic(test, exactFuncCall.asType(site.type()));
 							}
 						} else {
 							SwitchPoint sp = jsObj.getOrCreateProtoSwitchPoint();
-							site.installProtoGuard(jsObj.shape, sp, test, exactFuncCall.asType(site.type()));
+							site.installProtoGuard(sp, test, exactFuncCall.asType(site.type()));
 						}
 					}
 				} else if (ownOffset >= 0 && (jsObj.shape.getSlotType(ownOffset) & JSShape.FLAG_ACCESSOR) == 0 && site.getChainDepth() < 3) {
@@ -5150,7 +5150,7 @@ public class JSLinker {
 										getterTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(getterTarget, fbTyped);
 									}
 								}
-								site.installProtoGuard(shape, holder.getOrCreateProtoSwitchPoint(), test, getterTarget);
+								site.installProtoGuard(holder.getOrCreateProtoSwitchPoint(), test, getterTarget);
 								return JSOps.toInt(acc.callGetter(null, target));
 							}
 						} else {
@@ -5166,7 +5166,7 @@ public class JSLinker {
 									constTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(constTarget, fbTyped);
 								}
 							}
-							site.installProtoGuard(shape, holder.getOrCreateProtoSwitchPoint(), test, constTarget);
+							site.installProtoGuard(holder.getOrCreateProtoSwitchPoint(), test, constTarget);
 							return iVal;
 						}
 					}
@@ -5347,7 +5347,7 @@ public class JSLinker {
 										getterTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(getterTarget, fbTyped);
 									}
 								}
-								site.installProtoGuard(shape, holder.getOrCreateProtoSwitchPoint(), test, getterTarget);
+								site.installProtoGuard(holder.getOrCreateProtoSwitchPoint(), test, getterTarget);
 								return JSOps.toDouble(acc.callGetter(null, target));
 							}
 						} else {
@@ -5363,7 +5363,7 @@ public class JSLinker {
 									constTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(constTarget, fbTyped);
 								}
 							}
-							site.installProtoGuard(shape, holder.getOrCreateProtoSwitchPoint(), test, constTarget);
+							site.installProtoGuard(holder.getOrCreateProtoSwitchPoint(), test, constTarget);
 							return dVal;
 						}
 					}
@@ -5532,7 +5532,7 @@ public class JSLinker {
 										getterTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(getterTarget, fbTyped);
 									}
 								}
-								site.installProtoGuard(shape, holder.getOrCreateProtoSwitchPoint(), test, getterTarget);
+								site.installProtoGuard(holder.getOrCreateProtoSwitchPoint(), test, getterTarget);
 								return JSOps.toLong(acc.callGetter(null, target));
 							}
 						} else {
@@ -5548,7 +5548,7 @@ public class JSLinker {
 									constTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(constTarget, fbTyped);
 								}
 							}
-							site.installProtoGuard(shape, holder.getOrCreateProtoSwitchPoint(), test, constTarget);
+							site.installProtoGuard(holder.getOrCreateProtoSwitchPoint(), test, constTarget);
 							return lVal;
 						}
 					}

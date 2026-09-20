@@ -218,10 +218,10 @@ public class ChainedCallSite extends MutableCallSite {
 	/** 最大允许重链次数：超出后强制降级 Megamorphic，避免 runPoly 类场景无限循环。 */
 	private static final int MAX_RELINKS = 8;
 
-	public synchronized boolean installProtoGuard(JSShape shape, SwitchPoint sp, MethodHandle test, MethodHandle fastTarget) {
+	public synchronized boolean installProtoGuard(SwitchPoint sp, MethodHandle test, MethodHandle fastTarget) {
 		// 单层原型访问（无中间链），allSps 仅含 holderSp
 		List<SwitchPoint> allSps = (sp != null) ? Collections.singletonList(sp) : Collections.emptyList();
-		return installProtoGuard(shape, sp, allSps, test, fastTarget);
+		return installProtoGuard(sp, allSps, test, fastTarget);
 	}
 
 	/**
@@ -231,7 +231,7 @@ public class ChainedCallSite extends MutableCallSite {
 	 *               用于检测任意一级失效。只有当 {@code allSps} 中某个 SP 确实
 	 *               {@link SwitchPoint#hasBeenInvalidated()} 才触发 reset()。
 	 */
-	public synchronized boolean installProtoGuard(JSShape shape, SwitchPoint holderSp,
+	public synchronized boolean installProtoGuard(SwitchPoint holderSp,
 	                                              List<SwitchPoint> allSps,
 	                                              MethodHandle test, MethodHandle fastTarget) {
 		// 先检查 megamorphic，避免 reset() 悄悄撤销已降级状态
@@ -239,8 +239,8 @@ public class ChainedCallSite extends MutableCallSite {
 
 		// 扫描已挂载的 SP：只有真正失效的 SP 才需要重建链
 		boolean anyInvalidated = false;
-		for (int i = 0; i < recordedProtoSps.size(); i++) {
-			if (recordedProtoSps.get(i).hasBeenInvalidated()) {
+		for (SwitchPoint recordedProtoSp : recordedProtoSps) {
+			if (recordedProtoSp.hasBeenInvalidated()) {
 				anyInvalidated = true;
 				break;
 			}

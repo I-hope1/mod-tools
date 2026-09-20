@@ -206,7 +206,9 @@ public class ChainedCallSite extends MutableCallSite {
 		if (shape != null && !recordedProtoShapes.contains(shape)) {
 			recordedProtoShapes.add(shape);
 		}
-		return installGuardWithSwitchPoint(test, sp, fastTarget);
+		// JS 原型方法 IC 不需要 globalSwitchPoint（globalSp 仅供 Java 类重载场景使用），
+		// 跳过该层可减少一层 MH 链路开销。
+		return installGuardWithSwitchPoint(test, sp, fastTarget, /*useGlobalSp=*/false);
 	}
 
 	public synchronized boolean installJavaGuard(Class<?> clazz, MethodHandle test, MethodHandle fastTarget) {
@@ -222,6 +224,14 @@ public class ChainedCallSite extends MutableCallSite {
 	}
 
 	public synchronized boolean installGuardWithSwitchPoint(MethodHandle test, SwitchPoint switchPoint, MethodHandle fastTarget) {
+		return installGuardWithSwitchPoint(test, switchPoint, fastTarget, true);
+	}
+
+	/**
+	 * @param useGlobalSp if false, skip the globalSwitchPoint wrapper (preferred for JS prototype
+	 *                    method ICs where globalSp is irrelevant, saving one MH layer per call).
+	 */
+	public synchronized boolean installGuardWithSwitchPoint(MethodHandle test, SwitchPoint switchPoint, MethodHandle fastTarget, boolean useGlobalSp) {
 		if (megamorphic) return false;
 		chainDepth++;
 		if (chainDepth > MAX_CHAIN_DEPTH) {
@@ -237,9 +247,11 @@ public class ChainedCallSite extends MutableCallSite {
 			if (switchPoint != null) {
 				guardedTarget = switchPoint.guardWithTest(guardedTarget, fbTyped);
 			}
-			SwitchPoint globalSp = MagicJIT.getGlobalSwitchPoint();
-			if (globalSp != null) {
-				guardedTarget = globalSp.guardWithTest(guardedTarget, fbTyped);
+			if (useGlobalSp) {
+				SwitchPoint globalSp = MagicJIT.getGlobalSwitchPoint();
+				if (globalSp != null) {
+					guardedTarget = globalSp.guardWithTest(guardedTarget, fbTyped);
+				}
 			}
 		}
 		MethodHandle guard = MethodHandles.guardWithTest(test, guardedTarget, getTarget());

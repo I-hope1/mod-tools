@@ -57,6 +57,36 @@ public class JSObject {
 	private          JSObject    prototype/*  = null */;
 	private volatile SwitchPoint protoSwitchPoint;
 
+	/**
+	 * 当该对象被用作 prototype（即执行 {@code new Foo()}）时，懒惰创建并缓存一个
+	 * <b>专属的初始 JSShape</b>（等价于 V8 的 "initial map per prototype"）。
+	 * <p>
+	 * 这样 {@code new Dog()} 和 {@code new Cat()} 的实例拥有不同的 shape id，
+	 * IC guard 只需 {@code shape == expectedShape} 一条比较即可区分，
+	 * 无需再走 {@code getPrototype() == expectedProto} 的多余虚方法调用。
+	 */
+	private volatile JSShape instanceInitShape;
+
+	/** 为 new Foo() 实例获取（或懒创建）与该 prototype 绑定的初始 JSShape。 */
+	public JSShape getOrCreateInstanceInitShape() {
+		JSShape s = instanceInitShape;
+		if (s == null) {
+			synchronized (this) {
+				s = instanceInitShape;
+				if (s == null) {
+					// 新建一个空 Shape（propertyCount=0），但 id 全局唯一，区别于 ROOT
+					instanceInitShape = s = JSShape.createInitShapeForProto();
+				}
+			}
+		}
+		return s;
+	}
+
+	/** 若已存在则返回，否则返回 null（快路径：不触发 shape 分配）。 */
+	public JSShape getInstanceInitShapeIfPresent() {
+		return instanceInitShape;
+	}
+
 	public SwitchPoint getOrCreateProtoSwitchPoint() {
 		SwitchPoint sp = this.protoSwitchPoint;
 		if (sp == null) {

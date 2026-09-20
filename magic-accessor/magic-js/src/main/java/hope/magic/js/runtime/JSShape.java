@@ -72,6 +72,15 @@ public final class JSShape {
 
 	public static final JSShape ROOT = new JSShape(null, SymbolTable.NO_SYMBOL, TYPE_UNKNOWN, false);
 
+	/**
+	 * 为 prototype 对象创建专属的初始 JSShape（等价于 V8 "initial map"）。
+	 * 与 ROOT 结构相同（propertyCount = 0），但 id 全局唯一，
+	 * 使 IC guard 只需 shape == expectedShape 即可区分不同 class 的实例。
+	 */
+	public static JSShape createInitShapeForProto() {
+		return new JSShape(null, SymbolTable.NO_SYMBOL, TYPE_UNKNOWN, false);
+	}
+
 	public final  int     id;
 	public final  boolean hasAccessors;
 	public final  int     propertyCount;

@@ -3437,7 +3437,16 @@ public class JSLinker {
 					MethodHandle test;
 					JSObject proto = (ownOffset < 0) ? jsObj.getPrototype() : null;
 					if (ownOffset < 0) {
-						test = (proto != null) ? MH_IS_EXACT_SHAPE_AND_PROTO.bindTo(jsObj.shape).bindTo(proto) : null;
+						// 若实例持有 proto-keyed 专属 shape（由 new Foo() 分配），则 shape 已唯一标识原型链，
+						// 无需再做 getPrototype() 比较（protoSwitchPoint 负责失效保护）。
+						// 否则（如 {} 对象 shape = ROOT），多个不同 prototype 共享同一 shape，
+						// 必须保留 proto 比较。
+						boolean hasProtoKeyedShape = (jsObj.shape != JSShape.ROOT);
+						if (hasProtoKeyedShape) {
+							test = MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
+						} else {
+							test = (proto != null) ? MH_IS_EXACT_SHAPE_AND_PROTO.bindTo(jsObj.shape).bindTo(proto) : null;
+						}
 					} else {
 						test = (site.getChainDepth() == 0) ? MH_IS_SAME_OBJECT.bindTo(jsObj) : MH_IS_EXACT_SHAPE.bindTo(jsObj.shape);
 					}
@@ -4078,7 +4087,7 @@ public class JSLinker {
 	}
 
 	public static Object newJSFunction0(JSFunction ctor, JSObject cachedProto) throws Throwable {
-		JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto) : new JSObject();
+		JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto.getOrCreateInstanceInitShape(), cachedProto) : new JSObject();
 		Object   res    = ctor.call0(null, newObj);
 		if (res instanceof JSBridgedObject || (res != null && res != JSUndefined.INSTANCE && !(res instanceof Number || res instanceof Boolean || res instanceof String || res instanceof Character))) {
 			return res;
@@ -4087,7 +4096,7 @@ public class JSLinker {
 	}
 
 	public static Object newJSFunction1(JSFunction ctor, Object a0, JSObject cachedProto) throws Throwable {
-		JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto) : new JSObject();
+		JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto.getOrCreateInstanceInitShape(), cachedProto) : new JSObject();
 		Object   res    = ctor.call1(null, newObj, a0);
 		if (res instanceof JSBridgedObject || (res != null && res != JSUndefined.INSTANCE && !(res instanceof Number || res instanceof Boolean || res instanceof String || res instanceof Character))) {
 			return res;
@@ -4096,7 +4105,7 @@ public class JSLinker {
 	}
 
 	public static Object newJSFunction2(JSFunction ctor, Object a0, Object a1, JSObject cachedProto) throws Throwable {
-		JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto) : new JSObject();
+		JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto.getOrCreateInstanceInitShape(), cachedProto) : new JSObject();
 		Object   res    = ctor.call2(null, newObj, a0, a1);
 		if (res instanceof JSBridgedObject || (res != null && res != JSUndefined.INSTANCE && !(res instanceof Number || res instanceof Boolean || res instanceof String || res instanceof Character))) {
 			return res;
@@ -4106,7 +4115,7 @@ public class JSLinker {
 
 	public static Object newJSFunction3(JSFunction ctor, Object a0, Object a1, Object a2, JSObject cachedProto)
 	 throws Throwable {
-		JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto) : new JSObject();
+		JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto.getOrCreateInstanceInitShape(), cachedProto) : new JSObject();
 		Object   res    = ctor.call3(null, newObj, a0, a1, a2);
 		if (res instanceof JSBridgedObject || (res != null && res != JSUndefined.INSTANCE && !(res instanceof Number || res instanceof Boolean || res instanceof String || res instanceof Character))) {
 			return res;
@@ -4116,7 +4125,7 @@ public class JSLinker {
 
 	public static Object newJSFunction4(JSFunction ctor, Object a0, Object a1, Object a2, Object a3, JSObject cachedProto)
 	 throws Throwable {
-		JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto) : new JSObject();
+		JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto.getOrCreateInstanceInitShape(), cachedProto) : new JSObject();
 		Object   res    = ctor.call4(null, newObj, a0, a1, a2, a3);
 		if (res instanceof JSBridgedObject || (res != null && res != JSUndefined.INSTANCE && !(res instanceof Number || res instanceof Boolean || res instanceof String || res instanceof Character))) {
 			return res;
@@ -4125,7 +4134,7 @@ public class JSLinker {
 	}
 
 	public static Object newJSFunctionN(JSFunction ctor, Object[] args, JSObject cachedProto) throws Throwable {
-		JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto) : new JSObject();
+		JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto.getOrCreateInstanceInitShape(), cachedProto) : new JSObject();
 		Object   res    = ctor.call(null, newObj, args);
 		if (res instanceof JSBridgedObject || (res != null && res != JSUndefined.INSTANCE && !(res instanceof Number || res instanceof Boolean || res instanceof String || res instanceof Character))) {
 			return res;

@@ -2202,12 +2202,17 @@ public class JSLinker {
 						Object raw = holder.getRawObjectSlot(holderOffset);
 						if (raw instanceof PropertyAccessor acc) {
 							MethodHandle getterTarget = MethodHandles.insertArguments(MH_GET_PROTO_ACCESSOR_PROP, 0, acc).asType(site.type());
+							List<SwitchPoint> allSps = new ArrayList<>(chain != null ? chain.size() + 1 : 1);
 							if (chain != null && fbTyped != null) {
 								for (JSObject p : chain) {
-									getterTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(getterTarget, fbTyped);
+									SwitchPoint pSp = p.getOrCreateProtoSwitchPoint();
+									getterTarget = pSp.guardWithTest(getterTarget, fbTyped);
+									allSps.add(pSp);
 								}
 							}
-							site.installProtoGuard(shape, holder.getOrCreateProtoSwitchPoint(), test, getterTarget);
+							SwitchPoint holderSp = holder.getOrCreateProtoSwitchPoint();
+							allSps.add(holderSp);
+							site.installProtoGuard(shape, holderSp, allSps, test, getterTarget);
 							return acc.callGetter(null, target);
 						}
 					} else {
@@ -2216,12 +2221,17 @@ public class JSLinker {
 						MethodHandle constTarget = MethodHandles.dropArguments(
 							MethodHandles.constant(Object.class, val), 0, site.type().parameterList()
 						).asType(site.type());
+						List<SwitchPoint> allSps = new ArrayList<>(chain != null ? chain.size() + 1 : 1);
 						if (chain != null && fbTyped != null) {
 							for (JSObject p : chain) {
-								constTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(constTarget, fbTyped);
+								SwitchPoint pSp = p.getOrCreateProtoSwitchPoint();
+								constTarget = pSp.guardWithTest(constTarget, fbTyped);
+								allSps.add(pSp);
 							}
 						}
-						site.installProtoGuard(shape, holder.getOrCreateProtoSwitchPoint(), test, constTarget);
+						SwitchPoint holderSp = holder.getOrCreateProtoSwitchPoint();
+						allSps.add(holderSp);
+						site.installProtoGuard(shape, holderSp, allSps, test, constTarget);
 						return val;
 					}
 				}
@@ -3500,12 +3510,17 @@ public class JSLinker {
 								MethodHandle fb = site.getInitialFallback();
 								MethodHandle fbTyped = (fb != null) ? fb.asType(site.type()) : null;
 								MethodHandle guardedCall = exactFuncCall.asType(site.type());
+								List<SwitchPoint> allSps = new ArrayList<>(chain != null ? chain.size() + 1 : 1);
 								if (chain != null && fbTyped != null) {
 									for (JSObject p : chain) {
-										guardedCall = p.getOrCreateProtoSwitchPoint().guardWithTest(guardedCall, fbTyped);
+										SwitchPoint pSp = p.getOrCreateProtoSwitchPoint();
+										guardedCall = pSp.guardWithTest(guardedCall, fbTyped);
+										allSps.add(pSp);
 									}
 								}
-								site.installProtoGuard(jsObj.shape, holder.getOrCreateProtoSwitchPoint(), test, guardedCall);
+								SwitchPoint holderSp = holder.getOrCreateProtoSwitchPoint();
+								allSps.add(holderSp);
+								site.installProtoGuard(jsObj.shape, holderSp, allSps, test, guardedCall);
 							} else {
 								site.installGuardOrSwitchMegamorphic(test, exactFuncCall.asType(site.type()));
 							}

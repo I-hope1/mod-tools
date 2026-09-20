@@ -189,31 +189,86 @@ public class ChainedCallSite extends MutableCallSite {
 	}
 
 	private boolean hasRecordedClass(Class<?> clazz) {
-		for (int i = 0; i < recordedClasses.size(); i++) {
-			Class<?> c = recordedClasses.get(i).get();
+		for (WeakReference<Class<?>> recordedClass : recordedClasses) {
+			Class<?> c = recordedClass.get();
 			if (c == clazz) return true;
 		}
 		return false;
 	}
 
-	private final List<JSShape> recordedProtoShapes = new ArrayList<>(4);
+	/**
+	 * 已挂载的原型 SwitchPoint 列表（非按 shape 去重）。
+	 * 只有当某个 SP 真正失效时才触发 reset()，而非"同一个 shape 再次出现"。
+	 *
+	 * <p><b>旧实现的问题：</b>用 {@code recordedProtoShapes.contains(shape)} 来判断
+	 * "SwitchPoint 已失效，需要重置"。但当多个不同类的实例共享同一个 JSShape（如 ROOT
+	 * shape 下的 Dog/Cat），每次交替调用都会命中 contains → 触发 reset()，形成
+	 * install→reset→install 死循环，导致 JIT 无法稳定内联，runPoly 退化为 100s 量级。
+	 *
+	 * <p><b>正确判断：</b>检查已记录的 SwitchPoint 是否确实 {@link SwitchPoint#hasBeenInvalidated()}。
+	 * 若否（SP 仍然有效），则直接追加新 guard，不做 reset。
+	 * 若是（某个 SP 已失效），才触发 reset() 重建链，同时消耗一次 relink 预算，
+	 * 超出 {@link #MAX_RELINKS} 后强制降级为 Megamorphic。
+	 */
+	private final List<SwitchPoint> recordedProtoSps = new ArrayList<>(4);
+
+	/** 已发生的重链次数（不随 reset() 清零，用于限制振荡场景下的无限重链）。 */
+	private int relinkCount = 0;
+
+	/** 最大允许重链次数：超出后强制降级 Megamorphic，避免 runPoly 类场景无限循环。 */
+	private static final int MAX_RELINKS = 8;
 
 	public synchronized boolean installProtoGuard(JSShape shape, SwitchPoint sp, MethodHandle test, MethodHandle fastTarget) {
-		if (shape != null && recordedProtoShapes.contains(shape)) {
-			// 该实例 Shape 此前已挂载过原型守卫，再次进入说明原型的 SwitchPoint 已失效，重置调用点
-			reset();
+		// 单层原型访问（无中间链），allSps 仅含 holderSp
+		List<SwitchPoint> allSps = (sp != null) ? Collections.singletonList(sp) : Collections.emptyList();
+		return installProtoGuard(shape, sp, allSps, test, fastTarget);
+	}
+
+	/**
+	 * 带完整 SP 列表的原型守卫安装（深链路径使用）。
+	 *
+	 * @param allSps 链条中的全部 SwitchPoint（中间层 SP + holder SP），
+	 *               用于检测任意一级失效。只有当 {@code allSps} 中某个 SP 确实
+	 *               {@link SwitchPoint#hasBeenInvalidated()} 才触发 reset()。
+	 */
+	public synchronized boolean installProtoGuard(JSShape shape, SwitchPoint holderSp,
+	                                              List<SwitchPoint> allSps,
+	                                              MethodHandle test, MethodHandle fastTarget) {
+		// 先检查 megamorphic，避免 reset() 悄悄撤销已降级状态
+		if (megamorphic) return false;
+
+		// 扫描已挂载的 SP：只有真正失效的 SP 才需要重建链
+		boolean anyInvalidated = false;
+		for (int i = 0; i < recordedProtoSps.size(); i++) {
+			if (recordedProtoSps.get(i).hasBeenInvalidated()) {
+				anyInvalidated = true;
+				break;
+			}
 		}
-		if (shape != null && !recordedProtoShapes.contains(shape)) {
-			recordedProtoShapes.add(shape);
+		if (anyInvalidated) {
+			if (++relinkCount > MAX_RELINKS) {
+				// 反复失效 → 场景不稳定，降级为 Megamorphic，不再重建
+				megamorphic = true;
+				getOrCreateDirectCache();
+				if (megamorphicTarget != null) setTarget(megamorphicTarget.asType(type()));
+				return false;
+			}
+			reset(); // 清空链（内部会清 recordedProtoSps）
 		}
-		// JS 原型方法 IC 不需要 globalSwitchPoint（globalSp 仅供 Java 类重载场景使用），
-		// 跳过该层可减少一层 MH 链路开销。
-		return installGuardWithSwitchPoint(test, sp, fastTarget, /*useGlobalSp=*/false);
+
+		// 追加本次链条中的全部 SP（允许 reset 后重新添加）
+		recordedProtoSps.addAll(allSps);
+
+		// JS 原型方法 IC 不需要 globalSwitchPoint（globalSp 仅供 Java 类重载场景使用）
+		return installGuardWithSwitchPoint(test, holderSp, fastTarget, /*useGlobalSp=*/false);
 	}
 
 	public synchronized boolean installJavaGuard(Class<?> clazz, MethodHandle test, MethodHandle fastTarget) {
+		if (megamorphic) return false; // 先检查，避免 reset() 悄悄撤销已降级状态
 		if (clazz != null && hasRecordedClass(clazz)) {
-			// 该类此前已挂载过，本次再次进入说明 SwitchPoint 已失效触发 Deopt，旧链条已失效，重置调用点
+			// Java class 守卫：同一个类再次进入 fallback 说明其 classSp 或 globalSp 已失效，
+			// 链条已断裂，需要重置重建。（与 installProtoGuard 不同，Java class 不存在
+			// 多个不相关类共享同一 JSShape 的问题，所以重录即等价于 SP 失效。）
 			reset();
 		}
 		if (clazz != null && !hasRecordedClass(clazz)) {
@@ -267,7 +322,7 @@ public class ChainedCallSite extends MutableCallSite {
 		this.commonType = -1;
 		this.offsetEquivalent = true;
 		this.recordedClasses.clear();
-		this.recordedProtoShapes.clear();
+		this.recordedProtoSps.clear();  // 清空 SP 列表，relinkCount 故意保留（跨 reset 限制总重链次数）
 		Arrays.fill(recordedShapes, null);
 		Arrays.fill(recordedEntries, 0L);
 		if (initialFallback != null) {

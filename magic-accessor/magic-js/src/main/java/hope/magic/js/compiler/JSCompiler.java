@@ -6,6 +6,8 @@ import hope.magic.js.runtime.*;
 import hope.magic.runtime.Magic;
 import org.objectweb.asm.*;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.invoke.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -44,15 +46,15 @@ public class JSCompiler {
 	 BSM_GET_INDEX       = createBSM("bootstrapGetIndex", BSM_TYPE_BASE),
 	 BSM_SET_INDEX       = createBSM("bootstrapSetIndex", BSM_TYPE_BASE);
 
-	public static volatile boolean ENABLE_LOOP_INVARIANT_HOISTING = true;
-	public static volatile boolean ENABLE_INTEGER_MOD_SPECIALIZATION = false;
-	public static volatile java.util.function.BiConsumer<String, byte[]> CLASS_DUMP_HOOK = null;
+	public static volatile boolean                                       ENABLE_LOOP_INVARIANT_HOISTING    = true;
+	public static volatile boolean                                       ENABLE_INTEGER_MOD_SPECIALIZATION = false;
+	public static volatile java.util.function.BiConsumer<String, byte[]> CLASS_DUMP_HOOK                   = null;
 
 	public static String disassemble(byte[] classBytes) {
-		org.objectweb.asm.ClassReader cr = new org.objectweb.asm.ClassReader(classBytes);
-		java.io.StringWriter sw = new java.io.StringWriter();
-		java.io.PrintWriter pw = new java.io.PrintWriter(sw);
-		org.objectweb.asm.util.TraceClassVisitor tcv = new org.objectweb.asm.util.TraceClassVisitor(pw);
+		var         cr  = new ClassReader(classBytes);
+		var         sw  = new StringWriter();
+		PrintWriter pw  = new PrintWriter(sw);
+		var         tcv = new org.objectweb.asm.util.TraceClassVisitor(pw);
 		cr.accept(tcv, 0);
 		return sw.toString();
 	}
@@ -144,15 +146,15 @@ public class JSCompiler {
 		ClassLoader prev = CURRENT_LOADER.get();
 		CURRENT_LOADER.set(scriptLoader);
 		try {
-			JSLexer      lexer         = new JSLexer(code);
-			JSParser     parser        = new JSParser(lexer.tokenize());
-			Node.Program program       = parser.parse();
-			Node.Program modProg       = hope.magic.js.module.ModuleTransformer.transform(program);
-			Node.Program foldedProgram = ConstantFolder.fold(modProg);
-			Node.BlockStmt body        = new Node.BlockStmt(foldedProgram.body, foldedProgram.line, foldedProgram.column);
-			List<String> params        = List.of("exports", "require", "module", "__filename", "__dirname");
-			String       funcClass     = generateFunctionClass(null, params, body, false);
-			Class<?>     clazz         = scriptLoader.loadClass(funcClass.replace('/', '.'));
+			JSLexer        lexer         = new JSLexer(code);
+			JSParser       parser        = new JSParser(lexer.tokenize());
+			Node.Program   program       = parser.parse();
+			Node.Program   modProg       = hope.magic.js.module.ModuleTransformer.transform(program);
+			Node.Program   foldedProgram = ConstantFolder.fold(modProg);
+			Node.BlockStmt body          = new Node.BlockStmt(foldedProgram.body, foldedProgram.line, foldedProgram.column);
+			List<String>   params        = List.of("exports", "require", "module", "__filename", "__dirname");
+			String         funcClass     = generateFunctionClass(null, params, body, false);
+			Class<?>       clazz         = scriptLoader.loadClass(funcClass.replace('/', '.'));
 			return (JSFunction) clazz.getDeclaredConstructor().newInstance();
 		} finally {
 			if (prev != null) {
@@ -341,14 +343,15 @@ public class JSCompiler {
 		boolean isPrimitive() { return type != VarType.OBJECT; }
 	}
 
-	private record TryCatchLabels(Label tryStart, Label tryEnd, Label catchHandler, Label catchStart, Label catchEnd, Label finallyHandler, Label afterTryCatch) { }
+	private record TryCatchLabels(Label tryStart, Label tryEnd, Label catchHandler, Label catchStart, Label catchEnd,
+	                              Label finallyHandler, Label afterTryCatch) { }
 
 	private static class CompileContext {
 		final MethodVisitor                     mv;
 		final String                            className;
 		final Node                              rootNode;
-		final Map<String, LocalVar>             locals           = new LinkedHashMap<>();
-		final Map<String, VarType>              preInferredTypes = new LinkedHashMap<>();
+		final Map<String, LocalVar>             locals                 = new LinkedHashMap<>();
+		final Map<String, VarType>              preInferredTypes       = new LinkedHashMap<>();
 		final Map<Node.TryStmt, TryCatchLabels> tryCatchMap            = new IdentityHashMap<>();
 		final Deque<Node>                       activeFinallyBlocks    = new ArrayDeque<>();
 		final Set<String>                       capturedVars           = new HashSet<>();
@@ -424,12 +427,13 @@ public class JSCompiler {
 			    && member.target instanceof Node.IdentifierExpr targetIdent
 			    && targetIdent.name.equals("Math")
 			    && (ctx == null || ctx.getLocal("Math") == null)) {
-				int argc = call.arguments.size();
+				int    argc = call.arguments.size();
 				String prop = member.property;
 				if (argc == 0 && "random".equals(prop)) return true;
 				if (argc == 1) {
 					return switch (prop) {
-						case "abs", "sqrt", "floor", "ceil", "sin", "cos", "tan", "log", "log10", "log2", "exp", "round", "sign", "trunc", "asin", "acos", "atan", "cbrt" -> true;
+						case "abs", "sqrt", "floor", "ceil", "sin", "cos", "tan", "log", "log10", "log2", "exp", "round", "sign",
+						     "trunc", "asin", "acos", "atan", "cbrt" -> true;
 						default -> false;
 					};
 				}
@@ -487,7 +491,9 @@ public class JSCompiler {
 			VarType   left  = inferVarType(bin.left, ctx);
 			VarType   right = inferVarType(bin.right, ctx);
 			if (left == VarType.INT && right == VarType.INT) {
-				if (op == TokenType.SLASH || op == TokenType.PLUS || op == TokenType.MINUS || op == TokenType.STAR) return VarType.DOUBLE;
+				if (op == TokenType.SLASH || op == TokenType.PLUS || op == TokenType.MINUS || op == TokenType.STAR) {
+					return VarType.DOUBLE;
+				}
 				return VarType.INT;
 			}
 			if (left == VarType.LONG && right == VarType.LONG && op != TokenType.SLASH) {
@@ -550,6 +556,44 @@ public class JSCompiler {
 			return isStringExpr(bin.left) || isStringExpr(bin.right);
 		}
 		return false;
+	}
+
+	private static boolean isIdentUsedAsObject(String name, Node node) {
+		if (node == null) return false;
+		// 作为成员访问的主体：d.speak()
+		if (node instanceof Node.MemberAccessExpr mem) {
+			if (mem.target instanceof Node.IdentifierExpr target && target.name.equals(name)) {
+				return true;
+			}
+			return isIdentUsedAsObject(name, mem.target);
+		}
+		// 作为索引访问的主体：d[0]
+		if (node instanceof Node.IndexAccessExpr idx) {
+			if (idx.target instanceof Node.IdentifierExpr target && target.name.equals(name)) {
+				return true;
+			}
+			return isIdentUsedAsObject(name, idx.target) || isIdentUsedAsObject(name, idx.index);
+		}
+		// 作为函数被直接调用：d()
+		if (node instanceof Node.CallExpr call) {
+			if (call.callee instanceof Node.IdentifierExpr callee && callee.name.equals(name)) {
+				return true;
+			}
+		}
+		// 作为构造器：new d()
+		if (node instanceof Node.NewExpr newExpr) {
+			if (newExpr.constructor instanceof Node.IdentifierExpr ctor && ctor.name.equals(name)) {
+				return true;
+			}
+		}
+
+		boolean[] found = new boolean[1];
+		forEachChildNode(node, child -> {
+			if (!found[0] && isIdentUsedAsObject(name, child)) {
+				found[0] = true;
+			}
+		});
+		return found[0];
 	}
 
 	private static boolean isNumeric(VarType t) {
@@ -637,6 +681,11 @@ public class JSCompiler {
 			if (isVarUsedAsNumeric(name, f.update)) return true;
 			if (isVarUsedAsNumeric(name, f.body)) return true;
 		} else if (node instanceof Node.AssignExpr assign) {
+			if (assign.target instanceof Node.IdentifierExpr target && target.name.equals(name)) {
+				if (assign.op != TokenType.ASSIGN) {
+					return true;
+				}
+			}
 			return isVarUsedAsNumeric(name, assign.value);
 		} else if (node instanceof Node.ExprStmt exprStmt) {
 			return isVarUsedAsNumeric(name, exprStmt.expr);
@@ -675,7 +724,7 @@ public class JSCompiler {
 		}
 	}
 
-	private record ScopeInfo(List<String> params, Node body) {}
+	private record ScopeInfo(List<String> params, Node body) { }
 
 	private static Set<String> findCapturedVarsInFunction(List<String> params, Node.BlockStmt body) {
 		Set<String> declared = new HashSet<>();
@@ -690,8 +739,8 @@ public class JSCompiler {
 		collectClassDecls(new Node.Program(body.statements, body.line, body.column), classDecls);
 		for (Node.ClassDecl cd : classDecls) if (cd.name != null) declared.add(cd.name);
 
-		Set<String> captured = new HashSet<>();
-		boolean[] hasEval = new boolean[1];
+		Set<String>     captured     = new HashSet<>();
+		boolean[]       hasEval      = new boolean[1];
 		List<ScopeInfo> nestedScopes = new ArrayList<>();
 		findNestedScopesAndEval(body, nestedScopes, hasEval);
 
@@ -709,7 +758,7 @@ public class JSCompiler {
 
 	private static void collectCapturedVars(Node root, Set<String> capturedVars) {
 		if (root == null) return;
-		boolean[] hasEval = new boolean[1];
+		boolean[]       hasEval      = new boolean[1];
 		List<ScopeInfo> nestedScopes = new ArrayList<>();
 		findNestedScopesAndEval(root, nestedScopes, hasEval);
 
@@ -1100,6 +1149,12 @@ public class JSCompiler {
 				    || assign.op == TokenType.SHR_ASSIGN) { return VarType.INT; }
 				if (assign.op == TokenType.PLUS_ASSIGN || assign.op == TokenType.MINUS_ASSIGN
 				    || assign.op == TokenType.STAR_ASSIGN || assign.op == TokenType.PERCENT_ASSIGN) {
+					if (ctx != null) {
+						VarType current = ctx.preInferredTypes.get(name);
+						if (current != null && isNumeric(current)) {
+							return VarType.DOUBLE;
+						}
+					}
 					VarType valType = inferVarType(assign.value, ctx);
 					if (isNumeric(valType)) {
 						return valType == VarType.DOUBLE ? VarType.DOUBLE : (valType == VarType.LONG ? VarType.LONG : VarType.INT);
@@ -1454,8 +1509,8 @@ public class JSCompiler {
 			if (needResult) visitUndefined(mv);
 			return;
 		}
-		VarType       type = preInferVarType(varDecl, ctx);
-		LocalVar      var  = ctx.declareLocal(varDecl.name, type);
+		VarType  type = preInferVarType(varDecl, ctx);
+		LocalVar var  = ctx.declareLocal(varDecl.name, type);
 		if (!ctx.isFunction) {
 			ctx.uncapturedTopLevelVars.add(varDecl.name);
 		}
@@ -1499,9 +1554,9 @@ public class JSCompiler {
 		if (!ENABLE_LOOP_INVARIANT_HOISTING) {
 			return Collections.emptySet();
 		}
-		Set<String> reads = new LinkedHashSet<>();
-		Set<String> writes = new HashSet<>();
-		boolean[] hasSideEffects = new boolean[1];
+		Set<String> reads          = new LinkedHashSet<>();
+		Set<String> writes         = new HashSet<>();
+		boolean[]   hasSideEffects = new boolean[1];
 
 		collectLoopIdentAccess(body, reads, writes, hasSideEffects);
 		if (cond != null) collectLoopIdentAccess(cond, reads, writes, hasSideEffects);
@@ -1514,15 +1569,16 @@ public class JSCompiler {
 		Set<String> hoistable = new LinkedHashSet<>();
 		for (String name : reads) {
 			if (!writes.contains(name)
-					&& !isSpecialGlobalOrBuiltin(name)
-					&& ctx.getLocal(name) == null) {
+			    && !isSpecialGlobalOrBuiltin(name)
+			    && ctx.getLocal(name) == null) {
 				hoistable.add(name);
 			}
 		}
 		return hoistable;
 	}
 
-	private static void collectLoopIdentAccess(Node node, Set<String> reads, Set<String> writes, boolean[] hasSideEffects) {
+	private static void collectLoopIdentAccess(Node node, Set<String> reads, Set<String> writes,
+	                                           boolean[] hasSideEffects) {
 		if (node == null || hasSideEffects[0]) return;
 
 		if (node instanceof Node.IdentifierExpr ident) {
@@ -1570,8 +1626,8 @@ public class JSCompiler {
 		}
 		if (node instanceof Node.CallExpr call) {
 			if (call.callee instanceof Node.MemberAccessExpr mem
-					&& mem.target instanceof Node.IdentifierExpr target
-					&& "Math".equals(target.name)) {
+			    && mem.target instanceof Node.IdentifierExpr target
+			    && "Math".equals(target.name)) {
 				for (Node arg : call.arguments) {
 					collectLoopIdentAccess(arg, reads, writes, hasSideEffects);
 				}
@@ -1590,8 +1646,8 @@ public class JSCompiler {
 
 	private static boolean isSpecialGlobalOrBuiltin(String name) {
 		return "this".equals(name) || "arguments".equals(name)
-				|| "NaN".equals(name) || "undefined".equals(name) || "Infinity".equals(name)
-				|| "Math".equals(name) || "globalThis".equals(name) || "window".equals(name) || "global".equals(name);
+		       || "NaN".equals(name) || "undefined".equals(name) || "Infinity".equals(name)
+		       || "Math".equals(name) || "globalThis".equals(name) || "window".equals(name) || "global".equals(name);
 	}
 
 	private static Map<String, LocalVar> hoistLoopInvariants(Set<String> hoistable, CompileContext ctx) {
@@ -1614,14 +1670,14 @@ public class JSCompiler {
 	}
 
 	private static void compileWhile(Node.WhileStmt whileStmt, CompileContext ctx) {
-		MethodVisitor mv       = ctx.mv;
+		MethodVisitor mv = ctx.mv;
 
 		Set<String>           hoistable  = findHoistableLoopInvariants(whileStmt.body, whileStmt.condition, null, ctx);
 		Map<String, LocalVar> hoistedMap = hoistLoopInvariants(hoistable, ctx);
 
-		Label         loopCond = new Label();
-		Label         loopBody = new Label();
-		Label         loopEnd  = new Label();
+		Label loopCond = new Label();
+		Label loopBody = new Label();
+		Label loopEnd  = new Label();
 
 		ctx.breakTargets.push(loopEnd);
 		ctx.continueTargets.push(loopCond);
@@ -1750,14 +1806,14 @@ public class JSCompiler {
 	}
 
 	private static void compileDoWhile(Node.DoWhileStmt doWhile, CompileContext ctx) {
-		MethodVisitor mv            = ctx.mv;
+		MethodVisitor mv = ctx.mv;
 
 		Set<String>           hoistable  = findHoistableLoopInvariants(doWhile.body, doWhile.condition, null, ctx);
 		Map<String, LocalVar> hoistedMap = hoistLoopInvariants(hoistable, ctx);
 
-		Label         startLabel    = new Label();
-		Label         continueLabel = new Label();
-		Label         endLabel      = new Label();
+		Label startLabel    = new Label();
+		Label continueLabel = new Label();
+		Label endLabel      = new Label();
 
 		ctx.breakTargets.push(endLabel);
 		ctx.continueTargets.push(continueLabel);
@@ -1925,7 +1981,7 @@ public class JSCompiler {
 			ctx.allocTempSlot(); // double uses 2 slots
 			mv.visitVarInsn(Opcodes.DSTORE, retSlot);
 			for (int i = 0; i < fins.size(); i++) {
-				Node fin = fins.get(i);
+				Node        fin   = fins.get(i);
 				Deque<Node> saved = new ArrayDeque<>(ctx.activeFinallyBlocks);
 				ctx.activeFinallyBlocks.clear();
 				for (int j = i + 1; j < fins.size(); j++) {
@@ -1946,7 +2002,7 @@ public class JSCompiler {
 			int retSlot = ctx.allocTempSlot();
 			mv.visitVarInsn(Opcodes.ASTORE, retSlot);
 			for (int i = 0; i < fins.size(); i++) {
-				Node fin = fins.get(i);
+				Node        fin   = fins.get(i);
 				Deque<Node> saved = new ArrayDeque<>(ctx.activeFinallyBlocks);
 				ctx.activeFinallyBlocks.clear();
 				for (int j = i + 1; j < fins.size(); j++) {
@@ -2053,7 +2109,8 @@ public class JSCompiler {
 		}
 	}
 
-	private static void storeAndResult(MethodVisitor mv, LocalVar var, boolean needResult, CompileContext ctx, String varName) {
+	private static void storeAndResult(MethodVisitor mv, LocalVar var, boolean needResult, CompileContext ctx,
+	                                   String varName) {
 		if (var.isInt()) {
 			if (needResult) {
 				mv.visitInsn(Opcodes.DUP);
@@ -2987,11 +3044,11 @@ public class JSCompiler {
 				mv.visitInsn(Opcodes.AASTORE);
 			}
 			mv.visitMethodInsn(
-					Opcodes.INVOKESTATIC,
-					IN_JSLinker,
-					"callSuperConstructor",
-					"(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
-					false
+			 Opcodes.INVOKESTATIC,
+			 IN_JSLinker,
+			 "callSuperConstructor",
+			 "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
+			 false
 			);
 			if (!needResult) {
 				mv.visitInsn(Opcodes.POP);
@@ -3052,11 +3109,11 @@ public class JSCompiler {
 				mv.visitInsn(Opcodes.AASTORE);
 			}
 			mv.visitMethodInsn(
-					Opcodes.INVOKESTATIC,
-					IN_JSLinker,
-					"invokeIndex",
-					"(Ljava/lang/Object;Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
-					false
+			 Opcodes.INVOKESTATIC,
+			 IN_JSLinker,
+			 "invokeIndex",
+			 "(Ljava/lang/Object;Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
+			 false
 			);
 			if (!needResult) mv.visitInsn(Opcodes.POP);
 			return;
@@ -3092,7 +3149,7 @@ public class JSCompiler {
 		MethodVisitor mv = ctx.mv;
 
 		boolean hasAccessors = false;
-		boolean hasComputed = false;
+		boolean hasComputed  = false;
 		for (var entry : objLit.entries) {
 			if (entry.kind() != Node.PropertyKind.NORMAL) {
 				hasAccessors = true;
@@ -3112,30 +3169,30 @@ public class JSCompiler {
 					if (entry.kind() == Node.PropertyKind.GETTER) {
 						compileNode(entry.keyExpr(), ctx, true);
 						mv.visitMethodInsn(Opcodes.INVOKESTATIC, "hope/magic/js/runtime/JSArray", "toPropertyKey",
-								"(Ljava/lang/Object;)Ljava/lang/String;", false);
+						 "(Ljava/lang/Object;)Ljava/lang/String;", false);
 						compileNode(entry.value(), ctx, true);
 						mv.visitTypeInsn(Opcodes.CHECKCAST, "hope/magic/js/runtime/JSFunction");
 						mv.visitInsn(Opcodes.ACONST_NULL);
 						mv.visitInsn(Opcodes.ICONST_1); // enumerable = true
 						mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "defineAccessor",
-								"(Ljava/lang/String;Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSFunction;Z)V", false);
+						 "(Ljava/lang/String;Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSFunction;Z)V", false);
 					} else if (entry.kind() == Node.PropertyKind.SETTER) {
 						compileNode(entry.keyExpr(), ctx, true);
 						mv.visitMethodInsn(Opcodes.INVOKESTATIC, "hope/magic/js/runtime/JSArray", "toPropertyKey",
-								"(Ljava/lang/Object;)Ljava/lang/String;", false);
+						 "(Ljava/lang/Object;)Ljava/lang/String;", false);
 						mv.visitInsn(Opcodes.ACONST_NULL);
 						compileNode(entry.value(), ctx, true);
 						mv.visitTypeInsn(Opcodes.CHECKCAST, "hope/magic/js/runtime/JSFunction");
 						mv.visitInsn(Opcodes.ICONST_1); // enumerable = true
 						mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "defineAccessor",
-								"(Ljava/lang/String;Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSFunction;Z)V", false);
+						 "(Ljava/lang/String;Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSFunction;Z)V", false);
 					} else {
 						compileNode(entry.keyExpr(), ctx, true);
 						mv.visitMethodInsn(Opcodes.INVOKESTATIC, "hope/magic/js/runtime/JSArray", "toPropertyKey",
-								"(Ljava/lang/Object;)Ljava/lang/String;", false);
+						 "(Ljava/lang/Object;)Ljava/lang/String;", false);
 						compileNode(entry.value(), ctx, true);
 						mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "put",
-								"(Ljava/lang/String;Ljava/lang/Object;)V", false);
+						 "(Ljava/lang/String;Ljava/lang/Object;)V", false);
 					}
 				} else {
 					if (entry.kind() == Node.PropertyKind.GETTER) {
@@ -3145,7 +3202,7 @@ public class JSCompiler {
 						mv.visitInsn(Opcodes.ACONST_NULL);
 						mv.visitInsn(Opcodes.ICONST_1); // enumerable = true
 						mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "defineAccessor",
-								"(Ljava/lang/String;Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSFunction;Z)V", false);
+						 "(Ljava/lang/String;Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSFunction;Z)V", false);
 					} else if (entry.kind() == Node.PropertyKind.SETTER) {
 						mv.visitLdcInsn(entry.key());
 						mv.visitInsn(Opcodes.ACONST_NULL);
@@ -3153,12 +3210,12 @@ public class JSCompiler {
 						mv.visitTypeInsn(Opcodes.CHECKCAST, "hope/magic/js/runtime/JSFunction");
 						mv.visitInsn(Opcodes.ICONST_1); // enumerable = true
 						mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "defineAccessor",
-								"(Ljava/lang/String;Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSFunction;Z)V", false);
+						 "(Ljava/lang/String;Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSFunction;Z)V", false);
 					} else {
 						mv.visitLdcInsn(entry.key());
 						compileNode(entry.value(), ctx, true);
 						mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "put",
-								"(Ljava/lang/String;Ljava/lang/Object;)V", false);
+						 "(Ljava/lang/String;Ljava/lang/Object;)V", false);
 					}
 				}
 			}
@@ -3225,8 +3282,8 @@ public class JSCompiler {
 	}
 
 	private static void compileArrayLiteral(Node.ArrayLiteralExpr arrLit, CompileContext ctx, boolean needResult) {
-		MethodVisitor mv = ctx.mv;
-		int size = arrLit.elements.size();
+		MethodVisitor mv   = ctx.mv;
+		int           size = arrLit.elements.size();
 		if (size == 0) {
 			mv.visitTypeInsn(Opcodes.NEW, IN_JSArray);
 			mv.visitInsn(Opcodes.DUP);
@@ -3394,11 +3451,11 @@ public class JSCompiler {
 
 		// 7. Call JavaClassExtender.defineClass
 		mv.visitMethodInsn(
-				Opcodes.INVOKESTATIC,
-				"hope/magic/js/runtime/JavaClassExtender",
-				"defineClass",
-				"(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;[Ljava/lang/Object;Lhope/magic/js/runtime/JSFunction;)Lhope/magic/js/runtime/JSFunction;",
-				false
+		 Opcodes.INVOKESTATIC,
+		 "hope/magic/js/runtime/JavaClassExtender",
+		 "defineClass",
+		 "(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;[Ljava/lang/Object;Lhope/magic/js/runtime/JSFunction;)Lhope/magic/js/runtime/JSFunction;",
+		 false
 		);
 
 		// 8. Bind class name into scope
@@ -3457,11 +3514,18 @@ public class JSCompiler {
 
 	private static boolean isNumericFunction(Node.BlockStmt body, List<String> params, String functionName) {
 		if (body == null || body.statements.isEmpty()) return false;
+
+		for (String param : params) {
+			if (!isVarUsedAsNumeric(param, body) || isIdentUsedAsObject(param, body)) {
+				return false;
+			}
+		}
+
 		List<Node.ReturnStmt> returns = new ArrayList<>();
 		collectReturnStmts(body, returns);
 		if (returns.isEmpty()) return false;
-		Set<String> numericNames = new HashSet<>(params);
-		List<Node.VarDecl> varDecls = new ArrayList<>();
+		Set<String>        numericNames = new HashSet<>(params);
+		List<Node.VarDecl> varDecls     = new ArrayList<>();
 		collectVarDecls(body, varDecls);
 		for (Node.VarDecl vd : varDecls) {
 			if (isVarUsedAsNumeric(vd.name, body)) {
@@ -3636,12 +3700,13 @@ public class JSCompiler {
 		return generateFunctionClass(functionName, params, body, false);
 	}
 
-	public static String generateFunctionClass(String functionName, List<String> params, Node.BlockStmt body, boolean isAsync) {
+	public static String generateFunctionClass(String functionName, List<String> params, Node.BlockStmt body,
+	                                           boolean isAsync) {
 		String      funcClassName = "hope/magic/gen/MagicJSFunction_" + SCRIPT_ID.incrementAndGet();
 		ClassWriter cw            = new FastClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
 		cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, funcClassName, null, IN_JSObject, isAsync
-				? new String[]{Type.getInternalName(JSFunction.class), "hope/magic/js/runtime/JSLinker$AsyncJSFunction"}
-				: new String[]{Type.getInternalName(JSFunction.class)});
+		 ? new String[]{Type.getInternalName(JSFunction.class), "hope/magic/js/runtime/JSLinker$AsyncJSFunction"}
+		 : new String[]{Type.getInternalName(JSFunction.class)});
 
 		// public JSContext cx;
 		cw.visitField(Opcodes.ACC_PUBLIC, "cx", "L" + IN_JSContext + ";", null, null).visitEnd();
@@ -3695,18 +3760,18 @@ public class JSCompiler {
 		initMv.visitMaxs(3, 1);
 		initMv.visitEnd();
 
-		boolean hasArguments = usesArguments(body) && !params.contains("arguments");
-		int    paramCount       = params.size();
+		boolean     hasArguments     = usesArguments(body) && !params.contains("arguments");
+		int         paramCount       = params.size();
 		Set<String> thisFuncCaptured = findCapturedVarsInFunction(params, body);
 
 		if (isAsync) {
 			// 1. call(cx, thisObj, args) -> JSLinker.runAsync(this, cx, thisObj, args)
 			MethodVisitor callMv = cw.visitMethod(
-					Opcodes.ACC_PUBLIC,
-					"call",
-					"(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
-					null,
-					new String[]{"java/lang/Throwable"}
+			 Opcodes.ACC_PUBLIC,
+			 "call",
+			 "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
+			 null,
+			 new String[]{"java/lang/Throwable"}
 			);
 			callMv.visitCode();
 			callMv.visitVarInsn(Opcodes.ALOAD, 0); // this
@@ -3714,11 +3779,11 @@ public class JSCompiler {
 			callMv.visitVarInsn(Opcodes.ALOAD, 2); // thisObj
 			callMv.visitVarInsn(Opcodes.ALOAD, 3); // args
 			callMv.visitMethodInsn(
-					Opcodes.INVOKESTATIC,
-					IN_JSLinker,
-					"runAsync",
-					"(Lhope/magic/js/runtime/JSLinker$AsyncJSFunction;L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Lhope/magic/js/runtime/JSPromise;",
-					false
+			 Opcodes.INVOKESTATIC,
+			 IN_JSLinker,
+			 "runAsync",
+			 "(Lhope/magic/js/runtime/JSLinker$AsyncJSFunction;L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Lhope/magic/js/runtime/JSPromise;",
+			 false
 			);
 			callMv.visitInsn(Opcodes.ARETURN);
 			callMv.visitMaxs(0, 0);
@@ -3729,11 +3794,11 @@ public class JSCompiler {
 
 			// 3. callAsync(cx, thisObj, args) 编译实际异步函数体
 			MethodVisitor asyncMv = cw.visitMethod(
-					Opcodes.ACC_PUBLIC,
-					"callAsync",
-					"(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
-					null,
-					new String[]{"java/lang/Throwable"}
+			 Opcodes.ACC_PUBLIC,
+			 "callAsync",
+			 "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
+			 null,
+			 new String[]{"java/lang/Throwable"}
 			);
 			asyncMv.visitCode();
 
@@ -3792,8 +3857,8 @@ public class JSCompiler {
 			asyncMv.visitMaxs(0, 0);
 			asyncMv.visitEnd();
 		} else {
-			boolean useCallMethod   = hasArguments || paramCount > 4;
-			String targetMethodName = !useCallMethod ? "call" + paramCount : "call";
+			boolean useCallMethod    = hasArguments || paramCount > 4;
+			String  targetMethodName = !useCallMethod ? "call" + paramCount : "call";
 			String targetMethodDesc = !useCallMethod
 			 ? "(L" + IN_JSContext + ";Ljava/lang/Object;" + "Ljava/lang/Object;".repeat(paramCount) + ")Ljava/lang/Object;"
 			 : "(L" + IN_JSContext + ";Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;";
@@ -3972,7 +4037,7 @@ public class JSCompiler {
 		}
 
 		cw.visitEnd();
-		byte[]      bytes  = cw.toByteArray();
+		byte[] bytes = cw.toByteArray();
 		if (CLASS_DUMP_HOOK != null) {
 			CLASS_DUMP_HOOK.accept(funcClassName, bytes);
 		}
@@ -4137,8 +4202,8 @@ public class JSCompiler {
 				continue;
 			}
 			if (ctx.getLocal(decl.name) == null) {
-				VarType type = preInferVarType(decl, ctx);
-				LocalVar var = ctx.declareLocal(decl.name, type);
+				VarType  type = preInferVarType(decl, ctx);
+				LocalVar var  = ctx.declareLocal(decl.name, type);
 				if (var.isInt()) {
 					mv.visitInsn(Opcodes.ICONST_0);
 					mv.visitVarInsn(Opcodes.ISTORE, var.slot);
@@ -4223,17 +4288,17 @@ public class JSCompiler {
 			}
 			// ─────────────────────────────────────────────────────────────────────
 			int opcode = switch (bin.op) {
-				case STAR    -> Opcodes.IMUL;
+				case STAR -> Opcodes.IMUL;
 				case PERCENT -> Opcodes.IREM;
-				case MINUS   -> Opcodes.ISUB;
-				case SLASH   -> Opcodes.IDIV;
-				case BIT_OR  -> Opcodes.IOR;
+				case MINUS -> Opcodes.ISUB;
+				case SLASH -> Opcodes.IDIV;
+				case BIT_OR -> Opcodes.IOR;
 				case BIT_AND -> Opcodes.IAND;
 				case BIT_XOR -> Opcodes.IXOR;
-				case SHL     -> Opcodes.ISHL;
-				case SHR     -> Opcodes.ISHR;
-				case USHR    -> Opcodes.IUSHR;
-				default      -> 0;
+				case SHL -> Opcodes.ISHL;
+				case SHR -> Opcodes.ISHR;
+				case USHR -> Opcodes.IUSHR;
+				default -> 0;
 			};
 			if (opcode != 0) {
 				compileNodeAsInt(bin.left, ctx);
@@ -4336,11 +4401,11 @@ public class JSCompiler {
 			}
 			// ─────────────────────────────────────────────────────────────────────
 			int opcode = switch (bin.op) {
-				case STAR    -> Opcodes.LMUL;
+				case STAR -> Opcodes.LMUL;
 				case PERCENT -> Opcodes.LREM;
-				case MINUS   -> Opcodes.LSUB;
-				case SLASH   -> Opcodes.LDIV;
-				default      -> 0;
+				case MINUS -> Opcodes.LSUB;
+				case SLASH -> Opcodes.LDIV;
+				default -> 0;
 			};
 			if (opcode != 0) {
 				compileNodeAsLong(bin.left, ctx);
@@ -4425,11 +4490,11 @@ public class JSCompiler {
 				}
 			}
 			int opcode = switch (bin.op) {
-				case STAR    -> Opcodes.DMUL;
-				case SLASH   -> Opcodes.DDIV;
+				case STAR -> Opcodes.DMUL;
+				case SLASH -> Opcodes.DDIV;
 				case PERCENT -> Opcodes.DREM;
-				case MINUS   -> Opcodes.DSUB;
-				default      -> 0;
+				case MINUS -> Opcodes.DSUB;
+				default -> 0;
 			};
 			if (opcode != 0) {
 				compileNodeAsDouble(bin.left, ctx);
@@ -4484,16 +4549,17 @@ public class JSCompiler {
 
 		if (node instanceof Node.CallExpr call) {
 			if (isMathCall(call, ctx)) {
-				Node.MemberAccessExpr member = (Node.MemberAccessExpr) call.callee;
-				String mathMethod = member.property;
-				int    argc       = call.arguments.size();
+				Node.MemberAccessExpr member     = (Node.MemberAccessExpr) call.callee;
+				String                mathMethod = member.property;
+				int                   argc       = call.arguments.size();
 				if (argc == 0 && "random".equals(mathMethod)) {
 					mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Math", "random", "()D", false);
 					return;
 				}
 				if (argc == 1) {
 					switch (mathMethod) {
-						case "abs", "sqrt", "floor", "ceil", "sin", "cos", "tan", "asin", "acos", "atan", "exp", "log", "log10", "cbrt" -> {
+						case "abs", "sqrt", "floor", "ceil", "sin", "cos", "tan", "asin", "acos", "atan", "exp", "log", "log10",
+						     "cbrt" -> {
 							compileNodeAsDouble(call.arguments.get(0), ctx);
 							mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Math", mathMethod, "(D)D", false);
 							return;

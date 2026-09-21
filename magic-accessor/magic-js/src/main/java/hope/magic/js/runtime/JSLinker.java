@@ -1,5 +1,7 @@
 package hope.magic.js.runtime;
 
+import hope.magic.js.module.JSModule;
+import hope.magic.js.module.JSModuleManager;
 import hope.magic.runtime.*;
 import sun.misc.Unsafe;
 
@@ -11,7 +13,7 @@ import java.util.regex.Matcher;
 
 import static hope.magic.js.runtime.SlotMH.*;
 
-@SuppressWarnings({"unused", "unchecked", "rawtypes", "RedundantCast"})
+@SuppressWarnings({"unused", "unchecked", "rawtypes", "RedundantCast", "UnnecessaryUnboxing"})
 public class JSLinker {
 	private static final Unsafe               UNSAFE = Magic.unsafe;
 	private static final MethodHandles.Lookup LOOKUP = Magic.lookup;
@@ -1559,7 +1561,7 @@ public class JSLinker {
 			setIndexList(target, index, value);
 			return;
 		}
-		if (target != null && target.getClass().isArray()) {
+		if (/* target != null &&  */target.getClass().isArray()) {
 			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
 			if (site.type().parameterCount() > 1) {
 				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
@@ -3251,7 +3253,8 @@ public class JSLinker {
 		if (member instanceof JSFunction fn) {
 			return fn.call(null, obj, args != null ? args : new Object[0]);
 		}
-		throw new RuntimeException("TypeError: " + (obj != null ? obj.toString() : "object") + "." + propName + " is not a function");
+		// 前面知道obj != null
+		throw new RuntimeException("TypeError: " + obj.toString() + "." + propName + " is not a function");
 	}
 
 	public static Object callOwnMethod0(int offset, Object target) throws Throwable {
@@ -3318,24 +3321,17 @@ public class JSLinker {
 			int          arity = args.length;
 			MethodHandle directMh;
 			if (arity == 0) {
-				directMh = JSFuncMH.CALL0;
-				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null, JSUndefined.INSTANCE);
+				directMh = JSFuncMH.CALL0_UNDEFINED;
 			} else if (arity == 1) {
-				directMh = JSFuncMH.CALL1;
-				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null, JSUndefined.INSTANCE);
+				directMh = JSFuncMH.CALL1_UNDEFINED;
 			} else if (arity == 2) {
-				directMh = JSFuncMH.CALL2;
-				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null, JSUndefined.INSTANCE);
+				directMh = JSFuncMH.CALL2_UNDEFINED;
 			} else if (arity == 3) {
-				directMh = JSFuncMH.CALL3;
-				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null, JSUndefined.INSTANCE);
+				directMh = JSFuncMH.CALL3_UNDEFINED;
 			} else if (arity == 4) {
-				directMh = JSFuncMH.CALL4;
-				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null, JSUndefined.INSTANCE);
+				directMh = JSFuncMH.CALL4_UNDEFINED;
 			} else {
-				directMh = JSFuncMH.CALL;
-				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null, JSUndefined.INSTANCE);
-				directMh = directMh.asCollector(1, Object[].class, arity);
+				directMh = JSFuncMH.CALL_UNDEFINED.asCollector(1, Object[].class, arity);
 			}
 
 			if (site.getChainDepth() == 0) {
@@ -3381,27 +3377,19 @@ public class JSLinker {
 			int          arity = args.length;
 			MethodHandle directMh;
 			if (arity == 0) {
-				directMh = JSFuncMH.CALL0;
-				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null, JSUndefined.INSTANCE);
+				directMh = JSFuncMH.CALL0_UNDEFINED;
 			} else if (arity == 1) {
-				directMh = JSFuncMH.CALL0;
-				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null);
+				directMh = JSFuncMH.CALL0_NULL;
 			} else if (arity == 2) {
-				directMh = JSFuncMH.CALL1;
-				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null);
+				directMh = JSFuncMH.CALL1_NULL;
 			} else if (arity == 3) {
-				directMh = JSFuncMH.CALL2;
-				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null);
+				directMh = JSFuncMH.CALL2_NULL;
 			} else if (arity == 4) {
-				directMh = JSFuncMH.CALL3;
-				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null);
+				directMh = JSFuncMH.CALL3_NULL;
 			} else if (arity == 5) {
-				directMh = JSFuncMH.CALL4;
-				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null);
+				directMh = JSFuncMH.CALL4_NULL;
 			} else {
-				directMh = JSFuncMH.CALL;
-				directMh = MethodHandles.insertArguments(directMh, 1, (JSContext) null);
-				directMh = directMh.asCollector(2, Object[].class, arity - 1);
+				directMh = JSFuncMH.CALL_NULL.asCollector(2, Object[].class, arity - 1);
 			}
 
 			if (site.getChainDepth() == 0) {
@@ -3477,17 +3465,17 @@ public class JSLinker {
 						}
 						if (exactFuncCall == null) {
 							if (arity == 0) {
-								exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL0, 1, (Object) null).bindTo(func);
+								exactFuncCall = JSFuncMH.CALL0_NULL.bindTo(func);
 							} else if (arity == 1) {
-								exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL1, 1, (Object) null).bindTo(func);
+								exactFuncCall = JSFuncMH.CALL1_NULL.bindTo(func);
 							} else if (arity == 2) {
-								exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL2, 1, (Object) null).bindTo(func);
+								exactFuncCall = JSFuncMH.CALL2_NULL.bindTo(func);
 							} else if (arity == 3) {
-								exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL3, 1, (Object) null).bindTo(func);
+								exactFuncCall = JSFuncMH.CALL3_NULL.bindTo(func);
 							} else if (arity == 4) {
-								exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL4, 1, (Object) null).bindTo(func);
+								exactFuncCall = JSFuncMH.CALL4_NULL.bindTo(func);
 							} else {
-								exactFuncCall = MethodHandles.insertArguments(JSFuncMH.CALL, 1, (Object) null)
+								exactFuncCall = JSFuncMH.CALL_NULL
 								 .bindTo(func)
 								 .asCollector(1, Object[].class, arity);
 							}
@@ -3529,7 +3517,7 @@ public class JSLinker {
 							site.installProtoGuard(sp, test, exactFuncCall.asType(site.type()));
 						}
 					}
-				} else if (ownOffset >= 0 && (jsObj.shape.getSlotType(ownOffset) & JSShape.FLAG_ACCESSOR) == 0 && site.getChainDepth() < 3) {
+				} else if (/* ownOffset >= 0 &&  */(jsObj.shape.getSlotType(ownOffset) & JSShape.FLAG_ACCESSOR) == 0 && site.getChainDepth() < 3) {
 					int arity = args.length;
 					MethodHandle callMh;
 					if (arity == 0) {
@@ -4342,7 +4330,7 @@ public class JSLinker {
 			Object   proto       = (ctor instanceof JSObject jsObj) ? jsObj.get("prototype") : JSUndefined.INSTANCE;
 			JSObject cachedProto = (proto instanceof JSObject sp) ? sp : null;
 
-			MethodHandle fastTarget = null;
+			MethodHandle fastTarget;
 			if (arity == 0) {
 				fastTarget = MethodHandles.insertArguments(NewMH.NEW_JS_FUNC0, 1, cachedProto);
 			} else if (arity == 1) {
@@ -4727,7 +4715,7 @@ public class JSLinker {
 			double val = d.doubleValue();
 			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
 				int idx = (int) val;
-				return (idx >= 0 && idx < list.size()) ? list.get(idx) : JSUndefined.INSTANCE;
+				return (/* idx >= 0 &&  */idx < list.size()) ? list.get(idx) : JSUndefined.INSTANCE;
 			}
 		}
 		Integer idx = JSArray.toValidJavaArrayIndex(index);
@@ -4747,7 +4735,7 @@ public class JSLinker {
 			double val = d.doubleValue();
 			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
 				int idx = (int) val;
-				return (idx >= 0 && idx < a.length) ? a[idx] : JSUndefined.INSTANCE;
+				return (/* idx >= 0 && */idx < a.length) ? a[idx] : JSUndefined.INSTANCE;
 			}
 		}
 		Integer idx = JSArray.toValidJavaArrayIndex(index);
@@ -5925,14 +5913,14 @@ public class JSLinker {
 			return p;
 		}
 		String specifier = JSOps.toStr(specifierObj);
-		hope.magic.js.module.JSModuleManager mgr = cx.getModuleManager();
-		hope.magic.js.module.JSModule parent = null;
-		if (currentDirOrModule instanceof hope.magic.js.module.JSModule m) {
+		JSModuleManager mgr = cx.getModuleManager();
+		JSModule parent;
+		if (currentDirOrModule instanceof JSModule m) {
 			parent = m;
 		} else if (currentDirOrModule instanceof String dirname) {
-			parent = new hope.magic.js.module.JSModule("temp", "", dirname, null);
+			parent = new JSModule("temp", "", dirname, null);
 		} else {
-			parent = hope.magic.js.module.JSModuleManager.getCurrentModule();
+			parent = JSModuleManager.getCurrentModule();
 		}
 		return mgr.importDynamic(specifier, parent);
 	}

@@ -3439,6 +3439,30 @@ public class JSLinker {
 		}
 		return JSOps.toDouble(func.call(cx, thisObj, args));
 	}
+
+	private static MethodHandle getDirectFuncMH(JSFunction func, int arity) {
+		try {
+			Class<?> clazz = func.getClass();
+			return switch (arity) {
+				case 0 -> LOOKUP.findVirtual(clazz, "call0", MethodType.methodType(Object.class, JSContext.class, Object.class)).bindTo(func).bindTo(null);
+				case 1 -> LOOKUP.findVirtual(clazz, "call1", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class)).bindTo(func).bindTo(null);
+				case 2 -> LOOKUP.findVirtual(clazz, "call2", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class)).bindTo(func).bindTo(null);
+				case 3 -> LOOKUP.findVirtual(clazz, "call3", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class, Object.class)).bindTo(func).bindTo(null);
+				case 4 -> LOOKUP.findVirtual(clazz, "call4", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class, Object.class, Object.class)).bindTo(func).bindTo(null);
+				default -> LOOKUP.findVirtual(clazz, "call", MethodType.methodType(Object.class, JSContext.class, Object.class, Object[].class)).bindTo(func).bindTo(null).asCollector(1, Object[].class, arity);
+			};
+		} catch (Throwable ignored) {
+			return switch (arity) {
+				case 0 -> JSFuncMH.CALL0_NULL.bindTo(func);
+				case 1 -> JSFuncMH.CALL1_NULL.bindTo(func);
+				case 2 -> JSFuncMH.CALL2_NULL.bindTo(func);
+				case 3 -> JSFuncMH.CALL3_NULL.bindTo(func);
+				case 4 -> JSFuncMH.CALL4_NULL.bindTo(func);
+				default -> JSFuncMH.CALL_NULL.bindTo(func).asCollector(1, Object[].class, arity);
+			};
+		}
+	}
+
 	public static Object invokeFallback(ChainedCallSite site, Object target, Object[] args, String methodName)
 	 throws Throwable {
 		if (target == null || target == JSUndefined.INSTANCE) {
@@ -3587,16 +3611,7 @@ public class JSLinker {
 							}
 						}
 						if (exactFuncCall == null) {
-							exactFuncCall = switch (arity) {
-								case 0 -> JSFuncMH.CALL0_NULL.bindTo(func);
-								case 1 -> JSFuncMH.CALL1_NULL.bindTo(func);
-								case 2 -> JSFuncMH.CALL2_NULL.bindTo(func);
-								case 3 -> JSFuncMH.CALL3_NULL.bindTo(func);
-								case 4 -> JSFuncMH.CALL4_NULL.bindTo(func);
-								default -> JSFuncMH.CALL_NULL
-								 .bindTo(func)
-								 .asCollector(1, Object[].class, arity);
-							};
+							exactFuncCall = getDirectFuncMH(func, arity);
 						}
 						if (ownOffset < 0 && proto != null) {
 							JSObject       current = proto;
@@ -4470,7 +4485,7 @@ public class JSLinker {
 				site.installGuardOrSwitchMegamorphic(test, guarded);
 			}
 
-			JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto) : new JSObject();
+			JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto.getOrCreateInstanceInitShape(), cachedProto) : new JSObject();
 			Object   res    = switch (arity) {
 				case 0 -> func.call0(null, newObj);
 				case 1 -> func.call1(null, newObj, args[0]);

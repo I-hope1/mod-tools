@@ -191,7 +191,7 @@ public final class JavaClassExtender {
 			if (thisObj instanceof JSObject existing) {
 				inst = existing;
 			} else {
-				inst = new JSObject(proto);
+				inst = (proto != null) ? new JSObject(proto.getOrCreateInstanceInitShape(), proto) : new JSObject();
 			}
 			if (jsCtor != null) {
 				jsCtor.call(callCx, inst, args != null ? args : new Object[0]);
@@ -261,7 +261,7 @@ public final class JavaClassExtender {
 			if (thisObj instanceof JSBridgedObject existing) {
 				instance = existing;
 			} else {
-				JSObject jsObj = new JSObject(proto);
+				JSObject jsObj = (proto != null) ? new JSObject(proto.getOrCreateInstanceInitShape(), proto) : new JSObject();
 				instance = instantiateSubclass(useCx, info, jsObj, finalMask, callArgs);
 			}
 

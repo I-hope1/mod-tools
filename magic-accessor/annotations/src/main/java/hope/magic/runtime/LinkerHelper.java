@@ -30,7 +30,7 @@ public class LinkerHelper {
 	static {
 		if (IS_ANDROID) {
 			Magic.bypassHiddenApi();
-		} else if (FAST_OFFSET) {
+		} else /* if (FAST_OFFSET) */ {
 			Magic.openModule();
 		}
 	}

@@ -5,11 +5,14 @@ import sun.misc.Unsafe;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodHandles.Lookup;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Base64;
 
 @SuppressWarnings("removal")
 public class Magic {
@@ -57,7 +60,7 @@ public class Magic {
 			try {
 				Class<?> classOptionClass = Class.forName("java.lang.invoke.MethodHandles$Lookup$ClassOption");
 				emptyOpts = java.lang.reflect.Array.newInstance(classOptionClass, 0);
-				java.lang.invoke.MethodType mt = java.lang.invoke.MethodType.methodType(Lookup.class, byte[].class, boolean.class, emptyOpts.getClass());
+				MethodType mt = MethodType.methodType(Lookup.class, byte[].class, boolean.class, emptyOpts.getClass());
 				dhc = lookup.findVirtual(Lookup.class, "defineHiddenClass", mt).asFixedArity();
 
 				@SuppressWarnings({"unchecked", "rawtypes"})
@@ -166,7 +169,7 @@ public class Magic {
 				try {
 					Class.forName("hope.magic.runtime.MagicBootstrapInvoker", false, null);
 				} catch (ClassNotFoundException e) {
-					try (java.io.InputStream in = MagicBootstrapInvoker.class.getResourceAsStream("/hope/magic/runtime/MagicBootstrapInvoker.class")) {
+					try (InputStream in = MagicBootstrapInvoker.class.getResourceAsStream("/hope/magic/runtime/MagicBootstrapInvoker.class")) {
 						if (in != null) {
 							byte[] invokerBytes = in.readAllBytes();
 							defineClass(null, invokerBytes);
@@ -176,7 +179,7 @@ public class Magic {
 				try {
 					Class.forName("hope.magic.runtime.MagicBootstrapCtorInvoker", false, null);
 				} catch (ClassNotFoundException e) {
-					try (java.io.InputStream in = MagicBootstrapCtorInvoker.class.getResourceAsStream("/hope/magic/runtime/MagicBootstrapCtorInvoker.class")) {
+					try (InputStream in = MagicBootstrapCtorInvoker.class.getResourceAsStream("/hope/magic/runtime/MagicBootstrapCtorInvoker.class")) {
 						if (in != null) {
 							byte[] ctorBytes = in.readAllBytes();
 							defineClass(null, ctorBytes);
@@ -186,14 +189,12 @@ public class Magic {
 				if (!LinkerHelper.IS_ANDROID) {
 					try {
 						MethodHandle addReadsMh = lookup.findVirtual(
-						 Module.class, "implAddReadsAllUnnamed", java.lang.invoke.MethodType.methodType(void.class)
+						 Module.class, "implAddReadsAllUnnamed", MethodType.methodType(void.class)
 						);
 						addReadsMh.invokeExact(Object.class.getModule());
-					} catch (Throwable ignored) {
-					}
+					} catch (Throwable ignored) { }
 				}
-			} catch (Throwable ignored) {
-			}
+			} catch (Throwable ignored) { }
 
 			installed = true;
 		} catch (Throwable e) {
@@ -245,10 +246,10 @@ public class Magic {
 			if (candidate.length >= 4 && candidate[0] == (byte) 0xCA && candidate[1] == (byte) 0xFE && candidate[2] == (byte) 0xBA && candidate[3] == (byte) 0xBE) {
 				bytes = candidate; // 0 Base64 损耗的 ISO_8859_1 原生字节码直传
 			} else {
-				bytes = java.util.Base64.getDecoder().decode(rawBytesOrBase64);
+				bytes = Base64.getDecoder().decode(rawBytesOrBase64);
 			}
 		} catch (Throwable t) {
-			bytes = java.util.Base64.getDecoder().decode(rawBytesOrBase64);
+			bytes = Base64.getDecoder().decode(rawBytesOrBase64);
 		}
 		installBridge(className, bytes);
 	}
@@ -258,6 +259,7 @@ public class Magic {
 			return jdk.internal.misc.Unsafe.getUnsafe().defineClass(null, bytes, 0, bytes.length, loader, null);
 		} catch (Throwable t1) {
 			try {
+				// java8
 				Method defineClassMethod = Unsafe.class.getDeclaredMethod(
 				 "defineClass", String.class, byte[].class, int.class, int.class, ClassLoader.class, java.security.ProtectionDomain.class
 				);

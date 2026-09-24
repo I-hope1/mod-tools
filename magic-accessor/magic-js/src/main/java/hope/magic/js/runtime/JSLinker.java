@@ -44,7 +44,7 @@ public class JSLinker {
 	public static final MethodHandle MH_IS_EXACT_SHAPE_AND_PROTO;
 	public static final MethodHandle MH_IS_SAME_OBJECT;
 	public static final MethodHandle MH_IS_SAME_OBJECT_AND_ARGS;
-	public static final MethodHandle MH_INVOKE_INTERFACE_1;
+	public static final MethodHandle MH_INVOKE_INTERFACE_1 = JSJavaInterop.MH_INVOKE_INTERFACE_1;
 	public static final MethodHandle MH_TRANSITION_SET_DOUBLE;
 	public static final MethodHandle MH_TRANSITION_SET_OBJECT;
 	public static final MethodHandle MH_TRANSITION_SET_OBJECT_DOUBLE;
@@ -54,26 +54,26 @@ public class JSLinker {
 	public static final MethodHandle MH_SET_NOOP_PROP;
 	public static final MethodHandle MH_ARRAY_LENGTH_INT;
 	public static final MethodHandle MH_ARRAY_LENGTH_DOUBLE;
-	public static final MethodHandle MH_GET_INDEX_JS_ARRAY;
-	public static final MethodHandle MH_GET_INDEX_LIST;
-	public static final MethodHandle MH_GET_INDEX_OBJECT_ARRAY;
-	public static final MethodHandle MH_GET_INDEX_PRIMITIVE_ARRAY;
-	public static final MethodHandle MH_GET_INDEX_INT_ARRAY;
-	public static final MethodHandle MH_GET_INDEX_DOUBLE_ARRAY;
-	public static final MethodHandle MH_GET_INDEX_LONG_ARRAY;
-	public static final MethodHandle MH_GET_INDEX_MAP;
+	public static final MethodHandle MH_GET_INDEX_JS_ARRAY        = JSIndexOps.MH_GET_INDEX_JS_ARRAY;
+	public static final MethodHandle MH_GET_INDEX_LIST            = JSIndexOps.MH_GET_INDEX_LIST;
+	public static final MethodHandle MH_GET_INDEX_OBJECT_ARRAY    = JSIndexOps.MH_GET_INDEX_OBJECT_ARRAY;
+	public static final MethodHandle MH_GET_INDEX_PRIMITIVE_ARRAY = JSIndexOps.MH_GET_INDEX_PRIMITIVE_ARRAY;
+	public static final MethodHandle MH_GET_INDEX_INT_ARRAY       = JSIndexOps.MH_GET_INDEX_INT_ARRAY;
+	public static final MethodHandle MH_GET_INDEX_DOUBLE_ARRAY    = JSIndexOps.MH_GET_INDEX_DOUBLE_ARRAY;
+	public static final MethodHandle MH_GET_INDEX_LONG_ARRAY      = JSIndexOps.MH_GET_INDEX_LONG_ARRAY;
+	public static final MethodHandle MH_GET_INDEX_MAP             = JSIndexOps.MH_GET_INDEX_MAP;
 
-	public static final MethodHandle MH_SET_INDEX_JS_ARRAY;
-	public static final MethodHandle MH_SET_INDEX_LIST;
-	public static final MethodHandle MH_SET_INDEX_OBJECT_ARRAY;
-	public static final MethodHandle MH_SET_INDEX_INT_ARRAY;
-	public static final MethodHandle MH_SET_INDEX_DOUBLE_ARRAY;
-	public static final MethodHandle MH_SET_INDEX_LONG_ARRAY;
-	public static final MethodHandle MH_SET_INDEX_PRIMITIVE_ARRAY;
-	public static final MethodHandle MH_SET_INDEX_MAP;
-	public static final MethodHandle MH_NEW_ARRAY_0;
-	public static final MethodHandle MH_NEW_ARRAY_1;
-	public static final MethodHandle MH_NEW_ARRAY_N;
+	public static final MethodHandle MH_SET_INDEX_JS_ARRAY        = JSIndexOps.MH_SET_INDEX_JS_ARRAY;
+	public static final MethodHandle MH_SET_INDEX_LIST            = JSIndexOps.MH_SET_INDEX_LIST;
+	public static final MethodHandle MH_SET_INDEX_OBJECT_ARRAY    = JSIndexOps.MH_SET_INDEX_OBJECT_ARRAY;
+	public static final MethodHandle MH_SET_INDEX_INT_ARRAY       = JSIndexOps.MH_SET_INDEX_INT_ARRAY;
+	public static final MethodHandle MH_SET_INDEX_DOUBLE_ARRAY    = JSIndexOps.MH_SET_INDEX_DOUBLE_ARRAY;
+	public static final MethodHandle MH_SET_INDEX_LONG_ARRAY      = JSIndexOps.MH_SET_INDEX_LONG_ARRAY;
+	public static final MethodHandle MH_SET_INDEX_PRIMITIVE_ARRAY = JSIndexOps.MH_SET_INDEX_PRIMITIVE_ARRAY;
+	public static final MethodHandle MH_SET_INDEX_MAP             = JSIndexOps.MH_SET_INDEX_MAP;
+	public static final MethodHandle MH_NEW_ARRAY_0        = JSJavaInterop.MH_NEW_ARRAY_0;
+	public static final MethodHandle MH_NEW_ARRAY_1        = JSJavaInterop.MH_NEW_ARRAY_1;
+	public static final MethodHandle MH_NEW_ARRAY_N        = JSJavaInterop.MH_NEW_ARRAY_N;
 	public static final MethodHandle MH_CREATE_BOUND_INSTANCE_METHOD;
 	public static final MethodHandle MH_JS_ARRAY_LENGTH_OBJ;
 	public static final MethodHandle MH_JS_ARRAY_LENGTH_DOUBLE;
@@ -117,27 +117,6 @@ public class JSLinker {
 			MH_SET_NOOP_PROP = LOOKUP.findStatic(JSLinker.class, "setNoopProp", MethodType.methodType(void.class, Object.class, Object.class));
 			MH_ARRAY_LENGTH_INT = LOOKUP.findStatic(JSLinker.class, "getArrayLengthInt", MethodType.methodType(int.class, Object.class));
 			MH_ARRAY_LENGTH_DOUBLE = LOOKUP.findStatic(JSLinker.class, "getArrayLengthDouble", MethodType.methodType(double.class, Object.class));
-			MH_GET_INDEX_JS_ARRAY = LOOKUP.findStatic(JSLinker.class, "getIndexJSArray", MethodType.methodType(Object.class, Object.class, Object.class));
-			MH_GET_INDEX_LIST = LOOKUP.findStatic(JSLinker.class, "getIndexList", MethodType.methodType(Object.class, Object.class, Object.class));
-			MH_GET_INDEX_OBJECT_ARRAY = LOOKUP.findStatic(JSLinker.class, "getIndexObjectArray", MethodType.methodType(Object.class, Object.class, Object.class));
-			MH_GET_INDEX_PRIMITIVE_ARRAY = LOOKUP.findStatic(JSLinker.class, "getIndexPrimitiveArray", MethodType.methodType(Object.class, Object.class, Object.class));
-			MH_GET_INDEX_INT_ARRAY = LOOKUP.findStatic(JSLinker.class, "getIndexIntArray", MethodType.methodType(Object.class, Object.class, Object.class));
-			MH_GET_INDEX_DOUBLE_ARRAY = LOOKUP.findStatic(JSLinker.class, "getIndexDoubleArray", MethodType.methodType(Object.class, Object.class, Object.class));
-			MH_GET_INDEX_LONG_ARRAY = LOOKUP.findStatic(JSLinker.class, "getIndexLongArray", MethodType.methodType(Object.class, Object.class, Object.class));
-			MH_GET_INDEX_MAP = LOOKUP.findStatic(JSLinker.class, "getIndexMap", MethodType.methodType(Object.class, Object.class, Object.class));
-
-			MH_SET_INDEX_JS_ARRAY = LOOKUP.findStatic(JSLinker.class, "setIndexJSArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
-			MH_SET_INDEX_LIST = LOOKUP.findStatic(JSLinker.class, "setIndexList", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
-			MH_SET_INDEX_OBJECT_ARRAY = LOOKUP.findStatic(JSLinker.class, "setIndexObjectArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
-			MH_SET_INDEX_INT_ARRAY = LOOKUP.findStatic(JSLinker.class, "setIndexIntArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
-			MH_SET_INDEX_DOUBLE_ARRAY = LOOKUP.findStatic(JSLinker.class, "setIndexDoubleArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
-			MH_SET_INDEX_LONG_ARRAY = LOOKUP.findStatic(JSLinker.class, "setIndexLongArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
-			MH_SET_INDEX_PRIMITIVE_ARRAY = LOOKUP.findStatic(JSLinker.class, "setIndexPrimitiveArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
-			MH_SET_INDEX_MAP = LOOKUP.findStatic(JSLinker.class, "setIndexMap", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
-			MH_NEW_ARRAY_0 = LOOKUP.findStatic(JSLinker.class, "newArrayInstance0", MethodType.methodType(Object.class, Class.class));
-			MH_NEW_ARRAY_1 = LOOKUP.findStatic(JSLinker.class, "newArrayInstance1", MethodType.methodType(Object.class, Class.class, Object.class));
-			MH_NEW_ARRAY_N = LOOKUP.findStatic(JSLinker.class, "newArrayInstanceN", MethodType.methodType(Object.class, Class.class, Object[].class));
-			MH_INVOKE_INTERFACE_1 = LOOKUP.findStatic(JSLinker.class, "invokeInterfaceAdapter1", MethodType.methodType(Object.class, Object.class, Object.class));
 			MH_CREATE_BOUND_INSTANCE_METHOD = LOOKUP.findStatic(JSLinker.class, "createBoundInstanceMethod", MethodType.methodType(Object.class, Object.class, Class.class, String.class, int.class));
 			MH_JS_ARRAY_LENGTH_OBJ = LOOKUP.findStatic(JSLinker.class, "getJSArrayLengthObj", MethodType.methodType(Object.class, Object.class));
 			MH_JS_ARRAY_LENGTH_DOUBLE = LOOKUP.findStatic(JSLinker.class, "getJSArrayLengthDouble", MethodType.methodType(double.class, Object.class));
@@ -184,787 +163,91 @@ public class JSLinker {
 		}
 	}
 
-	/** JDK 17+ 是否可用 MethodHandles.tableSwitch（反射探测，类加载时确定）。 */
-	private static final boolean SUPPORTS_TABLE_SWITCH;
-	private static final Method  MTH_TABLE_SWITCH;
-
-	static {
-		boolean ok = false;
-		Method  m  = null;
-		try {
-			m = MethodHandles.class.getMethod("tableSwitch", MethodHandle.class, MethodHandle[].class);
-			ok = true;
-		} catch (NoSuchMethodException ignored) { }
-		SUPPORTS_TABLE_SWITCH = ok;
-		MTH_TABLE_SWITCH = m;
-	}
-
-	/**
-	 * 统一 tableSwitch 构造分发（兼容直接调用与反射调用）。
-	 * @param defaultCase 当 selector 不在 [0, targets.length) 区间时的降级 Handle（首参数必须为 int）
-	 * @param targets     各 index 对应的目标 Handle 数组（首参数必须为 int）
-	 * @return 签名为 {@code (int selector, TrailingArgs...) -> ReturnType} 的 switch Handle
-	 */
-	private static MethodHandle invokeTableSwitch(MethodHandle defaultCase, MethodHandle[] targets) throws Throwable {
-		if (MTH_TABLE_SWITCH != null) {
-			return (MethodHandle) MTH_TABLE_SWITCH.invoke(null, new Object[]{defaultCase, targets});
-		}
-		throw new UnsupportedOperationException("MethodHandles.tableSwitch is not supported on current JVM");
-	}
-
-	/**
-	 * 构建异槽多态扁平 Switch 守卫（Object getter 版）。
-	 *
-	 * <p>路线 A（JDK 17+）：用 {@code MethodHandles.tableSwitch} 生成硬件跳转表，
-	 * 配合 {@code foldArguments} 消除 selector 参数，C2 编译后内联深度恒为 1。<br>
-	 * 路线 B（低版本）：生成单个 {@code polyGetObject} 静态方法调用（线性循环扫描）。
-	 * @param snap     多态快照（shape + offset 数组）
-	 * @param fallback 超态/未命中时的降级 handle，签名 {@code (Object) -> Object}
-	 * @return 签名为 {@code (Object) -> Object} 的扁平 Switch 守卫
-	 */
 	public static MethodHandle buildFlatPolySwitchObject(PolySnapshot snap, MethodHandle fallback) {
-		JSShape[] shapes = snap.shapes();
-		int       n      = shapes.length;
-		if (n == 0) return fallback;
-		int[]  offsets = snap.offsets();
-		byte[] types   = snap.types();
-
-		// 小规模多态 (n <= 2) 展开式级联 GWT (纯指针比较，零掩码与归属校验开销) ──
-		if (n <= 2) {
-			MethodHandle chain = fallback;
-			for (int i = n - 1; i >= 0; i--) {
-				int off = offsets[i];
-				MethodHandle fastGetter = off < 8
-				 ? MH_GET_SLOT_OBJECT[off]
-				 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, off);
-				MethodHandle exactTest = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
-				chain = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), chain);
-			}
-			return chain;
-		}
-
-		// 多态/巨态按 Offset 分组聚合位掩码 (Offset-Class Mask Dispatch) ──
-		MethodHandle maskChain = tryBuildOffsetMaskDispatchObject(shapes, offsets, n, snap.propId(), fallback);
-		if (maskChain != null) {
-			return maskChain;
-		}
-
-		// 路线 A：JDK 17+ 原生硬件跳转表
-		if (SUPPORTS_TABLE_SWITCH) {
-			try {
-				int minId = Integer.MAX_VALUE, maxId = Integer.MIN_VALUE;
-				for (JSShape s : shapes) {
-					minId = Math.min(minId, s.id);
-					maxId = Math.max(maxId, s.id);
-				}
-				int span = maxId - minId + 1;
-
-				if (span <= n * 4 && span <= 64) {
-					MethodHandle fallbackWithSel = MethodHandles.dropArguments(fallback, 0, int.class);
-
-					MethodHandle[] targets = new MethodHandle[span];
-					Arrays.fill(targets, fallbackWithSel);
-
-					for (int i = 0; i < n; i++) {
-						int  idx  = shapes[i].id - minId;
-						int  off  = offsets[i];
-						byte type = types[i];
-
-						MethodHandle fastGetter;
-						if ((type & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE) {
-							fastGetter = (off < 8)
-							 ? MH_GET_SLOT_DOUBLE_AS_OBJ[off] // 读出来直接转为 Double 对象，与其他原始类型不同
-							 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE_AS_OBJ, 0, off);
-						} else {
-							fastGetter = (off < 8)
-							 ? MH_GET_SLOT_OBJECT[off]
-							 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, off);
-						}
-
-						// JSShape.id 是通过 AtomicInteger 生成的全局唯一、不可变 ID。
-						// 进入 targets[idx] 说明当前对象的 shape.id - minId 精确命中了该下标；如果不命中或为未记录的 Shape，早在 Selector 处就会返回 -1 跳入 defaultCase，或命中空洞槽位的 fallbackWithSel。
-						// 因此，能跳转到 targets[idx]，其 Shape 数学上必然等于 shapes[i]
-						// MethodHandle exactTest     = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
-						// MethodHandle guardedGetter = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), fallback);
-						// targets[idx] = MethodHandles.dropArguments(guardedGetter, 0, int.class);
-						targets[idx] = MethodHandles.dropArguments(fastGetter.asType(fallback.type()), 0, int.class);
-					}
-
-					MethodHandle ts       = invokeTableSwitch(fallbackWithSel, targets);
-					MethodHandle selector = buildShapeIdSelector(minId, span);
-					return MethodHandles.foldArguments(ts, selector);
-				}
-			} catch (Throwable ignored) { }
-		}
-
-		return buildFlatPolySwitchObjectLinear(shapes, offsets, n, fallback);
+		return JSPolyGuards.buildFlatPolySwitchObject(snap, fallback);
 	}
 
-	/** 构建异槽多态扁平 Switch 守卫（double getter 版）。签名 {@code (Object) -> double}。 */
 	public static MethodHandle buildFlatPolySwitchDouble(PolySnapshot snap, MethodHandle fallback) {
-		JSShape[] shapes = snap.shapes();
-		int       n      = shapes.length;
-		if (n == 0) return fallback;
-		int[]  offsets = snap.offsets();
-		byte[] types   = snap.types();
-
-		// 小规模多态 (n <= 2) 展开式级联 GWT (纯指针比较，零掩码与归属校验开销) ──
-		if (n <= 2) {
-			MethodHandle chain = fallback;
-			for (int i = n - 1; i >= 0; i--) {
-				int off = offsets[i];
-				MethodHandle fastGetter = off < 8
-				 ? MH_GET_SLOT_DOUBLE[off]
-				 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE, 0, off);
-				MethodHandle exactTest = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
-				chain = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), chain);
-			}
-			return chain;
-		}
-
-		// 多态/巨态按 Offset 分组聚合位掩码 (Offset-Class Mask Dispatch) ──
-		MethodHandle maskChain = tryBuildOffsetMaskDispatchDouble(shapes, offsets, types, n, snap.propId(), fallback);
-		if (maskChain != null) {
-			return maskChain;
-		}
-
-		if (SUPPORTS_TABLE_SWITCH) {
-			try {
-				int minId = Integer.MAX_VALUE, maxId = Integer.MIN_VALUE;
-				for (JSShape s : shapes) {
-					minId = Math.min(minId, s.id);
-					maxId = Math.max(maxId, s.id);
-				}
-				int span = maxId - minId + 1;
-
-				if (span <= n * 4 && span <= 64) {
-					MethodHandle fallbackWithSel = MethodHandles.dropArguments(fallback, 0, int.class);
-
-					MethodHandle[] targets = new MethodHandle[span];
-					Arrays.fill(targets, fallbackWithSel);
-
-					for (int i = 0; i < n; i++) {
-						int  idx  = shapes[i].id - minId;
-						int  off  = offsets[i];
-						byte type = types[i];
-
-						MethodHandle fastGetter;
-						if ((type & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE) {
-							fastGetter = (off < 8)
-							 ? MH_GET_SLOT_DOUBLE[off]
-							 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE, 0, off);
-						} else {
-							fastGetter = (off < 8)
-							 ? MH_GET_SLOT_OBJECT[off]
-							 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, off);
-						}
-
-						// JSShape.id 是通过 AtomicInteger 生成的全局唯一、不可变 ID。
-						// 进入 targets[idx] 说明当前对象的 shape.id - minId 精确命中了该下标；如果不命中或为未记录的 Shape，早在 Selector 处就会返回 -1 跳入 defaultCase，或命中空洞槽位的 fallbackWithSel。
-						// 因此，能跳转到 targets[idx]，其 Shape 数学上必然等于 shapes[i]
-						// MethodHandle exactTest     = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
-						// MethodHandle guardedGetter = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), fallback);
-						// targets[idx] = MethodHandles.dropArguments(guardedGetter, 0, int.class);
-						targets[idx] = MethodHandles.dropArguments(fastGetter.asType(fallback.type()), 0, int.class);
-					}
-
-					MethodHandle ts       = invokeTableSwitch(fallbackWithSel, targets);
-					MethodHandle selector = buildShapeIdSelector(minId, span);
-					return MethodHandles.foldArguments(ts, selector);
-				}
-			} catch (Throwable ignored) { }
-		}
-
-		return buildFlatPolySwitchDoubleLinear(shapes, offsets, n, fallback);
+		return JSPolyGuards.buildFlatPolySwitchDouble(snap, fallback);
 	}
 
-	/** 构建异槽多态扁平 Switch 守卫（int getter 版）。签名 {@code (Object) -> int}。 */
 	public static MethodHandle buildFlatPolySwitchInt(PolySnapshot snap, MethodHandle fallback) {
-		JSShape[] shapes = snap.shapes();
-		int       n      = shapes.length;
-		if (n == 0) return fallback;
-		int[]  offsets = snap.offsets();
-		byte[] types   = snap.types();
-
-		// 小规模多态 (n <= 2) 展开式级联 GWT (纯指针比较，零掩码与归属校验开销) ──
-		if (n <= 2) {
-			MethodHandle chain = fallback;
-			for (int i = n - 1; i >= 0; i--) {
-				int          off        = offsets[i];
-				MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_INT, 0, off);
-				MethodHandle exactTest  = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
-				chain = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), chain);
-			}
-			return chain;
-		}
-
-		// 多态/巨态按 Offset 分组聚合位掩码 (Offset-Class Mask Dispatch) ──
-		MethodHandle maskChain = tryBuildOffsetMaskDispatchInt(shapes, offsets, n, snap.propId(), fallback);
-		if (maskChain != null) {
-			return maskChain;
-		}
-
-		if (SUPPORTS_TABLE_SWITCH) {
-			try {
-				int minId = Integer.MAX_VALUE, maxId = Integer.MIN_VALUE;
-				for (JSShape s : shapes) {
-					minId = Math.min(minId, s.id);
-					maxId = Math.max(maxId, s.id);
-				}
-				int span = maxId - minId + 1;
-
-				if (span <= n * 4 && span <= 64) {
-					MethodHandle fallbackWithSel = MethodHandles.dropArguments(fallback, 0, int.class);
-
-					MethodHandle[] targets = new MethodHandle[span];
-					Arrays.fill(targets, fallbackWithSel);
-
-					for (int i = 0; i < n; i++) {
-						int  idx  = shapes[i].id - minId;
-						int  off  = offsets[i];
-						byte type = types[i];
-
-						MethodHandle fastGetter;
-						if ((type & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE) {
-							fastGetter = (off < 8)
-							 ? MH_GET_SLOT_DOUBLE[off]
-							 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE, 0, off);
-						} else {
-							fastGetter = (off < 8)
-							 ? MH_GET_SLOT_OBJECT[off]
-							 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, off);
-						}
-
-						// JSShape.id 是通过 AtomicInteger 生成的全局唯一、不可变 ID。
-						// 进入 targets[idx] 说明当前对象的 shape.id - minId 精确命中了该下标；如果不命中或为未记录的 Shape，早在 Selector 处就会返回 -1 跳入 defaultCase，或命中空洞槽位的 fallbackWithSel。
-						// 因此，能跳转到 targets[idx]，其 Shape 数学上必然等于 shapes[i]
-						// MethodHandle exactTest     = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
-						// MethodHandle guardedGetter = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), fallback);
-						// targets[idx] = MethodHandles.dropArguments(guardedGetter, 0, int.class);
-						targets[idx] = MethodHandles.dropArguments(fastGetter.asType(fallback.type()), 0, int.class);
-					}
-
-					MethodHandle ts       = invokeTableSwitch(fallbackWithSel, targets);
-					MethodHandle selector = buildShapeIdSelector(minId, span);
-					return MethodHandles.foldArguments(ts, selector);
-				}
-			} catch (Throwable ignored) { }
-		}
-
-		return buildFlatPolySwitchIntLinear(shapes, offsets, n, fallback);
+		return JSPolyGuards.buildFlatPolySwitchInt(snap, fallback);
 	}
 
-	/** 构建异槽多态扁平 Switch 守卫（long getter 版）。签名 {@code (Object) -> long}。 */
 	public static MethodHandle buildFlatPolySwitchLong(PolySnapshot snap, MethodHandle fallback) {
-		JSShape[] shapes = snap.shapes();
-		int       n      = shapes.length;
-		if (n == 0) return fallback;
-		int[]  offsets = snap.offsets();
-		byte[] types   = snap.types();
-
-		// 小规模多态 (n <= 2) 展开式级联 GWT (纯指针比较，零掩码与归属校验开销) ──
-		if (n <= 2) {
-			MethodHandle chain = fallback;
-			for (int i = n - 1; i >= 0; i--) {
-				int          off        = offsets[i];
-				MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_LONG, 0, off);
-				MethodHandle exactTest  = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
-				chain = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), chain);
-			}
-			return chain;
-		}
-
-		// 多态/巨态按 Offset 分组聚合位掩码 (Offset-Class Mask Dispatch) ──
-		MethodHandle maskChain = tryBuildOffsetMaskDispatchLong(shapes, offsets, n, snap.propId(), fallback);
-		if (maskChain != null) {
-			return maskChain;
-		}
-
-		if (SUPPORTS_TABLE_SWITCH) {
-			try {
-				int minId = Integer.MAX_VALUE, maxId = Integer.MIN_VALUE;
-				for (JSShape s : shapes) {
-					minId = Math.min(minId, s.id);
-					maxId = Math.max(maxId, s.id);
-				}
-				int span = maxId - minId + 1;
-
-				if (span <= n * 4 && span <= 64) {
-					MethodHandle fallbackWithSel = MethodHandles.dropArguments(fallback, 0, int.class);
-
-					MethodHandle[] targets = new MethodHandle[span];
-					Arrays.fill(targets, fallbackWithSel);
-
-					for (int i = 0; i < n; i++) {
-						int  idx  = shapes[i].id - minId;
-						int  off  = offsets[i];
-						byte type = types[i];
-
-						MethodHandle fastGetter;
-						if ((type & JSShape.TYPE_MASK) == JSShape.TYPE_DOUBLE) {
-							fastGetter = (off < 8)
-							 ? MH_GET_SLOT_DOUBLE[off]
-							 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE, 0, off);
-						} else {
-							fastGetter = (off < 8)
-							 ? MH_GET_SLOT_OBJECT[off]
-							 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, off);
-						}
-
-						// JSShape.id 是通过 AtomicInteger 生成的全局唯一、不可变 ID。
-						// 进入 targets[idx] 说明当前对象的 shape.id - minId 精确命中了该下标；如果不命中或为未记录的 Shape，早在 Selector 处就会返回 -1 跳入 defaultCase，或命中空洞槽位的 fallbackWithSel。
-						// 因此，能跳转到 targets[idx]，其 Shape 数学上必然等于 shapes[i]
-						// MethodHandle exactTest     = MH_IS_EXACT_SHAPE.bindTo(shapes[i]);
-						// MethodHandle guardedGetter = MethodHandles.guardWithTest(exactTest, fastGetter.asType(fallback.type()), fallback);
-						// targets[idx] = MethodHandles.dropArguments(guardedGetter, 0, int.class);
-						targets[idx] = MethodHandles.dropArguments(fastGetter.asType(fallback.type()), 0, int.class);
-					}
-
-					MethodHandle ts       = invokeTableSwitch(fallbackWithSel, targets);
-					MethodHandle selector = buildShapeIdSelector(minId, span);
-					return MethodHandles.foldArguments(ts, selector);
-				}
-			} catch (Throwable ignored) { }
-		}
-
-		return buildFlatPolySwitchLongLinear(shapes, offsets, n, fallback);
+		return JSPolyGuards.buildFlatPolySwitchLong(snap, fallback);
 	}
 
-	// ── 偏移类聚合位掩码辅助函数 (Offset-Class Mask Dispatch Helpers) ──────────
-
-	private static int[] collectDistinctOffsets(int[] offsets, int n) {
-		int[] distinctOffsets = new int[8];
-		int   count           = 0;
-		for (int i = 0; i < n; i++) {
-			int     off   = offsets[i];
-			boolean found = false;
-			for (int j = 0; j < count; j++) {
-				if (distinctOffsets[j] == off) {
-					found = true;
-					break;
-				}
-			}
-			if (!found) {
-				if (count >= 8) return null; // offset 种类过多时回落
-				distinctOffsets[count++] = off;
-			}
-		}
-		return Arrays.copyOf(distinctOffsets, count);
-	}
-
-	private static MethodHandle tryBuildOffsetMaskDispatchDouble(JSShape[] shapes, int[] offsets, byte[] types, int n,
-	                                                             int propId,
-	                                                             MethodHandle fallback) {
-		if (propId < 0) return null;
-		for (int i = 0; i < n; i++) {
-			if ((types[i] & JSShape.TYPE_MASK) != JSShape.TYPE_DOUBLE) {
-				return null;
-			}
-		}
-		int[] distinctOffsets = collectDistinctOffsets(offsets, n);
-		if (distinctOffsets == null) return null;
-
-		MethodHandle chain = fallback;
-		for (int i = distinctOffsets.length - 1; i >= 0; i--) {
-			int off = distinctOffsets[i];
-			MethodHandle fastGetter = off < 8
-			 ? MH_GET_SLOT_DOUBLE[off]
-			 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_DOUBLE, 0, off);
-			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, off);
-			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
-		}
-		return chain;
-	}
-
-	private static MethodHandle tryBuildOffsetMaskDispatchObject(JSShape[] shapes, int[] offsets, int n, int propId,
-	                                                             MethodHandle fallback) {
-		if (propId < 0) return null;
-		int[] distinctOffsets = collectDistinctOffsets(offsets, n);
-		if (distinctOffsets == null) return null;
-
-		MethodHandle chain = fallback;
-		for (int i = distinctOffsets.length - 1; i >= 0; i--) {
-			int off = distinctOffsets[i];
-			MethodHandle fastGetter = off < 8
-			 ? MH_GET_SLOT_OBJECT[off]
-			 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, off);
-			MethodHandle test = MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, off);
-			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
-		}
-		return chain;
-	}
-
-	private static MethodHandle tryBuildOffsetMaskDispatchInt(JSShape[] shapes, int[] offsets, int n, int propId,
-	                                                          MethodHandle fallback) {
-		if (propId < 0) return null;
-		int[] distinctOffsets = collectDistinctOffsets(offsets, n);
-		if (distinctOffsets == null) return null;
-
-		MethodHandle chain = fallback;
-		for (int i = distinctOffsets.length - 1; i >= 0; i--) {
-			int          off        = distinctOffsets[i];
-			MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_INT, 0, off);
-			MethodHandle test       = MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, off);
-			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
-		}
-		return chain;
-	}
-
-	private static MethodHandle tryBuildOffsetMaskDispatchLong(JSShape[] shapes, int[] offsets, int n, int propId,
-	                                                           MethodHandle fallback) {
-		if (propId < 0) return null;
-		int[] distinctOffsets = collectDistinctOffsets(offsets, n);
-		if (distinctOffsets == null) return null;
-
-		MethodHandle chain = fallback;
-		for (int i = distinctOffsets.length - 1; i >= 0; i--) {
-			int          off        = distinctOffsets[i];
-			MethodHandle fastGetter = MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT_LONG, 0, off);
-			MethodHandle test       = MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, off);
-			chain = MethodHandles.guardWithTest(test, fastGetter.asType(fallback.type()), chain);
-		}
-		return chain;
-	}
-
-	/** 构建异槽多态扁平 Switch 守卫（Object setter 版）。签名 {@code (Object, Object) -> void}。 */
 	public static MethodHandle buildFlatPolySwitchSetterObject(PolySnapshot snap, MethodHandle fallback) {
-		JSShape[] shapes  = snap.shapes();
-		int[]     offsets = snap.offsets();
-		int       n       = shapes.length;
-
-		if (!SUPPORTS_TABLE_SWITCH || n == 0) return buildFlatPolySwitchSetterObjectLinear(shapes, offsets, n, fallback);
-
-		try {
-			int minId = Integer.MAX_VALUE, maxId = Integer.MIN_VALUE;
-			for (JSShape s : shapes) {
-				minId = Math.min(minId, s.id);
-				maxId = Math.max(maxId, s.id);
-			}
-			int span = maxId - minId + 1;
-
-			if (span <= n * 4 && span <= 64) {
-				// Fallback: (Object, Object) -> void  ==>  (int, Object, Object) -> void
-				MethodHandle fallbackWithSel = MethodHandles.dropArguments(fallback, 0, int.class);
-
-				MethodHandle[] targets = new MethodHandle[span];
-				Arrays.fill(targets, fallbackWithSel);
-
-				for (int i = 0; i < n; i++) {
-					int idx = shapes[i].id - minId;
-					int off = offsets[i];
-					MethodHandle fastSetter = off < 8
-					 ? MH_SET_SLOT_OBJECT[off]
-					 : MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT, 0, off);
-
-
-					// JSShape.id 是通过 AtomicInteger 生成的全局唯一、不可变 ID。
-					// 进入 targets[idx] 说明当前对象的 shape.id - minId 精确命中了该下标；如果不命中或为未记录的 Shape，早在 Selector 处就会返回 -1 跳入 defaultCase，或命中空洞槽位的 fallbackWithSel。
-					// 因此，能跳转到 targets[idx]，其 Shape 数学上必然等于 shapes[i]
-					// MethodHandle exactTest     = MH_IS_EXACT_SHAPE_SETTER_OBJECT.bindTo(shapes[i]);
-					// MethodHandle guardedSetter = MethodHandles.guardWithTest(exactTest, fastSetter.asType(fallback.type()), fallback);
-					// targets[idx] = MethodHandles.dropArguments(guardedSetter, 0, int.class);
-
-					targets[idx] = MethodHandles.dropArguments(fastSetter.asType(fallback.type()), 0, int.class);
-				}
-
-				// ts 签名: (int, Object, Object) -> void
-				MethodHandle ts = invokeTableSwitch(fallbackWithSel, targets);
-				// selector 签名: (Object target) -> int
-				MethodHandle selector = buildShapeIdSelector(minId, span);
-
-				// foldArguments 将 selector(arg0) 的结果注入给 ts 的第 0 个参数，
-				// 剩余 (Object, Object) 保持不变传递，最终输出 (Object, Object) -> void
-				return MethodHandles.foldArguments(ts, selector);
-			}
-		} catch (Throwable ignored) { }
-
-		return buildFlatPolySwitchSetterObjectLinear(shapes, offsets, n, fallback);
+		return JSPolyGuards.buildFlatPolySwitchSetterObject(snap, fallback);
 	}
 
-	/** 构建异槽多态扁平 Switch 守卫（double setter 版）。签名 {@code (Object, double) -> void}。 */
 	public static MethodHandle buildFlatPolySwitchSetterDouble(PolySnapshot snap, MethodHandle fallback) {
-		JSShape[] shapes  = snap.shapes();
-		int[]     offsets = snap.offsets();
-		int       n       = shapes.length;
-
-		if (!SUPPORTS_TABLE_SWITCH || n <= 0) return buildFlatPolySwitchSetterDoubleLinear(shapes, offsets, n, fallback);
-
-		try {
-			int minId = Integer.MAX_VALUE, maxId = Integer.MIN_VALUE;
-			for (JSShape s : shapes) {
-				minId = Math.min(minId, s.id);
-				maxId = Math.max(maxId, s.id);
-			}
-			int span = maxId - minId + 1;
-
-			if (span <= n * 4 && span <= 64) {
-				// Fallback: (Object, double) -> void  ==>  (int, Object, double) -> void
-				MethodHandle fallbackWithSel = MethodHandles.dropArguments(fallback, 0, int.class);
-
-				MethodHandle[] targets = new MethodHandle[span];
-				Arrays.fill(targets, fallbackWithSel);
-
-				for (int i = 0; i < n; i++) {
-					int idx = shapes[i].id - minId;
-					int off = offsets[i];
-					MethodHandle fastSetter = off < 8
-					 ? MH_SET_SLOT_DOUBLE[off]
-					 : MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT_DOUBLE, 0, off);
-
-					// JSShape.id 是通过 AtomicInteger 生成的全局唯一、不可变 ID。
-					// 进入 targets[idx] 说明当前对象的 shape.id - minId 精确命中了该下标；如果不命中或为未记录的 Shape，早在 Selector 处就会返回 -1 跳入 defaultCase，或命中空洞槽位的 fallbackWithSel。
-					// 因此，能跳转到 targets[idx]，其 Shape 数学上必然等于 shapes[i]
-					// MethodHandle exactTest     = MH_IS_EXACT_SHAPE_SETTER_OBJECT.bindTo(shapes[i]);
-					// MethodHandle guardedSetter = MethodHandles.guardWithTest(exactTest, fastSetter.asType(fallback.type()), fallback);
-
-					targets[idx] = MethodHandles.dropArguments(fastSetter.asType(fallback.type()), 0, int.class);
-				}
-
-				MethodHandle ts       = invokeTableSwitch(fallbackWithSel, targets);
-				MethodHandle selector = buildShapeIdSelector(minId, span);
-
-				return MethodHandles.foldArguments(ts, selector);
-			}
-		} catch (Throwable ignored) { }
-
-		return buildFlatPolySwitchSetterDoubleLinear(shapes, offsets, n, fallback);
+		return JSPolyGuards.buildFlatPolySwitchSetterDouble(snap, fallback);
 	}
 
-	// ── Selector builders ──────────────────────────────────────────────────────
-
-	/**
-	 * 构建通用 Getter/Setter 选择器：{@code (Object target) -> int}。
-	 * 读取 {@code jsObj.shape.id - minId}，若越界或非 JSObject 返回 -1 触发 fallback。
-	 */
-	private static MethodHandle buildShapeIdSelector(int minId, int span) {
-		return MethodHandles.insertArguments(
-		 findStaticMH(JSLinker.class, "shapeIdSelector", MethodType.methodType(int.class, int.class, int.class, Object.class)),
-		 0, minId, span
-		);
-	}
-
-	/** 运行时 shape.id 选择器实现：(minId, span, Object target) -> int */
 	public static int shapeIdSelector(int minId, int span, Object target) {
-		if (target instanceof JSObject jsObj) {
-			int idx = jsObj.shape.id - minId;
-			// 无符号比较：若 idx < 0，转为无符号将是巨大的正数，自然 >= span
-			if (Integer.compareUnsigned(idx, span) < 0) return idx;
-		}
-		return -1; // 负数强制命中 tableSwitch 的 defaultCase (fallback)
+		return JSPolyGuards.shapeIdSelector(minId, span, target);
 	}
 
-	// ── 路线 B：线性扫描（低版本 JDK 兼容）──────────────────────────────────────
-
-	/** 路线 B：Object getter 线性扫描静态代理。 */
-	public static Object polyGetObject(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target)
-	 throws Throwable {
-		if (target instanceof JSObject jsObj) {
-			JSShape s = jsObj.shape;
-			for (int i = 0, n = shapes.length; i < n; i++) {
-				if (s == shapes[i]) return jsObj.getSlot(offsets[i]);
-			}
-		}
-		return fallback.invoke(target);
+	public static Object polyGetObject(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target) throws Throwable {
+		return JSPolyGuards.polyGetObject(shapes, offsets, fallback, target);
 	}
 
-	/** 路线 B：double getter 线性扫描静态代理。 */
-	public static double polyGetDouble(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target)
-	 throws Throwable {
-		if (target instanceof JSObject jsObj) {
-			JSShape s = jsObj.shape;
-			for (int i = 0, n = shapes.length; i < n; i++) {
-				if (s == shapes[i]) return jsObj.getDoubleSlot(offsets[i]);
-			}
-		}
-		return (double) fallback.invoke(target);
+	public static double polyGetDouble(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target) throws Throwable {
+		return JSPolyGuards.polyGetDouble(shapes, offsets, fallback, target);
 	}
 
-	/** 路线 B：int getter 线性扫描静态代理。 */
-	public static int polyGetInt(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target)
-	 throws Throwable {
-		if (target instanceof JSObject jsObj) {
-			JSShape s = jsObj.shape;
-			for (int i = 0, n = shapes.length; i < n; i++) {
-				if (s == shapes[i]) return JSOps.toInt(jsObj.getSlot(offsets[i]));
-			}
-		}
-		return (int) fallback.invoke(target);
+	public static int polyGetInt(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target) throws Throwable {
+		return JSPolyGuards.polyGetInt(shapes, offsets, fallback, target);
 	}
 
-	/** 路线 B：long getter 线性扫描静态代理。 */
-	public static long polyGetLong(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target)
-	 throws Throwable {
-		if (target instanceof JSObject jsObj) {
-			JSShape s = jsObj.shape;
-			for (int i = 0, n = shapes.length; i < n; i++) {
-				if (s == shapes[i]) return JSOps.toLong(jsObj.getSlot(offsets[i]));
-			}
-		}
-		return (long) fallback.invoke(target);
-	}
-	private static MethodHandle buildFlatPolySwitchIntLinear(JSShape[] shapes, int[] offsets, int n,
-	                                                         MethodHandle fallback) {
-		try {
-			MethodHandle base = LOOKUP.findStatic(JSLinker.class, "polyGetInt",
-			 MethodType.methodType(int.class, JSShape[].class, int[].class, MethodHandle.class, Object.class));
-			return MethodHandles.insertArguments(base, 0, shapes, offsets, fallback);
-		} catch (Throwable t) { throw new RuntimeException(t); }
+	public static long polyGetLong(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target) throws Throwable {
+		return JSPolyGuards.polyGetLong(shapes, offsets, fallback, target);
 	}
 
-	private static MethodHandle buildFlatPolySwitchLongLinear(JSShape[] shapes, int[] offsets, int n,
-	                                                          MethodHandle fallback) {
-		try {
-			MethodHandle base = LOOKUP.findStatic(JSLinker.class, "polyGetLong",
-			 MethodType.methodType(long.class, JSShape[].class, int[].class, MethodHandle.class, Object.class));
-			return MethodHandles.insertArguments(base, 0, shapes, offsets, fallback);
-		} catch (Throwable t) { throw new RuntimeException(t); }
+	public static void polySetObject(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target, Object value) throws Throwable {
+		JSPolyGuards.polySetObject(shapes, offsets, fallback, target, value);
 	}
 
-	/** 路线 B：Object setter 线性扫描静态代理。 */
-	public static void polySetObject(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target, Object value)
-	 throws Throwable {
-		if (target instanceof JSObject jsObj) {
-			JSShape s = jsObj.shape;
-			for (int i = 0, n = shapes.length; i < n; i++) {
-				if (s == shapes[i]) {
-					jsObj.setSlot(offsets[i], value);
-					return;
-				}
-			}
-		}
-		fallback.invoke(target, value);
+	public static void polySetDouble(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target, double value) throws Throwable {
+		JSPolyGuards.polySetDouble(shapes, offsets, fallback, target, value);
 	}
 
-	/** 路线 B：double setter 线性扫描静态代理。 */
-	public static void polySetDouble(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target, double value)
-	 throws Throwable {
-		if (target instanceof JSObject jsObj) {
-			JSShape s = jsObj.shape;
-			for (int i = 0, n = shapes.length; i < n; i++) {
-				if (s == shapes[i]) {
-					jsObj.setDoubleSlot(offsets[i], value);
-					return;
-				}
-			}
-		}
-		fallback.invoke(target, value);
-	}
-
-	private static MethodHandle buildFlatPolySwitchObjectLinear(JSShape[] shapes, int[] offsets, int n,
-	                                                            MethodHandle fallback) {
-		try {
-			MethodHandle base = LOOKUP.findStatic(JSLinker.class, "polyGetObject",
-			 MethodType.methodType(Object.class, JSShape[].class, int[].class, MethodHandle.class, Object.class));
-			return MethodHandles.insertArguments(base, 0, shapes, offsets, fallback);
-		} catch (Throwable t) { throw new RuntimeException(t); }
-	}
-
-	private static MethodHandle buildFlatPolySwitchDoubleLinear(JSShape[] shapes, int[] offsets, int n,
-	                                                            MethodHandle fallback) {
-		try {
-			MethodHandle base = LOOKUP.findStatic(JSLinker.class, "polyGetDouble",
-			 MethodType.methodType(double.class, JSShape[].class, int[].class, MethodHandle.class, Object.class));
-			return MethodHandles.insertArguments(base, 0, shapes, offsets, fallback);
-		} catch (Throwable t) { throw new RuntimeException(t); }
-	}
-
-	private static MethodHandle buildFlatPolySwitchSetterObjectLinear(JSShape[] shapes, int[] offsets, int n,
-	                                                                  MethodHandle fallback) {
-		try {
-			MethodHandle base = LOOKUP.findStatic(JSLinker.class, "polySetObject",
-			 MethodType.methodType(void.class, JSShape[].class, int[].class, MethodHandle.class, Object.class, Object.class));
-			return MethodHandles.insertArguments(base, 0, shapes, offsets, fallback);
-		} catch (Throwable t) { throw new RuntimeException(t); }
-	}
-
-	private static MethodHandle buildFlatPolySwitchSetterDoubleLinear(JSShape[] shapes, int[] offsets, int n,
-	                                                                  MethodHandle fallback) {
-		try {
-			MethodHandle base = LOOKUP.findStatic(JSLinker.class, "polySetDouble",
-			 MethodType.methodType(void.class, JSShape[].class, int[].class, MethodHandle.class, Object.class, double.class));
-			return MethodHandles.insertArguments(base, 0, shapes, offsets, fallback);
-		} catch (Throwable t) { throw new RuntimeException(t); }
-	}
-
-	//endregion
-
-	//region Multi-Shape Guard Stubs (同偏移多态坍缩快速守卫)
-
-	/**
-	 * O(1) 槽位属性归属验证：
-	 * 验证当前对象在指定 offset 槽位上的属性确为 propId。
-	 * 彻底摆脱 64 掩码上限约束，即使在万级 Shape 场景下依然提供硬件单内存读取 + 比较的极速验证。
-	 */
 	public static boolean isMatchPropAt(int propId, int offset, Object target) {
-		return target instanceof JSObject jsObj && jsObj.shape.hasPropertyAt(propId, offset);
+		return JSPolyGuards.isMatchPropAt(propId, offset, target);
 	}
 
 	public static boolean isShapeN(JSShape[] shapes, Object target) {
-		if (target instanceof JSObject jsObj) {
-			JSShape s = jsObj.shape;
-			for (JSShape shape : shapes) {
-				if (s == shape) return true;
-			}
-		}
-		return false;
+		return JSPolyGuards.isShapeN(shapes, target);
 	}
 
-	private static MethodHandle buildMultiShapeGuard(JSShape[] shapes, int propId, int commonOff) {
-		int n = shapes.length;
-		if (n == 1) return MH_IS_EXACT_SHAPE.bindTo(shapes[0]);
-
-		if (propId >= 0 && commonOff >= 0) {
-			return MethodHandles.insertArguments(MH_IS_MATCH_PROP, 0, propId, commonOff);
-		}
-
-		return findStaticMH(JSLinker.class, "isShapeN", MethodType.methodType(boolean.class, JSShape[].class, Object.class)).bindTo(shapes);
+	static MethodHandle buildMultiShapeGuard(JSShape[] shapes, int propId, int commonOff) {
+		return JSPolyGuards.buildMultiShapeGuard(shapes, propId, commonOff);
 	}
 
 	public static boolean isShapeNSetterDouble(JSShape[] shapes, Object target, double val) {
-		if (target instanceof JSObject jsObj) {
-			JSShape s = jsObj.shape;
-			for (JSShape shape : shapes) {
-				if (s == shape) return true;
-			}
-		}
-		return false;
+		return JSPolyGuards.isShapeNSetterDouble(shapes, target, val);
 	}
 
-	private static MethodHandle buildMultiShapeGuardSetterDouble(JSShape[] shapes) {
-		int n = shapes.length;
-		if (n == 1) return MH_IS_EXACT_SHAPE_SETTER_DOUBLE.bindTo(shapes[0]);
-		// Setter 严格沿用精确 Shape 比较，禁止松散位掩码，杜绝类型混淆与原始槽脏写
-		return findStaticMH(JSLinker.class, "isShapeNSetterDouble", MethodType.methodType(boolean.class, JSShape[].class, Object.class, double.class)).bindTo(shapes);
+	static MethodHandle buildMultiShapeGuardSetterDouble(JSShape[] shapes) {
+		return JSPolyGuards.buildMultiShapeGuardSetterDouble(shapes);
 	}
 
 	public static boolean isShapeNSetterObject(JSShape[] shapes, Object target, Object val) {
-		if (target instanceof JSObject jsObj) {
-			JSShape s = jsObj.shape;
-			for (JSShape shape : shapes) {
-				if (s == shape) return true;
-			}
-		}
-		return false;
+		return JSPolyGuards.isShapeNSetterObject(shapes, target, val);
 	}
 
-	private static MethodHandle buildMultiShapeGuardSetterObject(JSShape[] shapes) {
-		int n = shapes.length;
-		if (n == 1) return MH_IS_EXACT_SHAPE_SETTER_OBJECT.bindTo(shapes[0]);
-		// Setter 严格沿用精确 Shape 比较，禁止松散位掩码
-		return findStaticMH(JSLinker.class, "isShapeNSetterObject", MethodType.methodType(boolean.class, JSShape[].class, Object.class, Object.class)).bindTo(shapes);
+	static MethodHandle buildMultiShapeGuardSetterObject(JSShape[] shapes) {
+		return JSPolyGuards.buildMultiShapeGuardSetterObject(shapes);
 	}
 
-	/**
-	 * 自适应 Fallback 句柄：
-	 * 当已观测 Shape 数量 < 64 且 CallSite 未进入超态时，返回 initialFallback（继续捕获新 Shape 并触发动态重新快照/Relink）；
-	 * 当 Shape 数量到达 64 阈值后，返回 megamorphicTarget 终结演化。
-	 */
-	private static MethodHandle getAdaptiveFallback(ChainedCallSite site) {
-		return (site.getPolyCount() < 64 && site.getInitialFallback() != null)
-		 ? site.getInitialFallback()
-		 : (site.getMegamorphicTarget() != null ? site.getMegamorphicTarget() : site.getTarget());
+	static MethodHandle getAdaptiveFallback(ChainedCallSite site) {
+		return JSPolyGuards.getAdaptiveFallback(site);
 	}
 	//endregion
+
 
 	//region BSM 引导方法
 
@@ -1130,95 +413,11 @@ public class JSLinker {
 	 MethodType type,
 	 String op
 	) {
-		MethodHandle mh = findSpecializedBinaryOp(op, type);
-		if (mh != null) {
-			return new ConstantCallSite(mh.asType(type));
-		}
-		mh = switch (op) {
-			case "+" -> OpMH.ADD;
-			case "-" -> OpMH.SUB;
-			case "*" -> OpMH.MUL;
-			case "/" -> OpMH.DIV;
-			case "%" -> OpMH.MOD;
-			case "==" -> OpMH.EQ;
-			case "===" -> OpMH.STRICT_EQ;
-			case "!=" -> OpMH.NE;
-			case "!==" -> OpMH.STRICT_NE;
-			case "<" -> OpMH.LT;
-			case "<=" -> OpMH.LTE;
-			case ">" -> OpMH.GT;
-			case ">=" -> OpMH.GTE;
-			case "&&" -> OpMH.AND;
-			case "||" -> OpMH.OR;
-			case "&" -> OpMH.BIT_AND;
-			case "|" -> OpMH.BIT_OR;
-			case "^" -> OpMH.BIT_XOR;
-			case "<<" -> OpMH.SHL;
-			case ">>" -> OpMH.SHR;
-			case ">>>" -> OpMH.USHR;
-			default -> throw new IllegalArgumentException("Unknown binary operator: " + op);
-		};
-		return new ConstantCallSite(mh.asType(type));
+		return JSBinaryOps.bootstrapBinaryOp(caller, name, type, op);
 	}
 
-	private static MethodHandle findSpecializedBinaryOp(String op, MethodType type) {
-		if (type.parameterCount() != 2) return null;
-		Class<?> p0  = type.parameterType(0);
-		Class<?> p1  = type.parameterType(1);
-		Class<?> ret = type.returnType();
-
-		if ("+".equals(op)) {
-			if (p0 == double.class && p1 == double.class && ret == double.class) return OpMH.ADD_DD_D;
-			if (p0 == int.class && p1 == int.class && ret == int.class) return OpMH.ADD_II_I;
-			if (p0 == int.class && p1 == double.class && ret == double.class) return OpMH.ADD_ID_D;
-			if (p0 == double.class && p1 == int.class && ret == double.class) return OpMH.ADD_DI_D;
-			if (p0 == Object.class && p1 == double.class) return OpMH.ADD_OD_O;
-			if (p0 == double.class && p1 == Object.class) return OpMH.ADD_DO_O;
-			if (p0 == Object.class && p1 == int.class) return OpMH.ADD_OI_O;
-			if (p0 == int.class && p1 == Object.class) return OpMH.ADD_IO_O;
-			if (p0 == String.class && p1 == String.class) return OpMH.ADD_SS_S;
-			if (p0 == String.class && p1 == Object.class) return OpMH.ADD_SO_S;
-			if (p0 == Object.class && p1 == String.class) return OpMH.ADD_OS_S;
-		} else if ("-".equals(op)) {
-			if (p0 == double.class && p1 == double.class && ret == double.class) return OpMH.SUB_DD_D;
-			if (p0 == int.class && p1 == int.class && ret == int.class) return OpMH.SUB_II_I;
-			if (p0 == int.class && p1 == double.class && ret == double.class) return OpMH.SUB_ID_D;
-			if (p0 == double.class && p1 == int.class && ret == double.class) return OpMH.SUB_DI_D;
-			if (p0 == Object.class && p1 == double.class) return OpMH.SUB_OD_D;
-			if (p0 == double.class && p1 == Object.class) return OpMH.SUB_DO_D;
-		} else if ("*".equals(op)) {
-			if (p0 == double.class && p1 == double.class && ret == double.class) return OpMH.MUL_DD_D;
-			if (p0 == int.class && p1 == int.class && ret == int.class) return OpMH.MUL_II_I;
-			if (p0 == int.class && p1 == double.class && ret == double.class) return OpMH.MUL_ID_D;
-			if (p0 == double.class && p1 == int.class && ret == double.class) return OpMH.MUL_DI_D;
-			if (p0 == Object.class && p1 == double.class) return OpMH.MUL_OD_D;
-			if (p0 == double.class && p1 == Object.class) return OpMH.MUL_DO_D;
-		} else if ("/".equals(op)) {
-			if (p0 == double.class && p1 == double.class && ret == double.class) return OpMH.DIV_DD_D;
-			if (p0 == int.class && p1 == int.class) return OpMH.DIV_II_D;
-			if (p0 == int.class && p1 == double.class && ret == double.class) return OpMH.DIV_ID_D;
-			if (p0 == double.class && p1 == int.class && ret == double.class) return OpMH.DIV_DI_D;
-			if (p0 == Object.class && p1 == double.class) return OpMH.DIV_OD_D;
-			if (p0 == double.class && p1 == Object.class) return OpMH.DIV_DO_D;
-		} else if ("%".equals(op)) {
-			if (p0 == double.class && p1 == double.class && ret == double.class) return OpMH.MOD_DD_D;
-			if (p0 == int.class && p1 == int.class && ret == int.class) return OpMH.MOD_II_I;
-			if (p0 == int.class && p1 == double.class && ret == double.class) return OpMH.MOD_ID_D;
-			if (p0 == double.class && p1 == int.class && ret == double.class) return OpMH.MOD_DI_D;
-			if (p0 == Object.class && p1 == double.class) return OpMH.MOD_OD_D;
-			if (p0 == double.class && p1 == Object.class) return OpMH.MOD_DO_D;
-		} else if ("==".equals(op)) {
-			if (p0 == Object.class && p1 == int.class) return OpMH.EQ_OI_Z;
-			if (p0 == Object.class && p1 == double.class) return OpMH.EQ_OD_Z;
-			if (p0 == Object.class && p1 == boolean.class) return OpMH.EQ_OB_Z;
-			if (p0 == Object.class && p1 == String.class) return OpMH.EQ_OS_Z;
-		} else if ("===".equals(op)) {
-			if (p0 == Object.class && p1 == int.class) return OpMH.STRICT_EQ_OI_Z;
-			if (p0 == Object.class && p1 == double.class) return OpMH.STRICT_EQ_OD_Z;
-			if (p0 == Object.class && p1 == boolean.class) return OpMH.STRICT_EQ_OB_Z;
-			if (p0 == Object.class && p1 == String.class) return OpMH.STRICT_EQ_OS_Z;
-		}
-		return null;
+	public static MethodHandle findSpecializedBinaryOp(String op, MethodType type) {
+		return JSBinaryOps.findSpecializedBinaryOp(op, type);
 	}
 
 	public static CallSite bootstrapGetIndex(
@@ -1226,14 +425,7 @@ public class JSLinker {
 	 String name,
 	 MethodType type
 	) {
-		ChainedCallSite site = new ChainedCallSite(type, IndexMH.GET.asType(type));
-
-		// 绑定 Fallback 处理器
-		MethodHandle fallback = IndexMH.GET_FALLBACK.bindTo(site).asType(type);
-
-		site.setInitialFallback(fallback);
-		site.setTarget(fallback);
-		return site;
+		return JSIndexOps.bootstrapGetIndex(caller, name, type);
 	}
 
 	public static CallSite bootstrapSetIndex(
@@ -1241,383 +433,43 @@ public class JSLinker {
 	 String name,
 	 MethodType type
 	) {
-		ChainedCallSite site = new ChainedCallSite(type, IndexMH.SET.asType(type));
-
-		// 绑定 Fallback 处理器
-		MethodHandle fallback = IndexMH.SET_FALLBACK.bindTo(site).asType(type);
-
-		site.setInitialFallback(fallback);
-		site.setTarget(fallback);
-		return site;
+		return JSIndexOps.bootstrapSetIndex(caller, name, type);
 	}
 	//endregion
 
-	//region Fallback 与 Inline Cache 实现
+	//region Fallback 롢 Inline Cache ʵ
 
-	/** 双重守卫：Shape 相同且 Key 相同（先做引用比较 ==，失败再做 equals，同时支持 JSSymbol） */
 	@SuppressWarnings("EqualsReplaceableByObjectsCall")
 	public static boolean isExactShapeAndKey(JSShape expectedShape, String expectedKey, Object target, Object key) {
-		return target instanceof JSObject jsObj
-		       && jsObj.shape == expectedShape
-		       && (key == expectedKey || (key != null && (key.equals(expectedKey) || (key instanceof JSSymbol sym && sym.getKey().equals(expectedKey)))));
+		return JSIndexOps.isExactShapeAndKey(expectedShape, expectedKey, target, key);
 	}
 
-	/** 字符串属性专用高速守卫：Shape 相同且 String Key 相同（先做引用比较 ==，失败再做 String.equals，无 JSSymbol 任何开销） */
 	public static boolean isExactShapeAndStringKey(JSShape expectedShape, String expectedKey, Object target, Object key) {
-		return target instanceof JSObject jsObj
-		       && jsObj.shape == expectedShape
-		       && (key == expectedKey || expectedKey.equals(key));
+		return JSIndexOps.isExactShapeAndStringKey(expectedShape, expectedKey, target, key);
 	}
 
-	/** 符号属性专用单指令守卫：Shape 相同且 Symbol 引用指针完全一致（纯 == 比较） */
 	public static boolean isExactShapeAndSymbol(JSShape expectedShape, JSSymbol expectedSymbol, Object target,
 	                                            Object key) {
-		return target instanceof JSObject jsObj
-		       && jsObj.shape == expectedShape
-		       && key == expectedSymbol;
+		return JSIndexOps.isExactShapeAndSymbol(expectedShape, expectedSymbol, target, key);
 	}
 
-	/** 原型链字符串属性守卫：Shape 相同、原型对象一致且 String Key 相同 */
 	public static boolean isExactShapeAndProtoAndStringKey(JSShape expectedShape, JSObject expectedProto,
 	                                                       String expectedKey, Object target, Object key) {
-		return target instanceof JSObject jsObj
-		       && jsObj.shape == expectedShape
-		       && jsObj.getPrototype() == expectedProto
-		       && (key == expectedKey || (key instanceof String s && expectedKey.equals(s)));
+		return JSIndexOps.isExactShapeAndProtoAndStringKey(expectedShape, expectedProto, expectedKey, target, key);
 	}
 
-	/** 原型链符号属性守卫：Shape 相同、原型对象一致且 Symbol 引用指针完全一致 */
 	public static boolean isExactShapeAndProtoAndSymbol(JSShape expectedShape, JSObject expectedProto,
 	                                                    JSSymbol expectedSymbol, Object target, Object key) {
-		return target instanceof JSObject jsObj
-		       && jsObj.shape == expectedShape
-		       && jsObj.getPrototype() == expectedProto
-		       && key == expectedSymbol;
+		return JSIndexOps.isExactShapeAndProtoAndSymbol(expectedShape, expectedProto, expectedSymbol, target, key);
 	}
 
-	/** 动态对象索引读取的通用 Fallback 入口 */
 	public static Object getIndexDynamicFallback(ChainedCallSite site, Object target, Object index) throws Throwable {
-		if (target instanceof JSContext.JSGlobalThis globalThis) {
-			return globalThis.get(toPropertyKey(index));
-		}
-		if (target instanceof JSObject jsObj) {
-			if (index instanceof String strKey) {
-				JSShape s      = jsObj.shape;
-				int     offset = s.getOffset(strKey);
-
-				// 只有当属性命中且非 accessor 且缓存深度 < 3 时挂载 String Keyed IC 单态/多态分支
-				if (offset >= 0 && (!s.hasAccessors || !s.isAccessor(offset)) && site.getChainDepth() < 3) {
-					MethodHandle test = LOOKUP.findStatic(
-					 JSLinker.class,
-					 "isExactShapeAndStringKey",
-					 MethodType.methodType(boolean.class, JSShape.class, String.class, Object.class, Object.class)
-					).bindTo(s).bindTo(strKey);
-
-					// 构造极速直读 Handle：(target, key) -> target.getSlot(offset)
-					MethodHandle getter = offset < 8
-					 ? MH_GET_SLOT_OBJECT[offset]
-					 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, offset);
-					// 丢弃第 1 个参数 key，适配签名 (Object, Object) -> Object
-					MethodHandle directTarget = MethodHandles.dropArguments(getter, 1, Object.class);
-
-					site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
-					return jsObj.getSlot(offset);
-				} else if (offset < 0 && site.getChainDepth() < 3) {
-					JSObject proto = jsObj.getPrototype();
-					if (proto != null) {
-						JSObject       current      = proto;
-						JSObject       holder       = null;
-						int            holderOffset = -1;
-						List<JSObject> chain        = null;
-
-						while (current != null) {
-							int pOff = current.shape.getOffset(strKey);
-							if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.NOT_FOUND)) {
-								holder = current;
-								holderOffset = pOff;
-								break;
-							}
-							if (chain == null) chain = new ArrayList<>(2);
-							chain.add(current);
-							current = current.getPrototype();
-						}
-
-						if (holder != null && (!holder.shape.hasAccessors || !holder.shape.isAccessor(holderOffset))) {
-							Object val = holder.getSlot(holderOffset);
-							MethodHandle test = LOOKUP.findStatic(
-							 JSLinker.class,
-							 "isExactShapeAndProtoAndStringKey",
-							 MethodType.methodType(boolean.class, JSShape.class, JSObject.class, String.class, Object.class, Object.class)
-							).bindTo(s).bindTo(proto).bindTo(strKey);
-
-							MethodHandle fb      = site.getInitialFallback();
-							MethodHandle fbTyped = (fb != null) ? fb.asType(site.type()) : null;
-							MethodHandle constTarget = MethodHandles.dropArguments(
-							 MethodHandles.constant(Object.class, val), 0, site.type().parameterList()
-							).asType(site.type());
-							if (chain != null && fbTyped != null) {
-								for (JSObject p : chain) {
-									constTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(constTarget, fbTyped);
-								}
-							}
-							site.installProtoGuard(holder.getOrCreateProtoSwitchPoint(), test, constTarget);
-							return val;
-						}
-					}
-				}
-			} else if (index instanceof JSSymbol symKey) {
-				JSShape s      = jsObj.shape;
-				int     offset = s.getOffset(symKey.getSymbolId());
-
-				// 针对 Symbol 进行引用恒等比较的单指令 IC 守卫（非 accessor）
-				if (offset >= 0 && (!s.hasAccessors || !s.isAccessor(offset)) && site.getChainDepth() < 3) {
-					MethodHandle test = LOOKUP.findStatic(
-					 JSLinker.class,
-					 "isExactShapeAndSymbol",
-					 MethodType.methodType(boolean.class, JSShape.class, JSSymbol.class, Object.class, Object.class)
-					).bindTo(s).bindTo(symKey);
-
-					MethodHandle getter = offset < 8
-					 ? MH_GET_SLOT_OBJECT[offset]
-					 : MethodHandles.insertArguments(MH_GET_JS_OBJ_SLOT, 0, offset);
-					MethodHandle directTarget = MethodHandles.dropArguments(getter, 1, Object.class);
-
-					site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
-					return jsObj.getSlot(offset);
-				} else if (offset < 0 && site.getChainDepth() < 3) {
-					JSObject proto = jsObj.getPrototype();
-					if (proto != null) {
-						JSObject       current      = proto;
-						JSObject       holder       = null;
-						int            holderOffset = -1;
-						List<JSObject> chain        = null;
-
-						while (current != null) {
-							int pOff = current.shape.getOffset(symKey.getSymbolId());
-							if (pOff >= 0 && (current.isDoubleSlot(pOff) || current.getRawObjectSlot(pOff) != JSObject.NOT_FOUND)) {
-								holder = current;
-								holderOffset = pOff;
-								break;
-							}
-							if (chain == null) chain = new ArrayList<>(2);
-							chain.add(current);
-							current = current.getPrototype();
-						}
-
-						if (holder != null && (!holder.shape.hasAccessors || !holder.shape.isAccessor(holderOffset))) {
-							Object val = holder.getSlot(holderOffset);
-							MethodHandle test = LOOKUP.findStatic(
-							 JSLinker.class,
-							 "isExactShapeAndProtoAndSymbol",
-							 MethodType.methodType(boolean.class, JSShape.class, JSObject.class, JSSymbol.class, Object.class, Object.class)
-							).bindTo(s).bindTo(proto).bindTo(symKey);
-
-							MethodHandle fb      = site.getInitialFallback();
-							MethodHandle fbTyped = (fb != null) ? fb.asType(site.type()) : null;
-							MethodHandle constTarget = MethodHandles.dropArguments(
-							 MethodHandles.constant(Object.class, val), 0, site.type().parameterList()
-							).asType(site.type());
-							if (chain != null && fbTyped != null) {
-								for (JSObject p : chain) {
-									constTarget = p.getOrCreateProtoSwitchPoint().guardWithTest(constTarget, fbTyped);
-								}
-							}
-							site.installProtoGuard(holder.getOrCreateProtoSwitchPoint(), test, constTarget);
-							return val;
-						}
-					}
-				}
-			}
-		}
-		if (target instanceof JSArray) {
-			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
-			if (site.type().parameterCount() > 1) {
-				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
-			}
-			site.installGuardOrSwitchMegamorphic(test, MH_GET_INDEX_JS_ARRAY.asType(site.type()));
-			return getIndexJSArray(target, index);
-		}
-		if (target instanceof List) {
-			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
-			if (site.type().parameterCount() > 1) {
-				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
-			}
-			site.installGuardOrSwitchMegamorphic(test, MH_GET_INDEX_LIST.asType(site.type()));
-			return getIndexList(target, index);
-		}
-		if (target != null && target.getClass().isArray()) {
-			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
-			if (site.type().parameterCount() > 1) {
-				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
-			}
-			MethodHandle directTarget;
-			if (target instanceof Object[]) { directTarget = MH_GET_INDEX_OBJECT_ARRAY; } else if (target instanceof int[]) {
-				directTarget = MH_GET_INDEX_INT_ARRAY;
-			} else if (target instanceof double[]) {
-				directTarget = MH_GET_INDEX_DOUBLE_ARRAY;
-			} else if (target instanceof long[]) { directTarget = MH_GET_INDEX_LONG_ARRAY; } else {
-				directTarget = MH_GET_INDEX_PRIMITIVE_ARRAY;
-			}
-
-			site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
-			if (target instanceof Object[]) return getIndexObjectArray(target, index);
-			if (target instanceof int[]) return getIndexIntArray(target, index);
-			if (target instanceof double[]) return getIndexDoubleArray(target, index);
-			if (target instanceof long[]) return getIndexLongArray(target, index);
-			return getIndexPrimitiveArray(target, index);
-		}
-		if (target instanceof Map) {
-			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
-			if (site.type().parameterCount() > 1) {
-				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
-			}
-			site.installGuardOrSwitchMegamorphic(test, MH_GET_INDEX_MAP.asType(site.type()));
-			return getIndexMap(target, index);
-		}
-		// 降级走原有的全量查找
-		return getIndex(target, index);
+		return JSIndexOps.getIndexDynamicFallback(site, target, index);
 	}
 
-	/** 动态对象索引写入的通用 Fallback 入口 */
 	public static void setIndexDynamicFallback(ChainedCallSite site, Object target, Object index, Object value)
 	 throws Throwable {
-		if (target == null || target == JSUndefined.INSTANCE) return;
-		if (target instanceof JSContext.JSGlobalThis globalThis) {
-			globalThis.put(toPropertyKey(index), value);
-			return;
-		}
-		if (target instanceof JSObject jsObj) {
-			boolean isPrototype = jsObj.getProtoSwitchPoint() != null || jsObj == JSContext.LazyArray.ARRAY_PROTOTYPE;
-			if (index instanceof String strKey) {
-				JSShape s      = jsObj.shape;
-				int     offset = s.getOffset(strKey);
-
-				if (offset >= 0 && (!s.hasAccessors || !s.isAccessor(offset)) && s.isWritable(offset) && site.getChainDepth() < 3) {
-					byte type            = s.getSlotType(offset);
-					byte currentBaseType = (byte) (type & JSShape.TYPE_MASK);
-					byte newBaseType     = (value instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
-					if (currentBaseType == newBaseType) {
-						boolean isDouble = currentBaseType == JSShape.TYPE_DOUBLE;
-						if (!isPrototype) {
-							MethodHandle test = LOOKUP.findStatic(
-							 JSLinker.class,
-							 "isExactShapeAndStringKey",
-							 MethodType.methodType(boolean.class, JSShape.class, String.class, Object.class, Object.class)
-							).bindTo(s).bindTo(strKey);
-							test = MethodHandles.dropArguments(test, 2, Object.class);
-
-							MethodHandle directSlotSetter;
-							if (offset < 8) {
-								directSlotSetter = isDouble ? MH_SET_SLOT_DOUBLE_AS_OBJ[offset] : MH_SET_SLOT_OBJECT[offset];
-							} else {
-								directSlotSetter = isDouble
-								 ? MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT_DOUBLE_AS_OBJ, 0, offset)
-								 : MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT, 0, offset);
-							}
-							MethodHandle directTarget = MethodHandles.dropArguments(directSlotSetter, 1, Object.class);
-							site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
-						}
-						if (isDouble) {
-							jsObj.setDoubleSlot(offset, JSOps.toDouble(value));
-						} else {
-							jsObj.setSlot(offset, value);
-						}
-						jsObj.onStructuralOrPropertyChange();
-						return;
-					}
-				}
-			} else if (index instanceof JSSymbol symKey) {
-				JSShape s      = jsObj.shape;
-				int     offset = s.getOffset(symKey.getSymbolId());
-
-				if (offset >= 0 && (!s.hasAccessors || !s.isAccessor(offset)) && s.isWritable(offset) && site.getChainDepth() < 3) {
-					byte type            = s.getSlotType(offset);
-					byte currentBaseType = (byte) (type & JSShape.TYPE_MASK);
-					byte newBaseType     = (value instanceof Number) ? JSShape.TYPE_DOUBLE : JSShape.TYPE_OBJECT;
-					if (currentBaseType == newBaseType) {
-						boolean isDouble = currentBaseType == JSShape.TYPE_DOUBLE;
-						if (!isPrototype) {
-							MethodHandle test = LOOKUP.findStatic(
-							 JSLinker.class,
-							 "isExactShapeAndSymbol",
-							 MethodType.methodType(boolean.class, JSShape.class, JSSymbol.class, Object.class, Object.class)
-							).bindTo(s).bindTo(symKey);
-							test = MethodHandles.dropArguments(test, 2, Object.class);
-
-							MethodHandle directSlotSetter;
-							if (offset < 8) {
-								directSlotSetter = isDouble ? MH_SET_SLOT_DOUBLE_AS_OBJ[offset] : MH_SET_SLOT_OBJECT[offset];
-							} else {
-								directSlotSetter = isDouble
-								 ? MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT_DOUBLE_AS_OBJ, 0, offset)
-								 : MethodHandles.insertArguments(MH_SET_JS_OBJ_SLOT, 0, offset);
-							}
-							MethodHandle directTarget = MethodHandles.dropArguments(directSlotSetter, 1, Object.class);
-							site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
-						}
-						if (isDouble) {
-							jsObj.setDoubleSlot(offset, JSOps.toDouble(value));
-						} else {
-							jsObj.setSlot(offset, value);
-						}
-						jsObj.onStructuralOrPropertyChange();
-						return;
-					}
-				}
-			}
-		}
-		if (target instanceof JSArray) {
-			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
-			if (site.type().parameterCount() > 1) {
-				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
-			}
-			site.installGuardOrSwitchMegamorphic(test, MH_SET_INDEX_JS_ARRAY.asType(site.type()));
-			setIndexJSArray(target, index, value);
-			return;
-		}
-		if (target instanceof List) {
-			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
-			if (site.type().parameterCount() > 1) {
-				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
-			}
-			site.installGuardOrSwitchMegamorphic(test, MH_SET_INDEX_LIST.asType(site.type()));
-			setIndexList(target, index, value);
-			return;
-		}
-		if (/* target != null &&  */target.getClass().isArray()) {
-			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
-			if (site.type().parameterCount() > 1) {
-				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
-			}
-			MethodHandle directTarget;
-			if (target instanceof Object[]) { directTarget = MH_SET_INDEX_OBJECT_ARRAY; } else if (target instanceof int[]) {
-				directTarget = MH_SET_INDEX_INT_ARRAY;
-			} else if (target instanceof double[]) {
-				directTarget = MH_SET_INDEX_DOUBLE_ARRAY;
-			} else if (target instanceof long[]) { directTarget = MH_SET_INDEX_LONG_ARRAY; } else {
-				directTarget = MH_SET_INDEX_PRIMITIVE_ARRAY;
-			}
-
-			site.installGuardOrSwitchMegamorphic(test, directTarget.asType(site.type()));
-			if (target instanceof Object[]) { setIndexObjectArray(target, index, value); } else if (target instanceof int[]) {
-				setIndexIntArray(target, index, value);
-			} else if (target instanceof double[]) {
-				setIndexDoubleArray(target, index, value);
-			} else if (target instanceof long[]) { setIndexLongArray(target, index, value); } else {
-				setIndexPrimitiveArray(target, index, value);
-			}
-			return;
-		}
-		if (target instanceof Map) {
-			MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
-			if (site.type().parameterCount() > 1) {
-				test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
-			}
-			site.installGuardOrSwitchMegamorphic(test, MH_SET_INDEX_MAP.asType(site.type()));
-			setIndexMap(target, index, value);
-			return;
-		}
-		setIndex(target, index, value);
+		JSIndexOps.setIndexDynamicFallback(site, target, index, value);
 	}
 
 	public static Object getPropMegamorphic(ChainedCallSite site, Object target, String propName) {
@@ -2419,8 +1271,7 @@ public class JSLinker {
 
 	public static void invalidateClass(Class<?> clazz) {
 		if (clazz == null) return;
-		SPREADER_DATA.remove(clazz);
-		INTERFACE_FILTER_CACHE.remove(clazz);
+		JSJavaInterop.invalidateClass(clazz);
 		STATIC_METHOD_CACHE.remove(clazz);
 	}
 
@@ -2923,360 +1774,32 @@ public class JSLinker {
 	}
 	//endregion
 
-	//region Dynalink / JLS 规范级重载决议 (Overload Resolution)
-
-	private static int getPrimitiveTypeIndex(Class<?> c) {
-		if (c == byte.class || c == Byte.class) return 0;
-		if (c == short.class || c == Short.class) return 1;
-		if (c == char.class || c == Character.class) return 2;
-		if (c == int.class || c == Integer.class) return 3;
-		if (c == long.class || c == Long.class) return 4;
-		if (c == float.class || c == Float.class) return 5;
-		if (c == double.class || c == Double.class) return 6;
-		if (c == boolean.class || c == Boolean.class) return 7;
-		return -1;
-	}
-
-	private static int getInheritanceDistance(Class<?> from, Class<?> to) {
-		if (from == to) return 0;
-		if (to.isArray() && from.isArray()) {
-			return getInheritanceDistance(from.getComponentType(), to.getComponentType());
-		}
-		if (to.isInterface()) {
-			int minDistance = MethodResolver.COST_INCOMPATIBLE;
-			for (Class<?> iface : from.getInterfaces()) {
-				if (iface == to) return 1;
-				if (to.isAssignableFrom(iface)) {
-					int d = 1 + getInheritanceDistance(iface, to);
-					if (d < minDistance) minDistance = d;
-				}
-			}
-			Class<?> superclass = from.getSuperclass();
-			if (superclass != null && to.isAssignableFrom(superclass)) {
-				int d = 1 + getInheritanceDistance(superclass, to);
-				if (d < minDistance) minDistance = d;
-			}
-			return minDistance != MethodResolver.COST_INCOMPATIBLE ? minDistance : 10;
-		}
-		int      distance = 0;
-		Class<?> curr     = from;
-		while (curr != null && curr != to) {
-			curr = curr.getSuperclass();
-			distance++;
-		}
-		return curr == to ? distance : MethodResolver.COST_INCOMPATIBLE;
-	}
-
-	private static int getHierarchyDepth(Class<?> clazz) {
-		int      depth = 0;
-		Class<?> curr  = clazz;
-		while (curr != null) {
-			depth++;
-			curr = curr.getSuperclass();
-		}
-		return depth;
-	}
+	//region Dynalink / JLS 重载决议与 Java 互操作 (委托至 JSJavaInterop)
 
 	public static int computeConversionCost(Object arg, Class<?> targetType) {
-		if (arg == null) {
-			if (targetType.isPrimitive()) return MethodResolver.COST_INCOMPATIBLE;
-			if (targetType == Object.class) return 100;
-			// 越具体的类型（继承深度越深）在匹配 null 时优先级越高 (Cost 越低)
-			return Math.max(1, 100 - getHierarchyDepth(targetType));
-		}
-
-		Class<?> fromType = arg.getClass();
-		if (fromType == targetType) return 0;
-
-		// 0. 接口适配 (SAM 函数式接口 / JSObject 动态代理)
-		if (targetType.isInterface()) {
-			if (arg instanceof JSFunction) {
-				if (JSOps.getSingleAbstractMethod(targetType) != null) return 2;
-				if (targetType == JSFunction.class) return 0;
-			}
-			if (arg instanceof JSObject) {
-				if (targetType == JSObject.class) return 0;
-				return 5;
-			}
-		}
-
-		// 1. 引用类型子类型继承关系
-		if (targetType.isAssignableFrom(fromType)) {
-			if (targetType == Object.class) return 50;
-			return getInheritanceDistance(fromType, targetType);
-		}
-
-		// 2. 基本类型与包装类型转换
-		int fromPrim = getPrimitiveTypeIndex(fromType);
-		int toPrim   = getPrimitiveTypeIndex(targetType);
-
-		if (fromPrim >= 0 && toPrim >= 0) {
-			// boolean 单独处理
-			if (fromPrim == 7 || toPrim == 7) {
-				return (fromPrim == toPrim) ? 1 : MethodResolver.COST_INCOMPATIBLE;
-			}
-			// 同一种基本类型的装箱/拆箱 (e.g. Integer -> int, Double -> double)
-			if (fromPrim == toPrim) return 1;
-
-			// JLS §5.1.2 基本类型无损拓宽 (Widening Primitive Conversion)
-			// byte(0) -> short(1) -> int(3) -> long(4) -> float(5) -> double(6), char(2) -> int(3)
-			if (fromPrim == 2 && toPrim >= 3) { // char -> int/long/float/double
-				return 2 + (toPrim - 3);
-			}
-			if (fromPrim < toPrim && toPrim != 2) {
-				return 2 + (toPrim - fromPrim);
-			}
-
-			// JS 动态数字无损收窄 (JS Double 实际上是整型值，如 10.0 -> int)
-			if (arg instanceof Number num) {
-				double d = num.doubleValue();
-				if (Double.isFinite(d) && d == Math.floor(d)) {
-					if (toPrim == 3 && d >= Integer.MIN_VALUE && d <= Integer.MAX_VALUE) return 3;
-					if (toPrim == 4 && d >= Long.MIN_VALUE && d <= Long.MAX_VALUE) return 3;
-					if (toPrim == 1 && d >= Short.MIN_VALUE && d <= Short.MAX_VALUE) return 4;
-					if (toPrim == 0 && d >= Byte.MIN_VALUE && d <= Byte.MAX_VALUE) return 5;
-				}
-				// 浮点转整型的有损收窄
-				return 20;
-			}
-		}
-
-		// 3. String / CharSequence / char
-		if (targetType == String.class || targetType == CharSequence.class) {
-			if (arg instanceof String) return 1;
-			return 20;
-		}
-		if ((targetType == char.class || targetType == Character.class) && arg instanceof String s && s.length() == 1) {
-			return 5;
-		}
-
-		return MethodResolver.COST_INCOMPATIBLE;
+		return JSJavaInterop.computeConversionCost(arg, targetType);
 	}
 
 	public static boolean isMoreSpecific(Method m1, Method m2) {
-		Class<?>[] p1              = m1.getParameterTypes();
-		Class<?>[] p2              = m2.getParameterTypes();
-		boolean    oneMoreSpecific = false;
-		for (int i = 0; i < p1.length; i++) {
-			Class<?> t1 = p1[i];
-			Class<?> t2 = p2[i];
-			if (t1 != t2) {
-				if (t2.isAssignableFrom(t1)) {
-					oneMoreSpecific = true;
-				} else if (t1.isInterface() && t2 == Object.class) {
-					oneMoreSpecific = true;
-				} else if (t1.isPrimitive() && !t2.isPrimitive()) {
-					oneMoreSpecific = true;
-				} else if (t1.isPrimitive()/*  && t2.isPrimitive() */) {
-					int idx1 = getPrimitiveTypeIndex(t1);
-					int idx2 = getPrimitiveTypeIndex(t2);
-					if (idx1 >= 0 && idx2 >= 0 && idx1 < idx2) {
-						oneMoreSpecific = true;
-					} else {
-						return false;
-					}
-				} else {
-					// 如果 t1 不能转换为 t2，说明 m1 在此参数上不比 m2 更具体，必须返回 false
-					return false;
-				}
-			}
-		}
-		return oneMoreSpecific;
+		return JSJavaInterop.isMoreSpecific(m1, m2);
 	}
 
 	public static Object invokeIndex(Object target, Object index, Object[] args) throws Throwable {
-		if (target == null || target == JSUndefined.INSTANCE) {
-			throw new NullPointerException("Cannot invoke method on null/undefined");
-		}
-		Object fn = getIndex(target, index);
-		if (fn instanceof JSFunction func) {
-			return func.call(JSContext.CURRENT.get(), target, args);
-		}
-		throw JSContext.makeTypeError(JSArray.toPropertyKey(index) + " is not a function");
+		return JSJavaInterop.invokeIndex(target, index, args);
 	}
+
 	public static double invokeDoubleGeneric(Object target, Object[] args, String methodName) throws Throwable {
-		return JSOps.toDouble(invokeGeneric(target, args, methodName));
+		return JSJavaInterop.invokeDoubleGeneric(target, args, methodName);
 	}
+
 	public static Object invokeGeneric(Object target, Object[] args, String methodName) throws Throwable {
-		if (target == null || target == JSUndefined.INSTANCE) {
-			throw new NullPointerException("Cannot invoke method '" + methodName + "' on null/undefined");
-		}
-
-		if (target instanceof JSFunction func && "$invoke$".equals(methodName)) {
-			return func.call(JSContext.current(), JSUndefined.INSTANCE, args);
-		}
-
-		if (target instanceof Class<?> clazz && clazz.isInterface() && "$invoke$".equals(methodName)) {
-			if (args.length == 1) {
-				return invokeInterfaceAdapter1(clazz, args[0]);
-			}
-			throw new NoSuchMethodException("Interface " + clazz.getName() + " cannot be invoked with " + args.length + " args");
-		}
-
-		if (target instanceof JSFunction func && "call".equals(methodName)) {
-			Object   thisArg = args.length > 0 && args[0] != null ? args[0] : JSUndefined.INSTANCE;
-			Object[] rest    = args.length > 1 ? Arrays.copyOfRange(args, 1, args.length) : new Object[0];
-			return func.call(JSContext.current(), thisArg, rest);
-		}
-
-		if (methodName.startsWith("__magic_super_")) {
-			String realName = methodName.substring("__magic_super_".length());
-
-			if (target instanceof JSBridgedObject) {
-				Class<?> clazz        = target.getClass();
-				Method   targetMethod = MethodResolver.findBestMatchingMethod(clazz, methodName, args);
-				if (targetMethod != null) {
-					return invokeMatchedMethod(target, targetMethod, args, clazz, methodName);
-				}
-			}
-
-			JSObject jsObj = (target instanceof JSBridgedObject bridged)
-			 ? bridged.getJSObject()
-			 : (target instanceof JSObject obj ? obj : null);
-
-			if (jsObj != null) {
-				JSObject currentSuper = CURRENT_SUPER_PROTO.get();
-				JSObject superProto;
-				if (currentSuper != null) {
-					superProto = currentSuper.getPrototype();
-				} else {
-					JSObject proto = jsObj.getPrototype();
-					if (proto != null && proto.hasOwnProperty("constructor") && proto.getPrototype() != null) {
-						superProto = proto.getPrototype();
-					} else {
-						superProto = proto;
-					}
-				}
-				if (superProto != null) {
-					Object member = superProto.get(realName);
-					if (member instanceof JSFunction func) {
-						JSObject prev = currentSuper;
-						CURRENT_SUPER_PROTO.set(superProto);
-						try {
-							return func.call(null, target, args);
-						} finally {
-							CURRENT_SUPER_PROTO.set(prev);
-						}
-					}
-				}
-			}
-		}
-
-		if (target instanceof JSObject jsObj) {
-			Object member = jsObj.get(methodName);
-			if (member instanceof JSFunction func) {
-				return func.call(null, jsObj, args);
-			}
-			if (member instanceof Class<?> clazz) {
-				if (clazz.isInterface()) {
-					if (args.length == 1) {
-						return invokeInterfaceAdapter1(clazz, args[0]);
-					}
-					throw new NoSuchMethodException("Interface " + clazz.getName() + " cannot be invoked with " + args.length + " args");
-				}
-			}
-		}
-
-		if (target instanceof JSBridgedObject bridged && !methodName.startsWith("__magic_super_")) {
-			JSObject jsObj = bridged.getJSObject();
-			if (jsObj != null) {
-				Object member = jsObj.get(methodName);
-				if (member instanceof JSFunction func) {
-					return func.call(null, target, args);
-				}
-			}
-		}
-
-		if (target instanceof CharSequence seq) {
-			Object strRes = invokeStringMethod(seq.toString(), methodName, args);
-			if (strRes != null || "search".equals(methodName) || "match".equals(methodName)) {
-				return strRes;
-			}
-		}
-
-		Class<?> clazz        = (target instanceof Class<?>) ? (Class<?>) target : target.getClass();
-		Method   targetMethod = MethodResolver.findBestMatchingMethod(clazz, methodName, args);
-		if (targetMethod != null) {
-			return invokeMatchedMethod(target, targetMethod, args, clazz, methodName);
-		}
-
-		return invokeJavaMethod(target, methodName, args);
+		return JSJavaInterop.invokeGeneric(target, args, methodName);
 	}
 
 	public static Object[] packVarArgs(Class<?>[] paramTypes, Object[] args) {
-		int      paramCount      = paramTypes.length;
-		Class<?> varargArrayType = paramTypes[paramCount - 1];
-		Class<?> elemType        = varargArrayType.getComponentType();
-
-		if (args.length == paramCount && args[paramCount - 1] != null) {
-			Object lastArg = args[paramCount - 1];
-			if (varargArrayType.isInstance(lastArg)) {
-				Object[] casted = new Object[paramCount];
-				for (int i = 0; i < paramCount - 1; i++) {
-					casted[i] = JSOps.castValue(args[i], paramTypes[i]);
-				}
-				casted[paramCount - 1] = lastArg;
-				return casted;
-			}
-		}
-
-		Object[] packed = new Object[paramCount];
-		for (int i = 0; i < paramCount - 1; i++) {
-			packed[i] = (i < args.length) ? JSOps.castValue(args[i], paramTypes[i]) : null;
-		}
-
-		int    varargLen = Math.max(0, args.length - (paramCount - 1));
-		Object varargArr = Array.newInstance(elemType, varargLen);
-		for (int i = 0; i < varargLen; i++) {
-			Object raw = args[paramCount - 1 + i];
-			Array.set(varargArr, i, JSOps.castValue(raw, elemType));
-		}
-		packed[paramCount - 1] = varargArr;
-		return packed;
+		return JSJavaInterop.packVarArgs(paramTypes, args);
 	}
-
-	private static Object invokeMatchedMethod(Object target, Method targetMethod, Object[] args, Class<?> clazz,
-	                                          String methodName) throws Throwable {
-		try {
-			targetMethod.setAccessible(true);
-		} catch (Throwable ignored) {
-		}
-		Class<?>[] paramTypes = targetMethod.getParameterTypes();
-		boolean    isVoid     = (targetMethod.getReturnType() == void.class);
-
-		if (targetMethod.isVarArgs()) {
-			Object[] packedArgs = packVarArgs(paramTypes, args);
-			Object   res        = targetMethod.invoke(target, packedArgs);
-			return isVoid ? JSUndefined.INSTANCE : res;
-		}
-
-		int                   arity   = args.length;
-		MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(clazz, targetMethod);
-		if (invoker != null) {
-			Object res = switch (arity) {
-				case 0 -> invoker.invoke0(target);
-				case 1 -> invoker.invoke1(target, JSOps.castValue(args[0], paramTypes[0]));
-				case 2 ->
-				 invoker.invoke2(target, JSOps.castValue(args[0], paramTypes[0]), JSOps.castValue(args[1], paramTypes[1]));
-				case 3 ->
-				 invoker.invoke3(target, JSOps.castValue(args[0], paramTypes[0]), JSOps.castValue(args[1], paramTypes[1]), JSOps.castValue(args[2], paramTypes[2]));
-				default -> {
-					Object[] castedArgs = new Object[arity];
-					for (int i = 0; i < arity; i++) {
-						castedArgs[i] = JSOps.castValue(args[i], paramTypes[i]);
-					}
-					yield invoker.invoke(target, castedArgs);
-				}
-			};
-			return isVoid ? JSUndefined.INSTANCE : res;
-		}
-		Object[] castedArgs = new Object[arity];
-		for (int i = 0; i < arity; i++) {
-			castedArgs[i] = JSOps.castValue(args[i], paramTypes[i]);
-		}
-		Object res = targetMethod.invoke(target, castedArgs);
-		return isVoid ? JSUndefined.INSTANCE : res;
-	}
+	//endregion
 
 	private static Object slowOwnMethod(JSObject obj, int offset, Object[] args) throws Throwable {
 		int    propId   = obj.shape.getPropertyId(offset);
@@ -3712,7 +2235,7 @@ public class JSLinker {
 	public static Object invokeFallbackSlow(ChainedCallSite site, Object target, Object[] args, String methodName)
 	 throws Throwable {
 		if (target instanceof CharSequence seq) {
-			Object strRes = invokeStringMethod(seq.toString(), methodName, args);
+			Object strRes = JSJavaInterop.invokeStringMethod(seq.toString(), methodName, args);
 			if (strRes != null || "search".equals(methodName) || "match".equals(methodName)) {
 				return strRes;
 			}
@@ -3795,7 +2318,7 @@ public class JSLinker {
 					}
 				} catch (Throwable ignored) {
 				}
-				return invokeMatchedMethod(target, targetMethod, args, clazz, methodName);
+				return JSJavaInterop.invokeMatchedMethod(target, targetMethod, args, clazz, methodName);
 			}
 
 			boolean preferMagicAccessor = (STRATEGY != InvocationStrategy.SPREADER);
@@ -3845,249 +2368,28 @@ public class JSLinker {
 		return invokeGeneric(target, args, methodName);
 	}
 
-	private static boolean hasComplexParameters(Method method) {
-		for (Class<?> pType : method.getParameterTypes()) {
-			if (pType.isInterface() && pType != JSFunction.class && pType != JSObject.class) {
-				return true;
-			}
-		}
-		return false;
+	public static boolean hasComplexParameters(Method method) {
+		return JSJavaInterop.hasComplexParameters(method);
 	}
 
-	/** @see JSOps#castValue(Object, Class) */
-	private static final ClassValue<MethodHandle> INTERFACE_FILTER_CACHE = new ClassValue<>() {
-		@Override
-		protected MethodHandle computeValue(Class<?> type) {
-			return MethodHandles.insertArguments(MH_TO_INTERFACE, 1, type);
-		}
-	};
 	public static MethodHandle getArgumentFilter(Class<?> targetType) {
-		if (targetType == int.class) return MH_TO_INT;
-		if (targetType == long.class) return MH_TO_LONG;
-		if (targetType == double.class) return MH_TO_DOUBLE;
-		if (targetType == float.class) return MH_TO_FLOAT;
-		if (targetType == short.class) return MH_TO_SHORT;
-		if (targetType == byte.class) return MH_TO_BYTE;
-		if (targetType == char.class) return MH_TO_CHAR;
-		if (targetType == boolean.class) return MH_TO_BOOLEAN;
-		if (targetType == String.class) return MH_TO_STRING;
-		if (targetType.isInterface() && targetType != JSFunction.class && targetType != JSObject.class) {
-			return INTERFACE_FILTER_CACHE.get(targetType);
-		}
-		return null;
-	}
-
-	private static final class MethodLookupKey {
-		final String  methodName;
-		final int     arity;
-		final boolean isStatic;
-		final int     hash;
-
-		MethodLookupKey(String methodName, int arity, boolean isStatic) {
-			this.methodName = methodName;
-			this.arity = arity;
-			this.isStatic = isStatic;
-			int h = methodName.hashCode();
-			h = 31 * h + arity;
-			h = 31 * h + (isStatic ? 1 : 0);
-			this.hash = h;
-		}
-
-		@Override
-		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof MethodLookupKey that)) return false;
-			return arity == that.arity && isStatic == that.isStatic && methodName.equals(that.methodName);
-		}
-
-		@Override
-		public int hashCode() {
-			return hash;
-		}
-	}
-
-	private static final class ClassSpreaderData {
-		final Map<Integer, MethodHandle>         ctorSpreaderCache      = new ConcurrentHashMap<>();
-		final Map<Constructor<?>, MethodHandle>  exactCtorSpreaderCache = new ConcurrentHashMap<>();
-		final Map<MethodLookupKey, MethodHandle> methodSpreaderCache    = new ConcurrentHashMap<>();
-	}
-
-	private static final ClassValue<ClassSpreaderData> SPREADER_DATA = new ClassValue<>() {
-		@Override
-		protected ClassSpreaderData computeValue(Class<?> type) {
-			return new ClassSpreaderData();
-		}
-	};
-
-	private static MethodHandle getConstructorSpreader(Class<?> clazz, Constructor<?> c) {
-		if (c == null) return null;
-		ClassSpreaderData data   = SPREADER_DATA.get(clazz);
-		MethodHandle      cached = data.exactCtorSpreaderCache.get(c);
-		if (cached != null) return cached;
-		try {
-			MethodHandle mh         = Magic.lookup.unreflectConstructor(c);
-			Class<?>[]   paramTypes = c.getParameterTypes();
-			int          arity      = paramTypes.length;
-			MethodHandle adapted    = mh;
-			for (int i = 0; i < paramTypes.length; i++) {
-				MethodHandle filter = getArgumentFilter(paramTypes[i]);
-				if (filter != null) {
-					adapted = MethodHandles.filterArguments(adapted, i, filter);
-				}
-			}
-			MethodHandle genericMh = adapted.asType(MethodType.genericMethodType(arity));
-			MethodHandle spreader  = genericMh.asSpreader(Object[].class, arity);
-			data.exactCtorSpreaderCache.put(c, spreader);
-			return spreader;
-		} catch (Throwable e) {
-			throw new RuntimeException(e);
-		}
-	}
-
-	private static MethodHandle getConstructorSpreader(Class<?> clazz, int arity) {
-		Constructor<?> c = MethodResolver.findConstructor(clazz, arity);
-		if (c == null) return null;
-		return getConstructorSpreader(clazz, c);
+		return JSJavaInterop.getArgumentFilter(targetType);
 	}
 
 	public static JSObject getPrototypeFromConstructor(JSContext cx, Object constructor, String intrinsicDefaultProto) {
-		if (constructor instanceof JSObject ctorObj) {
-			Object proto = ctorObj.get("prototype");
-			if (proto instanceof JSObject protoObj) {
-				return protoObj;
-			}
-			JSContext realm = ctorObj.realm;
-			if (realm == null) realm = cx;
-			if (realm != null) {
-				if ("%Array.prototype%".equals(intrinsicDefaultProto)) {
-					Object arrayCtor = realm.get("Array");
-					if (arrayCtor instanceof JSObject ac) {
-						Object p = ac.get("prototype");
-						if (p instanceof JSObject po) return po;
-					}
-					return JSContext.LazyArray.ARRAY_PROTOTYPE;
-				} else if ("%Function.prototype%".equals(intrinsicDefaultProto)) {
-					Object fnCtor = realm.get("Function");
-					if (fnCtor instanceof JSObject fc) {
-						Object p = fc.get("prototype");
-						if (p instanceof JSObject po) return po;
-					}
-					return JSContext.LazyFunction.FUNCTION_PROTOTYPE;
-				} else {
-					Object objCtor = realm.get("Object");
-					if (objCtor instanceof JSObject oc) {
-						Object p = oc.get("prototype");
-						if (p instanceof JSObject po) return po;
-					}
-					return JSContext.LazyObject.OBJECT_PROTOTYPE;
-				}
-			}
-		}
-		return "%Array.prototype%".equals(intrinsicDefaultProto)
-		 ? JSContext.LazyArray.ARRAY_PROTOTYPE
-		 : JSContext.LazyObject.OBJECT_PROTOTYPE;
+		return JSJavaInterop.getPrototypeFromConstructor(cx, constructor, intrinsicDefaultProto);
 	}
 
 	public static Object newGeneric(Object ctor, Object[] args) throws Throwable {
-		return newGeneric(ctor, args, ctor);
+		return JSJavaInterop.newGeneric(ctor, args);
 	}
 
 	public static Object newGeneric(Object ctor, Object[] args, Object newTarget) throws Throwable {
-		if (ctor instanceof Class<?> clazz) {
-			if (clazz.isArray()) {
-				int      arity         = args.length;
-				Class<?> componentType = clazz.getComponentType();
-				if (arity == 1) return newArrayInstance1(componentType, args[0]);
-				if (arity == 0) return newArrayInstance0(componentType);
-				return newArrayInstanceN(componentType, args);
-			}
-			if (clazz.isInterface()) {
-				if (args.length == 1) {
-					return invokeInterfaceAdapter1(clazz, args[0]);
-				}
-				throw new NoSuchMethodException("Interface " + clazz.getName() + " cannot be instantiated with " + args.length + " args");
-			}
-			Constructor<?> c = MethodResolver.findBestMatchingConstructor(clazz, args);
-			if (c != null) {
-				Class<?>[] paramTypes = c.getParameterTypes();
-				Object[]   castedArgs = c.isVarArgs() ? packVarArgs(paramTypes, args) : new Object[args.length];
-				if (!c.isVarArgs()) {
-					for (int i = 0; i < args.length; i++) {
-						castedArgs[i] = JSOps.castValue(args[i], paramTypes[i]);
-					}
-				}
-				return c.newInstance(castedArgs);
-			}
-			throw new NoSuchMethodException("No matching constructor for " + clazz.getName() + " with " + args.length + " args");
-		}
-
-		if (ctor instanceof JSContext.JSBuiltinMethod bm) {
-			throw JSContext.makeTypeError(bm.getMethodName() + " is not a constructor");
-		}
-
-		if (ctor == JSContext.LazySymbol.SYMBOL) {
-			throw JSContext.makeTypeError("Symbol is not a constructor");
-		}
-
-		if (ctor == JSContext.LazyDate.DATE) {
-			JSContext currentCx = JSContext.current();
-			JSObject  proto     = getPrototypeFromConstructor(currentCx, newTarget, "%Date.prototype%");
-			return ((JSFunction) ctor).call(currentCx, new JSContext.JSDate(0, proto != null ? proto : JSContext.LazyDate.DATE_PROTOTYPE), args);
-		}
-
-		if (ctor == JSContext.LazyArray.ARRAY || ctor instanceof JSContext.JSArrayConstructor) {
-			JSContext currentCx = JSContext.current();
-			JSObject  proto     = getPrototypeFromConstructor(currentCx, newTarget, "%Array.prototype%");
-			Object    res       = ((JSFunction) ctor).call(currentCx, null, args);
-			if (res instanceof JSObject jo) {
-				jo.setPrototype(proto);
-				return jo;
-			}
-			return res;
-		}
-
-		if (ctor instanceof JSFunction) {
-			JSContext currentCx = JSContext.current();
-			JSObject  proto     = getPrototypeFromConstructor(currentCx, newTarget, "%Object.prototype%");
-			JSObject  newObj    = (proto != null) ? new JSObject(proto) : new JSObject();
-			if (ctor instanceof JSObject ctorObj && ctorObj.realm != null) {
-				newObj.realm = ctorObj.realm;
-			} else if (newTarget instanceof JSObject ntObj && ntObj.realm != null) {
-				newObj.realm = ntObj.realm;
-			} else {
-				newObj.realm = currentCx;
-			}
-			Object res = ((JSFunction) ctor).call(currentCx, newObj, args);
-			if (res instanceof JSBridgedObject || res instanceof JSObject || (res != null && res != JSUndefined.INSTANCE && !(res instanceof Number || res instanceof Boolean || res instanceof String || res instanceof Character))) {
-				if (res instanceof JSObject jo && jo.realm == null) {
-					jo.realm = newObj.realm;
-				}
-				return res;
-			}
-			return newObj;
-		}
-
-		throw JSContext.makeTypeError(ctor + " is not a constructor");
+		return JSJavaInterop.newGeneric(ctor, args, newTarget);
 	}
 
 	public static boolean isConstructor(Object ctor) {
-		if (ctor == null || ctor == JSUndefined.INSTANCE) return false;
-		if (ctor instanceof Class<?>) return true;
-		if (ctor instanceof JSContext.JSBuiltinMethod) return false;
-		if (ctor == JSContext.LazySymbol.SYMBOL) return false;
-		if (ctor instanceof JSContext.JSArrayConstructor) return true;
-		if (ctor instanceof JSContext.JSBuiltinConstructor) return true;
-		if (ctor instanceof JSFunction) {
-			if (ctor instanceof JSObject jo) {
-				if (jo.shape.getOffset("prototype") >= 0) {
-					return true;
-				}
-				Object p = jo.get("prototype");
-				return p != JSUndefined.INSTANCE && p != null;
-			}
-			return true;
-		}
-		return false;
+		return JSJavaInterop.isConstructor(ctor);
 	}
 
 	public static boolean isSameObject(Object expected, Object actual) {
@@ -4285,58 +2587,19 @@ public class JSLinker {
 	}
 
 	public static Object newArrayInstance0(Class<?> componentType) {
-		return Array.newInstance(componentType, 0);
+		return JSJavaInterop.newArrayInstance0(componentType);
 	}
 
 	public static Object newArrayInstance1(Class<?> componentType, Object lenOrInit) {
-		if (lenOrInit instanceof Number num) {
-			return Array.newInstance(componentType, num.intValue());
-		}
-		if (lenOrInit instanceof JSArray jsArr) {
-			int    len = (int) jsArr.length();
-			Object arr = Array.newInstance(componentType, len);
-			for (int i = 0; i < len; i++) {
-				Array.set(arr, i, JSOps.castValue(jsArr.getElement(i), componentType));
-			}
-			return arr;
-		}
-		if (lenOrInit instanceof List<?> list) {
-			int    len = list.size();
-			Object arr = Array.newInstance(componentType, len);
-			for (int i = 0; i < len; i++) {
-				Array.set(arr, i, JSOps.castValue(list.get(i), componentType));
-			}
-			return arr;
-		}
-		if (lenOrInit != null && lenOrInit.getClass().isArray()) {
-			int    len = Array.getLength(lenOrInit);
-			Object arr = Array.newInstance(componentType, len);
-			for (int i = 0; i < len; i++) {
-				Array.set(arr, i, JSOps.castValue(Array.get(lenOrInit, i), componentType));
-			}
-			return arr;
-		}
-		return Array.newInstance(componentType, JSOps.toInt(lenOrInit));
+		return JSJavaInterop.newArrayInstance1(componentType, lenOrInit);
 	}
 
 	public static Object newArrayInstanceN(Class<?> componentType, Object[] args) {
-		int    len = args.length;
-		Object arr = Array.newInstance(componentType, len);
-		for (int i = 0; i < len; i++) {
-			Array.set(arr, i, JSOps.castValue(args[i], componentType));
-		}
-		return arr;
+		return JSJavaInterop.newArrayInstanceN(componentType, args);
 	}
 
 	public static Object invokeInterfaceAdapter1(Object target, Object arg) {
-		Class<?> clazz = (Class<?>) target;
-		if (arg instanceof JSFunction fn) {
-			return MagicJIT.getFunctionAdapter(clazz, fn);
-		}
-		if (arg instanceof JSObject jsObj) {
-			return MagicJIT.getObjectAdapter(clazz, jsObj);
-		}
-		throw JSContext.makeTypeError("Cannot adapt " + arg + " to interface " + clazz.getName());
+		return JSJavaInterop.invokeInterfaceAdapter1(target, arg);
 	}
 
 	public static Object newFallback(ChainedCallSite site, Object ctor, Object[] args) throws Throwable {
@@ -4448,7 +2711,7 @@ public class JSLinker {
 					}
 				}
 
-				MethodHandle ctorSpreader = getConstructorSpreader(clazz, targetCtor);
+				MethodHandle ctorSpreader = JSJavaInterop.getConstructorSpreader(clazz, targetCtor);
 				if (ctorSpreader != null) {
 					return ctorSpreader.invokeExact(args);
 				}
@@ -4520,262 +2783,49 @@ public class JSLinker {
 	}
 
 	public static Long toValidArrayLongIndex(Object index) {
-		return JSArray.toValidArrayIndex(index);
+		return JSIndexOps.toValidArrayLongIndex(index);
 	}
 
 	public static Integer toValidArrayIndex(Object index) {
-		return JSArray.toValidJavaArrayIndex(index);
+		return JSIndexOps.toValidArrayIndex(index);
 	}
 
 	public static String toPropertyKey(Object index) {
-		return JSArray.toPropertyKey(index);
+		return JSIndexOps.toPropertyKey(index);
 	}
 
 	public static Object getArrayElement(Object target, int idx) {
-		if (idx < 0) return JSUndefined.INSTANCE;
-		if (target instanceof Object[] a) return idx < a.length ? a[idx] : JSUndefined.INSTANCE;
-		if (target instanceof int[] a) return idx < a.length ? (double) a[idx] : JSUndefined.INSTANCE;
-		if (target instanceof double[] a) return idx < a.length ? a[idx] : JSUndefined.INSTANCE;
-		if (target instanceof long[] a) return idx < a.length ? (double) a[idx] : JSUndefined.INSTANCE;
-		if (target instanceof float[] a) return idx < a.length ? (double) a[idx] : JSUndefined.INSTANCE;
-		if (target instanceof short[] a) return idx < a.length ? (double) a[idx] : JSUndefined.INSTANCE;
-		if (target instanceof byte[] a) return idx < a.length ? (double) a[idx] : JSUndefined.INSTANCE;
-		if (target instanceof boolean[] a) return idx < a.length ? a[idx] : JSUndefined.INSTANCE;
-		if (target instanceof char[] a) return idx < a.length ? String.valueOf(a[idx]) : JSUndefined.INSTANCE;
-		return JSUndefined.INSTANCE;
+		return JSIndexOps.getArrayElement(target, idx);
 	}
 
 	public static void setArrayElement(Object target, int idx, Object value) {
-		if (idx < 0) return;
-		if (target instanceof Object[] a) {
-			if (idx < a.length) a[idx] = value;
-			return;
-		}
-		if (target instanceof int[] a) {
-			if (idx < a.length) a[idx] = JSOps.toInt(value);
-			return;
-		}
-		if (target instanceof double[] a) {
-			if (idx < a.length) a[idx] = JSOps.toDouble(value);
-			return;
-		}
-		if (target instanceof long[] a) {
-			if (idx < a.length) a[idx] = JSOps.toLong(value);
-			return;
-		}
-		if (target instanceof float[] a) {
-			if (idx < a.length) a[idx] = JSOps.toFloat(value);
-			return;
-		}
-		if (target instanceof short[] a) {
-			if (idx < a.length) a[idx] = JSOps.toShort(value);
-			return;
-		}
-		if (target instanceof byte[] a) {
-			if (idx < a.length) a[idx] = JSOps.toByte(value);
-			return;
-		}
-		if (target instanceof boolean[] a) {
-			if (idx < a.length) a[idx] = JSOps.toBoolean(value);
-			return;
-		}
-		if (target instanceof char[] a) {
-			if (idx < a.length) a[idx] = JSOps.toChar(value);
-			return;
-		}
+		JSIndexOps.setArrayElement(target, idx, value);
 	}
-	public static final  int      SMALL_INT_SIZE    = 1024;
-	private static final String[] SMALL_INT_STRINGS = new String[SMALL_INT_SIZE];
 
-	static {
-		for (int i = 0; i < SMALL_INT_SIZE; i++) SMALL_INT_STRINGS[i] = String.valueOf(i).intern();
-	}
+	public static final int SMALL_INT_SIZE = JSIndexOps.SMALL_INT_SIZE;
 
 	public static String fastIntToString(int i) {
-		if (i >= 0 && i < SMALL_INT_SIZE) return SMALL_INT_STRINGS[i];
-		return String.valueOf(i);
+		return JSIndexOps.fastIntToString(i);
 	}
+
 	public static Object getIndex(Object target, int index) {
-		if (target instanceof JSArray jsArr) return jsArr.getElement(index);
-		if (target instanceof Object[] a) {
-			return (index >= 0 && index < a.length) ? a[index] : JSUndefined.INSTANCE;
-		}
-		if (target instanceof List list) {
-			return (index >= 0 && index < list.size()) ? list.get(index) : JSUndefined.INSTANCE;
-		}
-		if (target != null && target.getClass().isArray()) {
-			return getArrayElement(target, index);
-		}
-		if (target instanceof JSObject jsObj) {
-			return jsObj.get(fastIntToString(index));
-		}
-		if (target instanceof CharSequence seq) {
-			return (index >= 0 && index < seq.length()) ? String.valueOf(seq.charAt(index)) : JSUndefined.INSTANCE;
-		}
-		if (target instanceof Map map) {
-			return map.get(index);
-		}
-		if (target instanceof Map.Entry<?, ?> entry) {
-			if (index == 0) return entry.getKey();
-			if (index == 1) return entry.getValue();
-			return JSUndefined.INSTANCE;
-		}
-		return getPropGeneric(target, fastIntToString(index));
+		return JSIndexOps.getIndex(target, index);
 	}
 
 	public static void setIndex(Object target, int index, Object value) {
-		if (target instanceof JSArray jsArr) {
-			jsArr.setElement(index, value);
-			return;
-		}
-		if (target instanceof Object[] a) {
-			if (index >= 0 && index < a.length) a[index] = value;
-			return;
-		}
-		if (target instanceof List list) {
-			if (index >= 0 && index < list.size()) {
-				list.set(index, value);
-			} else if (index >= 0 && index <= list.size() + 1024 && index < 65536) {
-				while (list.size() <= index) list.add(null);
-				list.set(index, value);
-			}
-			return;
-		}
-		if (target != null && target.getClass().isArray()) {
-			setArrayElement(target, index, value);
-			return;
-		}
-		if (target instanceof JSObject jsObj) {
-			jsObj.put(fastIntToString(index), value);
-			return;
-		}
-		if (target instanceof Map map) {
-			map.put(index, value);
-			return;
-		}
-		setPropGeneric(target, value, fastIntToString(index));
+		JSIndexOps.setIndex(target, index, value);
 	}
 
 	public static Object getIndex(Object target, Object index) {
-		if (target == null || target == JSUndefined.INSTANCE) return JSUndefined.INSTANCE;
-		if (index instanceof Integer i) {
-			return getIndex(target, i.intValue());
-		}
-		if (index instanceof Double d) {
-			double val = d;
-			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
-				return getIndex(target, (int) val);
-			}
-		}
-		if (target instanceof JSArray jsArr) {
-			Long idx = JSArray.toValidArrayIndex(index);
-			if (idx != null) {
-				return jsArr.getElement(idx);
-			}
-			if (index instanceof JSSymbol sym) {
-				return jsArr.get(sym);
-			}
-			return jsArr.get(JSArray.toPropertyKey(index));
-		}
-		if (target instanceof JSObject jsObj) {
-			if (index instanceof JSSymbol sym) {
-				return jsObj.get(sym);
-			}
-			return jsObj.get(JSArray.toPropertyKey(index));
-		}
-		if (target.getClass().isArray()) {
-			Integer idx = JSArray.toValidJavaArrayIndex(index);
-			if (idx != null) {
-				return getArrayElement(target, idx);
-			}
-			return JSUndefined.INSTANCE;
-		}
-		if (target instanceof List list) {
-			Integer idx = JSArray.toValidJavaArrayIndex(index);
-			if (idx != null && idx >= 0 && idx < list.size()) {
-				return list.get(idx);
-			}
-			return JSUndefined.INSTANCE;
-		}
-		if (target instanceof CharSequence seq) {
-			Integer idx = JSArray.toValidJavaArrayIndex(index);
-			if (idx != null && idx >= 0 && idx < seq.length()) {
-				return String.valueOf(seq.charAt(idx));
-			}
-			return JSUndefined.INSTANCE;
-		}
-		if (target instanceof Map map) {
-			Object val = map.get(index);
-			if (val == null && !map.containsKey(index)) {
-				val = map.get(toPropertyKey(index));
-			}
-			return val == null && !map.containsKey(index) ? JSUndefined.INSTANCE : val;
-		}
-		return getPropGeneric(target, toPropertyKey(index));
+		return JSIndexOps.getIndex(target, index);
 	}
 
 	public static void setIndex(Object target, Object index, Object value) {
-		if (target == null || target == JSUndefined.INSTANCE) return;
-		if (index instanceof Integer i) {
-			setIndex(target, i.intValue(), value);
-			return;
-		}
-		if (index instanceof Double d) {
-			double val = d;
-			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
-				setIndex(target, (int) val, value);
-				return;
-			}
-		}
-		if (target instanceof JSArray jsArr) {
-			Long idx = JSArray.toValidArrayIndex(index);
-			if (idx != null) {
-				jsArr.setElement(idx, value);
-				return;
-			}
-			if (index instanceof JSSymbol sym) {
-				jsArr.put(sym, value);
-				return;
-			}
-			jsArr.put(JSArray.toPropertyKey(index), value);
-			return;
-		}
-		if (target instanceof JSObject jsObj) {
-			if (index instanceof JSSymbol sym) {
-				jsObj.put(sym, value);
-				return;
-			}
-			jsObj.put(JSArray.toPropertyKey(index), value);
-			return;
-		}
-		if (target.getClass().isArray()) {
-			Integer idx = JSArray.toValidJavaArrayIndex(index);
-			if (idx != null) {
-				setArrayElement(target, idx, value);
-			}
-			return;
-		}
-		if (target instanceof List list) {
-			Integer idx = JSArray.toValidJavaArrayIndex(index);
-			if (idx != null) {
-				if (idx >= 0 && idx < list.size()) {
-					list.set(idx, value);
-				} else if (idx >= 0 && idx <= list.size() + 1024 && idx < 65536) {
-					while (list.size() <= idx) list.add(null);
-					list.set(idx, value);
-				}
-			}
-			return;
-		}
-		if (target instanceof Map map) {
-			map.put(index, value);
-			return;
-		}
-		setPropGeneric(target, value, toPropertyKey(index));
+		JSIndexOps.setIndex(target, index, value);
 	}
 	//endregion
 
-	//region 辅助方法与直接 MethodHandle 构建
+	//region ֱ MethodHandle 
 
 	public static boolean isExactClass(Class<?> expected, Object target) {
 		return target != null && target.getClass() == expected;
@@ -4810,310 +2860,75 @@ public class JSLinker {
 	}
 
 	public static int getArrayLengthInt(Object target) {
-		return target != null && target.getClass().isArray() ? java.lang.reflect.Array.getLength(target) : 0;
+		return JSIndexOps.getArrayLengthInt(target);
 	}
 
 	public static double getArrayLengthDouble(Object target) {
-		return target != null && target.getClass().isArray() ? (double) java.lang.reflect.Array.getLength(target) : Double.NaN;
+		return JSIndexOps.getArrayLengthDouble(target);
 	}
 
 	public static Object getIndexJSArray(Object target, Object index) {
-		JSArray jsArr = (JSArray) target;
-		if (index instanceof Integer i) {
-			int val = i.intValue();
-			return (val >= 0 && val < jsArr.length()) ? jsArr.getElement(val) : jsArr.get(fastIntToString(val));
-		}
-		if (index instanceof Double d) {
-			double val = d.doubleValue();
-			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
-				int idx = (int) val;
-				return (idx < jsArr.length()) ? jsArr.getElement(idx) : jsArr.get(fastIntToString(idx));
-			}
-		}
-		Long idx = JSArray.toValidArrayIndex(index);
-		if (idx != null) {
-			return jsArr.getElement(idx);
-		}
-		if (index instanceof JSSymbol sym) {
-			return jsArr.get(sym);
-		}
-		return jsArr.get(JSArray.toPropertyKey(index));
+		return JSIndexOps.getIndexJSArray(target, index);
 	}
 
 	public static Object getIndexList(Object target, Object index) {
-		List<?> list = (List<?>) target;
-		if (index instanceof Integer i) {
-			int idx = i.intValue();
-			return (idx >= 0 && idx < list.size()) ? list.get(idx) : JSUndefined.INSTANCE;
-		}
-		if (index instanceof Double d) {
-			double val = d.doubleValue();
-			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
-				int idx = (int) val;
-				return (/* idx >= 0 &&  */idx < list.size()) ? list.get(idx) : JSUndefined.INSTANCE;
-			}
-		}
-		Integer idx = JSArray.toValidJavaArrayIndex(index);
-		if (idx != null && idx >= 0 && idx < list.size()) {
-			return list.get(idx);
-		}
-		return JSUndefined.INSTANCE;
+		return JSIndexOps.getIndexList(target, index);
 	}
 
 	public static Object getIndexObjectArray(Object target, Object index) {
-		Object[] a = (Object[]) target;
-		if (index instanceof Integer i) {
-			int idx = i.intValue();
-			return (idx >= 0 && idx < a.length) ? a[idx] : JSUndefined.INSTANCE;
-		}
-		if (index instanceof Double d) {
-			double val = d.doubleValue();
-			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
-				int idx = (int) val;
-				return (/* idx >= 0 && */idx < a.length) ? a[idx] : JSUndefined.INSTANCE;
-			}
-		}
-		Integer idx = JSArray.toValidJavaArrayIndex(index);
-		if (idx != null && idx >= 0 && idx < a.length) {
-			return a[idx];
-		}
-		return JSUndefined.INSTANCE;
+		return JSIndexOps.getIndexObjectArray(target, index);
 	}
 
 	public static Object getIndexPrimitiveArray(Object target, Object index) {
-		if (index instanceof Integer i) {
-			return getArrayElement(target, i.intValue());
-		}
-		if (index instanceof Double d) {
-			double val = d.doubleValue();
-			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
-				return getArrayElement(target, (int) val);
-			}
-		}
-		Integer idx = JSArray.toValidJavaArrayIndex(index);
-		if (idx != null) {
-			return getArrayElement(target, idx);
-		}
-		return JSUndefined.INSTANCE;
+		return JSIndexOps.getIndexPrimitiveArray(target, index);
 	}
 
 	public static Object getIndexIntArray(Object target, Object index) {
-		int[] a   = (int[]) target;
-		int   idx = -1;
-		if (index instanceof Integer i) {
-			idx = i.intValue();
-		} else if (index instanceof Double d) {
-			double val = d.doubleValue();
-			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
-				idx = (int) val;
-			}
-		} else {
-			Integer validIdx = JSArray.toValidJavaArrayIndex(index);
-			if (validIdx != null) idx = validIdx;
-		}
-		return (idx >= 0 && idx < a.length) ? (double) a[idx] : JSUndefined.INSTANCE;
+		return JSIndexOps.getIndexIntArray(target, index);
 	}
 
 	public static Object getIndexDoubleArray(Object target, Object index) {
-		double[] a   = (double[]) target;
-		int      idx = -1;
-		if (index instanceof Integer i) {
-			idx = i.intValue();
-		} else if (index instanceof Double d) {
-			double val = d.doubleValue();
-			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
-				idx = (int) val;
-			}
-		} else {
-			Integer validIdx = JSArray.toValidJavaArrayIndex(index);
-			if (validIdx != null) idx = validIdx;
-		}
-		return (idx >= 0 && idx < a.length) ? a[idx] : JSUndefined.INSTANCE;
+		return JSIndexOps.getIndexDoubleArray(target, index);
 	}
 
 	public static Object getIndexLongArray(Object target, Object index) {
-		long[] a   = (long[]) target;
-		int    idx = -1;
-		if (index instanceof Integer i) {
-			idx = i.intValue();
-		} else if (index instanceof Double d) {
-			double val = d.doubleValue();
-			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
-				idx = (int) val;
-			}
-		} else {
-			Integer validIdx = JSArray.toValidJavaArrayIndex(index);
-			if (validIdx != null) idx = validIdx;
-		}
-		return (idx >= 0 && idx < a.length) ? (double) a[idx] : JSUndefined.INSTANCE;
+		return JSIndexOps.getIndexLongArray(target, index);
 	}
 
 	public static Object getIndexMap(Object target, Object index) {
-		Map<?, ?> map = (Map<?, ?>) target;
-		Object    val = map.get(index);
-		if (val == null && !map.containsKey(index)) {
-			val = map.get(toPropertyKey(index));
-		}
-		return val == null && !map.containsKey(index) ? JSUndefined.INSTANCE : val;
+		return JSIndexOps.getIndexMap(target, index);
 	}
 
 	public static void setIndexJSArray(Object target, Object index, Object value) {
-		JSArray jsArr = (JSArray) target;
-		if (index instanceof Integer i) {
-			int val = i.intValue();
-			if (val >= 0) {
-				jsArr.setElement(val, value);
-				return;
-			}
-		} else if (index instanceof Double d) {
-			double val = d.doubleValue();
-			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
-				jsArr.setElement((int) val, value);
-				return;
-			}
-		}
-		Long idx = JSArray.toValidArrayIndex(index);
-		if (idx != null) {
-			jsArr.setElement(idx, value);
-			return;
-		}
-		if (index instanceof JSSymbol sym) {
-			jsArr.put(sym, value);
-			return;
-		}
-		jsArr.put(JSArray.toPropertyKey(index), value);
+		JSIndexOps.setIndexJSArray(target, index, value);
 	}
 
 	public static void setIndexList(Object target, Object index, Object value) {
-		List<Object> list = (List<Object>) target;
-		int          idx  = -1;
-		if (index instanceof Integer i) {
-			idx = i.intValue();
-		} else if (index instanceof Double d) {
-			double val = d.doubleValue();
-			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
-				idx = (int) val;
-			}
-		} else {
-			Integer validIdx = JSArray.toValidJavaArrayIndex(index);
-			if (validIdx != null) idx = validIdx;
-		}
-		if (idx >= 0) {
-			if (idx < list.size()) {
-				list.set(idx, value);
-			} else if (idx <= list.size() + 1024 && idx < 65536) {
-				while (list.size() <= idx) list.add(null);
-				list.set(idx, value);
-			}
-		}
+		JSIndexOps.setIndexList(target, index, value);
 	}
 
 	public static void setIndexObjectArray(Object target, Object index, Object value) {
-		Object[] a   = (Object[]) target;
-		int      idx = -1;
-		if (index instanceof Integer i) {
-			idx = i.intValue();
-		} else if (index instanceof Double d) {
-			double val = d.doubleValue();
-			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
-				idx = (int) val;
-			}
-		} else {
-			Integer validIdx = JSArray.toValidJavaArrayIndex(index);
-			if (validIdx != null) idx = validIdx;
-		}
-		if (idx >= 0 && idx < a.length) {
-			a[idx] = value;
-		}
+		JSIndexOps.setIndexObjectArray(target, index, value);
 	}
 
 	public static void setIndexIntArray(Object target, Object index, Object value) {
-		int[] a   = (int[]) target;
-		int   idx = -1;
-		if (index instanceof Integer i) {
-			idx = i.intValue();
-		} else if (index instanceof Double d) {
-			double val = d.doubleValue();
-			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
-				idx = (int) val;
-			}
-		} else {
-			Integer validIdx = JSArray.toValidJavaArrayIndex(index);
-			if (validIdx != null) idx = validIdx;
-		}
-		if (idx >= 0 && idx < a.length) {
-			a[idx] = JSOps.toInt(value);
-		}
+		JSIndexOps.setIndexIntArray(target, index, value);
 	}
 
 	public static void setIndexDoubleArray(Object target, Object index, Object value) {
-		double[] a   = (double[]) target;
-		int      idx = -1;
-		if (index instanceof Integer i) {
-			idx = i.intValue();
-		} else if (index instanceof Double d) {
-			double val = d.doubleValue();
-			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
-				idx = (int) val;
-			}
-		} else {
-			Integer validIdx = JSArray.toValidJavaArrayIndex(index);
-			if (validIdx != null) idx = validIdx;
-		}
-		if (idx >= 0 && idx < a.length) {
-			a[idx] = JSOps.toDouble(value);
-		}
+		JSIndexOps.setIndexDoubleArray(target, index, value);
 	}
 
 	public static void setIndexLongArray(Object target, Object index, Object value) {
-		long[] a   = (long[]) target;
-		int    idx = -1;
-		if (index instanceof Integer i) {
-			idx = i.intValue();
-		} else if (index instanceof Double d) {
-			double val = d.doubleValue();
-			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
-				idx = (int) val;
-			}
-		} else {
-			Integer validIdx = JSArray.toValidJavaArrayIndex(index);
-			if (validIdx != null) idx = validIdx;
-		}
-		if (idx >= 0 && idx < a.length) {
-			a[idx] = JSOps.toLong(value);
-		}
+		JSIndexOps.setIndexLongArray(target, index, value);
 	}
 
 	public static void setIndexPrimitiveArray(Object target, Object index, Object value) {
-		int idx = -1;
-		if (index instanceof Integer i) {
-			idx = i.intValue();
-		} else if (index instanceof Double d) {
-			double val = d.doubleValue();
-			if (val >= 0 && val <= Integer.MAX_VALUE && val == (int) val) {
-				idx = (int) val;
-			}
-		} else {
-			Integer validIdx = JSArray.toValidJavaArrayIndex(index);
-			if (validIdx != null) idx = validIdx;
-		}
-		if (idx >= 0) {
-			setArrayElement(target, idx, value);
-		}
+		JSIndexOps.setIndexPrimitiveArray(target, index, value);
 	}
 
 	public static void setIndexMap(Object target, Object index, Object value) {
-		Map<Object, Object> map = (Map<Object, Object>) target;
-		if (map.containsKey(index)) {
-			map.put(index, value);
-			return;
-		}
-		String strKey = toPropertyKey(index);
-		if (map.containsKey(strKey)) {
-			map.put(strKey, value);
-			return;
-		}
-		map.put(index, value);
+		JSIndexOps.setIndexMap(target, index, value);
 	}
 
 	@SuppressWarnings("RedundantIfStatement")
@@ -5756,201 +3571,11 @@ public class JSLinker {
 		return getPropLongGeneric(target, propName);
 	}
 
-	private static MethodHandle getMethodSpreader(Class<?> clazz, String methodName, int arity, boolean isStatic) {
-		ClassSpreaderData data   = SPREADER_DATA.get(clazz);
-		MethodLookupKey   key    = new MethodLookupKey(methodName, arity, isStatic);
-		MethodHandle      cached = data.methodSpreaderCache.get(key);
-		if (cached != null) return cached;
-
-		Method targetMethod = MethodResolver.getAccessibleMethod(MethodResolver.findMethod(clazz, methodName, arity, isStatic));
-		if (targetMethod == null) return null;
-		try {
-			targetMethod.setAccessible(true);
-		} catch (Throwable ignored) {
-		}
-		try {
-			MethodHandle mh         = Magic.lookup.unreflect(targetMethod);
-			MethodHandle adapted    = isStatic ? MethodHandles.dropArguments(mh, 0, Object.class) : mh;
-			Class<?>[]   paramTypes = targetMethod.getParameterTypes();
-			for (int i = 0; i < paramTypes.length; i++) {
-				MethodHandle filter = getArgumentFilter(paramTypes[i]);
-				if (filter != null) {
-					adapted = MethodHandles.filterArguments(adapted, 1 + i, filter);
-				}
-			}
-			if (targetMethod.getReturnType() == void.class) {
-				adapted = MethodHandles.filterReturnValue(adapted, MethodHandles.constant(Object.class, JSUndefined.INSTANCE));
-			}
-			MethodType   genericType = MethodType.genericMethodType(1 + arity);
-			MethodHandle genericMh   = adapted.asType(genericType);
-			MethodHandle spreader    = genericMh.asSpreader(Object[].class, arity);
-			data.methodSpreaderCache.put(key, spreader);
-			return spreader;
-		} catch (Throwable e) {
-			throw new RuntimeException(e);
-		}
-	}
-
-	private static Object invokeStringMethod(String str, String methodName, Object[] args) throws Throwable {
-		if ("match".equals(methodName)) {
-			Object   regArg = args.length > 0 ? args[0] : "";
-			JSRegExp reg    = regArg instanceof JSRegExp r ? r : new JSRegExp(JSOps.toStr(regArg), "");
-			if (reg.isGlobal()) {
-				Matcher m   = reg.getCompiledPattern().matcher(str);
-				JSArray arr = new JSArray();
-				while (m.find()) {
-					arr.push(m.group(0));
-				}
-				return arr.length() > 0 ? arr : null;
-			} else {
-				return reg.exec(str);
-			}
-		}
-		if ("search".equals(methodName)) {
-			Object   regArg = args.length > 0 ? args[0] : "";
-			JSRegExp reg    = regArg instanceof JSRegExp r ? r : new JSRegExp(JSOps.toStr(regArg), "");
-			Matcher  m      = reg.getCompiledPattern().matcher(str);
-			return m.find() ? (double) m.start() : -1.0;
-		}
-		if ("replace".equals(methodName)) {
-			Object regArg = args.length > 0 ? args[0] : "";
-			Object repArg = args.length > 1 ? args[1] : "";
-			if (regArg instanceof JSRegExp reg) {
-				return replaceWithRegExp(str, reg, repArg, false);
-			} else {
-				String searchStr = JSOps.toStr(regArg);
-				int    idx       = str.indexOf(searchStr);
-				if (idx < 0) return str;
-
-				String substring = str.substring(idx + searchStr.length());
-				if (repArg instanceof JSFunction func) {
-					Object[] funcArgs = new Object[]{searchStr, (double) idx, str};
-					String   replStr  = JSOps.toStr(func.call(null, null, funcArgs));
-					return str.substring(0, idx) + replStr + substring;
-				} else {
-					String repStr = JSOps.toStr(repArg);
-					if (repStr.contains("$")) {
-						repStr = repStr.replace("$$", "\0")
-						 .replace("$&", searchStr)
-						 .replace("\0", "$");
-					}
-					return str.substring(0, idx) + repStr + substring;
-				}
-			}
-		}
-		if ("replaceAll".equals(methodName)) {
-			Object regArg = args.length > 0 ? args[0] : "";
-			Object repArg = args.length > 1 ? args[1] : "";
-			if (regArg instanceof JSRegExp reg) {
-				return replaceWithRegExp(str, reg, repArg, true);
-			} else {
-				String searchStr = JSOps.toStr(regArg);
-				if (searchStr.isEmpty()) return str;
-				String repStr = JSOps.toStr(repArg);
-				if (repStr.contains("$")) {
-					repStr = repStr.replace("$$", "\0")
-					 .replace("$&", searchStr)
-					 .replace("\0", "$");
-				}
-				return str.replace(searchStr, repStr);
-			}
-		}
-		if ("split".equals(methodName) && args.length > 0 && args[0] instanceof JSRegExp reg) {
-			String[] parts = reg.getCompiledPattern().split(str, args.length > 1 ? JSOps.toInt(args[1]) : 0);
-			JSArray  arr   = new JSArray();
-			for (String p : parts) arr.push(p);
-			return arr;
-		}
-		return null;
-	}
-
-	private static String replaceWithRegExp(String str, JSRegExp reg, Object repArg, boolean forceAll) throws Throwable {
-		Matcher m      = reg.getCompiledPattern().matcher(str);
-		boolean global = forceAll || reg.isGlobal();
-		if (repArg instanceof JSFunction func) {
-			StringBuilder sb = new StringBuilder();
-			while (m.find()) {
-				int      groupCount = m.groupCount();
-				Object[] funcArgs   = new Object[groupCount + 3];
-				funcArgs[0] = m.group(0);
-				for (int i = 1; i <= groupCount; i++) {
-					funcArgs[i] = m.group(i);
-				}
-				funcArgs[groupCount + 1] = (double) m.start();
-				funcArgs[groupCount + 2] = str;
-				Object replRes = func.call(null, null, funcArgs);
-				String replStr = JSOps.toStr(replRes);
-				m.appendReplacement(sb, Matcher.quoteReplacement(replStr));
-				if (!global) break;
-			}
-			m.appendTail(sb);
-			return sb.toString();
-		} else {
-			String repStr = toJavaReplacement(JSOps.toStr(repArg));
-			if (global) {
-				return m.replaceAll(repStr);
-			} else {
-				return m.replaceFirst(repStr);
-			}
-		}
-	}
-
-	private static String toJavaReplacement(String jsRep) {
-		if (jsRep == null || !jsRep.contains("$")) return jsRep != null ? jsRep.replace("\\", "\\\\") : "";
-		StringBuilder sb = new StringBuilder(jsRep.length() * 2);
-		for (int i = 0; i < jsRep.length(); i++) {
-			char c = jsRep.charAt(i);
-			if (c == '$') {
-				if (i + 1 < jsRep.length()) {
-					char next = jsRep.charAt(i + 1);
-					if (next == '&') {
-						sb.append("$0"); // $& 在 JS 中是全匹配，对应 Java Matcher 的 $0
-					} else if (next == '$') {
-						sb.append("\\$"); // $$ 在 JS 中代表单个 $ 字面量
-						i++;
-					} else if (Character.isDigit(next)) {
-						if (next == '0') {
-							sb.append("\\$0"); // JS 中的 $0 是普通字面量，必须转义为 \$0，防止 Java 误当整串
-						} else {
-							sb.append("$").append(next);
-						}
-						i++;
-					} else {
-						sb.append("\\$"); // 单个无效 $ 作为字面量转义
-					}
-				} else {
-					sb.append("\\$");     // 末尾单个 $ 必须转义为 \$，防止 Java Matcher 抛出异常
-				}
-			} else if (c == '\\') {
-				sb.append("\\\\");
-			} else {
-				sb.append(c);
-			}
-		}
-		return sb.toString();
-	}
-
 	static Object invokeJavaMethod(Object target, String methodName, Object[] args) throws Throwable {
-		if (args == null) {
-			args = JSFunction.EMPTY_ARGS;
-		}
-		Class<?> clazz    = (target instanceof Class<?>) ? (Class<?>) target : target.getClass();
-		boolean  isStatic = (target instanceof Class<?>);
-
-		Method targetMethod = MethodResolver.findBestMatchingMethod(clazz, methodName, args);
-		if (targetMethod != null) {
-			return invokeMatchedMethod(target, targetMethod, args, clazz, methodName);
-		}
-
-		MethodHandle spreader = getMethodSpreader(clazz, methodName, args.length, isStatic);
-		if (spreader != null) {
-			return spreader.invoke(target, args);
-		}
-
-		throw new NoSuchMethodException("Method '" + methodName + "' with " + args.length + " args not found on " + clazz.getName());
+		return JSJavaInterop.invokeJavaMethod(target, methodName, args);
 	}
 
-	private static final ThreadLocal<JSObject> CURRENT_SUPER_PROTO      = new ThreadLocal<>();
+	public static final ThreadLocal<JSObject> CURRENT_SUPER_PROTO      = JSJavaInterop.CURRENT_SUPER_PROTO;
 	private static final ThreadLocal<JSObject> CURRENT_SUPER_CTOR_PROTO = new ThreadLocal<>();
 
 	public static Object callSuperConstructor(JSContext cx, Object thisObj, Object[] args) throws Throwable {

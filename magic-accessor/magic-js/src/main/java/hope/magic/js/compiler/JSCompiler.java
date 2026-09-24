@@ -437,13 +437,13 @@ public class JSCompiler {
 		final Set<String>                       uncapturedTopLevelVars = new LinkedHashSet<>();
 		int     nextLocalSlot       = 2; // Slot 0 is 'this', Slot 1 is 'cx' (JSContext)
 		int     nextSiteId          = 0;
-		int     tempVarCounter      = 0;
-		boolean isFunction          = false;
-		String  functionName        = null;
-		boolean wantDouble          = false;
-		boolean isDoubleSpecialized = false;
-		boolean isAsync             = false;
-		int     scopeSlot           = -1;
+		int     tempVarCounter            = 0;
+		boolean isFunction                = false;
+		String  functionName              = null;
+		/** 当前正在编译的 JVM 方法是否为原生 double 特化方法 (runDouble / callXDouble) */
+		boolean isDoubleSpecializedMethod = false;
+		boolean isAsync                   = false;
+		int     scopeSlot                 = -1;
 
 		final Deque<Label> breakTargets    = new ArrayDeque<>();
 		final Deque<Label> continueTargets = new ArrayDeque<>();
@@ -484,9 +484,9 @@ public class JSCompiler {
 	}
 
 	private static CompileContext createCompileContext(MethodVisitor mv, String className, Node.Program program,
-	                                                   String functionName, boolean isDoubleSpecialized) {
+	                                                   String functionName, boolean isDoubleSpecializedMethod) {
 		CompileContext ctx = new CompileContext(mv, className, program);
-		ctx.isDoubleSpecialized = isDoubleSpecialized;
+		ctx.isDoubleSpecializedMethod = isDoubleSpecializedMethod;
 		if (functionName != null) {
 			ctx.isFunction = true;
 			ctx.functionName = functionName;
@@ -596,7 +596,7 @@ public class JSCompiler {
 			if (op == TokenType.PLUS && !isStringExpr(bin.left) && !isStringExpr(bin.right)) {
 				boolean leftIsNum  = left.isPrimitive() || isNumeric(left) || isNumericExpr(bin.left);
 				boolean rightIsNum = right.isPrimitive() || isNumeric(right) || isNumericExpr(bin.right);
-				if (ctx != null && ctx.isDoubleSpecialized) {
+				if (ctx != null && ctx.isDoubleSpecializedMethod) {
 					if (leftIsNum || rightIsNum) {
 						return VarType.DOUBLE;
 					}
@@ -792,7 +792,7 @@ public class JSCompiler {
 			VarType init = decl.init != null ? inferVarType(decl.init, ctx) : null;
 			if ((decl.init instanceof Node.MemberAccessExpr || decl.init instanceof Node.IndexAccessExpr)
 			    && isVarUsedAsNumeric(decl.name, root)) {
-				if (/* ctx != null &&  */ctx.isDoubleSpecialized) {
+				if (/* ctx != null &&  */ctx.isDoubleSpecializedMethod) {
 					init = VarType.DOUBLE;
 				}
 			}
@@ -1263,7 +1263,7 @@ public class JSCompiler {
 				    || assign.op == TokenType.BIT_XOR_ASSIGN || assign.op == TokenType.SHL_ASSIGN
 				    || assign.op == TokenType.SHR_ASSIGN) { return VarType.INT; }
 				if (assign.op == TokenType.PLUS_ASSIGN) {
-					if (ctx != null && ctx.isDoubleSpecialized) {
+					if (ctx != null && ctx.isDoubleSpecializedMethod) {
 						return VarType.DOUBLE;
 					}
 					VarType valType = inferVarType(assign.value, ctx);
@@ -1291,7 +1291,7 @@ public class JSCompiler {
 				}
 				VarType valType = inferVarType(assign.value, ctx);
 				if (valType == VarType.OBJECT && (assign.value instanceof Node.MemberAccessExpr || isNumericExpr(assign.value))) {
-					if (ctx != null && ctx.isDoubleSpecialized) {
+					if (ctx != null && ctx.isDoubleSpecializedMethod) {
 						VarType pre = ctx.preInferredTypes.get(name);
 						if (pre != null && isNumeric(pre)) return VarType.DOUBLE;
 					}
@@ -2027,7 +2027,7 @@ public class JSCompiler {
 	private static void compileReturn(Node.ReturnStmt returnStmt, CompileContext ctx) {
 		MethodVisitor mv = ctx.mv;
 		if (ctx.activeFinallyBlocks.isEmpty()) {
-			if (ctx.isDoubleSpecialized) {
+			if (ctx.isDoubleSpecializedMethod) {
 				if (returnStmt.value != null) {
 					compileNodeAsDouble(returnStmt.value, ctx);
 				} else {
@@ -2046,7 +2046,7 @@ public class JSCompiler {
 		}
 
 		List<Node> fins = new ArrayList<>(ctx.activeFinallyBlocks);
-		if (ctx.isDoubleSpecialized) {
+		if (ctx.isDoubleSpecializedMethod) {
 			if (returnStmt.value != null) {
 				compileNodeAsDouble(returnStmt.value, ctx);
 			} else {
@@ -3169,7 +3169,7 @@ public class JSCompiler {
 		if (call.callee instanceof Node.IdentifierExpr ident && ctx.isFunction && ctx.functionName != null && ctx.functionName.equals(ident.name)) {
 			// 自递归单态直连调用 (Direct self-recursive monomorphic invocation on 'this')
 			int arity = call.arguments.size();
-			if (ctx.isDoubleSpecialized && arity <= 3) {
+			if (ctx.isDoubleSpecializedMethod && arity <= 3) {
 				mv.visitVarInsn(Opcodes.ALOAD, 0); // this
 				mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
 				mv.visitInsn(Opcodes.ACONST_NULL); // null
@@ -4809,27 +4809,19 @@ public class JSCompiler {
 				}
 			}
 
-			// 针对 a.b(...) 的成员方法调用：特化模式下发射 invokeDouble；通用模式下发射普通 invoke 并转 double
+			// 针对 a.b(...) 的成员方法调用：在 compileNodeAsDouble 下调用者确切需要 double，直接发射 invokeDouble
 			if (call.callee instanceof Node.MemberAccessExpr member) {
-				if (/* ctx != null &&  */ctx.isDoubleSpecialized) {
-					compileNode(member.target, ctx, true); // target
-					String desc = compileArgsAndGetDescDouble(call.arguments, ctx);
-					// 发射返回 double 的特化 invokedynamic (结合 SwitchPoint 守护)
-					mv.visitInvokeDynamicInsn("invokeDouble", desc, BSM_INVOKE_DOUBLE, member.property);
-					return;
-				} else {
-					compileNode(member.target, ctx, true);
-					String desc = compileArgsAndGetDesc(call.arguments, ctx);
-					mv.visitInvokeDynamicInsn("invoke", desc, BSM_INVOKE, member.property);
-					mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toDouble", "(Ljava/lang/Object;)D", false);
-					return;
-				}
+				compileNode(member.target, ctx, true); // target
+				String desc = compileArgsAndGetDescDouble(call.arguments, ctx);
+				// 发射返回 double 的特化 invokedynamic (结合 SwitchPoint 守护)
+				mv.visitInvokeDynamicInsn("invokeDouble", desc, BSM_INVOKE_DOUBLE, member.property);
+				return;
 			}
 
 			int arity = call.arguments.size();
 			if (arity <= 3) {
-				// 自递归单态调用 (仅在当前函数已被编译为 double 特化函数时有效)
-				if (call.callee instanceof Node.IdentifierExpr ident && ctx.isFunction && ctx.isDoubleSpecialized && ctx.functionName != null && ctx.functionName.equals(ident.name)) {
+				// 自递归单态调用 (仅在当前函数已被编译为 double 特化方法时有效)
+				if (call.callee instanceof Node.IdentifierExpr ident && ctx.isFunction && ctx.isDoubleSpecializedMethod && ctx.functionName != null && ctx.functionName.equals(ident.name)) {
 					mv.visitVarInsn(Opcodes.ALOAD, 0); // this
 					mv.visitVarInsn(Opcodes.ALOAD, 1); // cx
 					mv.visitInsn(Opcodes.ACONST_NULL); // null

@@ -9,34 +9,22 @@ import java.lang.invoke.*;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 支持多方案并存与可插拔的特权 JIT 存根生成器 (参考 AccessorProcessor 架构)。
- * 支持 AccessMode:
+ * 基于 DirectMethodHandle 与静态持有者 (MagicHolder) 的特权 JIT 存根生成器。
+ * <p>
+ * <b>架构升级与 AccessMode 统一说明：</b>
  * <ul>
- *   <li><b>AUTO:</b> 自动智能探测并采用最佳方案。</li>
- *   <li><b>UNSAFE_AND_METHODHANDLE:</b> 基于 DirectMethodHandle 纯标准直调 (零动态类生成, 跨平台及Android通用)。</li>
- *   <li><b>UNSAFE_AND_LINKTO:</b> 基于 HotSpot 原生 {@code linkTo*} 指令与 MemberName 绑定直调。
- *       <p><b>核心架构优势：</b></p>
- *       <ol>
- *         <li><b>极低 C2 JIT 内联预算消耗 (Inlining Budget)：</b>标准 MethodHandle 调用链繁复，经历多层 LambdaForm
- *             及适配器，极易吃满 HotSpot C2 的内联预算上限（默认 MaxInlineLevel=9, MaxInlineSize=35），导致业务方法被内联截断。
- *             linkTo 方案由 Invoker 动态类直接 {@code invokestatic} 桥接方法，桥接方法内直接下发 JVM 机器级 {@code linkTo*} 原语并尾随 MemberName 常量，
- *             调用图极其扁平（仅 1~2 层），几乎不消耗 C2 预算，将宝贵的内联额度全部留给业务逻辑。</li>
- *         <li><b>规避同构签名引发的递归与深度检测内联截断：</b>C2 对签名相同的调用链（如通用 Object[] 签名或多层通用 LambdaForm）
- *             具有严格的递归检测上限（MaxRecursiveInlineLevel 默认仅为 1）。linkTo 方案结合针对 arity 0~3 特化生成的专属强类型入参方法
- *             （{@code invoke0~3}、{@code newInstance0~3}），彻底摆脱了泛型同构包装，根绝了 C2 的同构方法递归内联截断。</li>
- *         <li><b>零 MethodHandle 对象头与 LambdaForm 元空间膨胀：</b>传统 MH 组合在堆上分配大量包装器并向 Metaspace 注入大量匿名类；
- *             linkTo 桥接结构极简（单静态方法 + 静态 {@code @Stable MemberName}），GC 与元空间零额外负担。</li>
- *         <li><b>杜绝运行期动态类型校验 (Polymorphic Type-Pollution Free)：</b>避免 {@code invokeExact} 的动态 MethodType 比较开销与去优化风险，
- *             字节码静态校验直通底层。</li>
- *         <li><b>穿透访问权限壁垒：</b>底层 {@code linkToSpecial / linkToStatic / linkToVirtual} 原语直接操作方法指针，突破 private 权限限制。</li>
- *         <li><b>零数组分配与零参数装箱 (Zero-Allocation)：</b>特化方法栈上传参，杜绝通用反射创建 {@code Object[]} 数组的堆分配与 GC 压力。</li>
- *       </ol>
- *   </li>
- *   <li><b>MAGIC_ACCESSOR:</b> 经典 ASM 动态生成特权类字节码直调 (JDK &le; 21)。</li>
+ *   <li><b>统一架构：</b>参考 OpenJDK 原生 {@code DirectMethodHandle$Holder} 与 {@code Invokers$Holder} 设计，
+ *       所有方法与构造器直调全面统一采用<b>基于 HotSpot 原生 DirectMethodHandle + {@link MagicHolder} 静态分派</b>。
+ *       HotSpot C2 编译器在内联阶段可直接穿透 {@link MagicHolder} 的 {@code @ForceInline} 入口抵达底层原生机器指令。</li>
+ *   <li><b>零动态类生成 (Zero Dynamic Classes)：</b>彻底废弃了早期针对不同 {@link AccessMode}（如 {@code NESTMATE}、
+ *       {@code MAGIC_ACCESSOR}、{@code UNSAFE_AND_LINKTO} 动态桥接类）通过 ASM 大量生成动态类和宿主组的设计，
+ *       实现 100% 零元空间 (Metaspace) 膨胀、零类加载器泄漏风险。</li>
+ *   <li><b>AccessMode 在运行期的状态：</b>在 magic-js 运行期，多模式分派已被统一架构完全取代。
+ *       所有接受 {@link AccessMode} 形参的 API 均转为向后兼容保留（No-op），无论传入何种模式，
+ *       内部均统一走高性能的 DirectMethodHandle + MagicHolder 路径。</li>
  * </ul>
  */
 @SuppressWarnings("removal")
@@ -70,14 +58,32 @@ public class MagicJIT implements Opcodes {
 		return AccessMode.AUTO;
 	}
 
+	/**
+	 * 获取当前配置的访问模式。
+	 *
+	 * @return 当前模式（由于运行期已全面统一为 DirectMethodHandle + MagicHolder，该值仅供配置回显）
+	 */
 	public static AccessMode getMode() {
 		return currentMode;
 	}
 
+	/**
+	 * 设置全局访问模式。
+	 * <p>
+	 * <b>注意：</b>运行期已全面统一为 DirectMethodHandle + MagicHolder 架构，
+	 * 此方法仅用于兼容旧版配置或测试，不再改变底层执行策略。
+	 *
+	 * @param mode 访问模式
+	 */
 	public static void setMode(AccessMode mode) {
 		currentMode = mode == null ? AccessMode.AUTO : mode;
 	}
 
+	/**
+	 * 获取当前生效的访问模式。
+	 *
+	 * @return 生效模式（统一为基于 DirectMethodHandle 的直调模式）
+	 */
 	public static AccessMode getEffectiveMode() {
 		AccessMode m = currentMode;
 		if (m == AccessMode.AUTO) {

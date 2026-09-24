@@ -2,6 +2,15 @@ package hope.magic.annotation;
 
 /**
  * 访问器底层实现模式。
+ * <p>
+ * <b>应用场景说明：</b>
+ * <ul>
+ *   <li><b>编译期注解生成 (magic-accessor)：</b>
+ *       用于标注在 {@link HMarkMagic}、{@link HMethod}、{@link HField} 上，指导编译期注解处理器生成对应的访问辅助代码。</li>
+ *   <li><b>动态脚本运行期 (magic-js)：</b>
+ *       在 magic-js 运行期，所有方法和构造器直调已全面升级统一为<b>基于 HotSpot 原生 DirectMethodHandle + 静态持有者 (MagicHolder)</b>，
+ *       实现了零动态类生成、零元空间污染的高性能内联方案。因此在 magic-js 运行期，此枚举仅作为旧版 API 兼容保留（No-op）。</li>
+ * </ul>
  */
 public enum AccessMode {
 	/**

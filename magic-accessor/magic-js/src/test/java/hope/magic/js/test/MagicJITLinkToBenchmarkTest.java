@@ -150,7 +150,7 @@ public class MagicJITLinkToBenchmarkTest {
 		printRow("4. MH + asSpreader (数组中转)", totalNsSpreader, METHOD_OPS, baseNs);
 
 		// 5. MagicInvoker.invoke (Object[] 数组中转)
-		MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(BenchmarkTarget.class, "multiply", 2, false);
+		var invoker = MagicJIT.getMethodInvoker(BenchmarkTarget.class, "multiply", 2, false);
 		long sumInvokerArr = 0;
 		for (int i = 0; i < WARMUP_TIMES; i++) {
 			arr[0] = i;
@@ -224,7 +224,7 @@ public class MagicJITLinkToBenchmarkTest {
 		Constructor<?> ctor = BenchmarkTarget.class.getDeclaredConstructor(int.class, String.class);
 		ctor.setAccessible(true);
 		MethodHandle ctorMh = Magic.lookup.unreflectConstructor(ctor);
-		MagicJIT.MagicConstructorInvoker invoker = MagicJIT.getConstructorInvoker(BenchmarkTarget.class, 2);
+		var invoker = MagicJIT.getConstructorInvoker(BenchmarkTarget.class, 2);
 
 		// 1. Java 原生 new
 		long sum0 = 0;
@@ -334,7 +334,7 @@ public class MagicJITLinkToBenchmarkTest {
 		printRow2("1. UNSAFE_AND_METHODHANDLE", totalNsMH, METHOD_OPS, baseNs);
 
 		// 2. UNSAFE_AND_LINKTO (invoke2)
-		MagicJIT.MagicInvoker linkToInvoker = MagicJIT.getMethodInvoker(BenchmarkTarget.class, "multiply", 2, false, AccessMode.UNSAFE_AND_LINKTO);
+		var linkToInvoker = MagicJIT.getMethodInvoker(BenchmarkTarget.class, "multiply", 2, false, AccessMode.UNSAFE_AND_LINKTO);
 		long sumLinkTo = 0;
 		for (int i = 0; i < WARMUP_TIMES; i++) sumLinkTo += ((Number) linkToInvoker.invoke2(target, i, 3)).intValue();
 		long startLinkTo = System.nanoTime();
@@ -357,7 +357,7 @@ public class MagicJITLinkToBenchmarkTest {
 		printRow2("2.1 LINKTO (invokeInt2 零装箱)", totalNsLinkToInt2, METHOD_OPS, baseNs);
 
 		// 3. MAGIC_ACCESSOR (invoke2)
-		MagicJIT.MagicInvoker accessorInvoker = MagicJIT.getMethodInvoker(BenchmarkTarget.class, "multiply", 2, false, AccessMode.MAGIC_ACCESSOR);
+		var accessorInvoker = MagicJIT.getMethodInvoker(BenchmarkTarget.class, "multiply", 2, false, AccessMode.MAGIC_ACCESSOR);
 		if (accessorInvoker != null) {
 			long sumAccessor = 0;
 			for (int i = 0; i < WARMUP_TIMES; i++) sumAccessor += ((Number) accessorInvoker.invoke2(target, i, 3)).intValue();
@@ -382,7 +382,7 @@ public class MagicJITLinkToBenchmarkTest {
 		}
 
 		// 4. NESTMATE (Plan C 同巢隐藏类 invoke2)
-		MagicJIT.MagicInvoker nestmateInvoker = MagicJIT.getMethodInvoker(BenchmarkTarget.class, "multiply", 2, false, AccessMode.NESTMATE);
+		var nestmateInvoker = MagicJIT.getMethodInvoker(BenchmarkTarget.class, "multiply", 2, false, AccessMode.NESTMATE);
 		if (nestmateInvoker != null) {
 			long sumNestmate = 0;
 			for (int i = 0; i < WARMUP_TIMES; i++) sumNestmate += ((Number) nestmateInvoker.invoke2(target, i, 3)).intValue();

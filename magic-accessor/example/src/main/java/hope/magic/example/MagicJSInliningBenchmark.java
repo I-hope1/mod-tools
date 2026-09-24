@@ -6,6 +6,7 @@ import hope.magic.js.runtime.JSScript;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.IntBinaryOperator;
 
 public class MagicJSInliningBenchmark {
 
@@ -16,7 +17,7 @@ public class MagicJSInliningBenchmark {
 			return a * b;
 		}
 
-		public int computeBinary(java.util.function.IntBinaryOperator op, int a, int b) {
+		public int computeBinary(IntBinaryOperator op, int a, int b) {
 			return op.applyAsInt(a, b);
 		}
 	}

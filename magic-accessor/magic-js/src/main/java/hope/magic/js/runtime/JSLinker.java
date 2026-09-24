@@ -1,15 +1,14 @@
 package hope.magic.js.runtime;
 
-import hope.magic.js.module.JSModule;
-import hope.magic.js.module.JSModuleManager;
+import hope.magic.js.module.*;
 import hope.magic.runtime.*;
 import sun.misc.Unsafe;
 
 import java.lang.invoke.*;
 import java.lang.reflect.*;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
 
 import static hope.magic.js.runtime.SlotMH.*;
 
@@ -44,7 +43,7 @@ public class JSLinker {
 	public static final MethodHandle MH_IS_EXACT_SHAPE_AND_PROTO;
 	public static final MethodHandle MH_IS_SAME_OBJECT;
 	public static final MethodHandle MH_IS_SAME_OBJECT_AND_ARGS;
-	public static final MethodHandle MH_INVOKE_INTERFACE_1 = JSJavaInterop.MH_INVOKE_INTERFACE_1;
+	public static final MethodHandle MH_INVOKE_INTERFACE_1        = JSJavaInterop.MH_INVOKE_INTERFACE_1;
 	public static final MethodHandle MH_TRANSITION_SET_DOUBLE;
 	public static final MethodHandle MH_TRANSITION_SET_OBJECT;
 	public static final MethodHandle MH_TRANSITION_SET_OBJECT_DOUBLE;
@@ -71,9 +70,9 @@ public class JSLinker {
 	public static final MethodHandle MH_SET_INDEX_LONG_ARRAY      = JSIndexOps.MH_SET_INDEX_LONG_ARRAY;
 	public static final MethodHandle MH_SET_INDEX_PRIMITIVE_ARRAY = JSIndexOps.MH_SET_INDEX_PRIMITIVE_ARRAY;
 	public static final MethodHandle MH_SET_INDEX_MAP             = JSIndexOps.MH_SET_INDEX_MAP;
-	public static final MethodHandle MH_NEW_ARRAY_0        = JSJavaInterop.MH_NEW_ARRAY_0;
-	public static final MethodHandle MH_NEW_ARRAY_1        = JSJavaInterop.MH_NEW_ARRAY_1;
-	public static final MethodHandle MH_NEW_ARRAY_N        = JSJavaInterop.MH_NEW_ARRAY_N;
+	public static final MethodHandle MH_NEW_ARRAY_0               = JSJavaInterop.MH_NEW_ARRAY_0;
+	public static final MethodHandle MH_NEW_ARRAY_1               = JSJavaInterop.MH_NEW_ARRAY_1;
+	public static final MethodHandle MH_NEW_ARRAY_N               = JSJavaInterop.MH_NEW_ARRAY_N;
 	public static final MethodHandle MH_CREATE_BOUND_INSTANCE_METHOD;
 	public static final MethodHandle MH_JS_ARRAY_LENGTH_OBJ;
 	public static final MethodHandle MH_JS_ARRAY_LENGTH_DOUBLE;
@@ -191,11 +190,13 @@ public class JSLinker {
 		return JSPolyGuards.shapeIdSelector(minId, span, target);
 	}
 
-	public static Object polyGetObject(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target) throws Throwable {
+	public static Object polyGetObject(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target)
+	 throws Throwable {
 		return JSPolyGuards.polyGetObject(shapes, offsets, fallback, target);
 	}
 
-	public static double polyGetDouble(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target) throws Throwable {
+	public static double polyGetDouble(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target)
+	 throws Throwable {
 		return JSPolyGuards.polyGetDouble(shapes, offsets, fallback, target);
 	}
 
@@ -203,15 +204,18 @@ public class JSLinker {
 		return JSPolyGuards.polyGetInt(shapes, offsets, fallback, target);
 	}
 
-	public static long polyGetLong(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target) throws Throwable {
+	public static long polyGetLong(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target)
+	 throws Throwable {
 		return JSPolyGuards.polyGetLong(shapes, offsets, fallback, target);
 	}
 
-	public static void polySetObject(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target, Object value) throws Throwable {
+	public static void polySetObject(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target, Object value)
+	 throws Throwable {
 		JSPolyGuards.polySetObject(shapes, offsets, fallback, target, value);
 	}
 
-	public static void polySetDouble(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target, double value) throws Throwable {
+	public static void polySetDouble(JSShape[] shapes, int[] offsets, MethodHandle fallback, Object target, double value)
+	 throws Throwable {
 		JSPolyGuards.polySetDouble(shapes, offsets, fallback, target, value);
 	}
 
@@ -767,7 +771,7 @@ public class JSLinker {
 		}
 
 		if (target.getClass().isArray() && "length".equals(propName)) {
-			return (double) java.lang.reflect.Array.getLength(target);
+			return (double) Array.getLength(target);
 		}
 
 		boolean  isStatic = false;
@@ -1148,7 +1152,7 @@ public class JSLinker {
 					MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
 					site.installGuardOrSwitchMegamorphic(test, MH_ARRAY_LENGTH_DOUBLE.asType(site.type()));
 				} catch (Throwable ignored) { }
-				return (double) java.lang.reflect.Array.getLength(target);
+				return (double) Array.getLength(target);
 			}
 		}
 
@@ -1958,12 +1962,18 @@ public class JSLinker {
 		try {
 			Class<?> clazz = func.getClass();
 			return switch (arity) {
-				case 0 -> LOOKUP.findVirtual(clazz, "call0", MethodType.methodType(Object.class, JSContext.class, Object.class)).bindTo(func).bindTo(null);
-				case 1 -> LOOKUP.findVirtual(clazz, "call1", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class)).bindTo(func).bindTo(null);
-				case 2 -> LOOKUP.findVirtual(clazz, "call2", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class)).bindTo(func).bindTo(null);
-				case 3 -> LOOKUP.findVirtual(clazz, "call3", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class, Object.class)).bindTo(func).bindTo(null);
-				case 4 -> LOOKUP.findVirtual(clazz, "call4", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class, Object.class, Object.class)).bindTo(func).bindTo(null);
-				default -> LOOKUP.findVirtual(clazz, "call", MethodType.methodType(Object.class, JSContext.class, Object.class, Object[].class)).bindTo(func).bindTo(null).asCollector(1, Object[].class, arity);
+				case 0 ->
+				 LOOKUP.findVirtual(clazz, "call0", MethodType.methodType(Object.class, JSContext.class, Object.class)).bindTo(func).bindTo(null);
+				case 1 ->
+				 LOOKUP.findVirtual(clazz, "call1", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class)).bindTo(func).bindTo(null);
+				case 2 ->
+				 LOOKUP.findVirtual(clazz, "call2", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class)).bindTo(func).bindTo(null);
+				case 3 ->
+				 LOOKUP.findVirtual(clazz, "call3", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class, Object.class)).bindTo(func).bindTo(null);
+				case 4 ->
+				 LOOKUP.findVirtual(clazz, "call4", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class, Object.class, Object.class)).bindTo(func).bindTo(null);
+				default ->
+				 LOOKUP.findVirtual(clazz, "call", MethodType.methodType(Object.class, JSContext.class, Object.class, Object[].class)).bindTo(func).bindTo(null).asCollector(1, Object[].class, arity);
 			};
 		} catch (Throwable ignored) {
 			return switch (arity) {
@@ -1981,12 +1991,18 @@ public class JSLinker {
 		try {
 			Class<?> clazz = func.getClass();
 			return switch (arity) {
-				case 0 -> LOOKUP.findVirtual(clazz, "call0Double", MethodType.methodType(double.class, JSContext.class, Object.class)).bindTo(func).bindTo(cx);
-				case 1 -> LOOKUP.findVirtual(clazz, "call1Double", MethodType.methodType(double.class, JSContext.class, Object.class, double.class)).bindTo(func).bindTo(cx);
-				case 2 -> LOOKUP.findVirtual(clazz, "call2Double", MethodType.methodType(double.class, JSContext.class, Object.class, double.class, double.class)).bindTo(func).bindTo(cx);
-				case 3 -> LOOKUP.findVirtual(clazz, "call3Double", MethodType.methodType(double.class, JSContext.class, Object.class, double.class, double.class, double.class)).bindTo(func).bindTo(cx);
-				case 4 -> LOOKUP.findVirtual(clazz, "call4Double", MethodType.methodType(double.class, JSContext.class, Object.class, double.class, double.class, double.class, double.class)).bindTo(func).bindTo(cx);
-				default -> MethodHandles.filterReturnValue(LOOKUP.findVirtual(clazz, "call", MethodType.methodType(Object.class, JSContext.class, Object.class, Object[].class)).bindTo(func).bindTo(cx).asCollector(1, Object[].class, arity), MH_TO_DOUBLE);
+				case 0 ->
+				 LOOKUP.findVirtual(clazz, "call0Double", MethodType.methodType(double.class, JSContext.class, Object.class)).bindTo(func).bindTo(cx);
+				case 1 ->
+				 LOOKUP.findVirtual(clazz, "call1Double", MethodType.methodType(double.class, JSContext.class, Object.class, double.class)).bindTo(func).bindTo(cx);
+				case 2 ->
+				 LOOKUP.findVirtual(clazz, "call2Double", MethodType.methodType(double.class, JSContext.class, Object.class, double.class, double.class)).bindTo(func).bindTo(cx);
+				case 3 ->
+				 LOOKUP.findVirtual(clazz, "call3Double", MethodType.methodType(double.class, JSContext.class, Object.class, double.class, double.class, double.class)).bindTo(func).bindTo(cx);
+				case 4 ->
+				 LOOKUP.findVirtual(clazz, "call4Double", MethodType.methodType(double.class, JSContext.class, Object.class, double.class, double.class, double.class, double.class)).bindTo(func).bindTo(cx);
+				default ->
+				 MethodHandles.filterReturnValue(LOOKUP.findVirtual(clazz, "call", MethodType.methodType(Object.class, JSContext.class, Object.class, Object[].class)).bindTo(func).bindTo(cx).asCollector(1, Object[].class, arity), MH_TO_DOUBLE);
 			};
 		} catch (Throwable ignored) {
 			MethodHandle exact = switch (arity) {
@@ -1995,7 +2011,8 @@ public class JSLinker {
 				case 2 -> JSFuncMH.CALL2_DOUBLE.bindTo(func);
 				case 3 -> JSFuncMH.CALL3_DOUBLE.bindTo(func);
 				case 4 -> JSFuncMH.CALL4_DOUBLE.bindTo(func);
-				default -> MethodHandles.filterReturnValue(JSFuncMH.CALL_NULL.bindTo(func).asCollector(1, Object[].class, arity), MH_TO_DOUBLE);
+				default ->
+				 MethodHandles.filterReturnValue(JSFuncMH.CALL_NULL.bindTo(func).asCollector(1, Object[].class, arity), MH_TO_DOUBLE);
 			};
 			return exact.bindTo(cx);
 		}
@@ -2008,7 +2025,7 @@ public class JSLinker {
 		}
 
 		if (target instanceof JSFunction func && "$invoke$".equals(methodName)) {
-			int          arity = args.length;
+			int arity = args.length;
 			MethodHandle directMh = switch (arity) {
 				case 0 -> JSFuncMH.CALL0_UNDEFINED;
 				case 1 -> JSFuncMH.CALL1_UNDEFINED;
@@ -2060,7 +2077,7 @@ public class JSLinker {
 		}
 
 		if (target instanceof JSFunction func && "call".equals(methodName)) {
-			int          arity = args.length;
+			int arity = args.length;
 			MethodHandle directMh = switch (arity) {
 				case 0 -> JSFuncMH.CALL0_UNDEFINED;
 				case 1 -> JSFuncMH.CALL0_NULL;
@@ -2184,7 +2201,7 @@ public class JSLinker {
 						}
 					}
 				} else if (/* ownOffset >= 0 &&  */(jsObj.shape.getSlotType(ownOffset) & JSShape.FLAG_ACCESSOR) == 0 && site.getChainDepth() < 3) {
-					int          arity = args.length;
+					int arity = args.length;
 					MethodHandle callMh = switch (arity) {
 						case 0 -> MethodHandles.insertArguments(MH_CALL_OWN_METHOD0, 0, ownOffset);
 						case 1 -> MethodHandles.insertArguments(MH_CALL_OWN_METHOD1, 0, ownOffset);
@@ -2462,9 +2479,9 @@ public class JSLinker {
 	}
 
 	public static JSPromise startAsync(JSContext cx, AsyncAction action) throws Throwable {
-		JSPromise                                    returnPromise      = new JSPromise(cx);
-		java.util.concurrent.CompletableFuture<Void> firstSuspendOrDone = new java.util.concurrent.CompletableFuture<>();
-		AsyncExecutionState                          state              = new AsyncExecutionState(cx, returnPromise, firstSuspendOrDone);
+		JSPromise               returnPromise      = new JSPromise(cx);
+		CompletableFuture<Void> firstSuspendOrDone = new CompletableFuture<>();
+		AsyncExecutionState     state              = new AsyncExecutionState(cx, returnPromise, firstSuspendOrDone);
 
 		Thread.ofVirtual().name("MagicJS-Async").start(() -> {
 			JSContext.CURRENT.set(cx);
@@ -2488,9 +2505,9 @@ public class JSLinker {
 
 	public static JSPromise runAsync(AsyncJSFunction target, JSContext cx, Object thisObj, Object[] args)
 	 throws Throwable {
-		JSPromise                                    returnPromise      = new JSPromise(cx);
-		java.util.concurrent.CompletableFuture<Void> firstSuspendOrDone = new java.util.concurrent.CompletableFuture<>();
-		AsyncExecutionState                          state              = new AsyncExecutionState(cx, returnPromise, firstSuspendOrDone);
+		JSPromise               returnPromise      = new JSPromise(cx);
+		CompletableFuture<Void> firstSuspendOrDone = new CompletableFuture<>();
+		AsyncExecutionState     state              = new AsyncExecutionState(cx, returnPromise, firstSuspendOrDone);
 
 		Thread.ofVirtual().name("MagicJS-Async").start(() -> {
 			JSContext.CURRENT.set(cx);
@@ -2692,7 +2709,7 @@ public class JSLinker {
 
 				if (STRATEGY != InvocationStrategy.SPREADER) {
 					try {
-						MagicJIT.MagicConstructorInvoker ctorInvoker = MagicJIT.getConstructorInvoker(clazz, targetCtor);
+						var ctorInvoker = MagicJIT.getConstructorInvoker(clazz, targetCtor);
 						if (ctorInvoker != null) {
 							switch (arity) {
 								case 0:
@@ -2764,7 +2781,7 @@ public class JSLinker {
 			}
 
 			JSObject newObj = (cachedProto != null) ? new JSObject(cachedProto.getOrCreateInstanceInitShape(), cachedProto) : new JSObject();
-			Object   res    = switch (arity) {
+			Object res = switch (arity) {
 				case 0 -> func.call0(null, newObj);
 				case 1 -> func.call1(null, newObj, args[0]);
 				case 2 -> func.call2(null, newObj, args[0], args[1]);
@@ -3117,7 +3134,7 @@ public class JSLinker {
 				MethodHandle test = MH_IS_EXACT_CLASS.bindTo(target.getClass());
 				site.installGuardOrSwitchMegamorphic(test, MH_ARRAY_LENGTH_INT.asType(site.type()));
 			} catch (Throwable ignored) { }
-			return java.lang.reflect.Array.getLength(target);
+			return Array.getLength(target);
 		}
 		boolean  isStatic = false;
 		Class<?> targetClass;
@@ -3575,7 +3592,7 @@ public class JSLinker {
 		return JSJavaInterop.invokeJavaMethod(target, methodName, args);
 	}
 
-	public static final ThreadLocal<JSObject> CURRENT_SUPER_PROTO      = JSJavaInterop.CURRENT_SUPER_PROTO;
+	public static final  ThreadLocal<JSObject> CURRENT_SUPER_PROTO      = JSJavaInterop.CURRENT_SUPER_PROTO;
 	private static final ThreadLocal<JSObject> CURRENT_SUPER_CTOR_PROTO = new ThreadLocal<>();
 
 	public static Object callSuperConstructor(JSContext cx, Object thisObj, Object[] args) throws Throwable {

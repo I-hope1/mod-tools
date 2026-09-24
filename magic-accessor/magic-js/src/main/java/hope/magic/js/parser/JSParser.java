@@ -3,6 +3,7 @@ package hope.magic.js.parser;
 import hope.magic.js.ast.Node;
 import hope.magic.js.ast.Token;
 import hope.magic.js.ast.TokenType;
+import hope.magic.js.runtime.JSUndefined;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -890,7 +891,7 @@ public class JSParser {
 			return new Node.LiteralExpr(null, previous().line, previous().column);
 		}
 		if (match(TokenType.UNDEFINED)) {
-			return new Node.LiteralExpr(hope.magic.js.runtime.JSUndefined.INSTANCE, previous().line, previous().column);
+			return new Node.LiteralExpr(JSUndefined.INSTANCE, previous().line, previous().column);
 		}
 		if (match(TokenType.THIS)) {
 			return new Node.IdentifierExpr("this", previous().line, previous().column);
@@ -1219,7 +1220,7 @@ public class JSParser {
 					if (match(TokenType.ASSIGN)) {
 						Node defaultVal = parseAssignment();
 						Node paramRef = new Node.IdentifierExpr(p.text, contextToken.line, contextToken.column);
-						Node cond = new Node.BinaryExpr(paramRef, TokenType.EQ_EQ, new Node.LiteralExpr(hope.magic.js.runtime.JSUndefined.INSTANCE, contextToken.line, contextToken.column), contextToken.line, contextToken.column);
+						Node cond = new Node.BinaryExpr(paramRef, TokenType.EQ_EQ, new Node.LiteralExpr(JSUndefined.INSTANCE, contextToken.line, contextToken.column), contextToken.line, contextToken.column);
 						result.unpackStmts.add(new Node.IfStmt(cond, new Node.ExprStmt(new Node.AssignExpr(paramRef, TokenType.ASSIGN, defaultVal, contextToken.line, contextToken.column), contextToken.line, contextToken.column), null, contextToken.line, contextToken.column));
 					}
 				}
@@ -1399,7 +1400,7 @@ public class JSParser {
 
 				Node valExpr;
 				if (entry.defaultValue != null) {
-					Node undef = new Node.LiteralExpr(hope.magic.js.runtime.JSUndefined.INSTANCE, line, column);
+					Node undef = new Node.LiteralExpr(JSUndefined.INSTANCE, line, column);
 					Node cond = new Node.BinaryExpr(propAccess, TokenType.NOT_EQ_EQ, undef, line, column);
 					valExpr = new Node.TernaryExpr(cond, propAccess, entry.defaultValue, line, column);
 				} else {
@@ -1483,7 +1484,7 @@ public class JSParser {
 				Node idxAccess = new Node.IndexAccessExpr(new Node.IdentifierExpr(tmpVar, line, column), new Node.LiteralExpr(i, line, column), line, column);
 				Node valExpr;
 				if (elem.defaultValue != null) {
-					Node undef = new Node.LiteralExpr(hope.magic.js.runtime.JSUndefined.INSTANCE, line, column);
+					Node undef = new Node.LiteralExpr(JSUndefined.INSTANCE, line, column);
 					Node cond = new Node.BinaryExpr(idxAccess, TokenType.NOT_EQ_EQ, undef, line, column);
 					valExpr = new Node.TernaryExpr(cond, idxAccess, elem.defaultValue, line, column);
 				} else {

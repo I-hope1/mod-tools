@@ -1,22 +1,12 @@
 package hope.magic.js.test;
 
-import hope.magic.js.runtime.ChainedCallSite;
-import hope.magic.js.runtime.JSContext;
-import hope.magic.js.runtime.JSFunction;
-import hope.magic.js.runtime.JSUndefined;
-import hope.magic.js.runtime.JavaClassExtender;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
+import hope.magic.js.runtime.*;
+import hope.magic.runtime.*;
+import org.junit.jupiter.api.*;
 
-import java.lang.invoke.CallSite;
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
+import java.lang.invoke.*;
 import java.lang.reflect.Field;
-import hope.magic.js.runtime.JSLinker;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
  * 验证 JS 调用 Java 架构中已识别的三大类缺陷的复现测试：
@@ -296,7 +286,7 @@ public class JavaInteropBugVerificationTest {
 				try {
 					f.setAccessible(true);
 					Object val = f.get(mh);
-					if (val instanceof hope.magic.js.runtime.MagicJIT.MagicInvoker || val instanceof hope.magic.js.runtime.MagicJIT.MagicConstructorInvoker) {
+					if (val instanceof MagicInvoker || val instanceof MagicConstructorInvoker) {
 						return val;
 					}
 				} catch (Throwable ignored) {}

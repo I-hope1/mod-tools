@@ -3,15 +3,19 @@ package hope.magic.js.runtime;
 import hope.magic.js.ast.*;
 import hope.magic.js.compiler.JSCompiler;
 import hope.magic.js.module.*;
+import hope.magic.js.module.JSModuleManager.RequireFunction;
 import hope.magic.js.parser.*;
 
+import java.lang.reflect.Array;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.stream.BaseStream;
 
 public class JSContext {
 	public static final     int                                INITIAL_GLOBAL_SLOTS_CAPACITY = 64;
@@ -651,10 +655,10 @@ public class JSContext {
 				Object arg = args[0];
 				if (arg instanceof JSObject) return arg;
 				if (arg.getClass().isArray()) {
-					int     len   = java.lang.reflect.Array.getLength(arg);
+					int     len   = Array.getLength(arg);
 					JSArray jsArr = new JSArray(len);
 					for (int i = 0; i < len; i++) {
-						jsArr.push(java.lang.reflect.Array.get(arg, i));
+						jsArr.push(Array.get(arg, i));
 					}
 					return jsArr;
 				}
@@ -678,15 +682,15 @@ public class JSContext {
 					jsArr.push(entry.getValue());
 					return jsArr;
 				}
-				if (arg instanceof java.util.stream.BaseStream<?, ?> stream) {
-					JSArray               jsArr = new JSArray();
-					java.util.Iterator<?> it    = stream.iterator();
+				if (arg instanceof BaseStream<?, ?> stream) {
+					JSArray jsArr = new JSArray();
+					var     it    = stream.iterator();
 					while (it.hasNext()) {
 						jsArr.push(it.next());
 					}
 					return jsArr;
 				}
-				if (arg instanceof java.util.Enumeration<?> en) {
+				if (arg instanceof Enumeration<?> en) {
 					JSArray jsArr = new JSArray();
 					while (en.hasMoreElements()) {
 						jsArr.push(en.nextElement());
@@ -708,28 +712,28 @@ public class JSContext {
 					}
 				}
 				if (!targetClass.isArray()) {
-					targetClass = java.lang.reflect.Array.newInstance(targetClass, 0).getClass();
+					targetClass = Array.newInstance(targetClass, 0).getClass();
 				}
 				Class<?> comp = targetClass.getComponentType();
 				if (jsVal instanceof JSArray jsArr) {
 					int    len = (int) jsArr.length();
-					Object arr = java.lang.reflect.Array.newInstance(comp, len);
+					Object arr = Array.newInstance(comp, len);
 					for (int i = 0; i < len; i++) {
-						java.lang.reflect.Array.set(arr, i, JSOps.castValue(jsArr.getElement(i), comp));
+						Array.set(arr, i, JSOps.castValue(jsArr.getElement(i), comp));
 					}
 					return arr;
 				}
 				if (jsVal instanceof Collection<?> col) {
 					int    len = col.size();
-					Object arr = java.lang.reflect.Array.newInstance(comp, len);
+					Object arr = Array.newInstance(comp, len);
 					int    idx = 0;
 					for (Object item : col) {
-						java.lang.reflect.Array.set(arr, idx++, JSOps.castValue(item, comp));
+						Array.set(arr, idx++, JSOps.castValue(item, comp));
 					}
 					return arr;
 				}
-				Object arr = java.lang.reflect.Array.newInstance(comp, 1);
-				java.lang.reflect.Array.set(arr, 0, JSOps.castValue(jsVal, comp));
+				Object arr = Array.newInstance(comp, 1);
+				Array.set(arr, 0, JSOps.castValue(jsVal, comp));
 				return arr;
 			});
 
@@ -788,7 +792,7 @@ public class JSContext {
 					baseName = baseName.substring(0, baseName.length() - 2).trim();
 				}
 				Class<?> elemClass = resolveJavaType(baseName);
-				return java.lang.reflect.Array.newInstance(elemClass, new int[dims]).getClass();
+				return Array.newInstance(elemClass, new int[dims]).getClass();
 			}
 
 			// 3. 类名查找 (支持上下文 ClassLoader 与内部类 Outer.Inner -> Outer$Inner 降级)
@@ -3056,7 +3060,7 @@ public class JSContext {
 		@Override
 		public String toString() {
 			if (Double.isNaN(time)) return "Invalid Date";
-			return new java.util.Date((long) time).toString();
+			return new Date((long) time).toString();
 		}
 	}
 
@@ -3477,7 +3481,7 @@ public class JSContext {
 					time = (double) cal.getTimeInMillis();
 				}
 				if (thisObj == null || thisObj == JSUndefined.INSTANCE || thisObj instanceof JSContext.JSGlobalThis) {
-					return new java.util.Date((long) time).toString();
+					return new Date((long) time).toString();
 				}
 				if (thisObj instanceof JSDate d) {
 					d.setTime(time);
@@ -3494,7 +3498,7 @@ public class JSContext {
 					return (double) Instant.parse(s).toEpochMilli();
 				} catch (Exception ignored) {
 					try {
-						return (double) java.util.Date.parse(s);
+						return (double) Date.parse(s);
 					} catch (Exception e) {
 						return Double.NaN;
 					}
@@ -3647,9 +3651,9 @@ public class JSContext {
 				if (args.length == 0 || !(args[0] instanceof JSFunction executor)) {
 					throw makeTypeError("Promise resolver undefined is not a function");
 				}
-				JSContext                                 current = cx != null ? cx : JSContext.current();
-				JSPromise                                 promise = (thisObj instanceof JSPromise p && p.getPrototype() == proto) ? p : new JSPromise(current, proto);
-				java.util.concurrent.atomic.AtomicBoolean called  = new java.util.concurrent.atomic.AtomicBoolean(false);
+				JSContext     current = cx != null ? cx : JSContext.current();
+				JSPromise     promise = (thisObj instanceof JSPromise p && p.getPrototype() == proto) ? p : new JSPromise(current, proto);
+				AtomicBoolean called  = new AtomicBoolean(false);
 				JSFunction resolveFn = (c, self, a) -> {
 					if (called.compareAndSet(false, true)) {
 						promise.resolve(a.length > 0 ? a[0] : JSUndefined.INSTANCE);
@@ -4265,11 +4269,11 @@ public class JSContext {
 		JSContext old = CURRENT.get();
 		CURRENT.set(this);
 		try {
-			JSFunction                    moduleFunc = JSCompiler.compileModule(code, "eval_module.js");
-			JSObject                      exports    = new JSObject();
-			hope.magic.js.module.JSModule module     = new hope.magic.js.module.JSModule("eval_module", "eval_module.js", "", null);
+			JSFunction moduleFunc = JSCompiler.compileModule(code, "eval_module.js");
+			JSObject   exports    = new JSObject();
+			JSModule   module     = new JSModule("eval_module", "eval_module.js", "", null);
 			module.setExports(exports);
-			hope.magic.js.module.JSModuleManager.RequireFunction localRequire = getModuleManager().createRequireFunction(module);
+			RequireFunction localRequire = getModuleManager().createRequireFunction(module);
 			Object[] args = new Object[]{
 			 exports,
 			 localRequire,

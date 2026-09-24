@@ -1026,7 +1026,7 @@ public class JSCompiler {
 		forEachChildNode(node, child -> collectReferencedIdentifiers(child, out));
 	}
 
-	private static void forEachChildNode(Node node, java.util.function.Consumer<Node> action) {
+	private static void forEachChildNode(Node node, Consumer<Node> action) {
 		if (node == null) return;
 		if (node instanceof Node.Program prog) {
 			for (Node s : prog.body) action.accept(s);
@@ -1168,7 +1168,7 @@ public class JSCompiler {
 		}
 	}
 
-	private static void forEachChildStmt(Node node, java.util.function.Consumer<Node> action) {
+	private static void forEachChildStmt(Node node, Consumer<Node> action) {
 		if (node == null) return;
 		if (node instanceof Node.Program prog) {
 			for (Node s : prog.body) action.accept(s);

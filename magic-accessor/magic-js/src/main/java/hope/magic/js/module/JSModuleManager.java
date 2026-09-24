@@ -5,6 +5,8 @@ import hope.magic.js.runtime.JSContext;
 import hope.magic.js.runtime.JSFunction;
 import hope.magic.js.runtime.JSObject;
 import hope.magic.js.runtime.JSOps;
+import hope.magic.js.runtime.JSPromise;
+import hope.magic.js.runtime.JSSymbol;
 
 import java.util.Map;
 import java.util.Objects;
@@ -156,17 +158,17 @@ public class JSModuleManager {
 	/**
 	 * 异步加载模块并返回 ES 模块命名空间对象的 Promise (支持 dynamic import())。
 	 */
-	public hope.magic.js.runtime.JSPromise importDynamic(String specifier, JSModule parentModule) {
-		hope.magic.js.runtime.JSPromise promise = new hope.magic.js.runtime.JSPromise(cx);
-		hope.magic.js.runtime.JSPromise.enqueueMicrotask(cx, () -> {
+	public JSPromise importDynamic(String specifier, JSModule parentModule) {
+		JSPromise promise = new JSPromise(cx);
+		JSPromise.enqueueMicrotask(cx, () -> {
 			try {
 				JSModule loaded = load(specifier, parentModule);
 				Object exports = loaded.getExports();
 				JSObject ns = new JSObject();
-				ns.put(hope.magic.js.runtime.JSSymbol.TO_STRING_TAG, "Module");
+				ns.put(JSSymbol.TO_STRING_TAG, "Module");
 				if (exports instanceof JSObject expObj) {
 					for (String key : expObj.keys()) {
-						if (!hope.magic.js.runtime.JSSymbol.isSymbolKey(key)) {
+						if (!JSSymbol.isSymbolKey(key)) {
 							ns.put(key, expObj.get(key));
 						}
 					}

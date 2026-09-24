@@ -22,9 +22,9 @@ public class JSJavaInterop {
 	static {
 		try {
 			MH_INVOKE_INTERFACE_1 = LOOKUP.findStatic(JSJavaInterop.class, "invokeInterfaceAdapter1", MethodType.methodType(Object.class, Object.class, Object.class));
-			MH_NEW_ARRAY_0        = LOOKUP.findStatic(JSJavaInterop.class, "newArrayInstance0", MethodType.methodType(Object.class, Class.class));
-			MH_NEW_ARRAY_1        = LOOKUP.findStatic(JSJavaInterop.class, "newArrayInstance1", MethodType.methodType(Object.class, Class.class, Object.class));
-			MH_NEW_ARRAY_N        = LOOKUP.findStatic(JSJavaInterop.class, "newArrayInstanceN", MethodType.methodType(Object.class, Class.class, Object[].class));
+			MH_NEW_ARRAY_0 = LOOKUP.findStatic(JSJavaInterop.class, "newArrayInstance0", MethodType.methodType(Object.class, Class.class));
+			MH_NEW_ARRAY_1 = LOOKUP.findStatic(JSJavaInterop.class, "newArrayInstance1", MethodType.methodType(Object.class, Class.class, Object.class));
+			MH_NEW_ARRAY_N = LOOKUP.findStatic(JSJavaInterop.class, "newArrayInstanceN", MethodType.methodType(Object.class, Class.class, Object[].class));
 		} catch (ReflectiveOperationException e) {
 			throw new ExceptionInInitializerError(e);
 		}
@@ -331,7 +331,7 @@ public class JSJavaInterop {
 	}
 
 	public static Object invokeMatchedMethod(Object target, Method targetMethod, Object[] args, Class<?> clazz,
-	                                          String methodName) throws Throwable {
+	                                         String methodName) throws Throwable {
 		try {
 			targetMethod.setAccessible(true);
 		} catch (Throwable ignored) {
@@ -345,8 +345,8 @@ public class JSJavaInterop {
 			return isVoid ? JSUndefined.INSTANCE : res;
 		}
 
-		int                   arity   = args.length;
-		MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(clazz, targetMethod);
+		int arity   = args.length;
+		var invoker = MagicJIT.getMethodInvoker(clazz, targetMethod);
 		if (invoker != null) {
 			Object res = switch (arity) {
 				case 0 -> invoker.invoke0(target);

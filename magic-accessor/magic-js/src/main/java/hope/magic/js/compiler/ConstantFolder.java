@@ -3,6 +3,7 @@ package hope.magic.js.compiler;
 import hope.magic.js.ast.*;
 import hope.magic.js.ast.Node.BlockStmt;
 import hope.magic.js.runtime.JSOps;
+import hope.magic.js.runtime.JSUndefined;
 
 import java.util.*;
 
@@ -470,7 +471,7 @@ public class ConstantFolder {
 		}
 
 		if (op == TokenType.EQ_EQ || op == TokenType.NOT_EQ_EQ || op == TokenType.EQ || op == TokenType.NOT_EQ) {
-			if (lVal == null || lVal instanceof hope.magic.js.runtime.JSUndefined || rVal == null || rVal instanceof hope.magic.js.runtime.JSUndefined) {
+			if (lVal == null || lVal instanceof JSUndefined || rVal == null || rVal instanceof JSUndefined) {
 				Object  eqRes = (op == TokenType.EQ_EQ || op == TokenType.NOT_EQ_EQ) ? JSOps.strictEq(lVal, rVal) : JSOps.eq(lVal, rVal);
 				boolean res   = (Boolean) eqRes;
 				if (op == TokenType.NOT_EQ || op == TokenType.NOT_EQ_EQ) res = !res;

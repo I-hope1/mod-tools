@@ -4,6 +4,7 @@ import hope.magic.runtime.Magic;
 import org.objectweb.asm.*;
 
 import java.io.*;
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -28,13 +29,13 @@ public final class JavaClassExtender {
 	public static final  String     IN_JSOps = "hope/magic/js/runtime/JSOps";
 
 	public static class ClassInfo {
-		public final Class<?>                      targetClass;
-		public final Class<?>                      subClass;
-		public final Map<String, Long>             methodMasks; // 方法名 -> 掩码位
-		public final List<Constructor<?>>          constructors; // 原父类可见构造器列表
-		public final List<Constructor<?>>          subConstructors; // 子类构造器列表
-		public final Constructor<?>                noArgSubConstructor; // 快速无参构造器 (JSObject, long)
-		public final java.lang.invoke.MethodHandle noArgSubMh; // 快速无参构造器 MethodHandle
+		public final Class<?>             targetClass;
+		public final Class<?>             subClass;
+		public final Map<String, Long>    methodMasks; // 方法名 -> 掩码位
+		public final List<Constructor<?>> constructors; // 原父类可见构造器列表
+		public final List<Constructor<?>> subConstructors; // 子类构造器列表
+		public final Constructor<?>       noArgSubConstructor; // 快速无参构造器 (JSObject, long)
+		public final MethodHandle         noArgSubMh; // 快速无参构造器 MethodHandle
 
 		public ClassInfo(Class<?> targetClass, Class<?> subClass,
 		                 Map<String, Long> methodMasks, List<Constructor<?>> constructors,
@@ -44,8 +45,8 @@ public final class JavaClassExtender {
 			this.methodMasks = methodMasks;
 			this.constructors = constructors;
 			this.subConstructors = subConstructors;
-			Constructor<?>                noArg = null;
-			java.lang.invoke.MethodHandle mh    = null;
+			Constructor<?> noArg = null;
+			MethodHandle   mh    = null;
 			for (Constructor<?> c : subConstructors) {
 				Class<?>[] pTypes = c.getParameterTypes();
 				if ((pTypes.length == 3 && pTypes[0] == JSContext.class && pTypes[1] == JSObject.class && pTypes[2] == long.class) ||
@@ -255,9 +256,9 @@ public final class JavaClassExtender {
 		}
 
 		JSFunctionObject ctor = new JSFunctionObject((callCx, thisObj, args) -> {
-			JSContext useCx = callCx != null ? callCx : (cx != null ? cx : JSContext.current());
-			Object[] callArgs = args != null ? args : new Object[0];
-			Object   instance;
+			JSContext useCx    = callCx != null ? callCx : (cx != null ? cx : JSContext.current());
+			Object[]  callArgs = args != null ? args : new Object[0];
+			Object    instance;
 			if (thisObj instanceof JSBridgedObject existing) {
 				instance = existing;
 			} else {
@@ -383,7 +384,9 @@ public final class JavaClassExtender {
 		// 1. 精确匹配参数个数 (优先匹配带 JSContext 的构造器)
 		for (Constructor<?> c : info.subConstructors) {
 			Class<?>[] pTypes = c.getParameterTypes();
-			if (pTypes.length < 3 || pTypes[0] != JSContext.class || pTypes[1] != JSObject.class || pTypes[2] != long.class) continue;
+			if (pTypes.length < 3 || pTypes[0] != JSContext.class || pTypes[1] != JSObject.class || pTypes[2] != long.class) {
+				continue;
+			}
 
 			int superArgCount = pTypes.length - 3;
 			if (superArgCount == args.length) {
@@ -416,7 +419,9 @@ public final class JavaClassExtender {
 		if (bestCtor == null && args.length > 0) {
 			for (Constructor<?> c : info.subConstructors) {
 				Class<?>[] pTypes = c.getParameterTypes();
-				if (pTypes.length < 3 || pTypes[0] != JSContext.class || pTypes[1] != JSObject.class || pTypes[2] != long.class) continue;
+				if (pTypes.length < 3 || pTypes[0] != JSContext.class || pTypes[1] != JSObject.class || pTypes[2] != long.class) {
+					continue;
+				}
 
 				int superArgCount = pTypes.length - 3;
 				if (superArgCount > 0 && superArgCount < args.length) {
@@ -466,7 +471,7 @@ public final class JavaClassExtender {
 
 				int superArgCount = pTypes.length - 2;
 				if (superArgCount == args.length || (superArgCount > 0 && superArgCount < args.length)) {
-					int count = Math.min(superArgCount, args.length);
+					int      count    = Math.min(superArgCount, args.length);
 					boolean  match    = true;
 					Object[] tempArgs = new Object[pTypes.length];
 					tempArgs[0] = jsObj;
@@ -756,18 +761,19 @@ public final class JavaClassExtender {
 		lmv.visitEnd();
 	}
 
-	private static void generateOverriddenMethod(ClassWriter cw, String subInternal, String superInternal, Method m, long maskShift, boolean isInterface) {
-		String name = m.getName();
-		String desc = Type.getMethodDescriptor(m);
+	private static void generateOverriddenMethod(ClassWriter cw, String subInternal, String superInternal, Method m,
+	                                             long maskShift, boolean isInterface) {
+		String     name       = m.getName();
+		String     desc       = Type.getMethodDescriptor(m);
 		Class<?>[] paramTypes = m.getParameterTypes();
-		Class<?> retType = m.getReturnType();
-		boolean isAbstract = Modifier.isAbstract(m.getModifiers());
+		Class<?>   retType    = m.getReturnType();
+		boolean    isAbstract = Modifier.isAbstract(m.getModifiers());
 
 		MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, name, desc, null, null);
 		mv.visitCode();
 
 		Label fallbackLabel = new Label();
-		Label superLabel = new Label();
+		Label superLabel    = new Label();
 
 		// 1. 掩码快速短路 (若非抽象方法)
 		if (!isAbstract) {

@@ -13,6 +13,7 @@ import org.openjdk.nashorn.api.scripting.NashornScriptEngineFactory;
 
 import javax.script.*;
 import java.util.*;
+import java.util.function.IntBinaryOperator;
 
 public class MagicJSColdStartBenchmark {
 
@@ -24,7 +25,7 @@ public class MagicJSColdStartBenchmark {
 			return a * b;
 		}
 
-		public int computeBinary(java.util.function.IntBinaryOperator op, int a, int b) {
+		public int computeBinary(IntBinaryOperator op, int a, int b) {
 			return op.applyAsInt(a, b);
 		}
 	}

@@ -97,7 +97,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 	// 全模块现代模式唯一收敛类 MagicBridgeData ClassWriter 与原生 MagicBridge ClassWriter
 	private ClassWriter bridgeDataWriter;
 	private ClassWriter bridgeWriter;
-	private final java.util.List<Consumer<MethodVisitor>> bridgeDataClinitInits = new ArrayList<>();
+	private final ArrayList<Consumer<MethodVisitor>> bridgeDataClinitInits = new ArrayList<>();
 
 	// MagicBridge MemberName 记录，用于在 <clinit> 中批量极速解析并去重外部类加载
 	public record BridgeMemberNameEntry(
@@ -107,7 +107,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 		String methodName,
 		String methodDesc
 	) {}
-	private final java.util.List<BridgeMemberNameEntry> bridgeMemberNameEntries = new ArrayList<>();
+	private final ArrayList<BridgeMemberNameEntry> bridgeMemberNameEntries = new ArrayList<>();
 
 	// 字段 / MemberName / MethodHandle 静态常量字段及生成方法去重映射表
 	public record FieldOffsetRecord(String offsetFieldName, String baseFieldName) {}
@@ -139,7 +139,7 @@ public class AccessorProcessor extends BaseAccessorProc {
 	// 仅用于 MAGIC_ACCESSOR 经典模式（需独立延迟加载，避免干扰现代模式的零配置类校验）
 	private final Map<Symbol, ClassWriter> legacyClassWriterMap = new LinkedHashMap<>();
 	private final Map<ClassWriter, String> legacyClassNamesMap = new LinkedHashMap<>();
-	private final Map<ClassWriter, java.util.List<Consumer<MethodVisitor>>> legacyClinitInits = new LinkedHashMap<>();
+	private final Map<ClassWriter, ArrayList<Consumer<MethodVisitor>>> legacyClinitInits = new LinkedHashMap<>();
 
 	@Override
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
@@ -171,9 +171,9 @@ public class AccessorProcessor extends BaseAccessorProc {
 		}
 
 		// 写入 legacy 模式类（仅当存在 MAGIC_ACCESSOR 时）
-		for (Map.Entry<ClassWriter, java.util.List<Consumer<MethodVisitor>>> entry : legacyClinitInits.entrySet()) {
+		for (var entry : legacyClinitInits.entrySet()) {
 			ClassWriter cw = entry.getKey();
-			java.util.List<Consumer<MethodVisitor>> inits = entry.getValue();
+			var inits = entry.getValue();
 			if (!inits.isEmpty()) {
 				MethodVisitor mv = cw.visitMethod(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
 				mv.visitCode();

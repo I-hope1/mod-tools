@@ -1,12 +1,9 @@
 package hope.magic.js.runtime;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 @SuppressWarnings("unused")
 public class JSOps {
@@ -785,7 +782,7 @@ public class JSOps {
 
 				@Override
 				public Object next() {
-					if (index >= len) throw new java.util.NoSuchElementException();
+					if (index >= len) throw new NoSuchElementException();
 					int    cp  = Character.codePointAt(s, index);
 					String res = new String(Character.toChars(cp));
 					index += Character.charCount(cp);
@@ -802,29 +799,29 @@ public class JSOps {
 			return iterator;
 		}
 		if (target instanceof Object[] arr) {
-			return java.util.Arrays.asList(arr).iterator();
+			return Arrays.asList(arr).iterator();
 		}
 		if (target.getClass().isArray()) {
 			int                    len  = Array.getLength(target);
-			java.util.List<Object> list = new ArrayList<>(len);
+			List<Object> list = new ArrayList<>(len);
 			for (int i = 0; i < len; i++) {
 				list.add(Array.get(target, i));
 			}
 			return list.iterator();
 		}
-		if (target instanceof java.util.Map<?, ?> map) {
+		if (target instanceof Map<?, ?> map) {
 			return map.entrySet().iterator();
 		}
-		if (target instanceof java.util.Map.Entry<?, ?> entry) {
-			return java.util.List.of(entry.getKey(), entry.getValue()).iterator();
+		if (target instanceof Map.Entry<?, ?> entry) {
+			return List.of(entry.getKey(), entry.getValue()).iterator();
 		}
-		if (target instanceof java.util.stream.BaseStream<?, ?> stream) {
+		if (target instanceof stream.BaseStream<?, ?> stream) {
 			return stream.iterator();
 		}
-		if (target instanceof java.util.Enumeration<?> en) {
+		if (target instanceof Enumeration<?> en) {
 			return en.asIterator();
 		}
-		if (target instanceof java.util.Optional<?> opt) {
+		if (target instanceof Optional<?> opt) {
 			return opt.stream().iterator();
 		}
 
@@ -871,7 +868,7 @@ public class JSOps {
 		@Override
 		public Object next() {
 			if (!hasNext()) {
-				throw new java.util.NoSuchElementException();
+				throw new NoSuchElementException();
 			}
 			hasCached = false;
 			return nextValue;
@@ -944,7 +941,7 @@ public class JSOps {
 		if (!(target instanceof JSObject jsObj)) {
 			return new JSObject();
 		}
-		java.util.Set<String> excluded = new java.util.HashSet<>();
+		Set<String> excluded = new HashSet<>();
 		if (excludedCsv != null && !excludedCsv.isEmpty()) {
 			for (String k : excludedCsv.split(",")) {
 				excluded.add(k.trim());
@@ -966,7 +963,7 @@ public class JSOps {
 		if (target instanceof JSObject jsObj) {
 			return jsObj.keys().iterator();
 		}
-		if (target instanceof java.util.Map<?, ?> map) {
+		if (target instanceof Map<?, ?> map) {
 			List<String> keys = new ArrayList<>();
 			for (Object k : map.keySet()) keys.add(String.valueOf(k));
 			return keys.iterator();
@@ -993,7 +990,7 @@ public class JSOps {
 		if (val instanceof CharSequence) return "string";
 		if (val instanceof JSSymbol) return "symbol";
 		if (val instanceof JSFunction) return "function";
-		if (val instanceof java.lang.reflect.Executable || val instanceof java.lang.invoke.MethodHandle) return "function";
+		if (val instanceof Executable || val instanceof MethodHandle) return "function";
 		return "object";
 	}
 
@@ -1012,7 +1009,7 @@ public class JSOps {
 			obj.delete(JSArray.toPropertyKey(key));
 			return true;
 		}
-		if (target instanceof java.util.Map<?, ?> map) {
+		if (target instanceof Map<?, ?> map) {
 			map.remove(key);
 			return true;
 		}

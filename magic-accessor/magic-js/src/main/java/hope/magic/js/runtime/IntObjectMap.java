@@ -295,8 +295,8 @@ public final class IntObjectMap<V> {
 		}
 	}
 	/** 专门用于从列表或其他集合批量导入数据，并提取复合哈希 Key */
-	public <T> void putAll(Collection<T> items, java.util.function.ToIntFunction<T> keyExtractor,
-	                       java.util.function.Function<T, V> valueMapper) {
+	public <T> void putAll(Collection<T> items, ToIntFunction<T> keyExtractor,
+	                       Function<T, V> valueMapper) {
 		if (items == null || items.isEmpty()) return;
 
 		// 预扩容检查

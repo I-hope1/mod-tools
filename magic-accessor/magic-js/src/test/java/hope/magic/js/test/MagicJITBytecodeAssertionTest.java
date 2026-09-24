@@ -72,7 +72,7 @@ public class MagicJITBytecodeAssertionTest {
 	@Test
 	public void testMethodInvokerZeroDynamicClassesAndFastExecution() throws Throwable {
 		// 1. 创建方法调用器 (无论指定 NESTMATE 还是 UNSAFE_AND_METHODHANDLE)
-		MagicJIT.MagicInvoker invoker = MagicJIT.createMethodInvoker(
+		var invoker = MagicJIT.createMethodInvoker(
 			SampleTarget.class, "privateMultiply", 2, false, AccessMode.NESTMATE
 		);
 
@@ -96,7 +96,7 @@ public class MagicJITBytecodeAssertionTest {
 	@Test
 	public void testConstructorInvokerZeroDynamicClassesAndCorrectInstantiation() throws Throwable {
 		// 1. 创建私有构造器调用器
-		MagicJIT.MagicConstructorInvoker ctorInvoker = MagicJIT.createConstructorInvoker(
+		var ctorInvoker = MagicJIT.createConstructorInvoker(
 			SampleTarget.class, 2, AccessMode.NESTMATE
 		);
 
@@ -119,7 +119,7 @@ public class MagicJITBytecodeAssertionTest {
 	@Test
 	public void testLinkToMethodInvokerDirectCall() throws Throwable {
 		// 1. 创建 UNSAFE_AND_LINKTO 模式的方法调用器
-		MagicJIT.MagicInvoker invoker = MagicJIT.createMethodInvoker(
+		var invoker = MagicJIT.createMethodInvoker(
 			SampleTarget.class, "privateMultiply", 2, false, AccessMode.UNSAFE_AND_LINKTO
 		);
 
@@ -148,11 +148,11 @@ public class MagicJITBytecodeAssertionTest {
 	@Test
 	public void testMultiMethodInvocationsWithoutClassGeneration() throws Throwable {
 		// 针对 MultiMethodTarget 的 5 个不同方法
-		MagicJIT.MagicInvoker inv1 = MagicJIT.createMethodInvoker(MultiMethodTarget.class, "m1", 1, false, AccessMode.NESTMATE);
-		MagicJIT.MagicInvoker inv2 = MagicJIT.createMethodInvoker(MultiMethodTarget.class, "m2", 1, false, AccessMode.NESTMATE);
-		MagicJIT.MagicInvoker inv3 = MagicJIT.createMethodInvoker(MultiMethodTarget.class, "m3", 2, false, AccessMode.NESTMATE);
-		MagicJIT.MagicInvoker inv4 = MagicJIT.createMethodInvoker(MultiMethodTarget.class, "m4", 1, false, AccessMode.NESTMATE);
-		MagicJIT.MagicInvoker inv5 = MagicJIT.createMethodInvoker(MultiMethodTarget.class, "m5", 0, false, AccessMode.NESTMATE);
+		var inv1 = MagicJIT.createMethodInvoker(MultiMethodTarget.class, "m1", 1, false, AccessMode.NESTMATE);
+		var inv2 = MagicJIT.createMethodInvoker(MultiMethodTarget.class, "m2", 1, false, AccessMode.NESTMATE);
+		var inv3 = MagicJIT.createMethodInvoker(MultiMethodTarget.class, "m3", 2, false, AccessMode.NESTMATE);
+		var inv4 = MagicJIT.createMethodInvoker(MultiMethodTarget.class, "m4", 1, false, AccessMode.NESTMATE);
+		var inv5 = MagicJIT.createMethodInvoker(MultiMethodTarget.class, "m5", 0, false, AccessMode.NESTMATE);
 
 		Assertions.assertNotNull(inv1);
 		Assertions.assertNotNull(inv2);
@@ -172,8 +172,8 @@ public class MagicJITBytecodeAssertionTest {
 		Assertions.assertEquals(42, inv5.invokeInt0(target));
 
 		// 构造器校验
-		MagicJIT.MagicConstructorInvoker c1 = MagicJIT.createConstructorInvoker(MultiMethodTarget.class, 0, AccessMode.NESTMATE);
-		MagicJIT.MagicConstructorInvoker c2 = MagicJIT.createConstructorInvoker(MultiMethodTarget.class, 1, AccessMode.NESTMATE);
+		var c1 = MagicJIT.createConstructorInvoker(MultiMethodTarget.class, 0, AccessMode.NESTMATE);
+		var c2 = MagicJIT.createConstructorInvoker(MultiMethodTarget.class, 1, AccessMode.NESTMATE);
 
 		Assertions.assertNotNull(c1);
 		Assertions.assertNotNull(c2);
@@ -200,9 +200,9 @@ public class MagicJITBytecodeAssertionTest {
 		PrimitiveTarget target = new PrimitiveTarget();
 
 		// boolean
-		MagicJIT.MagicInvoker b0 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "isTrue", 0, false);
-		MagicJIT.MagicInvoker b1 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "checkPos", 1, false);
-		MagicJIT.MagicInvoker b2 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "equals", 2, false);
+		var b0 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "isTrue", 0, false);
+		var b1 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "checkPos", 1, false);
+		var b2 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "equals", 2, false);
 
 		Assertions.assertTrue(b0.invokeBoolean0(target));
 		Assertions.assertTrue(b1.invokeBoolean1(target, 42));
@@ -211,10 +211,10 @@ public class MagicJITBytecodeAssertionTest {
 		Assertions.assertFalse(b2.invokeBoolean2(target, 10, 20));
 
 		// double
-		MagicJIT.MagicInvoker d0 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "getPi", 0, false);
-		MagicJIT.MagicInvoker d1 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "square", 1, false);
-		MagicJIT.MagicInvoker d2 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "hypot", 2, false);
-		MagicJIT.MagicInvoker d3 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "add3", 3, false);
+		var d0 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "getPi", 0, false);
+		var d1 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "square", 1, false);
+		var d2 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "hypot", 2, false);
+		var d3 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "add3", 3, false);
 
 		Assertions.assertEquals(3.14, d0.invokeDouble0(target), 0.001);
 		Assertions.assertEquals(16.0, d1.invokeDouble1(target, 4.0), 0.001);
@@ -222,16 +222,16 @@ public class MagicJITBytecodeAssertionTest {
 		Assertions.assertEquals(6.6, d3.invokeDouble3(target, 1.1, 2.2, 3.3), 0.001);
 
 		// long
-		MagicJIT.MagicInvoker l0 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "getTimestamp", 0, false);
-		MagicJIT.MagicInvoker l1 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "doubleLong", 1, false);
-		MagicJIT.MagicInvoker l2 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "sumLong2", 2, false);
+		var l0 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "getTimestamp", 0, false);
+		var l1 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "doubleLong", 1, false);
+		var l2 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "sumLong2", 2, false);
 
 		Assertions.assertEquals(1000000000L, l0.invokeLong0(target));
 		Assertions.assertEquals(100L, l1.invokeLong1(target, 50L));
 		Assertions.assertEquals(300L, l2.invokeLong2(target, 100L, 200L));
 
 		// int 3
-		MagicJIT.MagicInvoker i3 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "sumInt3", 3, false);
+		var i3 = MagicJIT.createMethodInvoker(PrimitiveTarget.class, "sumInt3", 3, false);
 		Assertions.assertEquals(60, i3.invokeInt3(target, 10, 20, 30));
 
 		// 零动态类生成验证

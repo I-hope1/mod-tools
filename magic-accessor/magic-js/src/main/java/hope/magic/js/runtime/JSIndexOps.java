@@ -3,6 +3,7 @@ package hope.magic.js.runtime;
 import hope.magic.runtime.*;
 
 import java.lang.invoke.*;
+import java.lang.reflect.Array;
 import java.util.*;
 
 import static hope.magic.js.runtime.SlotMH.*;
@@ -140,11 +141,11 @@ public class JSIndexOps {
 	}
 
 	public static int getArrayLengthInt(Object target) {
-		return target != null && target.getClass().isArray() ? java.lang.reflect.Array.getLength(target) : 0;
+		return target != null && target.getClass().isArray() ? Array.getLength(target) : 0;
 	}
 
 	public static double getArrayLengthDouble(Object target) {
-		return target != null && target.getClass().isArray() ? (double) java.lang.reflect.Array.getLength(target) : Double.NaN;
+		return target != null && target.getClass().isArray() ? (double) Array.getLength(target) : Double.NaN;
 	}
 
 	public static Object getIndex(Object target, int index) {

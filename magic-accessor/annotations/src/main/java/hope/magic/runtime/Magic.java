@@ -13,6 +13,9 @@ import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @SuppressWarnings("removal")
 public class Magic {
@@ -167,9 +170,9 @@ public class Magic {
 			// 注入 Bootstrap 直调接口 MagicBootstrapInvoker 与 MagicBootstrapCtorInvoker 并为 java.base 开放未命名模块读取权限
 			try {
 				try {
-					Class.forName("hope.magic.runtime.MagicBootstrapInvoker", false, null);
+					Class.forName("hope.magic.runtime.MagicInvoker", false, null);
 				} catch (ClassNotFoundException e) {
-					try (InputStream in = MagicBootstrapInvoker.class.getResourceAsStream("/hope/magic/runtime/MagicBootstrapInvoker.class")) {
+					try (InputStream in = MagicInvoker.class.getResourceAsStream("/hope/magic/runtime/MagicInvoker.class")) {
 						if (in != null) {
 							byte[] invokerBytes = in.readAllBytes();
 							defineClass(null, invokerBytes);
@@ -177,9 +180,9 @@ public class Magic {
 					}
 				}
 				try {
-					Class.forName("hope.magic.runtime.MagicBootstrapCtorInvoker", false, null);
+					Class.forName("hope.magic.runtime.MagicConstructorInvoker", false, null);
 				} catch (ClassNotFoundException e) {
-					try (InputStream in = MagicBootstrapCtorInvoker.class.getResourceAsStream("/hope/magic/runtime/MagicBootstrapCtorInvoker.class")) {
+					try (InputStream in = MagicConstructorInvoker.class.getResourceAsStream("/hope/magic/runtime/MagicConstructorInvoker.class")) {
 						if (in != null) {
 							byte[] ctorBytes = in.readAllBytes();
 							defineClass(null, ctorBytes);
@@ -202,7 +205,7 @@ public class Magic {
 		}
 	}
 
-	private static final java.util.Set<String> INSTALLED_BRIDGES = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
+	private static final Set<String> INSTALLED_BRIDGES = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
 	/**
 	 * 安装指定的 Bridge 桥接类到 Bootstrap ClassLoader。

@@ -6,13 +6,15 @@ import jdk.internal.vm.annotation.*;
  * Bootstrap 级别统一方法调用分发接口。
  * <p>用于配合 Hidden Class (隐式类) 与 Nestmate (同巢类) 实现无泄漏、零装箱的极速直调。</p>
  */
-public interface MagicBootstrapInvoker {
+public interface MagicInvoker {
+	Object[] EMPTY_ARGS = new Object[0];
+
 	Object invoke(Object target, Object[] args) throws Throwable;
 
 	@Hidden
 	@ForceInline
 	default Object invoke0(Object target) throws Throwable {
-		return invoke(target, new Object[0]);
+		return invoke(target, EMPTY_ARGS);
 	}
 	@Hidden
 	@ForceInline

@@ -4,27 +4,30 @@ import hope.magic.annotation.AccessMode;
 import hope.magic.runtime.*;
 import org.objectweb.asm.*;
 import org.objectweb.asm.Type;
+import org.objectweb.asm.util.TraceClassVisitor;
 
+import java.io.*;
 import java.lang.invoke.*;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiConsumer;
 
 /**
- * 基于 DirectMethodHandle 与静态持有者 (MagicHolder) 的特权 JIT 存根生成器。
+ * 基于 DirectMethodHandle 的特权 JIT 存根生成器。
  * <p>
  * <b>架构升级与 AccessMode 统一说明：</b>
  * <ul>
  *   <li><b>统一架构：</b>参考 OpenJDK 原生 {@code DirectMethodHandle$Holder} 与 {@code Invokers$Holder} 设计，
- *       所有方法与构造器直调全面统一采用<b>基于 HotSpot 原生 DirectMethodHandle + {@link MagicHolder} 静态分派</b>。
- *       HotSpot C2 编译器在内联阶段可直接穿透 {@link MagicHolder} 的 {@code @ForceInline} 入口抵达底层原生机器指令。</li>
+ *       所有方法与构造器直调全面统一采用<b>基于 HotSpot 原生 DirectMethodHandle 静态分派</b>。
+ *       {@code @ForceInline} 入口抵达底层原生机器指令。</li>
  *   <li><b>零动态类生成 (Zero Dynamic Classes)：</b>彻底废弃了早期针对不同 {@link AccessMode}（如 {@code NESTMATE}、
  *       {@code MAGIC_ACCESSOR}、{@code UNSAFE_AND_LINKTO} 动态桥接类）通过 ASM 大量生成动态类和宿主组的设计，
  *       实现 100% 零元空间 (Metaspace) 膨胀、零类加载器泄漏风险。</li>
  *   <li><b>AccessMode 在运行期的状态：</b>在 magic-js 运行期，多模式分派已被统一架构完全取代。
  *       所有接受 {@link AccessMode} 形参的 API 均转为向后兼容保留（No-op），无论传入何种模式，
- *       内部均统一走高性能的 DirectMethodHandle + MagicHolder 路径。</li>
+ *       内部均统一走高性能的 DirectMethodHandle 路径。</li>
  * </ul>
  */
 @SuppressWarnings("removal")
@@ -33,13 +36,13 @@ public class MagicJIT implements Opcodes {
 	public static final String IN_JSOps = "hope/magic/js/runtime/JSOps";
 
 	/** 供测试与调试注入的字节码转储勾子：(className, classBytes) -> void */
-	public static volatile java.util.function.BiConsumer<String, byte[]> CLASS_DUMP_HOOK = null;
+	public static volatile BiConsumer<String, byte[]> CLASS_DUMP_HOOK = null;
 
 	public static String disassemble(byte[] classBytes) {
-		var cr  = new org.objectweb.asm.ClassReader(classBytes);
-		var sw  = new java.io.StringWriter();
-		var pw  = new java.io.PrintWriter(sw);
-		var tcv = new org.objectweb.asm.util.TraceClassVisitor(pw);
+		var cr  = new ClassReader(classBytes);
+		var sw  = new StringWriter();
+		var pw  = new PrintWriter(sw);
+		var tcv = new TraceClassVisitor(pw);
 		cr.accept(tcv, 0);
 		return sw.toString();
 	}
@@ -60,8 +63,7 @@ public class MagicJIT implements Opcodes {
 
 	/**
 	 * 获取当前配置的访问模式。
-	 *
-	 * @return 当前模式（由于运行期已全面统一为 DirectMethodHandle + MagicHolder，该值仅供配置回显）
+	 * @return 当前模式（由于运行期已全面统一为 DirectMethodHandle，该值仅供配置回显）
 	 */
 	public static AccessMode getMode() {
 		return currentMode;
@@ -70,9 +72,8 @@ public class MagicJIT implements Opcodes {
 	/**
 	 * 设置全局访问模式。
 	 * <p>
-	 * <b>注意：</b>运行期已全面统一为 DirectMethodHandle + MagicHolder 架构，
+	 * <b>注意：</b>运行期已全面统一为 DirectMethodHandle 架构，
 	 * 此方法仅用于兼容旧版配置或测试，不再改变底层执行策略。
-	 *
 	 * @param mode 访问模式
 	 */
 	public static void setMode(AccessMode mode) {
@@ -81,7 +82,6 @@ public class MagicJIT implements Opcodes {
 
 	/**
 	 * 获取当前生效的访问模式。
-	 *
 	 * @return 生效模式（统一为基于 DirectMethodHandle 的直调模式）
 	 */
 	public static AccessMode getEffectiveMode() {
@@ -271,8 +271,8 @@ public class MagicJIT implements Opcodes {
 	// 1. 强引用动态加载的 Class，阻碍其 ClassLoader 垃圾回收，造成元空间（Metaspace）内存泄漏。
 	// 2. 并发哈希表读写存在哈希冲突与分段锁/CAS 竞争开销。
 	// 改为 JDK 原生 ClassValue<ClassJITData> 后：
-	private static final Object[] EMPTY_ARGS = new Object[0];
-	private static final AtomicLong COUNTER = new AtomicLong();
+	private static final Object[]   EMPTY_ARGS = new Object[0];
+	private static final AtomicLong COUNTER    = new AtomicLong();
 
 	private static String getPackageName(Class<?> cls) {
 		String name    = cls.getName();
@@ -319,108 +319,6 @@ public class MagicJIT implements Opcodes {
 		}
 	};
 
-	@FunctionalInterface
-	public interface MagicInvoker extends MagicBootstrapInvoker {
-		Object invoke(Object target, Object[] args) throws Throwable;
-
-		default Object invoke0(Object target) throws Throwable {
-			return invoke(target, EMPTY_ARGS);
-		}
-
-		default Object invoke1(Object target, Object a0) throws Throwable {
-			return invoke(target, new Object[]{a0});
-		}
-
-		default Object invoke2(Object target, Object a0, Object a1) throws Throwable {
-			return invoke(target, new Object[]{a0, a1});
-		}
-
-		default Object invoke3(Object target, Object a0, Object a1, Object a2) throws Throwable {
-			return invoke(target, new Object[]{a0, a1, a2});
-		}
-
-		// --- Primitive Fast-Path (Zero-Boxing Direct Call) ---
-		default int invokeInt0(Object target) throws Throwable {
-			return ((Number) invoke0(target)).intValue();
-		}
-
-		default int invokeInt1(Object target, int a0) throws Throwable {
-			return ((Number) invoke1(target, a0)).intValue();
-		}
-
-		default int invokeInt2(Object target, int a0, int a1) throws Throwable {
-			return ((Number) invoke2(target, a0, a1)).intValue();
-		}
-
-		default int invokeInt3(Object target, int a0, int a1, int a2) throws Throwable {
-			return ((Number) invoke3(target, a0, a1, a2)).intValue();
-		}
-
-		default boolean invokeBoolean0(Object target) throws Throwable {
-			Object res = invoke0(target);
-			return res instanceof Boolean b ? b : (res instanceof Number n && n.intValue() != 0);
-		}
-
-		default boolean invokeBoolean1(Object target, Object a0) throws Throwable {
-			Object res = invoke1(target, a0);
-			return res instanceof Boolean b ? b : (res instanceof Number n && n.intValue() != 0);
-		}
-
-		default boolean invokeBoolean2(Object target, Object a0, Object a1) throws Throwable {
-			Object res = invoke2(target, a0, a1);
-			return res instanceof Boolean b ? b : (res instanceof Number n && n.intValue() != 0);
-		}
-
-		default double invokeDouble0(Object target) throws Throwable {
-			return ((Number) invoke0(target)).doubleValue();
-		}
-
-		default double invokeDouble1(Object target, double a0) throws Throwable {
-			return ((Number) invoke1(target, a0)).doubleValue();
-		}
-
-		default double invokeDouble2(Object target, double a0, double a1) throws Throwable {
-			return ((Number) invoke2(target, a0, a1)).doubleValue();
-		}
-
-		default double invokeDouble3(Object target, double a0, double a1, double a2) throws Throwable {
-			return ((Number) invoke3(target, a0, a1, a2)).doubleValue();
-		}
-
-		default long invokeLong0(Object target) throws Throwable {
-			return ((Number) invoke0(target)).longValue();
-		}
-
-		default long invokeLong1(Object target, long a0) throws Throwable {
-			return ((Number) invoke1(target, a0)).longValue();
-		}
-
-		default long invokeLong2(Object target, long a0, long a1) throws Throwable {
-			return ((Number) invoke2(target, a0, a1)).longValue();
-		}
-	}
-
-	@FunctionalInterface
-	public interface MagicConstructorInvoker extends MagicBootstrapCtorInvoker {
-		Object newInstance(Object[] args) throws Throwable;
-
-		default Object newInstance0() throws Throwable {
-			return newInstance(EMPTY_ARGS);
-		}
-
-		default Object newInstance1(Object a0) throws Throwable {
-			return newInstance(new Object[]{a0});
-		}
-
-		default Object newInstance2(Object a0, Object a1) throws Throwable {
-			return newInstance(new Object[]{a0, a1});
-		}
-
-		default Object newInstance3(Object a0, Object a1, Object a2) throws Throwable {
-			return newInstance(new Object[]{a0, a1, a2});
-		}
-	}
-
 	private static final class Arity0Invoker implements MagicInvoker {
 		private final MethodHandle mh;
 		private final MethodHandle rawIntMh;
@@ -430,14 +328,14 @@ public class MagicJIT implements Opcodes {
 
 		Arity0Invoker(MethodHandle mh, Method targetMethod) {
 			this.mh = mh;
-			MethodHandle intMh = null;
-			MethodHandle longMh = null;
-			MethodHandle doubleMh = null;
+			MethodHandle intMh     = null;
+			MethodHandle longMh    = null;
+			MethodHandle doubleMh  = null;
 			MethodHandle booleanMh = null;
 			if (targetMethod != null) {
 				try {
-					boolean isStatic = Modifier.isStatic(targetMethod.getModifiers());
-					Class<?> ret = targetMethod.getReturnType();
+					boolean  isStatic = Modifier.isStatic(targetMethod.getModifiers());
+					Class<?> ret      = targetMethod.getReturnType();
 					if (targetMethod.getParameterCount() == 0) {
 						MethodHandle raw = Magic.lookup.unreflect(targetMethod);
 						if (isStatic) {
@@ -467,33 +365,33 @@ public class MagicJIT implements Opcodes {
 		}
 
 		@Override
-		public Object invoke(Object target, Object[] args) throws Throwable { return MagicHolder.invoke0(mh, target); }
+		public Object invoke(Object target, Object[] args) throws Throwable { return mh.invokeExact(target); }
 
 		@Override
-		public Object invoke0(Object target) throws Throwable { return MagicHolder.invoke0(mh, target); }
+		public Object invoke0(Object target) throws Throwable { return mh.invokeExact(target); }
 
 		@Override
 		public int invokeInt0(Object target) throws Throwable {
-			if (rawIntMh != null) return MagicHolder.invokeInt0(rawIntMh, target);
+			if (rawIntMh != null) return (int) rawIntMh.invokeExact(target);
 			return ((Number) invoke0(target)).intValue();
 		}
 
 		@Override
 		public boolean invokeBoolean0(Object target) throws Throwable {
-			if (rawBooleanMh != null) return MagicHolder.invokeBoolean0(rawBooleanMh, target);
+			if (rawBooleanMh != null) return (boolean) rawBooleanMh.invokeExact(target);
 			Object res = invoke0(target);
-			return res instanceof Boolean b ? b : (res instanceof Number n && n.intValue() != 0);
+			return res instanceof Boolean ? (Boolean) res : (res instanceof Number && ((Number) res).intValue() != 0);
 		}
 
 		@Override
 		public double invokeDouble0(Object target) throws Throwable {
-			if (rawDoubleMh != null) return MagicHolder.invokeDouble0(rawDoubleMh, target);
+			if (rawDoubleMh != null) return (double) rawDoubleMh.invokeExact(target);
 			return ((Number) invoke0(target)).doubleValue();
 		}
 
 		@Override
 		public long invokeLong0(Object target) throws Throwable {
-			if (rawLongMh != null) return MagicHolder.invokeLong0(rawLongMh, target);
+			if (rawLongMh != null) return (long) rawLongMh.invokeExact(target);
 			return ((Number) invoke0(target)).longValue();
 		}
 	}
@@ -509,15 +407,15 @@ public class MagicJIT implements Opcodes {
 		Arity1Invoker(MethodHandle mh, Method targetMethod) {
 			this.mh = mh;
 			this.spreader = mh.asSpreader(Object[].class, 1);
-			MethodHandle intMh = null;
-			MethodHandle longMh = null;
-			MethodHandle doubleMh = null;
+			MethodHandle intMh     = null;
+			MethodHandle longMh    = null;
+			MethodHandle doubleMh  = null;
 			MethodHandle booleanMh = null;
 			if (targetMethod != null) {
 				try {
-					boolean isStatic = Modifier.isStatic(targetMethod.getModifiers());
-					Class<?> ret = targetMethod.getReturnType();
-					Class<?>[] p = targetMethod.getParameterTypes();
+					boolean    isStatic = Modifier.isStatic(targetMethod.getModifiers());
+					Class<?>   ret      = targetMethod.getReturnType();
+					Class<?>[] p        = targetMethod.getParameterTypes();
 					if (p.length == 1) {
 						MethodHandle raw = Magic.lookup.unreflect(targetMethod);
 						if (isStatic) {
@@ -554,40 +452,36 @@ public class MagicJIT implements Opcodes {
 
 		@Override
 		public Object invoke1(Object target, Object a0) throws Throwable {
-			if (rawIntMh != null && a0 instanceof Number n0) {
-				return MagicHolder.invokeInt1(rawIntMh, target, n0.intValue());
+			if (a0 instanceof Number n0) {
+				if (rawIntMh != null) return (int) rawIntMh.invokeExact(target, n0.intValue());
+				if (rawDoubleMh != null) return (double) rawDoubleMh.invokeExact(target, n0.doubleValue());
+				if (rawLongMh != null) return (long) rawLongMh.invokeExact(target, n0.longValue());
 			}
-			if (rawDoubleMh != null && a0 instanceof Number n0) {
-				return MagicHolder.invokeDouble1(rawDoubleMh, target, n0.doubleValue());
-			}
-			if (rawLongMh != null && a0 instanceof Number n0) {
-				return MagicHolder.invokeLong1(rawLongMh, target, n0.longValue());
-			}
-			return MagicHolder.invoke1(mh, target, a0);
+			return (Object) mh.invokeExact(target, a0);
 		}
 
 		@Override
 		public int invokeInt1(Object target, int a0) throws Throwable {
-			if (rawIntMh != null) return MagicHolder.invokeInt1(rawIntMh, target, a0);
+			if (rawIntMh != null) return (int) rawIntMh.invokeExact(target, a0);
 			return ((Number) invoke1(target, a0)).intValue();
 		}
 
 		@Override
 		public boolean invokeBoolean1(Object target, Object a0) throws Throwable {
-			if (rawBooleanMh != null) return MagicHolder.invokeBoolean1(rawBooleanMh, target, a0);
+			if (rawBooleanMh != null) return (boolean) rawBooleanMh.invokeExact(target, a0);
 			Object res = invoke1(target, a0);
-			return res instanceof Boolean b ? b : (res instanceof Number n && n.intValue() != 0);
+			return res instanceof Boolean ? (Boolean) res : (res instanceof Number && ((Number) res).intValue() != 0);
 		}
 
 		@Override
 		public double invokeDouble1(Object target, double a0) throws Throwable {
-			if (rawDoubleMh != null) return MagicHolder.invokeDouble1(rawDoubleMh, target, a0);
+			if (rawDoubleMh != null) return (double) rawDoubleMh.invokeExact(target, a0);
 			return ((Number) invoke1(target, a0)).doubleValue();
 		}
 
 		@Override
 		public long invokeLong1(Object target, long a0) throws Throwable {
-			if (rawLongMh != null) return MagicHolder.invokeLong1(rawLongMh, target, a0);
+			if (rawLongMh != null) return (long) rawLongMh.invokeExact(target, a0);
 			return ((Number) invoke1(target, a0)).longValue();
 		}
 	}
@@ -603,15 +497,15 @@ public class MagicJIT implements Opcodes {
 		Arity2Invoker(MethodHandle mh, Method targetMethod) {
 			this.mh = mh;
 			this.spreader = mh.asSpreader(Object[].class, 2);
-			MethodHandle intMh = null;
-			MethodHandle longMh = null;
-			MethodHandle doubleMh = null;
+			MethodHandle intMh     = null;
+			MethodHandle longMh    = null;
+			MethodHandle doubleMh  = null;
 			MethodHandle booleanMh = null;
 			if (targetMethod != null) {
 				try {
-					boolean isStatic = Modifier.isStatic(targetMethod.getModifiers());
-					Class<?> ret = targetMethod.getReturnType();
-					Class<?>[] p = targetMethod.getParameterTypes();
+					boolean    isStatic = Modifier.isStatic(targetMethod.getModifiers());
+					Class<?>   ret      = targetMethod.getReturnType();
+					Class<?>[] p        = targetMethod.getParameterTypes();
 					if (p.length == 2) {
 						MethodHandle raw = Magic.lookup.unreflect(targetMethod);
 						if (isStatic) {
@@ -648,40 +542,39 @@ public class MagicJIT implements Opcodes {
 
 		@Override
 		public Object invoke2(Object target, Object a0, Object a1) throws Throwable {
-			if (rawIntMh != null && a0 instanceof Number n0 && a1 instanceof Number n1) {
-				return MagicHolder.invokeInt2(rawIntMh, target, n0.intValue(), n1.intValue());
+			if (a0 instanceof Number n0 && a1 instanceof Number n1) {
+				if (rawIntMh != null) { return (int) rawIntMh.invokeExact(target, n0.intValue(), n1.intValue()); }
+				if (rawDoubleMh != null) {
+					return (double) rawDoubleMh.invokeExact(target, n0.doubleValue(), n1.doubleValue());
+				}
+				if (rawLongMh != null) { return (long) rawLongMh.invokeExact(target, n0.longValue(), n1.longValue()); }
+				if (rawBooleanMh != null) { return (boolean) rawBooleanMh.invokeExact(target, n0, n1); }
 			}
-			if (rawDoubleMh != null && a0 instanceof Number n0 && a1 instanceof Number n1) {
-				return MagicHolder.invokeDouble2(rawDoubleMh, target, n0.doubleValue(), n1.doubleValue());
-			}
-			if (rawLongMh != null && a0 instanceof Number n0 && a1 instanceof Number n1) {
-				return MagicHolder.invokeLong2(rawLongMh, target, n0.longValue(), n1.longValue());
-			}
-			return MagicHolder.invoke2(mh, target, a0, a1);
+			return (Object) mh.invokeExact(target, a0, a1);
 		}
 
 		@Override
 		public int invokeInt2(Object target, int a0, int a1) throws Throwable {
-			if (rawIntMh != null) return MagicHolder.invokeInt2(rawIntMh, target, a0, a1);
+			if (rawIntMh != null) return (int) rawIntMh.invokeExact(target, a0, a1);
 			return ((Number) invoke2(target, a0, a1)).intValue();
 		}
 
 		@Override
 		public boolean invokeBoolean2(Object target, Object a0, Object a1) throws Throwable {
-			if (rawBooleanMh != null) return MagicHolder.invokeBoolean2(rawBooleanMh, target, a0, a1);
+			if (rawBooleanMh != null) return (boolean) rawBooleanMh.invokeExact(target, a0, a1);
 			Object res = invoke2(target, a0, a1);
-			return res instanceof Boolean b ? b : (res instanceof Number n && n.intValue() != 0);
+			return res instanceof Boolean ? (Boolean) res : (res instanceof Number && ((Number) res).intValue() != 0);
 		}
 
 		@Override
 		public long invokeLong2(Object target, long a0, long a1) throws Throwable {
-			if (rawLongMh != null) return MagicHolder.invokeLong2(rawLongMh, target, a0, a1);
+			if (rawLongMh != null) return (long) rawLongMh.invokeExact(target, a0, a1);
 			return ((Number) invoke2(target, a0, a1)).longValue();
 		}
 
 		@Override
 		public double invokeDouble2(Object target, double a0, double a1) throws Throwable {
-			if (rawDoubleMh != null) return MagicHolder.invokeDouble2(rawDoubleMh, target, a0, a1);
+			if (rawDoubleMh != null) return (double) rawDoubleMh.invokeExact(target, a0, a1);
 			return ((Number) invoke2(target, a0, a1)).doubleValue();
 		}
 	}
@@ -695,13 +588,13 @@ public class MagicJIT implements Opcodes {
 		Arity3Invoker(MethodHandle mh, Method targetMethod) {
 			this.mh = mh;
 			this.spreader = mh.asSpreader(Object[].class, 3);
-			MethodHandle intMh = null;
+			MethodHandle intMh    = null;
 			MethodHandle doubleMh = null;
 			if (targetMethod != null) {
 				try {
-					boolean isStatic = Modifier.isStatic(targetMethod.getModifiers());
-					Class<?> ret = targetMethod.getReturnType();
-					Class<?>[] p = targetMethod.getParameterTypes();
+					boolean    isStatic = Modifier.isStatic(targetMethod.getModifiers());
+					Class<?>   ret      = targetMethod.getReturnType();
+					Class<?>[] p        = targetMethod.getParameterTypes();
 					if (p.length == 3) {
 						MethodHandle raw = Magic.lookup.unreflect(targetMethod);
 						if (isStatic) {
@@ -732,24 +625,26 @@ public class MagicJIT implements Opcodes {
 
 		@Override
 		public Object invoke3(Object target, Object a0, Object a1, Object a2) throws Throwable {
-			if (rawIntMh != null && a0 instanceof Number n0 && a1 instanceof Number n1 && a2 instanceof Number n2) {
-				return MagicHolder.invokeInt3(rawIntMh, target, n0.intValue(), n1.intValue(), n2.intValue());
+			if (a0 instanceof Number n0 && a1 instanceof Number n1 && a2 instanceof Number n2) {
+				if (rawIntMh != null) {
+					return (int) rawIntMh.invokeExact(target, n0.intValue(), n1.intValue(), n2.intValue());
+				}
+				if (rawDoubleMh != null) {
+					return (double) rawDoubleMh.invokeExact(target, n0.doubleValue(), n1.doubleValue(), n2.doubleValue());
+				}
 			}
-			if (rawDoubleMh != null && a0 instanceof Number n0 && a1 instanceof Number n1 && a2 instanceof Number n2) {
-				return MagicHolder.invokeDouble3(rawDoubleMh, target, n0.doubleValue(), n1.doubleValue(), n2.doubleValue());
-			}
-			return MagicHolder.invoke3(mh, target, a0, a1, a2);
+			return (Object) mh.invokeExact(target, a0, a1, a2);
 		}
 
 		@Override
 		public int invokeInt3(Object target, int a0, int a1, int a2) throws Throwable {
-			if (rawIntMh != null) return MagicHolder.invokeInt3(rawIntMh, target, a0, a1, a2);
+			if (rawIntMh != null) return (int) rawIntMh.invokeExact(target, a0, a1, a2);
 			return ((Number) invoke3(target, a0, a1, a2)).intValue();
 		}
 
 		@Override
 		public double invokeDouble3(Object target, double a0, double a1, double a2) throws Throwable {
-			if (rawDoubleMh != null) return MagicHolder.invokeDouble3(rawDoubleMh, target, a0, a1, a2);
+			if (rawDoubleMh != null) return (double) rawDoubleMh.invokeExact(target, a0, a1, a2);
 			return ((Number) invoke3(target, a0, a1, a2)).doubleValue();
 		}
 	}
@@ -768,9 +663,9 @@ public class MagicJIT implements Opcodes {
 		Arity0CtorInvoker(MethodHandle mh, Constructor<?> targetCtor) { this.mh = mh; }
 		Arity0CtorInvoker(MethodHandle mh) { this(mh, null); }
 		@Override
-		public Object newInstance(Object[] args) throws Throwable { return MagicHolder.new0(mh); }
+		public Object newInstance(Object[] args) throws Throwable { return mh.invokeExact(); }
 		@Override
-		public Object newInstance0() throws Throwable { return MagicHolder.new0(mh); }
+		public Object newInstance0() throws Throwable { return mh.invokeExact(); }
 	}
 
 	private static final class Arity1CtorInvoker implements MagicConstructorInvoker {
@@ -808,9 +703,9 @@ public class MagicJIT implements Opcodes {
 		@Override
 		public Object newInstance1(Object a0) throws Throwable {
 			if (rawIntCtorMh != null && a0 instanceof Number n0) {
-				return MagicHolder.newInt1(rawIntCtorMh, n0.intValue());
+				return rawIntCtorMh.invokeExact(n0.intValue());
 			}
-			return MagicHolder.new1(mh, a0);
+			return mh.invokeExact(a0);
 		}
 	}
 
@@ -824,9 +719,9 @@ public class MagicJIT implements Opcodes {
 		Arity2CtorInvoker(MethodHandle mh, Constructor<?> targetCtor) {
 			this.mh = mh;
 			this.spreader = mh.asSpreader(Object[].class, 2);
-			MethodHandle raw = null;
-			boolean p0Int = false;
-			boolean p1Str = false;
+			MethodHandle raw   = null;
+			boolean      p0Int = false;
+			boolean      p1Str = false;
 			if (targetCtor != null) {
 				try {
 					Class<?>[] p = targetCtor.getParameterTypes();
@@ -857,9 +752,9 @@ public class MagicJIT implements Opcodes {
 		@Override
 		public Object newInstance2(Object a0, Object a1) throws Throwable {
 			if (rawCtorMh != null && p0IsInt && p1IsString && a0 instanceof Number n0 && (a1 == null || a1 instanceof String)) {
-				return MagicHolder.newIntString2(rawCtorMh, n0.intValue(), (String) a1);
+				return rawCtorMh.invoke(n0.intValue(), (String) a1);
 			}
-			return MagicHolder.new2(mh, a0, a1);
+			return mh.invoke(a0, a1);
 		}
 	}
 
@@ -883,7 +778,8 @@ public class MagicJIT implements Opcodes {
 		}
 
 		@Override
-		public Object newInstance3(Object a0, Object a1, Object a2) throws Throwable { return MagicHolder.new3(mh, a0, a1, a2); }
+		public Object newInstance3(Object a0, Object a1, Object a2)
+		 throws Throwable { return (Object) mh.invokeExact(a0, a1, a2); }
 	}
 
 	private static final class GenericCtorInvoker implements MagicConstructorInvoker {
@@ -894,13 +790,6 @@ public class MagicJIT implements Opcodes {
 			return spreader.invoke(args == null ? EMPTY_ARGS : args);
 		}
 	}
-
-
-
-
-
-
-
 
 
 	public static MagicInvoker getMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic) {
@@ -1197,8 +1086,8 @@ public class MagicJIT implements Opcodes {
 				MethodHandle filter = JSLinker.getArgumentFilter(pTypes[i]);
 				if (filter != null) mh = MethodHandles.filterArguments(mh, i, filter);
 			}
-			MethodHandle dropped = MethodHandles.dropArguments(mh, 0, Object.class);
-			Class<?>[] genericParams = new Class<?>[1 + pTypes.length];
+			MethodHandle dropped       = MethodHandles.dropArguments(mh, 0, Object.class);
+			Class<?>[]   genericParams = new Class<?>[1 + pTypes.length];
 			Arrays.fill(genericParams, Object.class);
 			return dropped.asType(MethodType.methodType(Object.class, genericParams));
 		} catch (Throwable t) {
@@ -2054,7 +1943,7 @@ public class MagicJIT implements Opcodes {
 
 	public static Object createProxyFunctionAdapter(Class<?> targetType, JSFunction fn, JSContext cx) {
 		ClassLoader cl = targetType.getClassLoader() != null ? targetType.getClassLoader() : MagicJIT.class.getClassLoader();
-		return java.lang.reflect.Proxy.newProxyInstance(cl, new Class<?>[]{targetType}, (proxy, method, methodArgs) -> {
+		return Proxy.newProxyInstance(cl, new Class<?>[]{targetType}, (proxy, method, methodArgs) -> {
 			if (method.getDeclaringClass() == Object.class) {
 				String name = method.getName();
 				switch (name) {
@@ -2082,7 +1971,7 @@ public class MagicJIT implements Opcodes {
 
 	public static Object createProxyObjectAdapter(Class<?> targetType, JSObject jsObj, JSContext cx) {
 		ClassLoader cl = targetType.getClassLoader() != null ? targetType.getClassLoader() : MagicJIT.class.getClassLoader();
-		return java.lang.reflect.Proxy.newProxyInstance(cl, new Class<?>[]{targetType}, (proxy, method, methodArgs) -> {
+		return Proxy.newProxyInstance(cl, new Class<?>[]{targetType}, (proxy, method, methodArgs) -> {
 			if (method.getDeclaringClass() == Object.class) {
 				String name = method.getName();
 				switch (name) {
@@ -2105,9 +1994,7 @@ public class MagicJIT implements Opcodes {
 					exitContext(cx, prev);
 				}
 			}
-			if (method.isDefault()) {
-				return java.lang.reflect.InvocationHandler.invokeDefault(proxy, method, methodArgs);
-			}
+			if (method.isDefault()) return InvocationHandler.invokeDefault(proxy, method, methodArgs);
 			if (member != null && member != JSUndefined.INSTANCE) {
 				return JSOps.castValue(member, method.getReturnType());
 			}

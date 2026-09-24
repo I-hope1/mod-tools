@@ -1,10 +1,8 @@
 package hope.magic.js.module;
 
-import hope.magic.js.ast.Node;
-import hope.magic.js.ast.TokenType;
+import hope.magic.js.ast.*;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 /**
  * ES6+ 模块 AST 转换器 (Module Transformer)。
@@ -37,7 +35,7 @@ public class ModuleTransformer {
 
 		// 2. 提升处理所有顶层函数声明并先行绑定导出 (Function Hoisting & Early Export Binding)
 		// 在 ESM 规范中，函数声明与导出先于模块正文求值，这是打破循环依赖（Circular Dependency）的核心机制。
-		java.util.Set<Node> hoistedStmts = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		Set<Node> hoistedStmts = Collections.newSetFromMap(new IdentityHashMap<>());
 		for (Node stmt : program.body) {
 			if (stmt instanceof Node.FunctionDecl fn) {
 				if (fn.name != null) {

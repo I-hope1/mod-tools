@@ -1,6 +1,7 @@
 package hope.magic.js.module;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,7 +42,7 @@ public class FileSystemModuleResolver implements ModuleResolver {
 		String pathStr = specifier;
 		if (pathStr.startsWith("file:///") || pathStr.startsWith("file://")) {
 			try {
-				pathStr = Paths.get(java.net.URI.create(pathStr)).toString();
+				pathStr = Paths.get(URI.create(pathStr)).toString();
 			} catch (Throwable ignored) {
 				pathStr = pathStr.replaceFirst("^file:[/]+", "");
 			}

@@ -5,7 +5,11 @@ import hope.magic.js.runtime.JSContext;
 import hope.magic.js.runtime.JSFunction;
 import hope.magic.js.runtime.JSScript;
 import hope.magic.js.runtime.MagicJIT;
+import org.mozilla.javascript.ScriptableObject;
+import org.openjdk.nashorn.api.scripting.NashornScriptEngineFactory;
 
+import javax.script.ScriptContext;
+import javax.script.ScriptEngine;
 import java.lang.management.ClassLoadingMXBean;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryPoolMXBean;
@@ -165,8 +169,8 @@ public class ContextDensityBenchmark {
 
 		long t0 = System.nanoTime();
 		try {
-			org.mozilla.javascript.ScriptableObject[] scopes = new org.mozilla.javascript.ScriptableObject[count];
-			org.mozilla.javascript.Context cx = org.mozilla.javascript.Context.enter();
+			ScriptableObject[] scopes = new ScriptableObject[count];
+			var                cx     = org.mozilla.javascript.Context.enter();
 			try {
 				for (int i = 0; i < count; i++) {
 					scopes[i] = cx.initStandardObjects();
@@ -213,12 +217,12 @@ public class ContextDensityBenchmark {
 
 		long t0 = System.nanoTime();
 		try {
-			org.openjdk.nashorn.api.scripting.NashornScriptEngineFactory factory = new org.openjdk.nashorn.api.scripting.NashornScriptEngineFactory();
-			javax.script.ScriptContext[] contexts = new javax.script.ScriptContext[count];
-			javax.script.ScriptEngine engine = factory.getScriptEngine();
+			NashornScriptEngineFactory factory = new NashornScriptEngineFactory();
+			ScriptContext[] contexts = new ScriptContext[count];
+			ScriptEngine engine = factory.getScriptEngine();
 			for (int i = 0; i < count; i++) {
 				contexts[i] = new javax.script.SimpleScriptContext();
-				contexts[i].setBindings(engine.createBindings(), javax.script.ScriptContext.ENGINE_SCOPE);
+				contexts[i].setBindings(engine.createBindings(), ScriptContext.ENGINE_SCOPE);
 			}
 			long costNs = System.nanoTime() - t0;
 			forceGC();

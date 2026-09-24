@@ -1,11 +1,17 @@
 package hope.magic.js.test;
 
 import hope.magic.annotation.AccessMode;
+import hope.magic.js.compiler.JSCompiler;
 import hope.magic.js.runtime.*;
-import hope.magic.runtime.Magic;
+import hope.magic.runtime.*;
 import org.junit.jupiter.api.*;
 import org.objectweb.asm.*;
+import org.objectweb.asm.Type;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodHandles.Lookup;
+import java.lang.invoke.MethodType;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.*;
 import java.util.List;
@@ -103,13 +109,13 @@ public class ClassValueUnloadTest {
 		Assertions.assertNotNull(getter);
 
 		// 2. MagicJIT 存根缓存测试
-		MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(clazz, "doWork", 0, false);
+		MagicInvoker invoker = MagicJIT.getMethodInvoker(clazz, "doWork", 0, false);
 		Assertions.assertNotNull(invoker);
 		Object instance = ctor.newInstance();
 		Object result   = invoker.invoke(instance, new Object[0]);
 		Assertions.assertEquals("plugin-result", result);
 
-		MagicJIT.MagicConstructorInvoker ctorInvoker = MagicJIT.getConstructorInvoker(clazz, 0);
+		var ctorInvoker = MagicJIT.getConstructorInvoker(clazz, 0);
 		Assertions.assertNotNull(ctorInvoker);
 		Object instance2 = ctorInvoker.newInstance(new Object[0]);
 		Assertions.assertNotNull(instance2);
@@ -125,13 +131,13 @@ public class ClassValueUnloadTest {
 		Assertions.assertEquals("plugin-result", exactRes);
 
 		// 3. 测试 MAGIC_ACCESSOR 模式下直接调用 private 方法
-		MagicJIT.MagicInvoker privateInvoker = MagicJIT.createMethodInvoker(clazz, "secret", 0, false, AccessMode.MAGIC_ACCESSOR);
+		MagicInvoker privateInvoker = MagicJIT.createMethodInvoker(clazz, "secret", 0, false, AccessMode.MAGIC_ACCESSOR);
 		Assertions.assertNotNull(privateInvoker);
 		Object privateRes = privateInvoker.invoke0(instance);
 		Assertions.assertEquals("secret-value", privateRes);
 
 		// 4. 测试 MAGIC_ACCESSOR 模式下直接调用 private 构造器
-		MagicJIT.MagicConstructorInvoker privateCtorInvoker = MagicJIT.createConstructorInvoker(clazz, 1, AccessMode.MAGIC_ACCESSOR);
+		var privateCtorInvoker = MagicJIT.createConstructorInvoker(clazz, 1, AccessMode.MAGIC_ACCESSOR);
 		Assertions.assertNotNull(privateCtorInvoker);
 		Object privateInstance = privateCtorInvoker.newInstance1(99);
 		Assertions.assertNotNull(privateInstance);
@@ -164,7 +170,7 @@ public class ClassValueUnloadTest {
 	}
 
 	private WeakReference<ClassLoader> exerciseScriptCompileAndRun(WeakReference<Class<?>>[] classRefHolder) throws Throwable {
-		hope.magic.js.runtime.JSScript script = hope.magic.js.compiler.JSCompiler.compile(
+		JSScript script = JSCompiler.compile(
 			"""
 			function outer(x) {
 			    function inner(y) {
@@ -178,9 +184,9 @@ public class ClassValueUnloadTest {
 
 		Class<?> scriptClass = script.getClass();
 		ClassLoader scriptLoader = scriptClass.getClassLoader();
-		Assertions.assertInstanceOf(hope.magic.js.compiler.JSCompiler.ScriptClassLoader.class, scriptLoader);
+		Assertions.assertInstanceOf(JSCompiler.ScriptClassLoader.class, scriptLoader);
 
-		hope.magic.js.runtime.JSContext cx = new hope.magic.js.runtime.JSContext();
+		JSContext cx = new JSContext();
 		Object res = script.run(cx);
 		Assertions.assertEquals(30.0, res);
 
@@ -210,15 +216,15 @@ public class ClassValueUnloadTest {
 	@Test
 	public void testResolveOrFail() throws Throwable {
 		// 1. 测试虚拟方法 resolveOrFail (byte 5 = REF_invokeVirtual)
-		Object mnVirtual = MagicJIT.resolveOrFail((byte) 5, String.class, "length", java.lang.invoke.MethodType.methodType(int.class));
+		Object mnVirtual = MagicJIT.resolveOrFail((byte) 5, String.class, "length", MethodType.methodType(int.class));
 		Assertions.assertNotNull(mnVirtual);
 
 		// 2. 测试静态方法 resolveOrFail (byte 6 = REF_invokeStatic)
-		Object mnStatic = MagicJIT.resolveOrFail((byte) 6, Math.class, "max", java.lang.invoke.MethodType.methodType(int.class, int.class, int.class));
+		Object mnStatic = MagicJIT.resolveOrFail((byte) 6, Math.class, "max", MethodType.methodType(int.class, int.class, int.class));
 		Assertions.assertNotNull(mnStatic);
 
 		// 3. 测试构造器 resolveOrFail (byte 7 = REF_invokeSpecial)
-		Object mnCtor = MagicJIT.resolveOrFail((byte) 7, String.class, "<init>", java.lang.invoke.MethodType.methodType(void.class));
+		Object mnCtor = MagicJIT.resolveOrFail((byte) 7, String.class, "<init>", MethodType.methodType(void.class));
 		Assertions.assertNotNull(mnCtor);
 
 		// 4. 测试字段读取 resolveOrFail (byte 1 = REF_getField)
@@ -261,11 +267,11 @@ public class ClassValueUnloadTest {
 			cw.visitEnd();
 			Class<?> cls = loader.define(internalName.replace('/', '.'), cw.toByteArray());
 
-			MagicJIT.MagicConstructorInvoker ctorInvoker = MagicJIT.getConstructorInvoker(cls, 0);
+			var ctorInvoker = MagicJIT.getConstructorInvoker(cls, 0);
 			Assertions.assertNotNull(ctorInvoker);
 			Object instance = ctorInvoker.newInstance(new Object[0]);
 
-			MagicJIT.MagicInvoker invoker = MagicJIT.getMethodInvoker(cls, "calc", 2, false);
+			var invoker = MagicJIT.getMethodInvoker(cls, "calc", 2, false);
 			Assertions.assertNotNull(invoker);
 			Object res = invoker.invoke(instance, new Object[]{ 10, 20 });
 			Assertions.assertEquals(30, res);
@@ -275,8 +281,8 @@ public class ClassValueUnloadTest {
 			// 验证重复获取相同类的方法/构造器时，复用缓存且不重复生成 Bridge
 			int mbBefore = MagicJIT.getMethodBridgeCacheSize();
 			int cbBefore = MagicJIT.getCtorBridgeCacheSize();
-			MagicJIT.MagicConstructorInvoker ctorInvoker2 = MagicJIT.getConstructorInvoker(cls, 0);
-			MagicJIT.MagicInvoker invoker2 = MagicJIT.getMethodInvoker(cls, "calc", 2, false);
+			var ctorInvoker2 = MagicJIT.getConstructorInvoker(cls, 0);
+			var invoker2 = MagicJIT.getMethodInvoker(cls, "calc", 2, false);
 			Assertions.assertSame(ctorInvoker, ctorInvoker2);
 			Assertions.assertSame(invoker, invoker2);
 			Assertions.assertEquals(mbBefore, MagicJIT.getMethodBridgeCacheSize(), "Method bridge must be cached and reused for same method");
@@ -309,7 +315,7 @@ public class ClassValueUnloadTest {
 
 	private WeakReference<?>[] exercisePlanB() throws Throwable {
 		Class<?> bootIface = getOrCreateBootstrapInvokerInterface();
-		String bootIfaceInternal = org.objectweb.asm.Type.getInternalName(bootIface);
+		String bootIfaceInternal = Type.getInternalName(bootIface);
 
 		// Target class in custom ClassLoader
 		SimpleClassLoader pluginLoader = new SimpleClassLoader(getClass().getClassLoader());
@@ -338,8 +344,8 @@ public class ClassValueUnloadTest {
 		Object pluginInstance = pluginClass.getDeclaredConstructor().newInstance();
 		Method multiplyMethod = pluginClass.getMethod("multiply", int.class, int.class);
 
-		java.lang.invoke.MethodHandle mh = Magic.lookup.unreflect(multiplyMethod);
-		Object mn = hope.magic.runtime.LinkerHelper.extractMemberName(mh);
+		MethodHandle mh = Magic.lookup.unreflect(multiplyMethod);
+		Object mn = LinkerHelper.extractMemberName(mh);
 
 		// 1. Generate Hidden Class in java.lang.invoke implementing MagicInvokerBootstrap
 		String hiddenClassName = "java/lang/invoke/PlanBHiddenInvoker";
@@ -407,10 +413,10 @@ public class ClassValueUnloadTest {
 		hInvokeArr.visitEnd();
 		hw.visitEnd();
 
-		java.lang.invoke.MethodHandles.Lookup invokeLookup = java.lang.invoke.MethodHandles.privateLookupIn(
-			java.lang.invoke.MethodHandle.class, Magic.lookup
+		Lookup invokeLookup = MethodHandles.privateLookupIn(
+			MethodHandle.class, Magic.lookup
 		);
-		java.lang.invoke.MethodHandles.Lookup hiddenLookup = invokeLookup.defineHiddenClass(hw.toByteArray(), true);
+		Lookup hiddenLookup = invokeLookup.defineHiddenClass(hw.toByteArray(), true);
 		Class<?> hiddenClass = hiddenLookup.lookupClass();
 
 		Field mnField = hiddenClass.getDeclaredField("MN");
@@ -425,7 +431,7 @@ public class ClassValueUnloadTest {
 		String appInvokerName = "hope/magic/test/PlanBAppInvoker";
 		ClassWriter aw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 		aw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, appInvokerName, null, "java/lang/Object",
-			new String[]{ org.objectweb.asm.Type.getInternalName(MagicJIT.MagicInvoker.class) });
+			new String[]{ Type.getInternalName(MagicInvoker.class) });
 
 		FieldVisitor afv = aw.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, "delegate", "L" + bootIfaceInternal + ";", null, null);
 		afv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
@@ -484,7 +490,7 @@ public class ClassValueUnloadTest {
 
 		Class<?> appInvokerClass = pluginLoader.define("hope.magic.test.PlanBAppInvoker", aw.toByteArray());
 		Constructor<?> appCtor = appInvokerClass.getConstructor(bootIface);
-		MagicJIT.MagicInvoker invoker = (MagicJIT.MagicInvoker) appCtor.newInstance(rawHiddenInvoker);
+		MagicInvoker invoker = (MagicInvoker) appCtor.newInstance(rawHiddenInvoker);
 
 		int res = invoker.invokeInt2(pluginInstance, 6, 7);
 		Assertions.assertEquals(42, res);
@@ -517,8 +523,8 @@ public class ClassValueUnloadTest {
 		cmv.visitVarInsn(Opcodes.LSTORE, 4);
 		cmv.visitInsn(Opcodes.ICONST_0);
 		cmv.visitVarInsn(Opcodes.ISTORE, 6);
-		org.objectweb.asm.Label loopStart = new org.objectweb.asm.Label();
-		org.objectweb.asm.Label loopEnd = new org.objectweb.asm.Label();
+		Label loopStart = new Label();
+		Label loopEnd = new Label();
 		cmv.visitLabel(loopStart);
 		cmv.visitVarInsn(Opcodes.ILOAD, 6);
 		cmv.visitVarInsn(Opcodes.ILOAD, 2);
@@ -617,7 +623,7 @@ public class ClassValueUnloadTest {
 		String hiddenClassName = "hope/magic/test/NestmateTarget$$NestmateInvoker";
 		ClassWriter hw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 		hw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, hiddenClassName, null, "java/lang/Object",
-			new String[]{ org.objectweb.asm.Type.getInternalName(MagicJIT.MagicInvoker.class) });
+			new String[]{ Type.getInternalName(MagicInvoker.class) });
 
 		MethodVisitor hInit = hw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
 		hInit.visitCode();
@@ -674,12 +680,12 @@ public class ClassValueUnloadTest {
 		hw.visitEnd();
 
 		// Define as NESTMATE of pluginClass!
-		java.lang.invoke.MethodHandles.Lookup targetLookup = java.lang.invoke.MethodHandles.privateLookupIn(pluginClass, Magic.lookup);
-		java.lang.invoke.MethodHandles.Lookup nestmateLookup = targetLookup.defineHiddenClass(hw.toByteArray(), true,
-			java.lang.invoke.MethodHandles.Lookup.ClassOption.NESTMATE);
+		Lookup targetLookup = MethodHandles.privateLookupIn(pluginClass, Magic.lookup);
+		Lookup nestmateLookup = targetLookup.defineHiddenClass(hw.toByteArray(), true,
+			Lookup.ClassOption.NESTMATE);
 		Class<?> nestmateHiddenClass = nestmateLookup.lookupClass();
 
-		MagicJIT.MagicInvoker invoker = (MagicJIT.MagicInvoker) nestmateHiddenClass.getDeclaredConstructor().newInstance();
+		var invoker = (MagicInvoker) nestmateHiddenClass.getDeclaredConstructor().newInstance();
 
 		int res = invoker.invokeInt2(pluginInstance, 6, 7);
 		Assertions.assertEquals(42, res);

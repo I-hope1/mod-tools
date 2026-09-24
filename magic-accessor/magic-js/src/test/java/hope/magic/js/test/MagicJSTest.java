@@ -9,6 +9,11 @@ import java.lang.invoke.*;
 import java.lang.reflect.Method;
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.function.*;
 
 public class MagicJSTest {
 
@@ -75,44 +80,44 @@ public class MagicJSTest {
 			r.run();
 		}
 
-		public String processString(java.util.function.Function<String, String> mapper, String input) {
+		public String processString(Function<String, String> mapper, String input) {
 			return mapper.apply(input);
 		}
 
-		public int computeBinary(java.util.function.IntBinaryOperator op, int a, int b) {
+		public int computeBinary(IntBinaryOperator op, int a, int b) {
 			return op.applyAsInt(a, b);
 		}
 
-		public boolean testIntPred(java.util.function.IntPredicate pred, int val) {
+		public boolean testIntPred(IntPredicate pred, int val) {
 			return pred.test(val);
 		}
 
-		public double testDoubleOp(java.util.function.DoubleBinaryOperator op, double a, double b) {
+		public double testDoubleOp(DoubleBinaryOperator op, double a, double b) {
 			return op.applyAsDouble(a, b);
 		}
 
-		public int testIntUnary(java.util.function.IntUnaryOperator op, int a) {
+		public int testIntUnary(IntUnaryOperator op, int a) {
 			return op.applyAsInt(a);
 		}
 
-		public double testDoubleSupplier(java.util.function.DoubleSupplier s) {
+		public double testDoubleSupplier(DoubleSupplier s) {
 			return s.getAsDouble();
 		}
 
-		public int testIntSupplier(java.util.function.IntSupplier s) {
+		public int testIntSupplier(IntSupplier s) {
 			return s.getAsInt();
 		}
 
-		public boolean testBooleanSupplier(java.util.function.BooleanSupplier s) {
+		public boolean testBooleanSupplier(BooleanSupplier s) {
 			return s.getAsBoolean();
 		}
 
-		public long testLongBinary(java.util.function.LongBinaryOperator op, long a, long b) {
+		public long testLongBinary(LongBinaryOperator op, long a, long b) {
 			return op.applyAsLong(a, b);
 		}
 
 		public int consumerVal = 0;
-		public void testIntConsumer(java.util.function.IntConsumer c, int val) {
+		public void testIntConsumer(IntConsumer c, int val) {
 			c.accept(val);
 		}
 
@@ -568,7 +573,7 @@ public class MagicJSTest {
 		JSContext cx = new JSContext();
 
 		// 0. Java List 超大索引安全拦截 (防 OOM)
-		java.util.List<Object> list = new java.util.ArrayList<>(java.util.List.of("a", "b"));
+		List<Object> list = new ArrayList<>(List.of("a", "b"));
 		cx.set("list", list);
 		cx.eval("list[1000000000] = 'huge';");
 		Assertions.assertEquals(2, list.size()); // 超界未发生无休止扩容
@@ -923,10 +928,10 @@ public class MagicJSTest {
 
 	@Test
 	public void testMultiThreadIsolatedContexts() throws Exception {
-		int                                  threadCount = 16;
-		int                                  iterations  = 100;
-		java.util.concurrent.ExecutorService pool        = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
-		List<java.util.concurrent.Future<?>> futures     = new java.util.ArrayList<>();
+		int             threadCount = 16;
+		int             iterations  = 100;
+		ExecutorService pool        = Executors.newFixedThreadPool(threadCount);
+		List<Future<?>> futures     = new ArrayList<>();
 
 		for (int t = 0; t < threadCount; t++) {
 			final int threadId = t;
@@ -942,7 +947,7 @@ public class MagicJSTest {
 			}));
 		}
 
-		for (java.util.concurrent.Future<?> future : futures) {
+		for (Future<?> future : futures) {
 			future.get();
 		}
 		pool.shutdown();
@@ -951,12 +956,12 @@ public class MagicJSTest {
 	@Test
 	public void testConcurrentCallSiteInitializationWithCAS() throws Exception {
 		// 单一编译产物，跨线程并发复用，针对同一调用点并发争抢不同 Shape
-		JSScript                             script      = JSCompiler.compile("obj.x");
-		int                                  threadCount = 16;
-		int                                  iterations  = 500;
-		java.util.concurrent.ExecutorService pool        = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
-		java.util.concurrent.CountDownLatch  startLatch  = new java.util.concurrent.CountDownLatch(1);
-		List<java.util.concurrent.Future<?>> futures     = new java.util.ArrayList<>();
+		JSScript        script      = JSCompiler.compile("obj.x");
+		int             threadCount = 16;
+		int             iterations  = 500;
+		ExecutorService pool        = Executors.newFixedThreadPool(threadCount);
+		CountDownLatch  startLatch  = new CountDownLatch(1);
+		List<Future<?>> futures     = new ArrayList<>();
 
 		for (int t = 0; t < threadCount; t++) {
 			final int threadId = t;
@@ -1380,8 +1385,8 @@ public class MagicJSTest {
 		Assertions.assertEquals(14.0, ((Number) r10).doubleValue());
 
 		// 11. Direct adapter call via MagicJIT.getFunctionAdapter
-		JSFunction                           fn       = (JSFunction) cx.eval("(a, b) => a * b + 10;");
-		java.util.function.IntBinaryOperator directOp = (java.util.function.IntBinaryOperator) MagicJIT.getFunctionAdapter(java.util.function.IntBinaryOperator.class, fn);
+		JSFunction        fn       = (JSFunction) cx.eval("(a, b) => a * b + 10;");
+		IntBinaryOperator directOp = (IntBinaryOperator) MagicJIT.getFunctionAdapter(IntBinaryOperator.class, fn);
 		Assertions.assertNotNull(directOp);
 		Assertions.assertEquals(52, directOp.applyAsInt(6, 7));
 	}
@@ -1979,19 +1984,19 @@ public class MagicJSTest {
 		arr.push(30);
 
 		// 1. Java enhanced for-loop over JSArray
-		java.util.List<Object> collected = new java.util.ArrayList<>();
+		List<Object> collected = new ArrayList<>();
 		for (Object item : arr) {
 			collected.add(item);
 		}
-		Assertions.assertEquals(java.util.List.of(10, 20, 30), collected);
+		Assertions.assertEquals(List.of(10, 20, 30), collected);
 
 		// 2. JSArray.forEach
-		java.util.List<Object> forEachList = new java.util.ArrayList<>();
+		var forEachList = new ArrayList<>();
 		arr.forEach(forEachList::add);
-		Assertions.assertEquals(java.util.List.of(10, 20, 30), forEachList);
+		Assertions.assertEquals(List.of(10, 20, 30), forEachList);
 
 		// 3. JSOps.toIterator with JSArray
-		java.util.Iterator<?> it = hope.magic.js.runtime.JSOps.toIterator(arr);
+		var it = JSOps.toIterator(arr);
 		Assertions.assertTrue(it.hasNext());
 		Assertions.assertEquals(10, it.next());
 		Assertions.assertEquals(20, it.next());
@@ -3073,24 +3078,24 @@ public class MagicJSTest {
 	@Test
 	public void testMagicJITLinkToStubAndInvoker() throws Throwable {
 		// 1. 测试实例私有方法 exactStub (linkToSpecial/linkToVirtual)
-		java.lang.reflect.Method multiplyMethod = TargetJavaClass.class.getDeclaredMethod("multiply", int.class, int.class);
+		Method multiplyMethod = TargetJavaClass.class.getDeclaredMethod("multiply", int.class, int.class);
 		multiplyMethod.setAccessible(true);
-		java.lang.invoke.MethodHandle exactMultiply = MagicJIT.createExactMethodStub(TargetJavaClass.class, multiplyMethod);
+		MethodHandle exactMultiply = MagicJIT.createExactMethodStub(TargetJavaClass.class, multiplyMethod);
 		Assertions.assertNotNull(exactMultiply);
 		TargetJavaClass target  = new TargetJavaClass(12345, "LinkToTest");
 		Object          multRes = exactMultiply.invoke(target, 6, 7);
 		Assertions.assertEquals(42, ((Number) multRes).intValue());
 
 		// 2. 测试静态私有方法 exactStub (linkToStatic)
-		java.lang.reflect.Method greetMethod = TargetJavaClass.class.getDeclaredMethod("greet", String.class);
+		Method greetMethod = TargetJavaClass.class.getDeclaredMethod("greet", String.class);
 		greetMethod.setAccessible(true);
-		java.lang.invoke.MethodHandle exactGreet = MagicJIT.createExactMethodStub(TargetJavaClass.class, greetMethod);
+		MethodHandle exactGreet = MagicJIT.createExactMethodStub(TargetJavaClass.class, greetMethod);
 		Assertions.assertNotNull(exactGreet);
 		Object greetRes = exactGreet.invoke(TargetJavaClass.class, "LinkTo");
 		Assertions.assertEquals("Hello, LinkTo", greetRes);
 
 		// 3. 测试 MagicInvoker (Arity 0~3 特化直调及 asSpreader 展开)
-		MagicJIT.MagicInvoker invoker2 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "multiply", 2, false);
+		var invoker2 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "multiply", 2, false);
 		Assertions.assertNotNull(invoker2);
 		Object invokerResArray = invoker2.invoke(target, new Object[]{8, 9});
 		Assertions.assertEquals(72, ((Number) invokerResArray).intValue());
@@ -3098,33 +3103,33 @@ public class MagicJSTest {
 		Assertions.assertEquals(72, ((Number) invokerRes2).intValue());
 
 		// 3.1 测试 Arity 0 特化
-		MagicJIT.MagicInvoker invoker0 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "getSecretCode", 0, false);
+		var invoker0 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "getSecretCode", 0, false);
 		Assertions.assertNotNull(invoker0);
 		Assertions.assertEquals(12345, ((Number) invoker0.invoke0(target)).intValue());
 		Assertions.assertEquals(12345, ((Number) invoker0.invoke(target, null)).intValue());
 
 		// 3.2 测试 Arity 1 特化
-		MagicJIT.MagicInvoker invoker1 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "singleArgTest", 1, false);
+		var invoker1 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "singleArgTest", 1, false);
 		Assertions.assertNotNull(invoker1);
 		Assertions.assertEquals("single:42", invoker1.invoke1(target, 42));
 
 		// 3.3 测试 Arity 3 特化
-		MagicJIT.MagicInvoker invoker3 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "add3", 3, false);
+		var invoker3 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "add3", 3, false);
 		Assertions.assertNotNull(invoker3);
 		Assertions.assertEquals(60, ((Number) invoker3.invoke3(target, 10, 20, 30)).intValue());
 
 		// 4. 测试 MagicConstructorInvoker (Arity 0~3 特化直调)
-		MagicJIT.MagicConstructorInvoker ctorInvoker0 = MagicJIT.getConstructorInvoker(TargetJavaClass.class, 0);
+		var ctorInvoker0 = MagicJIT.getConstructorInvoker(TargetJavaClass.class, 0);
 		Assertions.assertNotNull(ctorInvoker0);
 		TargetJavaClass obj0 = (TargetJavaClass) ctorInvoker0.newInstance0();
 		Assertions.assertEquals(100, obj0.secretCode);
 
-		MagicJIT.MagicConstructorInvoker ctorInvoker1 = MagicJIT.getConstructorInvoker(TargetJavaClass.class, 1);
+		var ctorInvoker1 = MagicJIT.getConstructorInvoker(TargetJavaClass.class, 1);
 		Assertions.assertNotNull(ctorInvoker1);
 		TargetJavaClass obj1 = (TargetJavaClass) ctorInvoker1.newInstance1(777);
 		Assertions.assertEquals(777, obj1.secretCode);
 
-		MagicJIT.MagicConstructorInvoker ctorInvoker = MagicJIT.getConstructorInvoker(TargetJavaClass.class, 2);
+		var ctorInvoker = MagicJIT.getConstructorInvoker(TargetJavaClass.class, 2);
 		Assertions.assertNotNull(ctorInvoker);
 		Object newObj = ctorInvoker.newInstance(new Object[]{8888, "CreatedByLinkToCtor"});
 		Assertions.assertInstanceOf(TargetJavaClass.class, newObj);
@@ -3145,9 +3150,9 @@ public class MagicJSTest {
 		Assertions.assertEquals(60, ((Number) testCx.eval("target.add3(10, 20, 30)")).intValue());
 
 		// 6. 测试 void 方法与接口回调自适应参数 (Runnable)
-		java.lang.reflect.Method runCbMethod = TargetJavaClass.class.getDeclaredMethod("runCallback", Runnable.class);
+		Method runCbMethod = TargetJavaClass.class.getDeclaredMethod("runCallback", Runnable.class);
 		runCbMethod.setAccessible(true);
-		java.lang.invoke.MethodHandle exactRunCb = MagicJIT.createExactMethodStub(TargetJavaClass.class, runCbMethod);
+		MethodHandle exactRunCb = MagicJIT.createExactMethodStub(TargetJavaClass.class, runCbMethod);
 		Assertions.assertNotNull(exactRunCb);
 		boolean[] ran     = new boolean[1];
 		Object    voidRes = exactRunCb.invoke(target, (Runnable) () -> ran[0] = true);
@@ -3169,23 +3174,23 @@ public class MagicJSTest {
 				MagicJIT.setMode(mode);
 
 				// 1. 测试特化 invoker (arity=0, 1, 2, 3)
-				MagicJIT.MagicInvoker inv0 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "getSecretCode", 0, false, mode);
+				var inv0 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "getSecretCode", 0, false, mode);
 				Assertions.assertEquals(789, ((Number) inv0.invoke0(target)).intValue());
 
-				MagicJIT.MagicInvoker inv1 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "singleArgTest", 1, false, mode);
+				var inv1 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "singleArgTest", 1, false, mode);
 				Assertions.assertEquals("single:99", inv1.invoke1(target, 99));
 
-				MagicJIT.MagicInvoker inv2 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "multiply", 2, false, mode);
+				var inv2 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "multiply", 2, false, mode);
 				Assertions.assertEquals(56, ((Number) inv2.invoke2(target, 7, 8)).intValue());
 
-				MagicJIT.MagicInvoker inv3 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "add3", 3, false, mode);
+				var inv3 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "add3", 3, false, mode);
 				Assertions.assertEquals(15, ((Number) inv3.invoke3(target, 4, 5, 6)).intValue());
 
 				// 2. 测试构造器 invoker
-				MagicJIT.MagicConstructorInvoker ctor0 = MagicJIT.getConstructorInvoker(TargetJavaClass.class, 0, mode);
+				var ctor0 = MagicJIT.getConstructorInvoker(TargetJavaClass.class, 0, mode);
 				Assertions.assertEquals(100, ((TargetJavaClass) ctor0.newInstance0()).secretCode);
 
-				MagicJIT.MagicConstructorInvoker ctor1 = MagicJIT.getConstructorInvoker(TargetJavaClass.class, 1, mode);
+				var ctor1 = MagicJIT.getConstructorInvoker(TargetJavaClass.class, 1, mode);
 				Assertions.assertEquals(1234, ((TargetJavaClass) ctor1.newInstance1(1234)).secretCode);
 
 				// 3. 端到端 JS 引擎测试

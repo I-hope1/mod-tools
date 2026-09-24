@@ -291,7 +291,7 @@ Invoker after GC: null
 
 ### 9.1 课题 1：直接将应用 Invoker 接口定义在 BootLoader
 - **可行性分析**：
-  在 JVM 启动阶段（`Magic.install()`），通过 `Magic.defineClass(null, bytes)` 将核心接口（`MagicBootstrapInvoker` 与 `MagicBootstrapCtorInvoker`）静态注入到 Bootstrap ClassLoader。
+  在 JVM 启动阶段（`Magic.install()`），通过 `Magic.defineClass(null, bytes)` 将核心接口（`MagicInvoker` 与 `MagicConstructorInvoker`）静态注入到 Bootstrap ClassLoader。
 - **收益**：
   1. 所有 ClassLoader（包括隔离的插件加载器、隐式类、系统类）天然可见 Bootstrap 中的类，彻底消灭跨加载器可见性屏障；
   2. 彻底干掉包装代理类，直接返回单层调用器句柄，单次 `invokeinterface` 立即达到 171 万+ ops/ms；

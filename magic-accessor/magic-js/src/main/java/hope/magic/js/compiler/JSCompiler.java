@@ -93,8 +93,9 @@ public class JSCompiler {
 		}
 	}
 
-	private static final ThreadLocal<ClassLoader>       CURRENT_LOADER     = new ThreadLocal<>();
-	private static final ThreadLocal<Map<Node, String>> CURRENT_FUNC_CACHE = new ThreadLocal<>();
+	private static final ThreadLocal<ClassLoader>       CURRENT_LOADER          = new ThreadLocal<>();
+	private static final ThreadLocal<Map<Node, String>> CURRENT_FUNC_CACHE      = new ThreadLocal<>();
+	private static final ThreadLocal<Set<String>>       CURRENT_NUMERIC_METHODS = new ThreadLocal<>();
 
 	public static byte[] compileToBytes(String code) {
 		ClassLoader parent = Thread.currentThread().getContextClassLoader();
@@ -188,6 +189,10 @@ public class JSCompiler {
 		if (isCacheOwner) {
 			CURRENT_FUNC_CACHE.set(new IdentityHashMap<>());
 		}
+		boolean isNumericOwner = (CURRENT_NUMERIC_METHODS.get() == null);
+		if (isNumericOwner) {
+			CURRENT_NUMERIC_METHODS.set(analyzeNumericMethods(program));
+		}
 		try {
 			ClassWriter cw = new FastClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
 			cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, className, null, IN_JSScript, null);
@@ -260,6 +265,9 @@ public class JSCompiler {
 		} finally {
 			if (isCacheOwner) {
 				CURRENT_FUNC_CACHE.remove();
+			}
+			if (isNumericOwner) {
+				CURRENT_NUMERIC_METHODS.remove();
 			}
 		}
 	}
@@ -532,6 +540,7 @@ public class JSCompiler {
 		if (node == null) return VarType.OBJECT;
 		if (node instanceof Node.CallExpr call) {
 			if (isMathCall(call, ctx)) return VarType.DOUBLE;
+			if (isKnownNumericCall(call)) return VarType.DOUBLE;
 		}
 		if (node instanceof Node.LiteralExpr lit) {
 			Object val = lit.value;
@@ -701,6 +710,7 @@ public class JSCompiler {
 	private static boolean isNumericExpr(Node node) {
 		if (node == null) return false;
 		if (isMathCall(node, null)) return true;
+		if (isKnownNumericCall(node)) return true;
 		if (node instanceof Node.LiteralExpr lit && lit.value instanceof Number) return true;
 		if (node instanceof Node.BinaryExpr bin) {
 			if (bin.op == TokenType.PLUS && !isStringExpr(bin.left) && !isStringExpr(bin.right)) {
@@ -779,6 +789,86 @@ public class JSCompiler {
 			return isVarUsedAsNumeric(name, exprStmt.expr);
 		} else if (node instanceof Node.ReturnStmt ret) {
 			return isVarUsedAsNumeric(name, ret.value);
+		}
+		return false;
+	}
+
+	private static final Set<String> BUILTIN_OR_DANGEROUS_METHODS = Set.of(
+		"toString", "valueOf", "toLocaleString", "hasOwnProperty", "isPrototypeOf",
+		"propertyIsEnumerable", "constructor", "call", "apply", "bind"
+	);
+
+	private static Set<String> analyzeNumericMethods(Node root) {
+		if (root == null) return Collections.emptySet();
+		List<Node.ClassDecl> classDecls = new ArrayList<>();
+		collectClassDecls(root, classDecls);
+
+		List<Node.FunctionDecl> funcDecls = new ArrayList<>();
+		collectFunctionDecls(root, funcDecls);
+
+		if (classDecls.isEmpty() && funcDecls.isEmpty()) {
+			return Collections.emptySet();
+		}
+
+		Map<String, Boolean> methodNumericMap = new HashMap<>();
+
+		for (Node.ClassDecl cd : classDecls) {
+			if (cd.methods != null) {
+				for (Node.FunctionDecl fd : cd.methods) {
+					if (fd.name != null && fd.body != null) {
+						if (BUILTIN_OR_DANGEROUS_METHODS.contains(fd.name)) {
+							methodNumericMap.put(fd.name, false);
+						} else {
+							boolean isNum = isNumericFunction(fd.body, fd.params != null ? fd.params : List.of(), fd.name);
+							methodNumericMap.compute(fd.name, (k, v) -> (v == null) ? isNum : (v && isNum));
+						}
+					}
+				}
+			}
+			if (cd.staticMethods != null) {
+				for (Node.FunctionDecl fd : cd.staticMethods) {
+					if (fd.name != null && fd.body != null) {
+						if (BUILTIN_OR_DANGEROUS_METHODS.contains(fd.name)) {
+							methodNumericMap.put(fd.name, false);
+						} else {
+							boolean isNum = isNumericFunction(fd.body, fd.params != null ? fd.params : List.of(), fd.name);
+							methodNumericMap.compute(fd.name, (k, v) -> (v == null) ? isNum : (v && isNum));
+						}
+					}
+				}
+			}
+		}
+
+		for (Node.FunctionDecl fd : funcDecls) {
+			if (fd.name != null && fd.body != null) {
+				if (BUILTIN_OR_DANGEROUS_METHODS.contains(fd.name)) {
+					methodNumericMap.put(fd.name, false);
+				} else {
+					boolean isNum = isNumericFunction(fd.body, fd.params != null ? fd.params : List.of(), fd.name);
+					methodNumericMap.compute(fd.name, (k, v) -> (v == null) ? isNum : (v && isNum));
+				}
+			}
+		}
+
+		Set<String> provenNumeric = new HashSet<>();
+		for (Map.Entry<String, Boolean> entry : methodNumericMap.entrySet()) {
+			if (entry.getValue() != null && entry.getValue()) {
+				provenNumeric.add(entry.getKey());
+			}
+		}
+		return provenNumeric;
+	}
+
+	private static boolean isKnownNumericCall(Node node) {
+		if (node instanceof Node.CallExpr call) {
+			if (isMathCall(call, null)) return true;
+			Set<String> set = CURRENT_NUMERIC_METHODS.get();
+			if (set == null || set.isEmpty()) return false;
+			if (call.callee instanceof Node.MemberAccessExpr mem) {
+				return set.contains(mem.property);
+			} else if (call.callee instanceof Node.IdentifierExpr id) {
+				return set.contains(id.name);
+			}
 		}
 		return false;
 	}
@@ -3900,6 +3990,10 @@ public class JSCompiler {
 			cache = new IdentityHashMap<>();
 			CURRENT_FUNC_CACHE.set(cache);
 		}
+		boolean isNumericOwner = (CURRENT_NUMERIC_METHODS.get() == null);
+		if (isNumericOwner && body != null) {
+			CURRENT_NUMERIC_METHODS.set(analyzeNumericMethods(body));
+		}
 		try {
 			String funcClassName = "hope/magic/gen/MagicJSFunction_" + SCRIPT_ID.incrementAndGet();
 			if (body != null) {
@@ -4256,6 +4350,9 @@ public class JSCompiler {
 		} finally {
 			if (isCacheOwner) {
 				CURRENT_FUNC_CACHE.remove();
+			}
+			if (isNumericOwner) {
+				CURRENT_NUMERIC_METHODS.remove();
 			}
 		}
 	}

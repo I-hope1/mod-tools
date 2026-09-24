@@ -613,18 +613,10 @@ public class BugVerificationTest {
 	}
 	@Test
 	public void testClassPolyPerformance() {
-		/* JSCompiler.ENABLE_INTEGER_MOD_SPECIALIZATION = true;
-		JSCompiler.CLASS_DUMP_HOOK = (name, bytes) -> {
-			if (name.contains("Function")) {
-				try {
-					Files.writeString(Path.of(name.replace('/','_') + "_poly_disasm.txt"), JSCompiler.disassemble(bytes));
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
-			}
-		}; */
-		JSContext cx = new JSContext();
-		cx.eval("""
+		JSCompiler.ENABLE_INTEGER_MOD_SPECIALIZATION = true;
+		try {
+			JSContext cx = new JSContext();
+			cx.eval("""
 		 class Dog { speak() { return 1; } }
 		 class Cat { speak() { return 2; } }
 		 
@@ -675,6 +667,10 @@ public class BugVerificationTest {
 		     }
 		 }
 		 """);
+		} finally {
+			JSCompiler.CLASS_DUMP_HOOK = null;
+			JSCompiler.ENABLE_INTEGER_MOD_SPECIALIZATION = false;
+		}
 		// System.out.println(Runtime.version());
 	}
 
@@ -712,14 +708,16 @@ public class BugVerificationTest {
 		Assertions.assertEquals("5xxxxx", String.valueOf(result));
 
 		cx = new JSContext();
-		result = cx.eval("""
+		cx.eval("""
 		 class Box { constructor(v){ this.v = v; } get() { return this.v; } }
 		 let sum = 0;
 		 let b = new Box(1);
-		 globalThis.externalArr = []; // 全局数组
+		 externalArr = []; // 全局数组
+		 """);
+		result = cx.eval("""
 		 for (let i = 0; i < 10; i++) {
 		     if (i === 5) { b.v = "x"; }
-		     globalThis.externalArr.push(i); // <-- 全局副作用！
+		     externalArr.push(i); // <-- 全局副作用！
 		     sum += b.get();
 		 }
 		 externalArr
@@ -738,7 +736,7 @@ public class BugVerificationTest {
 		 """);
 
 		// JS 规范标准答案必须是 4000000000
-		Assertions.assertEquals(4000000000.0, ((Number)result).doubleValue());
+		Assertions.assertEquals(4000000000.0, ((Number) result).doubleValue());
 
 
 		result = cx.eval("""

@@ -3373,17 +3373,8 @@ public class JSLinker {
 						test = MethodHandles.dropArguments(test, 1, site.type().parameterList().subList(1, site.type().parameterCount()));
 					}
 
-					// 优先寻找 JSCompiler 生成的 callXDouble 原生方法
-					MethodHandle exactCall = switch (arity) {
-						case 0 -> JSFuncMH.CALL0_DOUBLE.bindTo(func);
-						case 1 -> JSFuncMH.CALL1_DOUBLE.bindTo(func);
-						case 2 -> JSFuncMH.CALL2_DOUBLE.bindTo(func);
-						case 3 -> JSFuncMH.CALL3_DOUBLE.bindTo(func);
-						case 4 -> JSFuncMH.CALL4_DOUBLE.bindTo(func);
-						default -> MethodHandles.filterReturnValue(JSFuncMH.CALL_NULL.bindTo(func).asCollector(1, Object[].class, arity), MH_TO_DOUBLE);
-					};
-					JSContext cx = JSContext.current();
-					exactCall = exactCall.bindTo(cx);
+					JSContext    cx        = JSContext.current();
+					MethodHandle exactCall = getDirectFuncDoubleMH(func, arity, cx);
 
 					// MethodHandles.explicitCastArguments 能够自动处理 Object 到 double 的转换
 					exactCall = MethodHandles.explicitCastArguments(exactCall, site.type());
@@ -3460,6 +3451,30 @@ public class JSLinker {
 				case 4 -> JSFuncMH.CALL4_NULL.bindTo(func);
 				default -> JSFuncMH.CALL_NULL.bindTo(func).asCollector(1, Object[].class, arity);
 			};
+		}
+	}
+
+	private static MethodHandle getDirectFuncDoubleMH(JSFunction func, int arity, JSContext cx) {
+		try {
+			Class<?> clazz = func.getClass();
+			return switch (arity) {
+				case 0 -> LOOKUP.findVirtual(clazz, "call0Double", MethodType.methodType(double.class, JSContext.class, Object.class)).bindTo(func).bindTo(cx);
+				case 1 -> LOOKUP.findVirtual(clazz, "call1Double", MethodType.methodType(double.class, JSContext.class, Object.class, double.class)).bindTo(func).bindTo(cx);
+				case 2 -> LOOKUP.findVirtual(clazz, "call2Double", MethodType.methodType(double.class, JSContext.class, Object.class, double.class, double.class)).bindTo(func).bindTo(cx);
+				case 3 -> LOOKUP.findVirtual(clazz, "call3Double", MethodType.methodType(double.class, JSContext.class, Object.class, double.class, double.class, double.class)).bindTo(func).bindTo(cx);
+				case 4 -> LOOKUP.findVirtual(clazz, "call4Double", MethodType.methodType(double.class, JSContext.class, Object.class, double.class, double.class, double.class, double.class)).bindTo(func).bindTo(cx);
+				default -> MethodHandles.filterReturnValue(LOOKUP.findVirtual(clazz, "call", MethodType.methodType(Object.class, JSContext.class, Object.class, Object[].class)).bindTo(func).bindTo(cx).asCollector(1, Object[].class, arity), MH_TO_DOUBLE);
+			};
+		} catch (Throwable ignored) {
+			MethodHandle exact = switch (arity) {
+				case 0 -> JSFuncMH.CALL0_DOUBLE.bindTo(func);
+				case 1 -> JSFuncMH.CALL1_DOUBLE.bindTo(func);
+				case 2 -> JSFuncMH.CALL2_DOUBLE.bindTo(func);
+				case 3 -> JSFuncMH.CALL3_DOUBLE.bindTo(func);
+				case 4 -> JSFuncMH.CALL4_DOUBLE.bindTo(func);
+				default -> MethodHandles.filterReturnValue(JSFuncMH.CALL_NULL.bindTo(func).asCollector(1, Object[].class, arity), MH_TO_DOUBLE);
+			};
+			return exact.bindTo(cx);
 		}
 	}
 

@@ -352,12 +352,51 @@ public class MagicJIT implements Opcodes {
 			return ((Number) invoke2(target, a0, a1)).intValue();
 		}
 
-		default long invokeLong2(Object target, long a0, long a1) throws Throwable {
-			return ((Number) invoke2(target, a0, a1)).longValue();
+		default int invokeInt3(Object target, int a0, int a1, int a2) throws Throwable {
+			return ((Number) invoke3(target, a0, a1, a2)).intValue();
+		}
+
+		default boolean invokeBoolean0(Object target) throws Throwable {
+			Object res = invoke0(target);
+			return res instanceof Boolean b ? b : (res instanceof Number n && n.intValue() != 0);
+		}
+
+		default boolean invokeBoolean1(Object target, Object a0) throws Throwable {
+			Object res = invoke1(target, a0);
+			return res instanceof Boolean b ? b : (res instanceof Number n && n.intValue() != 0);
+		}
+
+		default boolean invokeBoolean2(Object target, Object a0, Object a1) throws Throwable {
+			Object res = invoke2(target, a0, a1);
+			return res instanceof Boolean b ? b : (res instanceof Number n && n.intValue() != 0);
+		}
+
+		default double invokeDouble0(Object target) throws Throwable {
+			return ((Number) invoke0(target)).doubleValue();
+		}
+
+		default double invokeDouble1(Object target, double a0) throws Throwable {
+			return ((Number) invoke1(target, a0)).doubleValue();
 		}
 
 		default double invokeDouble2(Object target, double a0, double a1) throws Throwable {
 			return ((Number) invoke2(target, a0, a1)).doubleValue();
+		}
+
+		default double invokeDouble3(Object target, double a0, double a1, double a2) throws Throwable {
+			return ((Number) invoke3(target, a0, a1, a2)).doubleValue();
+		}
+
+		default long invokeLong0(Object target) throws Throwable {
+			return ((Number) invoke0(target)).longValue();
+		}
+
+		default long invokeLong1(Object target, long a0) throws Throwable {
+			return ((Number) invoke1(target, a0)).longValue();
+		}
+
+		default long invokeLong2(Object target, long a0, long a1) throws Throwable {
+			return ((Number) invoke2(target, a0, a1)).longValue();
 		}
 	}
 
@@ -387,12 +426,14 @@ public class MagicJIT implements Opcodes {
 		private final MethodHandle rawIntMh;
 		private final MethodHandle rawLongMh;
 		private final MethodHandle rawDoubleMh;
+		private final MethodHandle rawBooleanMh;
 
 		Arity0Invoker(MethodHandle mh, Method targetMethod) {
 			this.mh = mh;
 			MethodHandle intMh = null;
 			MethodHandle longMh = null;
 			MethodHandle doubleMh = null;
+			MethodHandle booleanMh = null;
 			if (targetMethod != null) {
 				try {
 					boolean isStatic = Modifier.isStatic(targetMethod.getModifiers());
@@ -408,6 +449,8 @@ public class MagicJIT implements Opcodes {
 							longMh = raw.asType(MethodType.methodType(long.class, Object.class));
 						} else if (ret == double.class) {
 							doubleMh = raw.asType(MethodType.methodType(double.class, Object.class));
+						} else if (ret == boolean.class) {
+							booleanMh = raw.asType(MethodType.methodType(boolean.class, Object.class));
 						}
 					}
 				} catch (Throwable ignored) {
@@ -416,6 +459,7 @@ public class MagicJIT implements Opcodes {
 			this.rawIntMh = intMh;
 			this.rawLongMh = longMh;
 			this.rawDoubleMh = doubleMh;
+			this.rawBooleanMh = booleanMh;
 		}
 
 		Arity0Invoker(MethodHandle mh) {
@@ -433,6 +477,25 @@ public class MagicJIT implements Opcodes {
 			if (rawIntMh != null) return MagicHolder.invokeInt0(rawIntMh, target);
 			return ((Number) invoke0(target)).intValue();
 		}
+
+		@Override
+		public boolean invokeBoolean0(Object target) throws Throwable {
+			if (rawBooleanMh != null) return MagicHolder.invokeBoolean0(rawBooleanMh, target);
+			Object res = invoke0(target);
+			return res instanceof Boolean b ? b : (res instanceof Number n && n.intValue() != 0);
+		}
+
+		@Override
+		public double invokeDouble0(Object target) throws Throwable {
+			if (rawDoubleMh != null) return MagicHolder.invokeDouble0(rawDoubleMh, target);
+			return ((Number) invoke0(target)).doubleValue();
+		}
+
+		@Override
+		public long invokeLong0(Object target) throws Throwable {
+			if (rawLongMh != null) return MagicHolder.invokeLong0(rawLongMh, target);
+			return ((Number) invoke0(target)).longValue();
+		}
 	}
 
 	private static final class Arity1Invoker implements MagicInvoker {
@@ -441,6 +504,7 @@ public class MagicJIT implements Opcodes {
 		private final MethodHandle rawIntMh;
 		private final MethodHandle rawLongMh;
 		private final MethodHandle rawDoubleMh;
+		private final MethodHandle rawBooleanMh;
 
 		Arity1Invoker(MethodHandle mh, Method targetMethod) {
 			this.mh = mh;
@@ -448,6 +512,7 @@ public class MagicJIT implements Opcodes {
 			MethodHandle intMh = null;
 			MethodHandle longMh = null;
 			MethodHandle doubleMh = null;
+			MethodHandle booleanMh = null;
 			if (targetMethod != null) {
 				try {
 					boolean isStatic = Modifier.isStatic(targetMethod.getModifiers());
@@ -464,6 +529,8 @@ public class MagicJIT implements Opcodes {
 							longMh = raw.asType(MethodType.methodType(long.class, Object.class, long.class));
 						} else if (ret == double.class && p[0] == double.class) {
 							doubleMh = raw.asType(MethodType.methodType(double.class, Object.class, double.class));
+						} else if (ret == boolean.class) {
+							booleanMh = raw.asType(MethodType.methodType(boolean.class, Object.class, Object.class));
 						}
 					}
 				} catch (Throwable ignored) {
@@ -472,6 +539,7 @@ public class MagicJIT implements Opcodes {
 			this.rawIntMh = intMh;
 			this.rawLongMh = longMh;
 			this.rawDoubleMh = doubleMh;
+			this.rawBooleanMh = booleanMh;
 		}
 
 		Arity1Invoker(MethodHandle mh) {
@@ -490,10 +558,10 @@ public class MagicJIT implements Opcodes {
 				return MagicHolder.invokeInt1(rawIntMh, target, n0.intValue());
 			}
 			if (rawDoubleMh != null && a0 instanceof Number n0) {
-				return (double) rawDoubleMh.invokeExact(target, n0.doubleValue());
+				return MagicHolder.invokeDouble1(rawDoubleMh, target, n0.doubleValue());
 			}
 			if (rawLongMh != null && a0 instanceof Number n0) {
-				return (long) rawLongMh.invokeExact(target, n0.longValue());
+				return MagicHolder.invokeLong1(rawLongMh, target, n0.longValue());
 			}
 			return MagicHolder.invoke1(mh, target, a0);
 		}
@@ -503,6 +571,25 @@ public class MagicJIT implements Opcodes {
 			if (rawIntMh != null) return MagicHolder.invokeInt1(rawIntMh, target, a0);
 			return ((Number) invoke1(target, a0)).intValue();
 		}
+
+		@Override
+		public boolean invokeBoolean1(Object target, Object a0) throws Throwable {
+			if (rawBooleanMh != null) return MagicHolder.invokeBoolean1(rawBooleanMh, target, a0);
+			Object res = invoke1(target, a0);
+			return res instanceof Boolean b ? b : (res instanceof Number n && n.intValue() != 0);
+		}
+
+		@Override
+		public double invokeDouble1(Object target, double a0) throws Throwable {
+			if (rawDoubleMh != null) return MagicHolder.invokeDouble1(rawDoubleMh, target, a0);
+			return ((Number) invoke1(target, a0)).doubleValue();
+		}
+
+		@Override
+		public long invokeLong1(Object target, long a0) throws Throwable {
+			if (rawLongMh != null) return MagicHolder.invokeLong1(rawLongMh, target, a0);
+			return ((Number) invoke1(target, a0)).longValue();
+		}
 	}
 
 	private static final class Arity2Invoker implements MagicInvoker {
@@ -511,6 +598,7 @@ public class MagicJIT implements Opcodes {
 		private final MethodHandle rawIntMh;
 		private final MethodHandle rawLongMh;
 		private final MethodHandle rawDoubleMh;
+		private final MethodHandle rawBooleanMh;
 
 		Arity2Invoker(MethodHandle mh, Method targetMethod) {
 			this.mh = mh;
@@ -518,6 +606,7 @@ public class MagicJIT implements Opcodes {
 			MethodHandle intMh = null;
 			MethodHandle longMh = null;
 			MethodHandle doubleMh = null;
+			MethodHandle booleanMh = null;
 			if (targetMethod != null) {
 				try {
 					boolean isStatic = Modifier.isStatic(targetMethod.getModifiers());
@@ -534,6 +623,8 @@ public class MagicJIT implements Opcodes {
 							longMh = raw.asType(MethodType.methodType(long.class, Object.class, long.class, long.class));
 						} else if (ret == double.class && p[0] == double.class && p[1] == double.class) {
 							doubleMh = raw.asType(MethodType.methodType(double.class, Object.class, double.class, double.class));
+						} else if (ret == boolean.class) {
+							booleanMh = raw.asType(MethodType.methodType(boolean.class, Object.class, Object.class, Object.class));
 						}
 					}
 				} catch (Throwable ignored) {
@@ -542,6 +633,7 @@ public class MagicJIT implements Opcodes {
 			this.rawIntMh = intMh;
 			this.rawLongMh = longMh;
 			this.rawDoubleMh = doubleMh;
+			this.rawBooleanMh = booleanMh;
 		}
 
 		Arity2Invoker(MethodHandle mh) {
@@ -575,6 +667,13 @@ public class MagicJIT implements Opcodes {
 		}
 
 		@Override
+		public boolean invokeBoolean2(Object target, Object a0, Object a1) throws Throwable {
+			if (rawBooleanMh != null) return MagicHolder.invokeBoolean2(rawBooleanMh, target, a0, a1);
+			Object res = invoke2(target, a0, a1);
+			return res instanceof Boolean b ? b : (res instanceof Number n && n.intValue() != 0);
+		}
+
+		@Override
 		public long invokeLong2(Object target, long a0, long a1) throws Throwable {
 			if (rawLongMh != null) return MagicHolder.invokeLong2(rawLongMh, target, a0, a1);
 			return ((Number) invoke2(target, a0, a1)).longValue();
@@ -591,27 +690,34 @@ public class MagicJIT implements Opcodes {
 		private final MethodHandle mh;
 		private final MethodHandle spreader;
 		private final MethodHandle rawIntMh;
+		private final MethodHandle rawDoubleMh;
 
 		Arity3Invoker(MethodHandle mh, Method targetMethod) {
 			this.mh = mh;
 			this.spreader = mh.asSpreader(Object[].class, 3);
 			MethodHandle intMh = null;
+			MethodHandle doubleMh = null;
 			if (targetMethod != null) {
 				try {
 					boolean isStatic = Modifier.isStatic(targetMethod.getModifiers());
 					Class<?> ret = targetMethod.getReturnType();
 					Class<?>[] p = targetMethod.getParameterTypes();
-					if (p.length == 3 && ret == int.class && p[0] == int.class && p[1] == int.class && p[2] == int.class) {
+					if (p.length == 3) {
 						MethodHandle raw = Magic.lookup.unreflect(targetMethod);
 						if (isStatic) {
 							raw = MethodHandles.dropArguments(raw, 0, Object.class);
 						}
-						intMh = raw.asType(MethodType.methodType(int.class, Object.class, int.class, int.class, int.class));
+						if (ret == int.class && p[0] == int.class && p[1] == int.class && p[2] == int.class) {
+							intMh = raw.asType(MethodType.methodType(int.class, Object.class, int.class, int.class, int.class));
+						} else if (ret == double.class && p[0] == double.class && p[1] == double.class && p[2] == double.class) {
+							doubleMh = raw.asType(MethodType.methodType(double.class, Object.class, double.class, double.class, double.class));
+						}
 					}
 				} catch (Throwable ignored) {
 				}
 			}
 			this.rawIntMh = intMh;
+			this.rawDoubleMh = doubleMh;
 		}
 
 		Arity3Invoker(MethodHandle mh) {
@@ -629,7 +735,22 @@ public class MagicJIT implements Opcodes {
 			if (rawIntMh != null && a0 instanceof Number n0 && a1 instanceof Number n1 && a2 instanceof Number n2) {
 				return MagicHolder.invokeInt3(rawIntMh, target, n0.intValue(), n1.intValue(), n2.intValue());
 			}
+			if (rawDoubleMh != null && a0 instanceof Number n0 && a1 instanceof Number n1 && a2 instanceof Number n2) {
+				return MagicHolder.invokeDouble3(rawDoubleMh, target, n0.doubleValue(), n1.doubleValue(), n2.doubleValue());
+			}
 			return MagicHolder.invoke3(mh, target, a0, a1, a2);
+		}
+
+		@Override
+		public int invokeInt3(Object target, int a0, int a1, int a2) throws Throwable {
+			if (rawIntMh != null) return MagicHolder.invokeInt3(rawIntMh, target, a0, a1, a2);
+			return ((Number) invoke3(target, a0, a1, a2)).intValue();
+		}
+
+		@Override
+		public double invokeDouble3(Object target, double a0, double a1, double a2) throws Throwable {
+			if (rawDoubleMh != null) return MagicHolder.invokeDouble3(rawDoubleMh, target, a0, a1, a2);
+			return ((Number) invoke3(target, a0, a1, a2)).doubleValue();
 		}
 	}
 

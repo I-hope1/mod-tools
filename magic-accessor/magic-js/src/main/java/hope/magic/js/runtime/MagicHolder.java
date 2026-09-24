@@ -47,12 +47,44 @@ public final class MagicHolder {
 		return (int) mh.invokeExact(target, a0, a1, a2);
 	}
 
-	public static long invokeLong2(MethodHandle mh, Object target, long a0, long a1) throws Throwable {
-		return (long) mh.invokeExact(target, a0, a1);
+	public static boolean invokeBoolean0(MethodHandle mh, Object target) throws Throwable {
+		return (boolean) mh.invokeExact(target);
+	}
+
+	public static boolean invokeBoolean1(MethodHandle mh, Object target, Object a0) throws Throwable {
+		return (boolean) mh.invokeExact(target, a0);
+	}
+
+	public static boolean invokeBoolean2(MethodHandle mh, Object target, Object a0, Object a1) throws Throwable {
+		return (boolean) mh.invokeExact(target, a0, a1);
+	}
+
+	public static double invokeDouble0(MethodHandle mh, Object target) throws Throwable {
+		return (double) mh.invokeExact(target);
+	}
+
+	public static double invokeDouble1(MethodHandle mh, Object target, double a0) throws Throwable {
+		return (double) mh.invokeExact(target, a0);
 	}
 
 	public static double invokeDouble2(MethodHandle mh, Object target, double a0, double a1) throws Throwable {
 		return (double) mh.invokeExact(target, a0, a1);
+	}
+
+	public static double invokeDouble3(MethodHandle mh, Object target, double a0, double a1, double a2) throws Throwable {
+		return (double) mh.invokeExact(target, a0, a1, a2);
+	}
+
+	public static long invokeLong0(MethodHandle mh, Object target) throws Throwable {
+		return (long) mh.invokeExact(target);
+	}
+
+	public static long invokeLong1(MethodHandle mh, Object target, long a0) throws Throwable {
+		return (long) mh.invokeExact(target, a0);
+	}
+
+	public static long invokeLong2(MethodHandle mh, Object target, long a0, long a1) throws Throwable {
+		return (long) mh.invokeExact(target, a0, a1);
 	}
 
 	// --- 构造器分发 ---

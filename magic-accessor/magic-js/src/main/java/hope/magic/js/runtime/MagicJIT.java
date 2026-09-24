@@ -287,12 +287,12 @@ public class MagicJIT implements Opcodes {
 
 
 	private static final class ClassJITData {
-		final Map<InvokerLookupKey, MagicInvoker>         invokerCache      = new ConcurrentHashMap<>();
-		final Map<ExactMethodKey, MagicInvoker>           exactInvokerCache = new ConcurrentHashMap<>();
-		final Map<CtorLookupKey, MagicConstructorInvoker> ctorCache         = new ConcurrentHashMap<>();
-		final Map<ExactCtorKey, MagicConstructorInvoker>  exactCtorCache    = new ConcurrentHashMap<>();
-		final Map<String, MethodHandle>                   getterCache       = new ConcurrentHashMap<>();
-		final Map<String, MethodHandle>                   setterCache       = new ConcurrentHashMap<>();
+		final Map<InvokerLookupKey, MagicInvoker>         invokerCache       = new ConcurrentHashMap<>();
+		final Map<ExactMethodKey, MagicInvoker>           exactInvokerCache  = new ConcurrentHashMap<>();
+		final Map<CtorLookupKey, MagicConstructorInvoker> ctorCache          = new ConcurrentHashMap<>();
+		final Map<ExactCtorKey, MagicConstructorInvoker>  exactCtorCache     = new ConcurrentHashMap<>();
+		final Map<String, MethodHandle>                   getterCache        = new ConcurrentHashMap<>();
+		final Map<String, MethodHandle>                   setterCache        = new ConcurrentHashMap<>();
 		final Map<ExactMethodKey, MethodHandle>           exactMethodCache   = new ConcurrentHashMap<>();
 		final Map<ExactCtorKey, MethodHandle>             exactCtorStubCache = new ConcurrentHashMap<>();
 
@@ -302,7 +302,7 @@ public class MagicJIT implements Opcodes {
 		volatile HostCtorGroup   linkToCtorGroup;
 
 		volatile SwitchPoint switchPoint = new SwitchPoint();
-		volatile int epoch = 0;
+		volatile int         epoch       = 0;
 	}
 
 	private static final ClassValue<ClassJITData> JIT_DATA = new ClassValue<>() {
@@ -331,7 +331,7 @@ public class MagicJIT implements Opcodes {
 	public static void invalidateClass(Class<?> clazz) {
 		if (clazz == null) return;
 		ClassJITData data = JIT_DATA.get(clazz);
-		SwitchPoint oldSp;
+		SwitchPoint  oldSp;
 		synchronized (data) {
 			oldSp = data.switchPoint;
 			data.epoch++;
@@ -453,7 +453,7 @@ public class MagicJIT implements Opcodes {
 	};
 
 	@FunctionalInterface
-	public interface MagicInvoker extends hope.magic.runtime.MagicBootstrapInvoker {
+	public interface MagicInvoker extends MagicBootstrapInvoker {
 		Object invoke(Object target, Object[] args) throws Throwable;
 
 		default Object invoke0(Object target) throws Throwable {
@@ -495,7 +495,7 @@ public class MagicJIT implements Opcodes {
 	}
 
 	@FunctionalInterface
-	public interface MagicConstructorInvoker extends hope.magic.runtime.MagicBootstrapCtorInvoker {
+	public interface MagicConstructorInvoker extends MagicBootstrapCtorInvoker {
 		Object newInstance(Object[] args) throws Throwable;
 
 		default Object newInstance0() throws Throwable {
@@ -651,18 +651,18 @@ public class MagicJIT implements Opcodes {
 
 	private static boolean isFallbackInvoker(MagicInvoker invoker) {
 		return invoker instanceof Arity0Invoker
-			|| invoker instanceof Arity1Invoker
-			|| invoker instanceof Arity2Invoker
-			|| invoker instanceof Arity3Invoker
-			|| invoker instanceof GenericInvoker;
+		       || invoker instanceof Arity1Invoker
+		       || invoker instanceof Arity2Invoker
+		       || invoker instanceof Arity3Invoker
+		       || invoker instanceof GenericInvoker;
 	}
 
 	private static boolean isFallbackCtorInvoker(MagicConstructorInvoker invoker) {
 		return invoker instanceof Arity0CtorInvoker
-			|| invoker instanceof Arity1CtorInvoker
-			|| invoker instanceof Arity2CtorInvoker
-			|| invoker instanceof Arity3CtorInvoker
-			|| invoker instanceof GenericCtorInvoker;
+		       || invoker instanceof Arity1CtorInvoker
+		       || invoker instanceof Arity2CtorInvoker
+		       || invoker instanceof Arity3CtorInvoker
+		       || invoker instanceof GenericCtorInvoker;
 	}
 
 	private static final MethodHandle MH_INVOKER_INVOKE0;
@@ -684,13 +684,13 @@ public class MagicJIT implements Opcodes {
 			MH_INVOKER_INVOKE1 = lk.findVirtual(MagicInvoker.class, "invoke1", MethodType.methodType(Object.class, Object.class, Object.class));
 			MH_INVOKER_INVOKE2 = lk.findVirtual(MagicInvoker.class, "invoke2", MethodType.methodType(Object.class, Object.class, Object.class, Object.class));
 			MH_INVOKER_INVOKE3 = lk.findVirtual(MagicInvoker.class, "invoke3", MethodType.methodType(Object.class, Object.class, Object.class, Object.class, Object.class));
-			MH_INVOKER_INVOKE  = lk.findVirtual(MagicInvoker.class, "invoke", MethodType.methodType(Object.class, Object.class, Object[].class));
+			MH_INVOKER_INVOKE = lk.findVirtual(MagicInvoker.class, "invoke", MethodType.methodType(Object.class, Object.class, Object[].class));
 
 			MH_CTOR_INVOKER_NEW0 = lk.findVirtual(MagicConstructorInvoker.class, "newInstance0", MethodType.methodType(Object.class));
 			MH_CTOR_INVOKER_NEW1 = lk.findVirtual(MagicConstructorInvoker.class, "newInstance1", MethodType.methodType(Object.class, Object.class));
 			MH_CTOR_INVOKER_NEW2 = lk.findVirtual(MagicConstructorInvoker.class, "newInstance2", MethodType.methodType(Object.class, Object.class, Object.class));
 			MH_CTOR_INVOKER_NEW3 = lk.findVirtual(MagicConstructorInvoker.class, "newInstance3", MethodType.methodType(Object.class, Object.class, Object.class, Object.class));
-			MH_CTOR_INVOKER_NEW  = lk.findVirtual(MagicConstructorInvoker.class, "newInstance", MethodType.methodType(Object.class, Object[].class));
+			MH_CTOR_INVOKER_NEW = lk.findVirtual(MagicConstructorInvoker.class, "newInstance", MethodType.methodType(Object.class, Object[].class));
 		} catch (Throwable t) {
 			throw new ExceptionInInitializerError(t);
 		}
@@ -1199,18 +1199,13 @@ public class MagicJIT implements Opcodes {
 			Class<?>[] genericParams = new Class<?>[arity];
 			Arrays.fill(genericParams, Object.class);
 			MethodHandle finalCtorMh = ctorMh.asType(MethodType.methodType(Object.class, genericParams));
-			switch (arity) {
-				case 0:
-					return new Arity0CtorInvoker(finalCtorMh);
-				case 1:
-					return new Arity1CtorInvoker(finalCtorMh);
-				case 2:
-					return new Arity2CtorInvoker(finalCtorMh);
-				case 3:
-					return new Arity3CtorInvoker(finalCtorMh);
-				default:
-					return new GenericCtorInvoker(finalCtorMh.asSpreader(Object[].class, arity));
-			}
+			return switch (arity) {
+				case 0 -> new Arity0CtorInvoker(finalCtorMh);
+				case 1 -> new Arity1CtorInvoker(finalCtorMh);
+				case 2 -> new Arity2CtorInvoker(finalCtorMh);
+				case 3 -> new Arity3CtorInvoker(finalCtorMh);
+				default -> new GenericCtorInvoker(finalCtorMh.asSpreader(Object[].class, arity));
+			};
 		} catch (Throwable e) {
 			throw new RuntimeException("Failed to generate MagicConstructorInvoker for " + clazz.getName() + " (mode=" + mode + ")", e);
 		}
@@ -1368,9 +1363,9 @@ public class MagicJIT implements Opcodes {
 
 	public static MethodHandle getExactConstructorStub(Class<?> clazz, Constructor<?> targetCtor, AccessMode mode) {
 		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
-		ClassJITData   data   = JIT_DATA.get(clazz);
-		ExactCtorKey   key    = new ExactCtorKey(mode, targetCtor);
-		MethodHandle   cached = data.exactCtorStubCache.get(key);
+		ClassJITData data   = JIT_DATA.get(clazz);
+		ExactCtorKey key    = new ExactCtorKey(mode, targetCtor);
+		MethodHandle cached = data.exactCtorStubCache.get(key);
 		if (cached != null) return cached;
 		MethodHandle stub = generateExactConstructorStub(clazz, targetCtor, mode);
 		if (stub != null) data.exactCtorStubCache.put(key, stub);
@@ -1682,7 +1677,9 @@ public class MagicJIT implements Opcodes {
 
 	private static String getLinkToName(Class<?> declClass, Method m) {
 		if (Modifier.isStatic(m.getModifiers())) return "linkToStatic";
-		if (Modifier.isPrivate(m.getModifiers()) || Modifier.isFinal(m.getModifiers()) || Modifier.isFinal(declClass.getModifiers())) return "linkToSpecial";
+		if (Modifier.isPrivate(m.getModifiers()) || Modifier.isFinal(m.getModifiers()) || Modifier.isFinal(declClass.getModifiers())) {
+			return "linkToSpecial";
+		}
 		if (declClass.isInterface()) return "linkToInterface";
 		return "linkToVirtual";
 	}
@@ -4947,24 +4944,25 @@ public class MagicJIT implements Opcodes {
 	 * @param retType    返回类型
 	 */
 	private static void emitOptimizedJSFunctionCall(MethodVisitor mv, Class<?>[] paramTypes, Class<?> retType) {
-		if (paramTypes.length == 0) {
+		int arity = paramTypes.length;
+		if (arity == 0) {
 			mv.visitMethodInsn(INVOKEINTERFACE, "hope/magic/js/runtime/JSFunction", "call0", "(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;)Ljava/lang/Object;", true);
-		} else if (paramTypes.length == 1) {
+		} else if (arity == 1) {
 			emitLoadAndBox(mv, paramTypes[0], 1);
 			mv.visitMethodInsn(INVOKEINTERFACE, "hope/magic/js/runtime/JSFunction", "call1", "(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true);
-		} else if (paramTypes.length == 2) {
+		} else if (arity == 2) {
 			emitLoadAndBox(mv, paramTypes[0], 1);
 			int slot2 = (paramTypes[0] == long.class || paramTypes[0] == double.class) ? 3 : 2;
 			emitLoadAndBox(mv, paramTypes[1], slot2);
 			mv.visitMethodInsn(INVOKEINTERFACE, "hope/magic/js/runtime/JSFunction", "call2", "(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true);
-		} else if (paramTypes.length == 3) {
+		} else if (arity == 3) {
 			int slot = 1;
 			for (int i = 0; i < 3; i++) {
 				emitLoadAndBox(mv, paramTypes[i], slot);
 				slot += (paramTypes[i] == long.class || paramTypes[i] == double.class) ? 2 : 1;
 			}
 			mv.visitMethodInsn(INVOKEINTERFACE, "hope/magic/js/runtime/JSFunction", "call3", "(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true);
-		} else if (paramTypes.length == 4) {
+		} else if (arity == 4) {
 			int slot = 1;
 			for (int i = 0; i < 4; i++) {
 				emitLoadAndBox(mv, paramTypes[i], slot);
@@ -4973,11 +4971,11 @@ public class MagicJIT implements Opcodes {
 			mv.visitMethodInsn(INVOKEINTERFACE, "hope/magic/js/runtime/JSFunction", "call4", "(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", true);
 		} else {
 			// >4 参数：构建 Object[] args
-			pushInt(mv, paramTypes.length);
+			pushInt(mv, arity);
 			mv.visitTypeInsn(ANEWARRAY, "java/lang/Object");
 
 			int localSlot = 1;
-			for (int i = 0; i < paramTypes.length; i++) {
+			for (int i = 0; i < arity; i++) {
 				Class<?> pt = paramTypes[i];
 				mv.visitInsn(DUP);
 				pushInt(mv, i);
@@ -5018,9 +5016,9 @@ public class MagicJIT implements Opcodes {
 		mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/MagicJIT", "enterContext", "(Lhope/magic/js/runtime/JSContext;)Lhope/magic/js/runtime/JSContext;", false);
 		mv.visitVarInsn(ASTORE, prevSlot);
 
-		org.objectweb.asm.Label tryStart     = new org.objectweb.asm.Label();
-		org.objectweb.asm.Label tryEnd       = new org.objectweb.asm.Label();
-		org.objectweb.asm.Label catchHandler = new org.objectweb.asm.Label();
+		Label tryStart     = new Label();
+		Label tryEnd       = new Label();
+		Label catchHandler = new Label();
 		mv.visitTryCatchBlock(tryStart, tryEnd, catchHandler, null);
 
 		mv.visitLabel(tryStart);
@@ -5029,15 +5027,15 @@ public class MagicJIT implements Opcodes {
 			// Primitive 特化直调 (Zero-Allocation, 无装箱)
 			emitPrimitiveSAMMethodCall(mv, className, paramTypes, retType, cxSlot);
 		} else {
-			// 1. 获取 fn
+			// 获取 fn
 			mv.visitVarInsn(ALOAD, 0);
 			mv.visitFieldInsn(GETFIELD, className, "fn", "Lhope/magic/js/runtime/JSFunction;");
 
-			// 2. 参数压栈: cx, thisObj
+			// 参数压栈: cx, thisObj
 			mv.visitVarInsn(ALOAD, cxSlot);
 			mv.visitInsn(ACONST_NULL); // thisObj
 
-			// 3. Zero-Allocation 特化直调 (call0, call1, call2, call3, call4)
+			// 尽可能无参数数组 特化直调 (call0, call1, call2, call3, call4)
 			emitOptimizedJSFunctionCall(mv, paramTypes, retType);
 		}
 
@@ -5086,8 +5084,9 @@ public class MagicJIT implements Opcodes {
 		mv.visitVarInsn(ALOAD, 0);
 		mv.visitFieldInsn(GETFIELD, className, "fn", "Lhope/magic/js/runtime/JSFunction;");
 
-		// 2. 参数压栈: cx
+		// 2. 参数压栈: cx, thisObj
 		mv.visitVarInsn(ALOAD, cxSlot);
+		mv.visitInsn(ACONST_NULL);
 
 		// 3. 逐个将 primitive 参数加载并转为 double
 		int slot = 1;
@@ -5108,11 +5107,11 @@ public class MagicJIT implements Opcodes {
 
 	private static String getPrimCallDesc(int arity) {
 		return switch (arity) {
-			case 0 -> "(Lhope/magic/js/runtime/JSContext;)D";
-			case 1 -> "(Lhope/magic/js/runtime/JSContext;D)D";
-			case 2 -> "(Lhope/magic/js/runtime/JSContext;DD)D";
-			case 3 -> "(Lhope/magic/js/runtime/JSContext;DDD)D";
-			case 4 -> "(Lhope/magic/js/runtime/JSContext;DDDD)D";
+			case 0 -> "(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;)D";
+			case 1 -> "(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;D)D";
+			case 2 -> "(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;DD)D";
+			case 3 -> "(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;DDD)D";
+			case 4 -> "(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;DDDD)D";
 			default -> throw new IllegalArgumentException("Unsupported primitive arity: " + arity);
 		};
 	}
@@ -5256,9 +5255,9 @@ public class MagicJIT implements Opcodes {
 		mv.visitMethodInsn(INVOKESTATIC, "hope/magic/js/runtime/MagicJIT", "enterContext", "(Lhope/magic/js/runtime/JSContext;)Lhope/magic/js/runtime/JSContext;", false);
 		mv.visitVarInsn(ASTORE, prevSlot);
 
-		org.objectweb.asm.Label tryStart     = new org.objectweb.asm.Label();
-		org.objectweb.asm.Label tryEnd       = new org.objectweb.asm.Label();
-		org.objectweb.asm.Label catchHandler = new org.objectweb.asm.Label();
+		Label tryStart     = new Label();
+		Label tryEnd       = new Label();
+		Label catchHandler = new Label();
 		mv.visitTryCatchBlock(tryStart, tryEnd, catchHandler, null);
 
 		mv.visitLabel(tryStart);
@@ -5274,7 +5273,7 @@ public class MagicJIT implements Opcodes {
 		// 2. if (member instanceof JSFunction)
 		mv.visitVarInsn(ALOAD, memberSlot);
 		mv.visitTypeInsn(INSTANCEOF, "hope/magic/js/runtime/JSFunction");
-		org.objectweb.asm.Label notFnLabel = new org.objectweb.asm.Label();
+		Label notFnLabel = new Label();
 		mv.visitJumpInsn(IFEQ, notFnLabel);
 
 		// member.call*(cx, this.jsObj, ...)
@@ -5285,14 +5284,14 @@ public class MagicJIT implements Opcodes {
 		mv.visitFieldInsn(GETFIELD, className, "jsObj", "Lhope/magic/js/runtime/JSObject;"); // thisObj = jsObj
 		emitOptimizedJSFunctionCall(mv, paramTypes, retType);
 
-		org.objectweb.asm.Label doneLabel = new org.objectweb.asm.Label();
+		Label doneLabel = new Label();
 		mv.visitJumpInsn(GOTO, doneLabel);
 
 		// 3. else if (member != JSUndefined.INSTANCE)
 		mv.visitLabel(notFnLabel);
 		mv.visitVarInsn(ALOAD, memberSlot);
 		mv.visitFieldInsn(GETSTATIC, "hope/magic/js/runtime/JSUndefined", "INSTANCE", "Lhope/magic/js/runtime/JSUndefined;");
-		org.objectweb.asm.Label undefLabel = new org.objectweb.asm.Label();
+		Label undefLabel = new Label();
 		mv.visitJumpInsn(IF_ACMPEQ, undefLabel);
 
 		mv.visitVarInsn(ALOAD, memberSlot);
@@ -5485,7 +5484,7 @@ public class MagicJIT implements Opcodes {
 		eqMv.visitCode();
 		eqMv.visitVarInsn(ALOAD, 0);
 		eqMv.visitVarInsn(ALOAD, 1);
-		org.objectweb.asm.Label notEq = new org.objectweb.asm.Label();
+		Label notEq = new Label();
 		eqMv.visitJumpInsn(IF_ACMPNE, notEq);
 		eqMv.visitInsn(ICONST_1);
 		eqMv.visitInsn(IRETURN);

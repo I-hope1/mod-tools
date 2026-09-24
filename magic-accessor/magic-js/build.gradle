@@ -18,13 +18,13 @@ dependencies {
 
 test {
 	useJUnitPlatform()
-	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
-		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
+	if (new File("F:/files/java/jdks/openjdk-21.0.12.1/bin/java.exe").exists()) {
+		executable = "F:/files/java/jdks/openjdk-21.0.12.1/bin/java.exe"
 	}
-	jvmArgs(
-		'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
-		'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED'
-	)
+	/*jvmArgs(
+			'-XX:+UnlockDiagnosticVMOptions',
+			'-XX:+PrintInlining',
+	)*/
 }
 
 tasks.register('soakTest', Test) {
@@ -36,12 +36,12 @@ tasks.register('soakTest', Test) {
 		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
 	}
 	jvmArgs = [
-		'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
-		'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED',
-		'-Xcheck:jni',
-		'-XX:+UnlockDiagnosticVMOptions',
-		'-XX:+VerifyBeforeGC',
-		'-XX:+VerifyAfterGC'
+			'--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED',
+			'--add-exports=java.base/jdk.internal.reflect=ALL-UNNAMED',
+			'-Xcheck:jni',
+			'-XX:+UnlockDiagnosticVMOptions',
+			'-XX:+VerifyBeforeGC',
+			'-XX:+VerifyAfterGC'
 	]
 	testLogging {
 		events "passed", "skipped", "failed", "standardOut", "standardError"

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.*;
 
 import java.lang.invoke.*;
 import java.lang.reflect.Method;
+import java.nio.file.*;
 import java.util.*;
 
 public class MagicJSTest {
@@ -884,8 +885,8 @@ public class MagicJSTest {
 	public void testUpdatePropertyTypeTransitionCached() {
 		// 1. 基础缓存验证：同一个 Shape 对同一个 offset 执行相同的类型更新，必须返回同一个 Shape 实例
 		JSShape base = JSShape.ROOT.addProperty("a_upd_test", JSShape.TYPE_DOUBLE).addProperty("b_upd_test", JSShape.TYPE_INT);
-		int off0 = base.getOffset("a_upd_test");
-		int off1 = base.getOffset("b_upd_test");
+		int     off0 = base.getOffset("a_upd_test");
+		int     off1 = base.getOffset("b_upd_test");
 
 		JSShape s1 = base.updatePropertyType(off0, JSShape.TYPE_OBJECT);
 		JSShape s2 = base.updatePropertyType(off0, JSShape.TYPE_OBJECT);
@@ -1776,55 +1777,55 @@ public class MagicJSTest {
 
 		// 1. for...of 数组解构
 		Object r1 = cx.eval("""
-			const pairs = [[1, 10], [2, 20], [3, 30]];
-			let sum = 0;
-			for (const [k, v] of pairs) {
-				sum += k * v;
-			}
-			sum;
-		""");
-		Assertions.assertEquals(1*10 + 2*20 + 3*30, ((Number) r1).doubleValue());
+		 	const pairs = [[1, 10], [2, 20], [3, 30]];
+		 	let sum = 0;
+		 	for (const [k, v] of pairs) {
+		 		sum += k * v;
+		 	}
+		 	sum;
+		 """);
+		Assertions.assertEquals(1 * 10 + 2 * 20 + 3 * 30, ((Number) r1).doubleValue());
 
 		// 2. for...of 对象解构带别名与默认值
 		Object r2 = cx.eval("""
-			const users = [
-				{ name: "Alice", age: 25 },
-				{ name: "Bob" }
-			];
-			let totalAge = 0;
-			for (const { age = 18 } of users) {
-				totalAge += age;
-			}
-			totalAge;
-		""");
+		 	const users = [
+		 		{ name: "Alice", age: 25 },
+		 		{ name: "Bob" }
+		 	];
+		 	let totalAge = 0;
+		 	for (const { age = 18 } of users) {
+		 		totalAge += age;
+		 	}
+		 	totalAge;
+		 """);
 		Assertions.assertEquals(43.0, ((Number) r2).doubleValue());
 
 		// 3. 通用 Iterable (字符串与 rest) 数组解构
 		Object r3 = cx.eval("""
-			const [first, ...rest] = "hello";
-			first + ":" + rest.join("");
-		""");
+		 	const [first, ...rest] = "hello";
+		 	first + ":" + rest.join("");
+		 """);
 		Assertions.assertEquals("h:ello", r3);
 
 		// 4. 对象解构支持字符串键、数字键与计算属性名
 		Object r4 = cx.eval("""
-			const sym = Symbol("mySym");
-			const obj = {
-				"content-type": "application/json",
-				404: "Not Found",
-				[sym]: 9999
-			};
-			const { "content-type": ct, 404: statusText, [sym]: symVal } = obj;
-			ct + "|" + statusText + "|" + symVal;
-		""");
+		 	const sym = Symbol("mySym");
+		 	const obj = {
+		 		"content-type": "application/json",
+		 		404: "Not Found",
+		 		[sym]: 9999
+		 	};
+		 	const { "content-type": ct, 404: statusText, [sym]: symVal } = obj;
+		 	ct + "|" + statusText + "|" + symVal;
+		 """);
 		Assertions.assertEquals("application/json|Not Found|9999", r4);
 
 		// 5. 无声明循环解构 for ([a, b] of list)
 		Object r5 = cx.eval("""
-			let x = 0, y = 0;
-			for ([x, y] of [[5, 6], [7, 8]]) {}
-			x * 10 + y;
-		""");
+		 	let x = 0, y = 0;
+		 	for ([x, y] of [[5, 6], [7, 8]]) {}
+		 	x * 10 + y;
+		 """);
 		Assertions.assertEquals(78.0, ((Number) r5).doubleValue());
 	}
 
@@ -1849,17 +1850,17 @@ public class MagicJSTest {
 
 		// Case 4: custom constructor with iterable
 		Object r4 = cx.eval("""
-			function MyClass() { this.isMyClass = true; }
-			var res = Array.from.call(MyClass, [10, 20]);
-			({
-				isInst: res instanceof MyClass,
-				notArr: !Array.isArray(res),
-				len: res.length,
-				v0: res[0],
-				v1: res[1],
-				marker: res.isMyClass
-			});
-		""");
+		 	function MyClass() { this.isMyClass = true; }
+		 	var res = Array.from.call(MyClass, [10, 20]);
+		 	({
+		 		isInst: res instanceof MyClass,
+		 		notArr: !Array.isArray(res),
+		 		len: res.length,
+		 		v0: res[0],
+		 		v1: res[1],
+		 		marker: res.isMyClass
+		 	});
+		 """);
 		Assertions.assertTrue(r4 instanceof JSObject);
 		JSObject o4 = (JSObject) r4;
 		Assertions.assertEquals(Boolean.TRUE, o4.get("isInst"));
@@ -1871,16 +1872,16 @@ public class MagicJSTest {
 
 		// Case 5: custom constructor with array-like object
 		Object r5 = cx.eval("""
-			function ItemHolder() { this.holder = true; }
-			var resLike = Array.from.call(ItemHolder, { length: 2, 0: "hello", 1: "world" });
-			({
-				isInst: resLike instanceof ItemHolder,
-				notArr: !Array.isArray(resLike),
-				len: resLike.length,
-				v0: resLike[0],
-				v1: resLike[1]
-			});
-		""");
+		 	function ItemHolder() { this.holder = true; }
+		 	var resLike = Array.from.call(ItemHolder, { length: 2, 0: "hello", 1: "world" });
+		 	({
+		 		isInst: resLike instanceof ItemHolder,
+		 		notArr: !Array.isArray(resLike),
+		 		len: resLike.length,
+		 		v0: resLike[0],
+		 		v1: resLike[1]
+		 	});
+		 """);
 		Assertions.assertTrue(r5 instanceof JSObject);
 		JSObject o5 = (JSObject) r5;
 		Assertions.assertEquals(Boolean.TRUE, o5.get("isInst"));
@@ -1890,15 +1891,15 @@ public class MagicJSTest {
 
 		// Case 6: SubArray subclass via Array.from
 		Object r6 = cx.eval("""
-			class SubArray extends Array {}
-			var sub = SubArray.from([1, 2, 3]);
-			({
-				isSub: sub instanceof SubArray,
-				len: sub.length,
-				v0: sub[0],
-				v2: sub[2]
-			});
-		""");
+		 	class SubArray extends Array {}
+		 	var sub = SubArray.from([1, 2, 3]);
+		 	({
+		 		isSub: sub instanceof SubArray,
+		 		len: sub.length,
+		 		v0: sub[0],
+		 		v2: sub[2]
+		 	});
+		 """);
 		Assertions.assertTrue(r6 instanceof JSObject);
 		JSObject o6 = (JSObject) r6;
 		Assertions.assertEquals(Boolean.TRUE, o6.get("isSub"));
@@ -1908,66 +1909,66 @@ public class MagicJSTest {
 
 		// Case 7: Array.from.call with mapping function
 		Object r7 = cx.eval("""
-			Array.from.call(Array, [1, 2, 3], x => x * 2).join(',');
-		""");
+		 	Array.from.call(Array, [1, 2, 3], x => x * 2).join(',');
+		 """);
 		Assertions.assertEquals("2,4,6", r7);
 
 		// Case 8: Unicode string code points via Array.from.call
 		Object r8 = cx.eval("""
-			Array.from.call(null, "a😀b").length;
-		""");
+		 	Array.from.call(null, "a😀b").length;
+		 """);
 		Assertions.assertEquals(3.0, ((Number) r8).doubleValue());
 
 		// Case 9: test262 mapFn on array-like object without thisArg
 		cx.eval("""
-			var assert = {
-			  sameValue: function(actual, expected, message) {
-			    if (actual !== expected) {
-			      throw new Error((message || '') + ': expected ' + expected + ' but got ' + actual);
-			    }
-			  }
-			};
-
-			var list = {
-			  '0': 41,
-			  '1': 42,
-			  '2': 43,
-			  length: 3
-			};
-			var calls = [];
-
-			function mapFn(value) {
-			  calls.push({
-			    args: arguments,
-			    thisArg: this
-			  });
-			  return value * 2;
-			}
-
-			var result = Array.from(list, mapFn);
-
-			assert.sameValue(result.length, 3, 'The value of result.length is expected to be 3');
-			assert.sameValue(result[0], 82, 'The value of result[0] is expected to be 82');
-			assert.sameValue(result[1], 84, 'The value of result[1] is expected to be 84');
-			assert.sameValue(result[2], 86, 'The value of result[2] is expected to be 86');
-
-			assert.sameValue(calls.length, 3, 'The value of calls.length is expected to be 3');
-
-			assert.sameValue(calls[0].args.length, 2, 'The value of calls[0].args.length is expected to be 2');
-			assert.sameValue(calls[0].args[0], 41, 'The value of calls[0].args[0] is expected to be 41');
-			assert.sameValue(calls[0].args[1], 0, 'The value of calls[0].args[1] is expected to be 0');
-			assert.sameValue(calls[0].thisArg, this, 'The value of calls[0].thisArg is expected to be this');
-
-			assert.sameValue(calls[1].args.length, 2, 'The value of calls[1].args.length is expected to be 2');
-			assert.sameValue(calls[1].args[0], 42, 'The value of calls[1].args[0] is expected to be 42');
-			assert.sameValue(calls[1].args[1], 1, 'The value of calls[1].args[1] is expected to be 1');
-			assert.sameValue(calls[1].thisArg, this, 'The value of calls[1].thisArg is expected to be this');
-
-			assert.sameValue(calls[2].args.length, 2, 'The value of calls[2].args.length is expected to be 2');
-			assert.sameValue(calls[2].args[0], 43, 'The value of calls[2].args[0] is expected to be 43');
-			assert.sameValue(calls[2].args[1], 2, 'The value of calls[2].args[1] is expected to be 2');
-			assert.sameValue(calls[2].thisArg, this, 'The value of calls[2].thisArg is expected to be this');
-		""");
+		 	var assert = {
+		 	  sameValue: function(actual, expected, message) {
+		 	    if (actual !== expected) {
+		 	      throw new Error((message || '') + ': expected ' + expected + ' but got ' + actual);
+		 	    }
+		 	  }
+		 	};
+		 
+		 	var list = {
+		 	  '0': 41,
+		 	  '1': 42,
+		 	  '2': 43,
+		 	  length: 3
+		 	};
+		 	var calls = [];
+		 
+		 	function mapFn(value) {
+		 	  calls.push({
+		 	    args: arguments,
+		 	    thisArg: this
+		 	  });
+		 	  return value * 2;
+		 	}
+		 
+		 	var result = Array.from(list, mapFn);
+		 
+		 	assert.sameValue(result.length, 3, 'The value of result.length is expected to be 3');
+		 	assert.sameValue(result[0], 82, 'The value of result[0] is expected to be 82');
+		 	assert.sameValue(result[1], 84, 'The value of result[1] is expected to be 84');
+		 	assert.sameValue(result[2], 86, 'The value of result[2] is expected to be 86');
+		 
+		 	assert.sameValue(calls.length, 3, 'The value of calls.length is expected to be 3');
+		 
+		 	assert.sameValue(calls[0].args.length, 2, 'The value of calls[0].args.length is expected to be 2');
+		 	assert.sameValue(calls[0].args[0], 41, 'The value of calls[0].args[0] is expected to be 41');
+		 	assert.sameValue(calls[0].args[1], 0, 'The value of calls[0].args[1] is expected to be 0');
+		 	assert.sameValue(calls[0].thisArg, this, 'The value of calls[0].thisArg is expected to be this');
+		 
+		 	assert.sameValue(calls[1].args.length, 2, 'The value of calls[1].args.length is expected to be 2');
+		 	assert.sameValue(calls[1].args[0], 42, 'The value of calls[1].args[0] is expected to be 42');
+		 	assert.sameValue(calls[1].args[1], 1, 'The value of calls[1].args[1] is expected to be 1');
+		 	assert.sameValue(calls[1].thisArg, this, 'The value of calls[1].thisArg is expected to be this');
+		 
+		 	assert.sameValue(calls[2].args.length, 2, 'The value of calls[2].args.length is expected to be 2');
+		 	assert.sameValue(calls[2].args[0], 43, 'The value of calls[2].args[0] is expected to be 43');
+		 	assert.sameValue(calls[2].args[1], 2, 'The value of calls[2].args[1] is expected to be 2');
+		 	assert.sameValue(calls[2].thisArg, this, 'The value of calls[2].thisArg is expected to be this');
+		 """);
 	}
 
 	@Test
@@ -2940,6 +2941,13 @@ public class MagicJSTest {
 
 	@Test
 	public void testLargeArityAndHoistedVarInLoop() {
+		JSCompiler.CLASS_DUMP_HOOK = (name, bytes) -> {
+			try {
+				Files.writeString(Path.of(name.replace('/', '_') + "_poly_disasm.txt"), JSCompiler.disassemble(bytes));
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		};
 		JSContext cx = new JSContext();
 		Object res = cx.eval("""
 		 var x = Array(
@@ -2964,18 +2972,19 @@ public class MagicJSTest {
 		 result;
 		 """);
 		Assertions.assertEquals(Boolean.TRUE, res);
+		JSCompiler.CLASS_DUMP_HOOK = null;
 	}
 
 	@Test
 	public void testImportPackageBasic() {
 		JSContext cx = new JSContext();
 		Object res = cx.eval("""
-			importPackage(java.util);
-			var list = new ArrayList();
-			list.add("hello");
-			list.add("world");
-			list.size();
-		""");
+		 	importPackage(java.util);
+		 	var list = new ArrayList();
+		 	list.add("hello");
+		 	list.add("world");
+		 	list.size();
+		 """);
 		Assertions.assertEquals(2, ((Number) res).intValue());
 
 		Object val = cx.eval("list.get(0);");
@@ -2986,12 +2995,12 @@ public class MagicJSTest {
 	public void testImportPackagesVarargs() {
 		JSContext cx = new JSContext();
 		Object res = cx.eval("""
-			importPackages(java.util, java.io);
-			var map = new HashMap();
-			map.put("key", "val");
-			var f = new File("test.txt");
-			map.get("key") + ":" + f.getName();
-		""");
+		 	importPackages(java.util, java.io);
+		 	var map = new HashMap();
+		 	map.put("key", "val");
+		 	var f = new File("test.txt");
+		 	map.get("key") + ":" + f.getName();
+		 """);
 		Assertions.assertEquals("val:test.txt", res);
 	}
 
@@ -2999,13 +3008,13 @@ public class MagicJSTest {
 	public void testImportPackageStringAndPackagesPrefix() {
 		JSContext cx = new JSContext();
 		Object res = cx.eval("""
-			importPackage(Packages.java.util);
-			importPackage("java.text");
-			var sdf = new SimpleDateFormat("yyyy");
-			var l = new LinkedList();
-			l.add(1);
-			l.size();
-		""");
+		 	importPackage(Packages.java.util);
+		 	importPackage("java.text");
+		 	var sdf = new SimpleDateFormat("yyyy");
+		 	var l = new LinkedList();
+		 	l.add(1);
+		 	l.size();
+		 """);
 		Assertions.assertEquals(1, ((Number) res).intValue());
 	}
 
@@ -3013,17 +3022,17 @@ public class MagicJSTest {
 	public void testImportPackagePrecedenceAndFunctionScope() {
 		JSContext cx = new JSContext();
 		Object res = cx.eval("""
-			importPackage(java.lang);
-			importPackage(java.util);
-			// 确保原生 JS Math 和 Array 不会被 java.lang.Math 覆盖
-			var m = Math.max(10, 20);
-			function inFunc() {
-				var set = new HashSet();
-				set.add("a");
-				return set.size();
-			}
-			m + ":" + inFunc();
-		""");
+		 	importPackage(java.lang);
+		 	importPackage(java.util);
+		 	// 确保原生 JS Math 和 Array 不会被 java.lang.Math 覆盖
+		 	var m = Math.max(10, 20);
+		 	function inFunc() {
+		 		var set = new HashSet();
+		 		set.add("a");
+		 		return set.size();
+		 	}
+		 	m + ":" + inFunc();
+		 """);
 		Assertions.assertEquals("20:1", res);
 	}
 
@@ -3032,11 +3041,11 @@ public class MagicJSTest {
 		JSContext cx = new JSContext();
 		// 宽容处理：传 Class 相当于 importClass
 		Object res = cx.eval("""
-			importPackage(java.util.ArrayList);
-			var arr = new ArrayList();
-			arr.add(42);
-			arr.get(0);
-		""");
+		 	importPackage(java.util.ArrayList);
+		 	var arr = new ArrayList();
+		 	arr.add(42);
+		 	arr.get(0);
+		 """);
 		Assertions.assertEquals(42, ((Number) res).intValue());
 	}
 
@@ -3045,10 +3054,10 @@ public class MagicJSTest {
 		JSContext cx = new JSContext();
 		// 1. 小写变量不会触发包探测
 		Object res = cx.eval("""
-			importPackage(java.util);
-			var foo = typeof notExistVar;
-			foo;
-		""");
+		 	importPackage(java.util);
+		 	var foo = typeof notExistVar;
+		 	foo;
+		 """);
 		Assertions.assertEquals("undefined", res);
 
 		// 2. 不存在的大写类名首次进入负缓存
@@ -3068,8 +3077,8 @@ public class MagicJSTest {
 		multiplyMethod.setAccessible(true);
 		java.lang.invoke.MethodHandle exactMultiply = MagicJIT.createExactMethodStub(TargetJavaClass.class, multiplyMethod);
 		Assertions.assertNotNull(exactMultiply);
-		TargetJavaClass target = new TargetJavaClass(12345, "LinkToTest");
-		Object multRes = exactMultiply.invoke(target, 6, 7);
+		TargetJavaClass target  = new TargetJavaClass(12345, "LinkToTest");
+		Object          multRes = exactMultiply.invoke(target, 6, 7);
 		Assertions.assertEquals(42, ((Number) multRes).intValue());
 
 		// 2. 测试静态私有方法 exactStub (linkToStatic)
@@ -3083,7 +3092,7 @@ public class MagicJSTest {
 		// 3. 测试 MagicInvoker (Arity 0~3 特化直调及 asSpreader 展开)
 		MagicJIT.MagicInvoker invoker2 = MagicJIT.getMethodInvoker(TargetJavaClass.class, "multiply", 2, false);
 		Assertions.assertNotNull(invoker2);
-		Object invokerResArray = invoker2.invoke(target, new Object[]{ 8, 9 });
+		Object invokerResArray = invoker2.invoke(target, new Object[]{8, 9});
 		Assertions.assertEquals(72, ((Number) invokerResArray).intValue());
 		Object invokerRes2 = invoker2.invoke2(target, 8, 9);
 		Assertions.assertEquals(72, ((Number) invokerRes2).intValue());
@@ -3117,7 +3126,7 @@ public class MagicJSTest {
 
 		MagicJIT.MagicConstructorInvoker ctorInvoker = MagicJIT.getConstructorInvoker(TargetJavaClass.class, 2);
 		Assertions.assertNotNull(ctorInvoker);
-		Object newObj = ctorInvoker.newInstance(new Object[]{ 8888, "CreatedByLinkToCtor" });
+		Object newObj = ctorInvoker.newInstance(new Object[]{8888, "CreatedByLinkToCtor"});
 		Assertions.assertInstanceOf(TargetJavaClass.class, newObj);
 		Assertions.assertEquals(8888, ((TargetJavaClass) newObj).secretCode);
 		Object newObjDirect = ctorInvoker.newInstance2(9999, "CreatedDirect");
@@ -3140,8 +3149,8 @@ public class MagicJSTest {
 		runCbMethod.setAccessible(true);
 		java.lang.invoke.MethodHandle exactRunCb = MagicJIT.createExactMethodStub(TargetJavaClass.class, runCbMethod);
 		Assertions.assertNotNull(exactRunCb);
-		boolean[] ran = new boolean[1];
-		Object voidRes = exactRunCb.invoke(target, (Runnable) () -> ran[0] = true);
+		boolean[] ran     = new boolean[1];
+		Object    voidRes = exactRunCb.invoke(target, (Runnable) () -> ran[0] = true);
 		Assertions.assertTrue(ran[0]);
 		Assertions.assertSame(JSUndefined.INSTANCE, voidRes);
 	}
@@ -3153,9 +3162,9 @@ public class MagicJSTest {
 			TargetJavaClass target = new TargetJavaClass(789, "MultiModeTest");
 
 			for (AccessMode mode : new AccessMode[]{
-				AccessMode.UNSAFE_AND_METHODHANDLE,
-				AccessMode.UNSAFE_AND_LINKTO,
-				AccessMode.MAGIC_ACCESSOR
+			 AccessMode.UNSAFE_AND_METHODHANDLE,
+			 AccessMode.UNSAFE_AND_LINKTO,
+			 AccessMode.MAGIC_ACCESSOR
 			}) {
 				MagicJIT.setMode(mode);
 

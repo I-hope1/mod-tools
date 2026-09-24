@@ -1,6 +1,11 @@
 package hope.magic.js.runtime;
 
 import java.lang.reflect.*;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Objects;
 
 @SuppressWarnings("unused")
@@ -534,9 +539,9 @@ public class JSOps {
 	}
 
 	public static long toLong(Object val) {
-		if (val instanceof Long l) return l;
-		if (val instanceof Integer i) return i.longValue();
-		if (val instanceof Double d) return d.longValue();
+		if (val instanceof Long) return (Long) val;
+		if (val instanceof Integer) return ((Integer) val).longValue();
+		// if (val instanceof Double) return ((Double) val).longValue(); // 不常见
 		return toLongSlow(val);
 	}
 
@@ -586,9 +591,9 @@ public class JSOps {
 	}
 
 	public static char toChar(Object val) {
-		if (val instanceof Character c) return c;
+		if (val instanceof Character) return (Character) val;
 		if (val instanceof String s && !s.isEmpty()) return s.charAt(0);
-		if (val instanceof Number n) return (char) n.intValue();
+		if (val instanceof Number) return (char) ((Number) val).intValue();
 		return '\0';
 	}
 
@@ -597,13 +602,14 @@ public class JSOps {
 	}
 
 	public static boolean toBoolean(Object val) {
-		if (val instanceof Boolean b) return b;
+		if (val instanceof Boolean) return (Boolean) val;
 		return isTruthy(val);
 	}
 
 	public static String toStr(Object val) {
-		if (val instanceof String s) return s;
-		if (val instanceof Integer i) return i.toString();
+		if (val instanceof String) return (String) val;
+		if (val instanceof Integer) return ((Integer) val).toString();
+		// if (val instanceof Long) return ((Long)val).toString(); // 如果 |l| > 2^53，不符合规范
 		return toStrSlow(val);
 	}
 
@@ -611,24 +617,53 @@ public class JSOps {
 		if (val == null) return "null";
 		if (val == JSUndefined.INSTANCE) return "undefined";
 		if (val instanceof JSSymbol) throw JSContext.makeTypeError("Cannot convert a Symbol value to a string");
-		if (val instanceof Boolean b) {
-			return b ? "true" : "false";
-		}
-		if (val instanceof Double d) {
-			if (d == d.longValue() && !Double.isInfinite(d) && !Double.isNaN(d)) {
-				return String.valueOf(d.longValue());
-			}
-		}
-		if (val instanceof Float f) {
-			if (f == f.longValue() && !Float.isInfinite(f) && !Float.isNaN(f)) {
-				return String.valueOf(f.longValue());
-			}
-		}
+
+		if (val instanceof Boolean b) return b.toString();
+		if (val instanceof Number num) return numberToString(num.doubleValue());
 		if (val instanceof JSObject jo) {
 			Object prim = toPrimitive(jo, "string");
 			return toStr(prim);
 		}
 		return String.valueOf(val);
+	}
+
+	private static final double MIN_PLAIN = 1e-6;
+	private static final double MAX_PLAIN = 1e21;
+
+	/** 严格符合 ECMAScript (ECMA-262) 规范的 Number::toString 算法 */
+	public static String numberToString(double d) {
+		if (Double.isNaN(d)) return "NaN";
+		if (d == 0.0) return "0"; // 涵盖 +0.0 与 -0.0
+		if (Double.isInfinite(d)) return d > 0 ? "Infinity" : "-Infinity";
+
+		double abs = Math.abs(d);
+		return (abs >= MIN_PLAIN && abs < MAX_PLAIN)
+		 ? plainDecimal(d)
+		 : scientificNotation(d);
+	}
+
+	/** [1e-6, 1e21) 区间：常规十进制，无科学计数法 */
+	private static String plainDecimal(double d) {
+		String plain = BigDecimal.valueOf(d).stripTrailingZeros().toPlainString();
+		return "-0".equals(plain) ? "0" : plain;
+	}
+
+	/** 区间外：转换为 JS 规范的科学计数法，如 "1.23e+22" / "1e-7" */
+	private static String scientificNotation(double d) {
+		String s      = Double.toString(d);
+		int    eIndex = s.indexOf('E');
+
+		String mantissa = s.substring(0, eIndex);
+		if (mantissa.endsWith(".0")) {
+			mantissa = mantissa.substring(0, mantissa.length() - 2);
+		}
+
+		String exp = s.substring(eIndex + 1);
+		if (!exp.startsWith("-")) {
+			exp = "+" + exp;
+		}
+
+		return mantissa + "e" + exp;
 	}
 
 	public static Object toPrimitive(Object val, boolean preferString) {
@@ -695,16 +730,16 @@ public class JSOps {
 		throw new RuntimeException("TypeError: Cannot convert object to primitive value");
 	}
 
-	/** MagicJIT是直接调用{@link #castValue(Object, Class)}  */
+	/** MagicJIT是直接调用{@link #castValue(Object, Class)} */
 	public static Object toInterface(Object val, Class<?> iface) {
 		return castValue(val, iface);
 	}
 
-	public static java.util.Iterator<?> toIterator(Object target) {
+	public static Iterator<?> toIterator(Object target) {
 		return toIterator(JSContext.current(), target);
 	}
 
-	public static java.util.Iterator<?> toIterator(JSContext cx, Object target) {
+	public static Iterator<?> toIterator(JSContext cx, Object target) {
 		if (target == null || target == JSUndefined.INSTANCE) {
 			throw JSContext.makeTypeError(target + " is not iterable (cannot read property Symbol(Symbol.iterator))");
 		}
@@ -738,10 +773,10 @@ public class JSOps {
 
 		// 2. 字符串迭代 (按 Unicode 码点展开)
 		if (target instanceof CharSequence cs) {
-			return new java.util.Iterator<Object>() {
-				private final String s = cs.toString();
-				private int index = 0;
-				private final int len = s.length();
+			return new Iterator<Object>() {
+				private final String s     = cs.toString();
+				private       int    index = 0;
+				private final int    len   = s.length();
 
 				@Override
 				public boolean hasNext() {
@@ -751,7 +786,7 @@ public class JSOps {
 				@Override
 				public Object next() {
 					if (index >= len) throw new java.util.NoSuchElementException();
-					int cp = Character.codePointAt(s, index);
+					int    cp  = Character.codePointAt(s, index);
 					String res = new String(Character.toChars(cp));
 					index += Character.charCount(cp);
 					return res;
@@ -763,17 +798,17 @@ public class JSOps {
 		if (target instanceof Iterable<?> iterable) {
 			return iterable.iterator();
 		}
-		if (target instanceof java.util.Iterator<?> iterator) {
+		if (target instanceof Iterator<?> iterator) {
 			return iterator;
 		}
 		if (target instanceof Object[] arr) {
 			return java.util.Arrays.asList(arr).iterator();
 		}
 		if (target.getClass().isArray()) {
-			int len = java.lang.reflect.Array.getLength(target);
-			java.util.List<Object> list = new java.util.ArrayList<>(len);
+			int                    len  = Array.getLength(target);
+			java.util.List<Object> list = new ArrayList<>(len);
 			for (int i = 0; i < len; i++) {
-				list.add(java.lang.reflect.Array.get(target, i));
+				list.add(Array.get(target, i));
 			}
 			return list.iterator();
 		}
@@ -796,13 +831,13 @@ public class JSOps {
 		throw JSContext.makeTypeError(toStr(target) + " is not iterable");
 	}
 
-	public static class JSIteratorWrapper implements java.util.Iterator<Object> {
-		private final JSContext cx;
-		private final JSObject iterObj;
+	public static class JSIteratorWrapper implements Iterator<Object> {
+		private final JSContext  cx;
+		private final JSObject   iterObj;
 		private final JSFunction nextFn;
-		private Object nextValue;
-		private boolean hasCached = false;
-		private boolean done = false;
+		private       Object     nextValue;
+		private       boolean    hasCached = false;
+		private       boolean    done      = false;
 
 		public JSIteratorWrapper(JSContext cx, JSObject iterObj, JSFunction nextFn) {
 			this.cx = cx;
@@ -850,8 +885,8 @@ public class JSOps {
 		if (target instanceof JSArray arr) {
 			return arr;
 		}
-		java.util.Iterator<?> it = toIterator(target);
-		JSArray res = new JSArray();
+		Iterator<?> it  = toIterator(target);
+		JSArray     res = new JSArray();
 		while (it.hasNext()) {
 			res.push(it.next());
 		}
@@ -872,7 +907,7 @@ public class JSOps {
 			}
 			return res;
 		}
-		if (target instanceof java.util.List<?> list) {
+		if (target instanceof List<?> list) {
 			int len = list.size();
 			if (start < 0) start = Math.max(0, len + start);
 			if (start >= len) return new JSArray();
@@ -893,12 +928,12 @@ public class JSOps {
 			return res;
 		}
 		if (target.getClass().isArray()) {
-			int len = java.lang.reflect.Array.getLength(target);
+			int len = Array.getLength(target);
 			if (start < 0) start = Math.max(0, len + start);
 			if (start >= len) return new JSArray();
 			JSArray res = new JSArray();
 			for (int i = start; i < len; i++) {
-				res.push(java.lang.reflect.Array.get(target, i));
+				res.push(Array.get(target, i));
 			}
 			return res;
 		}
@@ -924,30 +959,30 @@ public class JSOps {
 		return res;
 	}
 
-	public static java.util.Iterator<?> toKeyIterator(Object target) {
+	public static Iterator<?> toKeyIterator(Object target) {
 		if (target == null || target == JSUndefined.INSTANCE) {
-			return java.util.Collections.emptyIterator();
+			return Collections.emptyIterator();
 		}
 		if (target instanceof JSObject jsObj) {
 			return jsObj.keys().iterator();
 		}
 		if (target instanceof java.util.Map<?, ?> map) {
-			java.util.List<String> keys = new java.util.ArrayList<>();
+			List<String> keys = new ArrayList<>();
 			for (Object k : map.keySet()) keys.add(String.valueOf(k));
 			return keys.iterator();
 		}
 		if (target instanceof CharSequence seq) {
-			java.util.List<String> indices = new java.util.ArrayList<>();
+			List<String> indices = new ArrayList<>();
 			for (int i = 0; i < seq.length(); i++) indices.add(String.valueOf(i));
 			return indices.iterator();
 		}
 		if (target.getClass().isArray()) {
-			int                    len     = java.lang.reflect.Array.getLength(target);
-			java.util.List<String> indices = new java.util.ArrayList<>();
+			int          len     = Array.getLength(target);
+			List<String> indices = new ArrayList<>();
 			for (int i = 0; i < len; i++) indices.add(String.valueOf(i));
 			return indices.iterator();
 		}
-		return java.util.Collections.emptyIterator();
+		return Collections.emptyIterator();
 	}
 
 	public static String typeOf(Object val) {

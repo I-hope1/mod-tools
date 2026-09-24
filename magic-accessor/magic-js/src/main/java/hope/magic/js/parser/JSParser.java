@@ -7,6 +7,7 @@ import hope.magic.js.ast.TokenType;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class JSParser {
 	private final List<Token> tokens;
@@ -1174,7 +1175,7 @@ public class JSParser {
 
 	//region 辅助方法与 ES6 解构脱糖
 
-	private static final java.util.concurrent.atomic.AtomicInteger TEMP_VAR_GEN = new java.util.concurrent.atomic.AtomicInteger(0);
+	private static final AtomicInteger TEMP_VAR_GEN = new AtomicInteger(0);
 
 	private static class ParamParseResult {
 		final List<String> params = new ArrayList<>();

@@ -4,13 +4,19 @@ import java.lang.invoke.*;
 
 public final class JSFuncMH {
 	public static final MethodHandle
-	 CALL            = JSLinker.findVirtualMH(JSFunction.class, "call", MethodType.methodType(Object.class, JSContext.class, Object.class, Object[].class)),
-	 CALL0           = JSLinker.findVirtualMH(JSFunction.class, "call0", MethodType.methodType(Object.class, JSContext.class, Object.class)),
-	 CALL1           = JSLinker.findVirtualMH(JSFunction.class, "call1", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class)),
-	 CALL2           = JSLinker.findVirtualMH(JSFunction.class, "call2", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class)),
-	 CALL3           = JSLinker.findVirtualMH(JSFunction.class, "call3", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class, Object.class)),
-	 CALL4           = JSLinker.findVirtualMH(JSFunction.class, "call4", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class, Object.class, Object.class)),
-	 CALL_UNDEFINED  = MethodHandles.insertArguments(CALL, 1, (JSContext) null, JSUndefined.INSTANCE),
+	 CALL         = JSLinker.findVirtualMH(JSFunction.class, "call", MethodType.methodType(Object.class, JSContext.class, Object.class, Object[].class)),
+	 CALL0        = JSLinker.findVirtualMH(JSFunction.class, "call0", MethodType.methodType(Object.class, JSContext.class, Object.class)),
+	 CALL1        = JSLinker.findVirtualMH(JSFunction.class, "call1", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class)),
+	 CALL2        = JSLinker.findVirtualMH(JSFunction.class, "call2", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class)),
+	 CALL3        = JSLinker.findVirtualMH(JSFunction.class, "call3", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class, Object.class)),
+	 CALL4        = JSLinker.findVirtualMH(JSFunction.class, "call4", MethodType.methodType(Object.class, JSContext.class, Object.class, Object.class, Object.class, Object.class, Object.class)),
+	 CALL0_DOUBLE = JSLinker.findVirtualMH(JSFunction.class, "call0Double", MethodType.methodType(double.class, JSContext.class, Object.class)),
+	 CALL1_DOUBLE = JSLinker.findVirtualMH(JSFunction.class, "call1Double", MethodType.methodType(double.class, JSContext.class, Object.class, double.class)),
+	 CALL2_DOUBLE = JSLinker.findVirtualMH(JSFunction.class, "call2Double", MethodType.methodType(double.class, JSContext.class, Object.class, double.class, double.class)),
+	 CALL3_DOUBLE = JSLinker.findVirtualMH(JSFunction.class, "call3Double", MethodType.methodType(double.class, JSContext.class, Object.class, double.class, double.class, double.class)),
+	 CALL4_DOUBLE = JSLinker.findVirtualMH(JSFunction.class, "call4Double", MethodType.methodType(double.class, JSContext.class, Object.class, double.class, double.class, double.class, double.class)),
+	// --
+	CALL_UNDEFINED   = MethodHandles.insertArguments(CALL, 1, (JSContext) null, JSUndefined.INSTANCE),
 	 CALL0_UNDEFINED = MethodHandles.insertArguments(CALL0, 1, (JSContext) null, JSUndefined.INSTANCE),
 	 CALL1_UNDEFINED = MethodHandles.insertArguments(CALL1, 1, (JSContext) null, JSUndefined.INSTANCE),
 	 CALL2_UNDEFINED = MethodHandles.insertArguments(CALL2, 1, (JSContext) null, JSUndefined.INSTANCE),

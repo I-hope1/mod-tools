@@ -2,6 +2,7 @@ package hope.magic.js.parser;
 
 import hope.magic.js.ast.Token;
 import hope.magic.js.ast.TokenType;
+import hope.magic.js.runtime.SymbolTable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -9,7 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 public class JSLexer {
-	private static final Map<String, TokenType> KEYWORDS = new HashMap<>();
+	private static final Map<String, TokenType> KEYWORDS = new HashMap<>(64);
 
 	static {
 		KEYWORDS.put("var", TokenType.VAR);
@@ -386,8 +387,9 @@ public class JSLexer {
 		while (!isAtEnd() && isDigit(peek())) advance();
 
 		if (!isAtEnd() && peek() == '.' && cursor + 1 < length && isDigit(source.charAt(cursor + 1))) {
-			advance(); // consume '.'
-			while (!isAtEnd() && isDigit(peek())) advance();
+			do {
+				advance(); // consume '.' first
+			} while (!isAtEnd() && isDigit(peek()));
 		}
 
 		if (!isAtEnd() && (peek() == 'e' || peek() == 'E')) {
@@ -416,7 +418,7 @@ public class JSLexer {
 			else if (type == TokenType.FALSE) val = Boolean.FALSE;
 			return new Token(type, text, val, startLine, startCol);
 		}
-		String sym = hope.magic.js.runtime.SymbolTable.symbol(text);
+		String sym = SymbolTable.symbol(text);
 		return new Token(TokenType.IDENTIFIER, sym, sym, startLine, startCol);
 	}
 

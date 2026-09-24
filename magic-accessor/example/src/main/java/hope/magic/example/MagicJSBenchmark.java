@@ -310,7 +310,7 @@ public class MagicJSBenchmark {
 	//region 3. 方法调用对比 (MagicJS vs V8 vs GraalJS vs Nashorn)
 	@Benchmark
 	public double magic_js_method_call() throws Throwable {
-		return magicMethodScript.call0Double(magicContext);
+		return magicMethodScript.call0Double(magicContext, null);
 	}
 
 	@Benchmark
@@ -334,7 +334,7 @@ public class MagicJSBenchmark {
 	//region 4. 1000以内质数和计算 (MagicJS vs V8 vs GraalJS vs Nashorn)
 	@Benchmark
 	public double magic_js_prime_sum_1000() throws Throwable {
-		return magicLoopScript.call0Double(magicContext);
+		return magicLoopScript.call0Double(magicContext, null);
 	}
 
 	@Benchmark
@@ -358,7 +358,7 @@ public class MagicJSBenchmark {
 	//region 5. 动态 JSObject 属性访问 (MagicJS vs V8 vs GraalJS vs Nashorn)
 	@Benchmark
 	public double magic_js_dynamic_obj_read() throws Throwable {
-		return magicObjScript.call0Double(magicContext);
+		return magicObjScript.call0Double(magicContext, null);
 	}
 
 	@Benchmark
@@ -382,22 +382,22 @@ public class MagicJSBenchmark {
 	//region 6. 5-Shape 多态流水线 Poly (MagicJS vs V8 vs GraalJS vs Nashorn)
 	@Benchmark
 	public double magic_js_poly_unhoisted() throws Throwable {
-		return magicPolyScriptUnhoisted.call0Double(magicContext);
+		return magicPolyScriptUnhoisted.call0Double(magicContext, null);
 	}
 
 	@Benchmark
 	public double magic_js_poly_hoisted() throws Throwable {
-		return magicPolyScriptHoisted.call0Double(magicContext);
+		return magicPolyScriptHoisted.call0Double(magicContext, null);
 	}
 
 	@Benchmark
 	public double magic_js_poly_hoisted_irem() throws Throwable {
-		return magicPolyScriptHoistedIrem.call0Double(magicContext);
+		return magicPolyScriptHoistedIrem.call0Double(magicContext, null);
 	}
 
 	@Benchmark
 	public double magic_js_poly() throws Throwable {
-		return magicPolyScriptHoisted.call0Double(magicContext);
+		return magicPolyScriptHoisted.call0Double(magicContext, null);
 	}
 
 	@Benchmark

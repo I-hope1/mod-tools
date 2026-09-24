@@ -27,23 +27,27 @@ public interface JSFunction {
 		return call(cx, thisObj, new Object[]{ a0, a1, a2, a3 });
 	}
 
-	default double call0Double(JSContext cx) throws Throwable {
-		return JSOps.toDouble(call0(cx, null));
+	default double callDouble(JSContext cx, Object thisObj, Object[] args) throws Throwable {
+		return JSOps.toDouble(call(cx, thisObj, args));
 	}
 
-	default double call1Double(JSContext cx, double a0) throws Throwable {
-		return JSOps.toDouble(call1(cx, null, a0));
+	default double call0Double(JSContext cx, Object thisObj) throws Throwable {
+		return JSOps.toDouble(call0(cx, thisObj));
 	}
 
-	default double call2Double(JSContext cx, double a0, double a1) throws Throwable {
-		return JSOps.toDouble(call2(cx, null, a0, a1));
+	default double call1Double(JSContext cx, Object thisObj, double a0) throws Throwable {
+		return JSOps.toDouble(call1(cx, thisObj, a0));
 	}
 
-	default double call3Double(JSContext cx, double a0, double a1, double a2) throws Throwable {
-		return JSOps.toDouble(call3(cx, null, a0, a1, a2));
+	default double call2Double(JSContext cx, Object thisObj, double a0, double a1) throws Throwable {
+		return JSOps.toDouble(call2(cx, thisObj, a0, a1));
 	}
 
-	default double call4Double(JSContext cx, double a0, double a1, double a2, double a3) throws Throwable {
-		return JSOps.toDouble(call4(cx, null, a0, a1, a2, a3));
+	default double call3Double(JSContext cx, Object thisObj, double a0, double a1, double a2) throws Throwable {
+		return JSOps.toDouble(call3(cx, thisObj, a0, a1, a2));
+	}
+
+	default double call4Double(JSContext cx, Object thisObj, double a0, double a1, double a2, double a3) throws Throwable {
+		return JSOps.toDouble(call4(cx, thisObj, a0, a1, a2, a3));
 	}
 }

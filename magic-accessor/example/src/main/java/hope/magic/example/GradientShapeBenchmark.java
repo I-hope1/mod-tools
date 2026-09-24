@@ -64,7 +64,7 @@ public class GradientShapeBenchmark {
 
 	private void verifyOnce(String phase) throws Throwable {
 		double expected = getExpectedSum(shapes);
-		double mRes = magicFunc.call0Double(magicContext);
+		double mRes = magicFunc.call0Double(magicContext, null);
 		double gRes = graalFunc.execute().asDouble();
 		verifyResult(phase + " Shape-" + shapes, mRes, gRes, expected);
 	}
@@ -100,7 +100,7 @@ public class GradientShapeBenchmark {
 
 	@Benchmark
 	public double test_magic() throws Throwable {
-		return magicFunc.call0Double(magicContext);
+		return magicFunc.call0Double(magicContext, null);
 	}
 
 	@Benchmark

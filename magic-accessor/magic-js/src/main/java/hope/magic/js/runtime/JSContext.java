@@ -329,46 +329,47 @@ public class JSContext {
 		}
 	}
 
-	public static final    int                 SLOT_NAN             = getGlobalSlot("NaN");
-	public static final    int                 SLOT_INFINITY        = getGlobalSlot("Infinity");
-	public static final    int                 SLOT_UNDEFINED       = getGlobalSlot("undefined");
-	public static final    int                 SLOT_JSOPS           = getGlobalSlot("JSOps");
-	public static final    int                 SLOT_PRINT           = getGlobalSlot("print");
-	public static final    int                 SLOT_CONSOLE         = getGlobalSlot("console");
-	public static final    int                 SLOT_MATH            = getGlobalSlot("Math");
-	public static final    int                 SLOT_IMPORT_CLASS    = getGlobalSlot("importClass");
-	public static final    int                 SLOT_IMPORT_PACKAGE  = getGlobalSlot("importPackage");
-	public static final    int                 SLOT_IMPORT_PACKAGES = getGlobalSlot("importPackages");
-	public static final    int                 SLOT_PACKAGES        = getGlobalSlot("Packages");
-	public static final    int                 SLOT_REGEXP          = getGlobalSlot("RegExp");
-	public static final    int                 SLOT_OBJECT          = getGlobalSlot("Object");
-	public static final    int                 SLOT_ARRAY           = getGlobalSlot("Array");
-	public static final    int                 SLOT_JAVA            = getGlobalSlot("Java");
-	public static final    int                 SLOT_JAVA_PKG        = getGlobalSlot("java");
-	public static final    int                 SLOT_JAVAX_PKG       = getGlobalSlot("javax");
-	public static final    int                 SLOT_ERROR           = getGlobalSlot("Error");
-	public static final    int                 SLOT_TYPE_ERROR      = getGlobalSlot("TypeError");
-	public static final    int                 SLOT_RANGE_ERROR     = getGlobalSlot("RangeError");
-	public static final    int                 SLOT_SYNTAX_ERROR    = getGlobalSlot("SyntaxError");
-	public static final    int                 SLOT_REFERENCE_ERROR = getGlobalSlot("ReferenceError");
-	public static final    int                 SLOT_URI_ERROR       = getGlobalSlot("URIError");
-	public static final    int                 SLOT_EVAL_ERROR      = getGlobalSlot("EvalError");
-	public static final    int                 SLOT_BOOLEAN         = getGlobalSlot("Boolean");
-	public static final    int                 SLOT_NUMBER          = getGlobalSlot("Number");
-	public static final    int                 SLOT_STRING          = getGlobalSlot("String");
-	public static final    int                 SLOT_FUNCTION        = getGlobalSlot("Function");
-	public static final    int                 SLOT_PROXY           = getGlobalSlot("Proxy");
-	public static final    int                 SLOT_REFLECT         = getGlobalSlot("Reflect");
-	public static final    int                 SLOT_DATE            = getGlobalSlot("Date");
-	public static final    int                 SLOT_PROMISE         = getGlobalSlot("Promise");
-	public static final    int                 SLOT_QUEUE_MICROTASK = getGlobalSlot("queueMicrotask");
-	public static final    int                 SLOT_GLOBAL_THIS     = getGlobalSlot("globalThis");
-	public static final    int                 SLOT_THIS            = getGlobalSlot("this");
-	public static final    int                 SLOT_WINDOW          = getGlobalSlot("window");
-	public static final    int                 SLOT_GLOBAL          = getGlobalSlot("global");
-	public static final    int                 SLOT_DOLLAR_262      = getGlobalSlot("$262");
-	public static final    int                 SLOT_SYMBOL          = getGlobalSlot("Symbol");
-	public static final    int                 SLOT_REQUIRE         = getGlobalSlot("require");
+	public static final int SLOT_NAN             = getGlobalSlot("NaN");
+	public static final int SLOT_INFINITY        = getGlobalSlot("Infinity");
+	public static final int SLOT_UNDEFINED       = getGlobalSlot("undefined");
+	public static final int SLOT_JSOPS           = getGlobalSlot("JSOps");
+	public static final int SLOT_PRINT           = getGlobalSlot("print");
+	public static final int SLOT_CONSOLE         = getGlobalSlot("console");
+	public static final int SLOT_MATH            = getGlobalSlot("Math");
+	public static final int SLOT_IMPORT_CLASS    = getGlobalSlot("importClass");
+	public static final int SLOT_IMPORT_PACKAGE  = getGlobalSlot("importPackage");
+	public static final int SLOT_IMPORT_PACKAGES = getGlobalSlot("importPackages");
+	public static final int SLOT_PACKAGES        = getGlobalSlot("Packages");
+	public static final int SLOT_REGEXP          = getGlobalSlot("RegExp");
+	public static final int SLOT_OBJECT          = getGlobalSlot("Object");
+	public static final int SLOT_ARRAY           = getGlobalSlot("Array");
+	public static final int SLOT_JAVA            = getGlobalSlot("Java");
+	public static final int SLOT_JAVA_PKG        = getGlobalSlot("java");
+	public static final int SLOT_JAVAX_PKG       = getGlobalSlot("javax");
+	public static final int SLOT_ERROR           = getGlobalSlot("Error");
+	public static final int SLOT_TYPE_ERROR      = getGlobalSlot("TypeError");
+	public static final int SLOT_RANGE_ERROR     = getGlobalSlot("RangeError");
+	public static final int SLOT_SYNTAX_ERROR    = getGlobalSlot("SyntaxError");
+	public static final int SLOT_REFERENCE_ERROR = getGlobalSlot("ReferenceError");
+	public static final int SLOT_URI_ERROR       = getGlobalSlot("URIError");
+	public static final int SLOT_EVAL_ERROR      = getGlobalSlot("EvalError");
+	public static final int SLOT_BOOLEAN         = getGlobalSlot("Boolean");
+	public static final int SLOT_NUMBER          = getGlobalSlot("Number");
+	public static final int SLOT_STRING          = getGlobalSlot("String");
+	public static final int SLOT_FUNCTION        = getGlobalSlot("Function");
+	public static final int SLOT_PROXY           = getGlobalSlot("Proxy");
+	public static final int SLOT_REFLECT         = getGlobalSlot("Reflect");
+	public static final int SLOT_DATE            = getGlobalSlot("Date");
+	public static final int SLOT_PROMISE         = getGlobalSlot("Promise");
+	public static final int SLOT_QUEUE_MICROTASK = getGlobalSlot("queueMicrotask");
+	public static final int SLOT_GLOBAL_THIS     = getGlobalSlot("globalThis");
+	public static final int SLOT_THIS            = getGlobalSlot("this");
+	public static final int SLOT_WINDOW          = getGlobalSlot("window");
+	public static final int SLOT_GLOBAL          = getGlobalSlot("global");
+	public static final int SLOT_DOLLAR_262      = getGlobalSlot("$262");
+	public static final int SLOT_SYMBOL          = getGlobalSlot("Symbol");
+	public static final int SLOT_REQUIRE         = getGlobalSlot("require");
+
 	public static volatile Consumer<JSContext> realmCreatedListener;
 
 	public static class JSBuiltinMethod extends JSObject implements JSFunction {
@@ -436,28 +437,29 @@ public class JSContext {
 		}
 
 		@Override
-		public double call0Double(JSContext cx) throws Throwable {
-			return fn.call0Double(ensureCx(cx));
+		public double call0Double(JSContext cx, Object thisObj) throws Throwable {
+			return fn.call0Double(ensureCx(cx), thisObj);
 		}
 
 		@Override
-		public double call1Double(JSContext cx, double a0) throws Throwable {
-			return fn.call1Double(ensureCx(cx), a0);
+		public double call1Double(JSContext cx, Object thisObj, double a0) throws Throwable {
+			return fn.call1Double(ensureCx(cx), thisObj, a0);
 		}
 
 		@Override
-		public double call2Double(JSContext cx, double a0, double a1) throws Throwable {
-			return fn.call2Double(ensureCx(cx), a0, a1);
+		public double call2Double(JSContext cx, Object thisObj, double a0, double a1) throws Throwable {
+			return fn.call2Double(ensureCx(cx), thisObj, a0, a1);
 		}
 
 		@Override
-		public double call3Double(JSContext cx, double a0, double a1, double a2) throws Throwable {
-			return fn.call3Double(ensureCx(cx), a0, a1, a2);
+		public double call3Double(JSContext cx, Object thisObj, double a0, double a1, double a2) throws Throwable {
+			return fn.call3Double(ensureCx(cx), thisObj, a0, a1, a2);
 		}
 
 		@Override
-		public double call4Double(JSContext cx, double a0, double a1, double a2, double a3) throws Throwable {
-			return fn.call4Double(ensureCx(cx), a0, a1, a2, a3);
+		public double call4Double(JSContext cx, Object thisObj, double a0, double a1, double a2, double a3)
+		 throws Throwable {
+			return fn.call4Double(ensureCx(cx), thisObj, a0, a1, a2, a3);
 		}
 
 		@Override
@@ -3058,7 +3060,10 @@ public class JSContext {
 		}
 	}
 
+	public static boolean lazyDateLoaded = false;
 	public static class LazyDate {
+		static { lazyDateLoaded = true; }
+
 		private static final List<String> DATE_PROTO_PROPS = List.of(
 		 "constructor", "getTime", "valueOf", "toString", "toUTCString", "toGMTString",
 		 "toISOString", "toJSON", "toDateString", "toTimeString",
@@ -4240,7 +4245,7 @@ public class JSContext {
 			JSParser     parser  = new JSParser(tokens);
 			Node.Program program = parser.parse();
 
-			if (hope.magic.js.module.ModuleTransformer.hasModuleSyntax(program)) {
+			if (ModuleTransformer.hasModuleSyntax(program)) {
 				return evalModule(code);
 			}
 

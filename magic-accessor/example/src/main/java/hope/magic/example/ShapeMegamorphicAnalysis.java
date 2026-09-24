@@ -1,7 +1,9 @@
 package hope.magic.example;
 
+import hope.magic.js.runtime.ChainedCallSite;
 import hope.magic.js.runtime.JSArray;
 import hope.magic.js.runtime.JSContext;
+import hope.magic.js.runtime.JSFunction;
 import hope.magic.js.runtime.JSObject;
 import hope.magic.js.runtime.JSShape;
 
@@ -47,17 +49,17 @@ public class ShapeMegamorphicAnalysis {
         // 真实引擎执行 (编译并调用 2000 次属性访问函数)
         System.out.println("\n=== 真实引擎 (Invokedynamic + ChainedCallSite) 运行时实测 ===");
         String accessCode = GradientShapeBenchmark.generatePureAccessCode(64);
-        hope.magic.js.runtime.JSFunction func = (hope.magic.js.runtime.JSFunction) ctx.eval("(function() {\n" + accessCode + "\n})");
+        JSFunction func = (JSFunction) ctx.eval("(function() {\n" + accessCode + "\n})");
         
-        hope.magic.js.runtime.ChainedCallSite.STATS_HITS.reset();
-        hope.magic.js.runtime.ChainedCallSite.STATS_MISSES.reset();
+        ChainedCallSite.STATS_HITS.reset();
+        ChainedCallSite.STATS_MISSES.reset();
 
-        double res = func.call0Double(ctx);
-        long hits = hope.magic.js.runtime.ChainedCallSite.STATS_HITS.sum();
-        long misses = hope.magic.js.runtime.ChainedCallSite.STATS_MISSES.sum();
+        double res = func.call0Double(ctx, null);
+        long hits = ChainedCallSite.STATS_HITS.sum();
+        long misses = ChainedCallSite.STATS_MISSES.sum();
         System.out.println("函数返回值: " + res + " (预期: 83616.0)");
         System.out.printf("引擎真实捕获计数 (当前 CACHE_SIZE=%d): Hits = %d, Misses = %d, 总 Megamorphic 访问 = %d\n",
-                hope.magic.js.runtime.ChainedCallSite.CACHE_SIZE, hits, misses, (hits + misses));
+                ChainedCallSite.CACHE_SIZE, hits, misses, (hits + misses));
         if (hits + misses > 0) {
             System.out.printf("实测命中率: %.2f%%, 实测未命中率: %.2f%%\n",
                     (double) hits / (hits + misses) * 100, (double) misses / (hits + misses) * 100);

@@ -4922,7 +4922,8 @@ public class JSCompiler {
 				if (isEqualityOp(op) && (isZeroLiteral(bin.right) || isZeroLiteral(bin.left))) {
 					Node targetNode = isZeroLiteral(bin.right) ? bin.left : bin.right;
 					if (targetNode instanceof Node.BinaryExpr modBin && modBin.op == TokenType.PERCENT) {
-						if (inferVarType(modBin.left, ctx) == VarType.INT && isLiteralNumber(modBin.right)) {
+						VarType mLeftType = inferVarType(modBin.left, ctx);
+						if ((mLeftType == VarType.INT || mLeftType == VarType.DOUBLE || mLeftType == VarType.LONG) && isLiteralNumber(modBin.right)) {
 							int divisor = ((Number) ((Node.LiteralExpr) modBin.right).value).intValue();
 							if (divisor > 0) {
 								compileNodeAsInt(modBin.left, ctx);

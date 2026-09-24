@@ -3405,20 +3405,21 @@ public class JSLinker {
 						}
 
 						if (holder != null) {
-							MethodHandle fbTyped = site.getInitialFallback().asType(site.type());
+							List<SwitchPoint> allSps = new ArrayList<>(chain != null ? chain.size() + 1 : 1);
 							if (chain != null) {
 								for (JSObject p : chain) {
-									exactCall = p.getOrCreateProtoSwitchPoint().guardWithTest(exactCall, fbTyped);
+									allSps.add(p.getOrCreateProtoSwitchPoint());
 								}
 							}
 							SwitchPoint holderSp = holder.getOrCreateProtoSwitchPoint();
-							exactCall = holderSp.guardWithTest(exactCall, fbTyped);
-
-							// 使用多态级联，允许 Dog 和 Cat 共同驻留在双态 GWT 树中
+							allSps.add(holderSp);
+							site.installProtoGuard(holderSp, allSps, test, exactCall);
+						} else {
 							site.installGuardOrSwitchMegamorphic(test, exactCall);
 						}
 					} else {
-						site.installGuardOrSwitchMegamorphic(test, exactCall);
+						SwitchPoint sp = jsObj.getOrCreateProtoSwitchPoint();
+						site.installProtoGuard(sp, test, exactCall);
 					}
 				}
 
@@ -3612,20 +3613,15 @@ public class JSLinker {
 								current = current.getPrototype();
 							}
 							if (holder != null) {
-								MethodHandle      fb          = site.getInitialFallback();
-								MethodHandle      fbTyped     = (fb != null) ? fb.asType(site.type()) : null;
-								MethodHandle      guardedCall = exactFuncCall.asType(site.type());
-								List<SwitchPoint> allSps      = new ArrayList<>(chain != null ? chain.size() + 1 : 1);
-								if (chain != null && fbTyped != null) {
+								List<SwitchPoint> allSps = new ArrayList<>(chain != null ? chain.size() + 1 : 1);
+								if (chain != null) {
 									for (JSObject p : chain) {
-										SwitchPoint pSp = p.getOrCreateProtoSwitchPoint();
-										guardedCall = pSp.guardWithTest(guardedCall, fbTyped);
-										allSps.add(pSp);
+										allSps.add(p.getOrCreateProtoSwitchPoint());
 									}
 								}
 								SwitchPoint holderSp = holder.getOrCreateProtoSwitchPoint();
 								allSps.add(holderSp);
-								site.installProtoGuard(holderSp, allSps, test, guardedCall);
+								site.installProtoGuard(holderSp, allSps, test, exactFuncCall);
 							} else {
 								site.installGuardOrSwitchMegamorphic(test, exactFuncCall.asType(site.type()));
 							}

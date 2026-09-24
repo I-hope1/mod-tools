@@ -4878,6 +4878,10 @@ public class JSCompiler {
 		};
 	}
 
+	private static boolean isEqualityOp(TokenType op) {
+		return op == TokenType.EQ || op == TokenType.EQ_EQ || op == TokenType.NOT_EQ || op == TokenType.NOT_EQ_EQ;
+	}
+
 	private static void jumpOnEqualityResult(MethodVisitor mv, TokenType op, boolean jumpOnTrue, Label targetLabel) {
 		boolean isEq            = (op == TokenType.EQ || op == TokenType.EQ_EQ);
 		boolean shouldJumpOnOne = (isEq == jumpOnTrue);
@@ -4913,6 +4917,28 @@ public class JSCompiler {
 
 			if (op == TokenType.LT || op == TokenType.LTE || op == TokenType.GT || op == TokenType.GTE
 			    || op == TokenType.EQ || op == TokenType.EQ_EQ || op == TokenType.NOT_EQ || op == TokenType.NOT_EQ_EQ) {
+
+				// 特化 0: 整数取模判等特化 (例如: (i % 2 === 0), (i % 2 !== 0))
+				if (isEqualityOp(op) && (isZeroLiteral(bin.right) || isZeroLiteral(bin.left))) {
+					Node targetNode = isZeroLiteral(bin.right) ? bin.left : bin.right;
+					if (targetNode instanceof Node.BinaryExpr modBin && modBin.op == TokenType.PERCENT) {
+						if (inferVarType(modBin.left, ctx) == VarType.INT && isLiteralNumber(modBin.right)) {
+							int divisor = ((Number) ((Node.LiteralExpr) modBin.right).value).intValue();
+							if (divisor > 0) {
+								compileNodeAsInt(modBin.left, ctx);
+								if ((divisor & (divisor - 1)) == 0) {
+									pushInt(mv, divisor - 1);
+									mv.visitInsn(Opcodes.IAND);
+								} else {
+									pushInt(mv, divisor);
+									mv.visitInsn(Opcodes.IREM);
+								}
+								mv.visitJumpInsn(getZeroCompareOpcode(op, jumpOnTrue), targetLabel);
+								return;
+							}
+						}
+					}
+				}
 
 				VarType leftType  = inferVarType(bin.left, ctx);
 				VarType rightType = inferVarType(bin.right, ctx);

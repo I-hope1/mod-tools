@@ -180,7 +180,8 @@ public class Magic {
 					"hope.magic.runtime.Arity1CtorInvoker",
 					"hope.magic.runtime.Arity2CtorInvoker",
 					"hope.magic.runtime.Arity3CtorInvoker",
-					"hope.magic.runtime.GenericCtorInvoker"
+					"hope.magic.runtime.GenericCtorInvoker",
+					"hope.magic.runtime.BootStableHolder"
 				};
 				for (String invokerName : bootInvokers) {
 					try {

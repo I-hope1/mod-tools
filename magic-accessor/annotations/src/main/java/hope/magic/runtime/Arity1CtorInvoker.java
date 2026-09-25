@@ -25,21 +25,37 @@ public final class Arity1CtorInvoker extends MagicInvoker {
 	@ForceInline
 	@Override
 	public Object invoke(Object target, Object[] args) throws Throwable {
-		return newInstance(args);
+		if (args != null && args.length == 1) {
+			Object a0 = args[0];
+			if (rawIntCtorMh != null && a0 instanceof Number n0) {
+				return rawIntCtorMh.invokeExact(n0.intValue());
+			}
+			return mh.invokeExact(a0);
+		}
+		return spreader.invoke(args == null ? EMPTY_ARGS : args);
 	}
 
 	@Hidden
 	@ForceInline
 	@Override
 	public Object invoke1(Object target, Object a0) throws Throwable {
-		return newInstance1(a0);
+		if (rawIntCtorMh != null && a0 instanceof Number n0) {
+			return rawIntCtorMh.invokeExact(n0.intValue());
+		}
+		return mh.invokeExact(a0);
 	}
 
 	@Hidden
 	@ForceInline
 	@Override
 	public Object newInstance(Object[] args) throws Throwable {
-		if (args != null && args.length == 1) return newInstance1(args[0]);
+		if (args != null && args.length == 1) {
+			Object a0 = args[0];
+			if (rawIntCtorMh != null && a0 instanceof Number n0) {
+				return rawIntCtorMh.invokeExact(n0.intValue());
+			}
+			return mh.invokeExact(a0);
+		}
 		return spreader.invoke(args == null ? EMPTY_ARGS : args);
 	}
 

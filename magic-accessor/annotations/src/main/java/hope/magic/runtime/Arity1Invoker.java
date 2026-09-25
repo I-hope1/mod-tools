@@ -56,7 +56,7 @@ public final class Arity1Invoker extends MagicInvoker {
 	@Override
 	public int invokeInt1(Object target, int a0) throws Throwable {
 		if (rawIntMh != null) return (int) rawIntMh.invokeExact(target, a0);
-		return ((Number) invoke1(target, a0)).intValue();
+		return ((Number) mh.invokeExact(target, (Object) a0)).intValue();
 	}
 
 	@Hidden
@@ -64,8 +64,8 @@ public final class Arity1Invoker extends MagicInvoker {
 	@Override
 	public boolean invokeBoolean1(Object target, Object a0) throws Throwable {
 		if (rawBooleanMh != null) return (boolean) rawBooleanMh.invokeExact(target, a0);
-		Object res = invoke1(target, a0);
-		return res instanceof Boolean ? (Boolean) res : (res instanceof Number && ((Number) res).intValue() != 0);
+		Object res = mh.invokeExact(target, a0);
+		return res instanceof Boolean b ? b : (res instanceof Number n && n.intValue() != 0);
 	}
 
 	@Hidden
@@ -73,7 +73,7 @@ public final class Arity1Invoker extends MagicInvoker {
 	@Override
 	public double invokeDouble1(Object target, double a0) throws Throwable {
 		if (rawDoubleMh != null) return (double) rawDoubleMh.invokeExact(target, a0);
-		return ((Number) invoke1(target, a0)).doubleValue();
+		return ((Number) mh.invokeExact(target, (Object) a0)).doubleValue();
 	}
 
 	@Hidden
@@ -81,6 +81,6 @@ public final class Arity1Invoker extends MagicInvoker {
 	@Override
 	public long invokeLong1(Object target, long a0) throws Throwable {
 		if (rawLongMh != null) return (long) rawLongMh.invokeExact(target, a0);
-		return ((Number) invoke1(target, a0)).longValue();
+		return ((Number) mh.invokeExact(target, (Object) a0)).longValue();
 	}
 }

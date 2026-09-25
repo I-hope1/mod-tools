@@ -24,6 +24,7 @@ public class BugVerificationTest {
 		Assertions.assertNull(Arity2CtorInvoker.class.getClassLoader(), "Arity2CtorInvoker must be loaded by BootstrapClassLoader");
 		Assertions.assertNull(Arity3CtorInvoker.class.getClassLoader(), "Arity3CtorInvoker must be loaded by BootstrapClassLoader");
 		Assertions.assertNull(GenericCtorInvoker.class.getClassLoader(), "GenericCtorInvoker must be loaded by BootstrapClassLoader");
+		Assertions.assertNull(BootStableHolder.class.getClassLoader(), "BootStableHolder must be loaded by BootstrapClassLoader");
 	}
 
 	@Test

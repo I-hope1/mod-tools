@@ -22,21 +22,26 @@ public final class Arity3CtorInvoker extends MagicInvoker {
 	@ForceInline
 	@Override
 	public Object invoke(Object target, Object[] args) throws Throwable {
-		return newInstance(args);
+		if (args != null && args.length == 3) {
+			return (Object) mh.invokeExact(args[0], args[1], args[2]);
+		}
+		return spreader.invoke(args == null ? EMPTY_ARGS : args);
 	}
 
 	@Hidden
 	@ForceInline
 	@Override
 	public Object invoke3(Object target, Object a0, Object a1, Object a2) throws Throwable {
-		return newInstance3(a0, a1, a2);
+		return (Object) mh.invokeExact(a0, a1, a2);
 	}
 
 	@Hidden
 	@ForceInline
 	@Override
 	public Object newInstance(Object[] args) throws Throwable {
-		if (args != null && args.length == 3) return newInstance3(args[0], args[1], args[2]);
+		if (args != null && args.length == 3) {
+			return (Object) mh.invokeExact(args[0], args[1], args[2]);
+		}
 		return spreader.invoke(args == null ? EMPTY_ARGS : args);
 	}
 

@@ -15,7 +15,7 @@ public final class GenericCtorInvoker extends MagicInvoker {
 	@ForceInline
 	@Override
 	public Object invoke(Object target, Object[] args) throws Throwable {
-		return newInstance(args);
+		return spreader.invoke(args == null ? EMPTY_ARGS : args);
 	}
 
 	@Hidden

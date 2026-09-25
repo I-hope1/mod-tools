@@ -286,7 +286,7 @@ public class JavaInteropBugVerificationTest {
 				try {
 					f.setAccessible(true);
 					Object val = f.get(mh);
-					if (val instanceof MagicInvoker || val instanceof MagicConstructorInvoker) {
+					if (val instanceof MagicInvoker) {
 						return val;
 					}
 				} catch (Throwable ignored) {}

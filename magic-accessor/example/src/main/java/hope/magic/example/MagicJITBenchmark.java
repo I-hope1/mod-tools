@@ -1,20 +1,15 @@
 package hope.magic.example;
 
-import hope.magic.runtime.Magic;
 import hope.magic.annotation.AccessMode;
 import hope.magic.js.runtime.MagicJIT;
-import hope.magic.js.runtime.MagicJIT.MagicConstructorInvoker;
-import hope.magic.js.runtime.MagicJIT.MagicInvoker;
+import hope.magic.runtime.*;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.profile.GCProfiler;
 import org.openjdk.jmh.runner.Runner;
-import org.openjdk.jmh.runner.options.Options;
-import org.openjdk.jmh.runner.options.OptionsBuilder;
+import org.openjdk.jmh.runner.options.*;
 
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
+import java.lang.invoke.*;
+import java.lang.reflect.*;
 import java.util.concurrent.TimeUnit;
 
 @BenchmarkMode(Mode.Throughput)
@@ -68,16 +63,16 @@ public class MagicJITBenchmark {
 
     // MagicJIT
     public MagicInvoker linkToInvoker;
-    public MagicConstructorInvoker linkToCtorInvoker;
+    public MagicInvoker linkToCtorInvoker;
     public MethodHandle exactMethodStub;
 
     // MagicJIT (MAGIC_ACCESSOR 模式对比)
     public MagicInvoker accessorInvoker;
-    public MagicConstructorInvoker accessorCtorInvoker;
+    public MagicInvoker accessorCtorInvoker;
 
     // MagicJIT (NESTMATE 模式对比)
     public MagicInvoker nestmateInvoker;
-    public MagicConstructorInvoker nestmateCtorInvoker;
+    public MagicInvoker nestmateCtorInvoker;
 
     // MagicJIT (UNSAFE_AND_METHODHANDLE 模式对比)
     public MagicInvoker mhFallbackInvoker;

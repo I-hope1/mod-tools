@@ -167,25 +167,15 @@ public class Magic {
 				magicAccessorInstalled = false;
 			}
 
-			// 注入 Bootstrap 直调接口 MagicBootstrapInvoker 与 MagicBootstrapCtorInvoker 并为 java.base 开放未命名模块读取权限
+			// 注入 Bootstrap 直调类 MagicInvoker 并为 java.base 开放未命名模块读取权限
 			try {
 				try {
 					Class.forName("hope.magic.runtime.MagicInvoker", false, null);
 				} catch (ClassNotFoundException e) {
-					try (InputStream in = MagicInvoker.class.getResourceAsStream("/hope/magic/runtime/MagicInvoker.class")) {
+					try (InputStream in = Magic.class.getResourceAsStream("/hope/magic/runtime/MagicInvoker.class")) {
 						if (in != null) {
 							byte[] invokerBytes = in.readAllBytes();
 							defineClass(null, invokerBytes);
-						}
-					}
-				}
-				try {
-					Class.forName("hope.magic.runtime.MagicConstructorInvoker", false, null);
-				} catch (ClassNotFoundException e) {
-					try (InputStream in = MagicConstructorInvoker.class.getResourceAsStream("/hope/magic/runtime/MagicConstructorInvoker.class")) {
-						if (in != null) {
-							byte[] ctorBytes = in.readAllBytes();
-							defineClass(null, ctorBytes);
 						}
 					}
 				}

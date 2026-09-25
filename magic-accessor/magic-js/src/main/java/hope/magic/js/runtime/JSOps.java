@@ -4,6 +4,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.stream.BaseStream;
 
 @SuppressWarnings("unused")
 public class JSOps {
@@ -815,7 +816,7 @@ public class JSOps {
 		if (target instanceof Map.Entry<?, ?> entry) {
 			return List.of(entry.getKey(), entry.getValue()).iterator();
 		}
-		if (target instanceof stream.BaseStream<?, ?> stream) {
+		if (target instanceof BaseStream<?, ?> stream) {
 			return stream.iterator();
 		}
 		if (target instanceof Enumeration<?> en) {

@@ -199,8 +199,8 @@ public class MagicJIT implements Opcodes {
 	private static final class ClassJITData {
 		final Map<InvokerLookupKey, MagicInvoker>         invokerCache       = new ConcurrentHashMap<>();
 		final Map<ExactMethodKey, MagicInvoker>           exactInvokerCache  = new ConcurrentHashMap<>();
-		final Map<CtorLookupKey, MagicConstructorInvoker> ctorCache          = new ConcurrentHashMap<>();
-		final Map<ExactCtorKey, MagicConstructorInvoker>  exactCtorCache     = new ConcurrentHashMap<>();
+		final Map<CtorLookupKey, MagicInvoker>           ctorCache          = new ConcurrentHashMap<>();
+		final Map<ExactCtorKey, MagicInvoker>            exactCtorCache     = new ConcurrentHashMap<>();
 		final Map<String, MethodHandle>                   getterCache        = new ConcurrentHashMap<>();
 		final Map<String, MethodHandle>                   setterCache        = new ConcurrentHashMap<>();
 		final Map<ExactMethodKey, MethodHandle>           exactMethodCache   = new ConcurrentHashMap<>();
@@ -319,7 +319,7 @@ public class MagicJIT implements Opcodes {
 		}
 	};
 
-	private static final class Arity0Invoker implements MagicInvoker {
+	private static final class Arity0Invoker extends MagicInvoker {
 		private final MethodHandle mh;
 		private final MethodHandle rawIntMh;
 		private final MethodHandle rawLongMh;
@@ -396,7 +396,7 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
-	private static final class Arity1Invoker implements MagicInvoker {
+	private static final class Arity1Invoker extends MagicInvoker {
 		private final MethodHandle mh;
 		private final MethodHandle spreader;
 		private final MethodHandle rawIntMh;
@@ -486,7 +486,7 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
-	private static final class Arity2Invoker implements MagicInvoker {
+	private static final class Arity2Invoker extends MagicInvoker {
 		private final MethodHandle mh;
 		private final MethodHandle spreader;
 		private final MethodHandle rawIntMh;
@@ -579,7 +579,7 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
-	private static final class Arity3Invoker implements MagicInvoker {
+	private static final class Arity3Invoker extends MagicInvoker {
 		private final MethodHandle mh;
 		private final MethodHandle spreader;
 		private final MethodHandle rawIntMh;
@@ -649,7 +649,7 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
-	private static final class GenericInvoker implements MagicInvoker {
+	private static final class GenericInvoker extends MagicInvoker {
 		private final MethodHandle spreader;
 		GenericInvoker(MethodHandle spreader) { this.spreader = spreader; }
 		@Override
@@ -658,17 +658,21 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
-	private static final class Arity0CtorInvoker implements MagicConstructorInvoker {
+	private static final class Arity0CtorInvoker extends MagicInvoker {
 		private final MethodHandle mh;
 		Arity0CtorInvoker(MethodHandle mh, Constructor<?> targetCtor) { this.mh = mh; }
 		Arity0CtorInvoker(MethodHandle mh) { this(mh, null); }
+		@Override
+		public Object invoke(Object target, Object[] args) throws Throwable { return mh.invokeExact(); }
+		@Override
+		public Object invoke0(Object target) throws Throwable { return mh.invokeExact(); }
 		@Override
 		public Object newInstance(Object[] args) throws Throwable { return mh.invokeExact(); }
 		@Override
 		public Object newInstance0() throws Throwable { return mh.invokeExact(); }
 	}
 
-	private static final class Arity1CtorInvoker implements MagicConstructorInvoker {
+	private static final class Arity1CtorInvoker extends MagicInvoker {
 		private final MethodHandle mh;
 		private final MethodHandle spreader;
 		private final MethodHandle rawIntCtorMh;
@@ -695,6 +699,16 @@ public class MagicJIT implements Opcodes {
 		}
 
 		@Override
+		public Object invoke(Object target, Object[] args) throws Throwable {
+			return newInstance(args);
+		}
+
+		@Override
+		public Object invoke1(Object target, Object a0) throws Throwable {
+			return newInstance1(a0);
+		}
+
+		@Override
 		public Object newInstance(Object[] args) throws Throwable {
 			if (args != null && args.length == 1) return newInstance1(args[0]);
 			return spreader.invoke(args == null ? EMPTY_ARGS : args);
@@ -709,7 +723,7 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
-	private static final class Arity2CtorInvoker implements MagicConstructorInvoker {
+	private static final class Arity2CtorInvoker extends MagicInvoker {
 		private final MethodHandle mh;
 		private final MethodHandle spreader;
 		private final MethodHandle rawCtorMh;
@@ -744,6 +758,16 @@ public class MagicJIT implements Opcodes {
 		}
 
 		@Override
+		public Object invoke(Object target, Object[] args) throws Throwable {
+			return newInstance(args);
+		}
+
+		@Override
+		public Object invoke2(Object target, Object a0, Object a1) throws Throwable {
+			return newInstance2(a0, a1);
+		}
+
+		@Override
 		public Object newInstance(Object[] args) throws Throwable {
 			if (args != null && args.length == 2) return newInstance2(args[0], args[1]);
 			return spreader.invoke(args == null ? EMPTY_ARGS : args);
@@ -758,7 +782,7 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
-	private static final class Arity3CtorInvoker implements MagicConstructorInvoker {
+	private static final class Arity3CtorInvoker extends MagicInvoker {
 		private final MethodHandle mh;
 		private final MethodHandle spreader;
 
@@ -772,6 +796,16 @@ public class MagicJIT implements Opcodes {
 		}
 
 		@Override
+		public Object invoke(Object target, Object[] args) throws Throwable {
+			return newInstance(args);
+		}
+
+		@Override
+		public Object invoke3(Object target, Object a0, Object a1, Object a2) throws Throwable {
+			return newInstance3(a0, a1, a2);
+		}
+
+		@Override
 		public Object newInstance(Object[] args) throws Throwable {
 			if (args != null && args.length == 3) return newInstance3(args[0], args[1], args[2]);
 			return spreader.invoke(args == null ? EMPTY_ARGS : args);
@@ -782,15 +816,18 @@ public class MagicJIT implements Opcodes {
 		 throws Throwable { return (Object) mh.invokeExact(a0, a1, a2); }
 	}
 
-	private static final class GenericCtorInvoker implements MagicConstructorInvoker {
+	private static final class GenericCtorInvoker extends MagicInvoker {
 		private final MethodHandle spreader;
 		GenericCtorInvoker(MethodHandle spreader) { this.spreader = spreader; }
+		@Override
+		public Object invoke(Object target, Object[] args) throws Throwable {
+			return newInstance(args);
+		}
 		@Override
 		public Object newInstance(Object[] args) throws Throwable {
 			return spreader.invoke(args == null ? EMPTY_ARGS : args);
 		}
 	}
-
 
 	public static MagicInvoker getMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic) {
 		return getMethodInvoker(clazz, methodName, arity, isStatic, getEffectiveMode());
@@ -859,44 +896,44 @@ public class MagicJIT implements Opcodes {
 		}
 	}
 
-	public static MagicConstructorInvoker getConstructorInvoker(Class<?> clazz, int arity) {
+	public static MagicInvoker getConstructorInvoker(Class<?> clazz, int arity) {
 		return getConstructorInvoker(clazz, arity, getEffectiveMode());
 	}
 
-	public static MagicConstructorInvoker getConstructorInvoker(Class<?> clazz, int arity, AccessMode mode) {
+	public static MagicInvoker getConstructorInvoker(Class<?> clazz, int arity, AccessMode mode) {
 		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
-		ClassJITData            data   = JIT_DATA.get(clazz);
-		CtorLookupKey           key    = new CtorLookupKey(mode, arity);
-		MagicConstructorInvoker cached = data.ctorCache.get(key);
+		ClassJITData  data   = JIT_DATA.get(clazz);
+		CtorLookupKey key    = new CtorLookupKey(mode, arity);
+		MagicInvoker  cached = data.ctorCache.get(key);
 		if (cached != null) return cached;
-		MagicConstructorInvoker invoker = createConstructorInvoker(clazz, arity, mode);
+		MagicInvoker invoker = createConstructorInvoker(clazz, arity, mode);
 		if (invoker != null) data.ctorCache.put(key, invoker);
 		return invoker;
 	}
 
-	public static MagicConstructorInvoker getConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor) {
+	public static MagicInvoker getConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor) {
 		return getConstructorInvoker(clazz, targetCtor, getEffectiveMode());
 	}
 
-	public static MagicConstructorInvoker getConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor,
-	                                                            AccessMode mode) {
+	public static MagicInvoker getConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor,
+	                                                 AccessMode mode) {
 		if (targetCtor == null) return null;
 		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
-		ClassJITData            data   = JIT_DATA.get(clazz);
-		ExactCtorKey            key    = new ExactCtorKey(mode, targetCtor);
-		MagicConstructorInvoker cached = data.exactCtorCache.get(key);
+		ClassJITData data   = JIT_DATA.get(clazz);
+		ExactCtorKey key    = new ExactCtorKey(mode, targetCtor);
+		MagicInvoker cached = data.exactCtorCache.get(key);
 		if (cached != null) return cached;
-		MagicConstructorInvoker invoker = createConstructorInvoker(clazz, targetCtor, mode);
+		MagicInvoker invoker = createConstructorInvoker(clazz, targetCtor, mode);
 		if (invoker != null) data.exactCtorCache.put(key, invoker);
 		return invoker;
 	}
 
-	public static MagicConstructorInvoker createConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor) {
+	public static MagicInvoker createConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor) {
 		return createConstructorInvoker(clazz, targetCtor, getEffectiveMode());
 	}
 
-	public static MagicConstructorInvoker createConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor,
-	                                                               AccessMode mode) {
+	public static MagicInvoker createConstructorInvoker(Class<?> clazz, Constructor<?> targetCtor,
+	                                                    AccessMode mode) {
 		if (targetCtor == null) return null;
 		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
 		targetCtor.setAccessible(true);
@@ -924,15 +961,15 @@ public class MagicJIT implements Opcodes {
 				default -> new GenericCtorInvoker(finalCtorMh.asSpreader(Object[].class, arity));
 			};
 		} catch (Throwable e) {
-			throw new RuntimeException("Failed to generate MagicConstructorInvoker for " + clazz.getName(), e);
+			throw new RuntimeException("Failed to generate MagicInvoker for constructor " + clazz.getName(), e);
 		}
 	}
 
-	public static MagicConstructorInvoker createConstructorInvoker(Class<?> clazz, int arity) {
+	public static MagicInvoker createConstructorInvoker(Class<?> clazz, int arity) {
 		return createConstructorInvoker(clazz, arity, getEffectiveMode());
 	}
 
-	public static MagicConstructorInvoker createConstructorInvoker(Class<?> clazz, int arity, AccessMode mode) {
+	public static MagicInvoker createConstructorInvoker(Class<?> clazz, int arity, AccessMode mode) {
 		if (mode == AccessMode.AUTO) mode = getEffectiveMode();
 		Constructor<?> targetCtor = MethodResolver.findConstructor(clazz, arity);
 		if (targetCtor == null) return null;

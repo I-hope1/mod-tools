@@ -2,11 +2,19 @@ package hope.magic.js.test;
 
 import hope.magic.js.compiler.JSCompiler;
 import hope.magic.js.runtime.*;
+import hope.magic.runtime.*;
 import org.junit.jupiter.api.*;
 
 import java.nio.file.*;
 
 public class BugVerificationTest {
+
+	@Test
+	public void testMagicInvokerClassLoader() {
+		Magic.install();
+
+		Assertions.assertNull(MagicInvoker.class.getClassLoader());
+	}
 
 	@Test
 	public void testBug01_ShapeAndSlotTypeMismatchInIC() {

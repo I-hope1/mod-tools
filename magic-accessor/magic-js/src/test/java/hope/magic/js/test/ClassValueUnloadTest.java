@@ -430,8 +430,8 @@ public class ClassValueUnloadTest {
 		// 2. Generate MagicInvoker in pluginLoader (or AppClassLoader) delegating to rawHiddenInvoker
 		String appInvokerName = "hope/magic/test/PlanBAppInvoker";
 		ClassWriter aw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
-		aw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, appInvokerName, null, "java/lang/Object",
-			new String[]{ Type.getInternalName(MagicInvoker.class) });
+		aw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, appInvokerName, null,
+			Type.getInternalName(MagicInvoker.class), null);
 
 		FieldVisitor afv = aw.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, "delegate", "L" + bootIfaceInternal + ";", null, null);
 		afv.visitAnnotation("Ljdk/internal/vm/annotation/Stable;", true).visitEnd();
@@ -440,7 +440,7 @@ public class ClassValueUnloadTest {
 		MethodVisitor aInit = aw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "(L" + bootIfaceInternal + ";)V", null, null);
 		aInit.visitCode();
 		aInit.visitVarInsn(Opcodes.ALOAD, 0);
-		aInit.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+		aInit.visitMethodInsn(Opcodes.INVOKESPECIAL, Type.getInternalName(MagicInvoker.class), "<init>", "()V", false);
 		aInit.visitVarInsn(Opcodes.ALOAD, 0);
 		aInit.visitVarInsn(Opcodes.ALOAD, 1);
 		aInit.visitFieldInsn(Opcodes.PUTFIELD, appInvokerName, "delegate", "L" + bootIfaceInternal + ";");
@@ -622,13 +622,12 @@ public class ClassValueUnloadTest {
 		// It directly calls private multiply using native invokevirtual!
 		String hiddenClassName = "hope/magic/test/NestmateTarget$$NestmateInvoker";
 		ClassWriter hw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
-		hw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, hiddenClassName, null, "java/lang/Object",
-			new String[]{ Type.getInternalName(MagicInvoker.class) });
+		hw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, hiddenClassName, null, Type.getInternalName(MagicInvoker.class), null);
 
 		MethodVisitor hInit = hw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
 		hInit.visitCode();
 		hInit.visitVarInsn(Opcodes.ALOAD, 0);
-		hInit.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+		hInit.visitMethodInsn(Opcodes.INVOKESPECIAL, Type.getInternalName(MagicInvoker.class), "<init>", "()V", false);
 		hInit.visitInsn(Opcodes.RETURN);
 		hInit.visitMaxs(1, 1);
 		hInit.visitEnd();

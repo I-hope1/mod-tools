@@ -15,7 +15,7 @@ import java.lang.invoke.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BiConsumer;
+import java.util.function.*;
 
 public class JSCompiler {
 	private static final AtomicInteger SCRIPT_ID   = new AtomicInteger(0);

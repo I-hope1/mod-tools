@@ -13,7 +13,17 @@ public class BugVerificationTest {
 	public void testMagicInvokerClassLoader() {
 		Magic.install();
 
-		Assertions.assertNull(MagicInvoker.class.getClassLoader());
+		Assertions.assertNull(MagicInvoker.class.getClassLoader(), "MagicInvoker must be loaded by BootstrapClassLoader");
+		Assertions.assertNull(Arity0Invoker.class.getClassLoader(), "Arity0Invoker must be loaded by BootstrapClassLoader");
+		Assertions.assertNull(Arity1Invoker.class.getClassLoader(), "Arity1Invoker must be loaded by BootstrapClassLoader");
+		Assertions.assertNull(Arity2Invoker.class.getClassLoader(), "Arity2Invoker must be loaded by BootstrapClassLoader");
+		Assertions.assertNull(Arity3Invoker.class.getClassLoader(), "Arity3Invoker must be loaded by BootstrapClassLoader");
+		Assertions.assertNull(GenericInvoker.class.getClassLoader(), "GenericInvoker must be loaded by BootstrapClassLoader");
+		Assertions.assertNull(Arity0CtorInvoker.class.getClassLoader(), "Arity0CtorInvoker must be loaded by BootstrapClassLoader");
+		Assertions.assertNull(Arity1CtorInvoker.class.getClassLoader(), "Arity1CtorInvoker must be loaded by BootstrapClassLoader");
+		Assertions.assertNull(Arity2CtorInvoker.class.getClassLoader(), "Arity2CtorInvoker must be loaded by BootstrapClassLoader");
+		Assertions.assertNull(Arity3CtorInvoker.class.getClassLoader(), "Arity3CtorInvoker must be loaded by BootstrapClassLoader");
+		Assertions.assertNull(GenericCtorInvoker.class.getClassLoader(), "GenericCtorInvoker must be loaded by BootstrapClassLoader");
 	}
 
 	@Test

@@ -47,6 +47,10 @@ public class MagicJIT implements Opcodes {
 		return sw.toString();
 	}
 
+	static {
+		Magic.install();
+	}
+
 	private static volatile AccessMode currentMode = initDefaultMode();
 
 	private static AccessMode initDefaultMode() {
@@ -319,514 +323,163 @@ public class MagicJIT implements Opcodes {
 		}
 	};
 
-	private static final class Arity0Invoker extends MagicInvoker {
-		private final MethodHandle mh;
-		private final MethodHandle rawIntMh;
-		private final MethodHandle rawLongMh;
-		private final MethodHandle rawDoubleMh;
-		private final MethodHandle rawBooleanMh;
-
-		Arity0Invoker(MethodHandle mh, Method targetMethod) {
-			this.mh = mh;
-			MethodHandle intMh     = null;
-			MethodHandle longMh    = null;
-			MethodHandle doubleMh  = null;
-			MethodHandle booleanMh = null;
-			if (targetMethod != null) {
-				try {
-					boolean  isStatic = Modifier.isStatic(targetMethod.getModifiers());
-					Class<?> ret      = targetMethod.getReturnType();
-					if (targetMethod.getParameterCount() == 0) {
-						MethodHandle raw = Magic.lookup.unreflect(targetMethod);
-						if (isStatic) {
-							raw = MethodHandles.dropArguments(raw, 0, Object.class);
-						}
-						if (ret == int.class) {
-							intMh = raw.asType(MethodType.methodType(int.class, Object.class));
-						} else if (ret == long.class) {
-							longMh = raw.asType(MethodType.methodType(long.class, Object.class));
-						} else if (ret == double.class) {
-							doubleMh = raw.asType(MethodType.methodType(double.class, Object.class));
-						} else if (ret == boolean.class) {
-							booleanMh = raw.asType(MethodType.methodType(boolean.class, Object.class));
-						}
+	private static Arity0Invoker createArity0Invoker(MethodHandle mh, Method targetMethod) {
+		MethodHandle intMh     = null;
+		MethodHandle longMh    = null;
+		MethodHandle doubleMh  = null;
+		MethodHandle booleanMh = null;
+		if (targetMethod != null) {
+			try {
+				boolean  isStatic = Modifier.isStatic(targetMethod.getModifiers());
+				Class<?> ret      = targetMethod.getReturnType();
+				if (targetMethod.getParameterCount() == 0) {
+					MethodHandle raw = Magic.lookup.unreflect(targetMethod);
+					if (isStatic) {
+						raw = MethodHandles.dropArguments(raw, 0, Object.class);
 					}
-				} catch (Throwable ignored) {
-				}
-			}
-			this.rawIntMh = intMh;
-			this.rawLongMh = longMh;
-			this.rawDoubleMh = doubleMh;
-			this.rawBooleanMh = booleanMh;
-		}
-
-		Arity0Invoker(MethodHandle mh) {
-			this(mh, null);
-		}
-
-		@Override
-		public Object invoke(Object target, Object[] args) throws Throwable { return mh.invokeExact(target); }
-
-		@Override
-		public Object invoke0(Object target) throws Throwable { return mh.invokeExact(target); }
-
-		@Override
-		public int invokeInt0(Object target) throws Throwable {
-			if (rawIntMh != null) return (int) rawIntMh.invokeExact(target);
-			return ((Number) invoke0(target)).intValue();
-		}
-
-		@Override
-		public boolean invokeBoolean0(Object target) throws Throwable {
-			if (rawBooleanMh != null) return (boolean) rawBooleanMh.invokeExact(target);
-			Object res = invoke0(target);
-			return res instanceof Boolean ? (Boolean) res : (res instanceof Number && ((Number) res).intValue() != 0);
-		}
-
-		@Override
-		public double invokeDouble0(Object target) throws Throwable {
-			if (rawDoubleMh != null) return (double) rawDoubleMh.invokeExact(target);
-			return ((Number) invoke0(target)).doubleValue();
-		}
-
-		@Override
-		public long invokeLong0(Object target) throws Throwable {
-			if (rawLongMh != null) return (long) rawLongMh.invokeExact(target);
-			return ((Number) invoke0(target)).longValue();
-		}
-	}
-
-	private static final class Arity1Invoker extends MagicInvoker {
-		private final MethodHandle mh;
-		private final MethodHandle spreader;
-		private final MethodHandle rawIntMh;
-		private final MethodHandle rawLongMh;
-		private final MethodHandle rawDoubleMh;
-		private final MethodHandle rawBooleanMh;
-
-		Arity1Invoker(MethodHandle mh, Method targetMethod) {
-			this.mh = mh;
-			this.spreader = mh.asSpreader(Object[].class, 1);
-			MethodHandle intMh     = null;
-			MethodHandle longMh    = null;
-			MethodHandle doubleMh  = null;
-			MethodHandle booleanMh = null;
-			if (targetMethod != null) {
-				try {
-					boolean    isStatic = Modifier.isStatic(targetMethod.getModifiers());
-					Class<?>   ret      = targetMethod.getReturnType();
-					Class<?>[] p        = targetMethod.getParameterTypes();
-					if (p.length == 1) {
-						MethodHandle raw = Magic.lookup.unreflect(targetMethod);
-						if (isStatic) {
-							raw = MethodHandles.dropArguments(raw, 0, Object.class);
-						}
-						if (ret == int.class && p[0] == int.class) {
-							intMh = raw.asType(MethodType.methodType(int.class, Object.class, int.class));
-						} else if (ret == long.class && p[0] == long.class) {
-							longMh = raw.asType(MethodType.methodType(long.class, Object.class, long.class));
-						} else if (ret == double.class && p[0] == double.class) {
-							doubleMh = raw.asType(MethodType.methodType(double.class, Object.class, double.class));
-						} else if (ret == boolean.class) {
-							booleanMh = raw.asType(MethodType.methodType(boolean.class, Object.class, Object.class));
-						}
+					if (ret == int.class) {
+						intMh = raw.asType(MethodType.methodType(int.class, Object.class));
+					} else if (ret == long.class) {
+						longMh = raw.asType(MethodType.methodType(long.class, Object.class));
+					} else if (ret == double.class) {
+						doubleMh = raw.asType(MethodType.methodType(double.class, Object.class));
+					} else if (ret == boolean.class) {
+						booleanMh = raw.asType(MethodType.methodType(boolean.class, Object.class));
 					}
-				} catch (Throwable ignored) {
 				}
+			} catch (Throwable ignored) {
 			}
-			this.rawIntMh = intMh;
-			this.rawLongMh = longMh;
-			this.rawDoubleMh = doubleMh;
-			this.rawBooleanMh = booleanMh;
 		}
-
-		Arity1Invoker(MethodHandle mh) {
-			this(mh, null);
-		}
-
-		@Override
-		public Object invoke(Object target, Object[] args) throws Throwable {
-			if (args != null && args.length == 1) return invoke1(target, args[0]);
-			return spreader.invoke(target, args == null ? EMPTY_ARGS : args);
-		}
-
-		@Override
-		public Object invoke1(Object target, Object a0) throws Throwable {
-			if (a0 instanceof Number n0) {
-				if (rawIntMh != null) return (int) rawIntMh.invokeExact(target, n0.intValue());
-				if (rawDoubleMh != null) return (double) rawDoubleMh.invokeExact(target, n0.doubleValue());
-				if (rawLongMh != null) return (long) rawLongMh.invokeExact(target, n0.longValue());
-			}
-			return (Object) mh.invokeExact(target, a0);
-		}
-
-		@Override
-		public int invokeInt1(Object target, int a0) throws Throwable {
-			if (rawIntMh != null) return (int) rawIntMh.invokeExact(target, a0);
-			return ((Number) invoke1(target, a0)).intValue();
-		}
-
-		@Override
-		public boolean invokeBoolean1(Object target, Object a0) throws Throwable {
-			if (rawBooleanMh != null) return (boolean) rawBooleanMh.invokeExact(target, a0);
-			Object res = invoke1(target, a0);
-			return res instanceof Boolean ? (Boolean) res : (res instanceof Number && ((Number) res).intValue() != 0);
-		}
-
-		@Override
-		public double invokeDouble1(Object target, double a0) throws Throwable {
-			if (rawDoubleMh != null) return (double) rawDoubleMh.invokeExact(target, a0);
-			return ((Number) invoke1(target, a0)).doubleValue();
-		}
-
-		@Override
-		public long invokeLong1(Object target, long a0) throws Throwable {
-			if (rawLongMh != null) return (long) rawLongMh.invokeExact(target, a0);
-			return ((Number) invoke1(target, a0)).longValue();
-		}
+		return new Arity0Invoker(mh, intMh, longMh, doubleMh, booleanMh);
 	}
 
-	private static final class Arity2Invoker extends MagicInvoker {
-		private final MethodHandle mh;
-		private final MethodHandle spreader;
-		private final MethodHandle rawIntMh;
-		private final MethodHandle rawLongMh;
-		private final MethodHandle rawDoubleMh;
-		private final MethodHandle rawBooleanMh;
-
-		Arity2Invoker(MethodHandle mh, Method targetMethod) {
-			this.mh = mh;
-			this.spreader = mh.asSpreader(Object[].class, 2);
-			MethodHandle intMh     = null;
-			MethodHandle longMh    = null;
-			MethodHandle doubleMh  = null;
-			MethodHandle booleanMh = null;
-			if (targetMethod != null) {
-				try {
-					boolean    isStatic = Modifier.isStatic(targetMethod.getModifiers());
-					Class<?>   ret      = targetMethod.getReturnType();
-					Class<?>[] p        = targetMethod.getParameterTypes();
-					if (p.length == 2) {
-						MethodHandle raw = Magic.lookup.unreflect(targetMethod);
-						if (isStatic) {
-							raw = MethodHandles.dropArguments(raw, 0, Object.class);
-						}
-						if (ret == int.class && p[0] == int.class && p[1] == int.class) {
-							intMh = raw.asType(MethodType.methodType(int.class, Object.class, int.class, int.class));
-						} else if (ret == long.class && p[0] == long.class && p[1] == long.class) {
-							longMh = raw.asType(MethodType.methodType(long.class, Object.class, long.class, long.class));
-						} else if (ret == double.class && p[0] == double.class && p[1] == double.class) {
-							doubleMh = raw.asType(MethodType.methodType(double.class, Object.class, double.class, double.class));
-						} else if (ret == boolean.class) {
-							booleanMh = raw.asType(MethodType.methodType(boolean.class, Object.class, Object.class, Object.class));
-						}
+	private static Arity1Invoker createArity1Invoker(MethodHandle mh, Method targetMethod) {
+		MethodHandle intMh     = null;
+		MethodHandle longMh    = null;
+		MethodHandle doubleMh  = null;
+		MethodHandle booleanMh = null;
+		if (targetMethod != null) {
+			try {
+				boolean    isStatic = Modifier.isStatic(targetMethod.getModifiers());
+				Class<?>   ret      = targetMethod.getReturnType();
+				Class<?>[] p        = targetMethod.getParameterTypes();
+				if (p.length == 1) {
+					MethodHandle raw = Magic.lookup.unreflect(targetMethod);
+					if (isStatic) {
+						raw = MethodHandles.dropArguments(raw, 0, Object.class);
 					}
-				} catch (Throwable ignored) {
-				}
-			}
-			this.rawIntMh = intMh;
-			this.rawLongMh = longMh;
-			this.rawDoubleMh = doubleMh;
-			this.rawBooleanMh = booleanMh;
-		}
-
-		Arity2Invoker(MethodHandle mh) {
-			this(mh, null);
-		}
-
-		@Override
-		public Object invoke(Object target, Object[] args) throws Throwable {
-			if (args != null && args.length == 2) return invoke2(target, args[0], args[1]);
-			return spreader.invoke(target, args == null ? EMPTY_ARGS : args);
-		}
-
-		@Override
-		public Object invoke2(Object target, Object a0, Object a1) throws Throwable {
-			if (a0 instanceof Number n0 && a1 instanceof Number n1) {
-				if (rawIntMh != null) { return (int) rawIntMh.invokeExact(target, n0.intValue(), n1.intValue()); }
-				if (rawDoubleMh != null) {
-					return (double) rawDoubleMh.invokeExact(target, n0.doubleValue(), n1.doubleValue());
-				}
-				if (rawLongMh != null) { return (long) rawLongMh.invokeExact(target, n0.longValue(), n1.longValue()); }
-				if (rawBooleanMh != null) { return (boolean) rawBooleanMh.invokeExact(target, n0, n1); }
-			}
-			return (Object) mh.invokeExact(target, a0, a1);
-		}
-
-		@Override
-		public int invokeInt2(Object target, int a0, int a1) throws Throwable {
-			if (rawIntMh != null) return (int) rawIntMh.invokeExact(target, a0, a1);
-			return ((Number) invoke2(target, a0, a1)).intValue();
-		}
-
-		@Override
-		public boolean invokeBoolean2(Object target, Object a0, Object a1) throws Throwable {
-			if (rawBooleanMh != null) return (boolean) rawBooleanMh.invokeExact(target, a0, a1);
-			Object res = invoke2(target, a0, a1);
-			return res instanceof Boolean ? (Boolean) res : (res instanceof Number && ((Number) res).intValue() != 0);
-		}
-
-		@Override
-		public long invokeLong2(Object target, long a0, long a1) throws Throwable {
-			if (rawLongMh != null) return (long) rawLongMh.invokeExact(target, a0, a1);
-			return ((Number) invoke2(target, a0, a1)).longValue();
-		}
-
-		@Override
-		public double invokeDouble2(Object target, double a0, double a1) throws Throwable {
-			if (rawDoubleMh != null) return (double) rawDoubleMh.invokeExact(target, a0, a1);
-			return ((Number) invoke2(target, a0, a1)).doubleValue();
-		}
-	}
-
-	private static final class Arity3Invoker extends MagicInvoker {
-		private final MethodHandle mh;
-		private final MethodHandle spreader;
-		private final MethodHandle rawIntMh;
-		private final MethodHandle rawDoubleMh;
-
-		Arity3Invoker(MethodHandle mh, Method targetMethod) {
-			this.mh = mh;
-			this.spreader = mh.asSpreader(Object[].class, 3);
-			MethodHandle intMh    = null;
-			MethodHandle doubleMh = null;
-			if (targetMethod != null) {
-				try {
-					boolean    isStatic = Modifier.isStatic(targetMethod.getModifiers());
-					Class<?>   ret      = targetMethod.getReturnType();
-					Class<?>[] p        = targetMethod.getParameterTypes();
-					if (p.length == 3) {
-						MethodHandle raw = Magic.lookup.unreflect(targetMethod);
-						if (isStatic) {
-							raw = MethodHandles.dropArguments(raw, 0, Object.class);
-						}
-						if (ret == int.class && p[0] == int.class && p[1] == int.class && p[2] == int.class) {
-							intMh = raw.asType(MethodType.methodType(int.class, Object.class, int.class, int.class, int.class));
-						} else if (ret == double.class && p[0] == double.class && p[1] == double.class && p[2] == double.class) {
-							doubleMh = raw.asType(MethodType.methodType(double.class, Object.class, double.class, double.class, double.class));
-						}
+					if (ret == int.class && p[0] == int.class) {
+						intMh = raw.asType(MethodType.methodType(int.class, Object.class, int.class));
+					} else if (ret == long.class && p[0] == long.class) {
+						longMh = raw.asType(MethodType.methodType(long.class, Object.class, long.class));
+					} else if (ret == double.class && p[0] == double.class) {
+						doubleMh = raw.asType(MethodType.methodType(double.class, Object.class, double.class));
+					} else if (ret == boolean.class) {
+						booleanMh = raw.asType(MethodType.methodType(boolean.class, Object.class, Object.class));
 					}
-				} catch (Throwable ignored) {
 				}
+			} catch (Throwable ignored) {
 			}
-			this.rawIntMh = intMh;
-			this.rawDoubleMh = doubleMh;
 		}
-
-		Arity3Invoker(MethodHandle mh) {
-			this(mh, null);
-		}
-
-		@Override
-		public Object invoke(Object target, Object[] args) throws Throwable {
-			if (args != null && args.length == 3) return invoke3(target, args[0], args[1], args[2]);
-			return spreader.invoke(target, args == null ? EMPTY_ARGS : args);
-		}
-
-		@Override
-		public Object invoke3(Object target, Object a0, Object a1, Object a2) throws Throwable {
-			if (a0 instanceof Number n0 && a1 instanceof Number n1 && a2 instanceof Number n2) {
-				if (rawIntMh != null) {
-					return (int) rawIntMh.invokeExact(target, n0.intValue(), n1.intValue(), n2.intValue());
-				}
-				if (rawDoubleMh != null) {
-					return (double) rawDoubleMh.invokeExact(target, n0.doubleValue(), n1.doubleValue(), n2.doubleValue());
-				}
-			}
-			return (Object) mh.invokeExact(target, a0, a1, a2);
-		}
-
-		@Override
-		public int invokeInt3(Object target, int a0, int a1, int a2) throws Throwable {
-			if (rawIntMh != null) return (int) rawIntMh.invokeExact(target, a0, a1, a2);
-			return ((Number) invoke3(target, a0, a1, a2)).intValue();
-		}
-
-		@Override
-		public double invokeDouble3(Object target, double a0, double a1, double a2) throws Throwable {
-			if (rawDoubleMh != null) return (double) rawDoubleMh.invokeExact(target, a0, a1, a2);
-			return ((Number) invoke3(target, a0, a1, a2)).doubleValue();
-		}
+		return new Arity1Invoker(mh, mh.asSpreader(Object[].class, 1), intMh, longMh, doubleMh, booleanMh);
 	}
 
-	private static final class GenericInvoker extends MagicInvoker {
-		private final MethodHandle spreader;
-		GenericInvoker(MethodHandle spreader) { this.spreader = spreader; }
-		@Override
-		public Object invoke(Object target, Object[] args) throws Throwable {
-			return spreader.invoke(target, args == null ? EMPTY_ARGS : args);
-		}
-	}
-
-	private static final class Arity0CtorInvoker extends MagicInvoker {
-		private final MethodHandle mh;
-		Arity0CtorInvoker(MethodHandle mh, Constructor<?> targetCtor) { this.mh = mh; }
-		Arity0CtorInvoker(MethodHandle mh) { this(mh, null); }
-		@Override
-		public Object invoke(Object target, Object[] args) throws Throwable { return mh.invokeExact(); }
-		@Override
-		public Object invoke0(Object target) throws Throwable { return mh.invokeExact(); }
-		@Override
-		public Object newInstance(Object[] args) throws Throwable { return mh.invokeExact(); }
-		@Override
-		public Object newInstance0() throws Throwable { return mh.invokeExact(); }
-	}
-
-	private static final class Arity1CtorInvoker extends MagicInvoker {
-		private final MethodHandle mh;
-		private final MethodHandle spreader;
-		private final MethodHandle rawIntCtorMh;
-
-		Arity1CtorInvoker(MethodHandle mh, Constructor<?> targetCtor) {
-			this.mh = mh;
-			this.spreader = mh.asSpreader(Object[].class, 1);
-			MethodHandle raw = null;
-			if (targetCtor != null) {
-				try {
-					Class<?>[] p = targetCtor.getParameterTypes();
-					if (p.length == 1 && p[0] == int.class) {
-						MethodHandle unref = Magic.lookup.unreflectConstructor(targetCtor);
-						raw = unref.asType(MethodType.methodType(Object.class, int.class));
+	private static Arity2Invoker createArity2Invoker(MethodHandle mh, Method targetMethod) {
+		MethodHandle intMh     = null;
+		MethodHandle longMh    = null;
+		MethodHandle doubleMh  = null;
+		MethodHandle booleanMh = null;
+		if (targetMethod != null) {
+			try {
+				boolean    isStatic = Modifier.isStatic(targetMethod.getModifiers());
+				Class<?>   ret      = targetMethod.getReturnType();
+				Class<?>[] p        = targetMethod.getParameterTypes();
+				if (p.length == 2) {
+					MethodHandle raw = Magic.lookup.unreflect(targetMethod);
+					if (isStatic) {
+						raw = MethodHandles.dropArguments(raw, 0, Object.class);
 					}
-				} catch (Throwable ignored) {
-				}
-			}
-			this.rawIntCtorMh = raw;
-		}
-
-		Arity1CtorInvoker(MethodHandle mh) {
-			this(mh, null);
-		}
-
-		@Override
-		public Object invoke(Object target, Object[] args) throws Throwable {
-			return newInstance(args);
-		}
-
-		@Override
-		public Object invoke1(Object target, Object a0) throws Throwable {
-			return newInstance1(a0);
-		}
-
-		@Override
-		public Object newInstance(Object[] args) throws Throwable {
-			if (args != null && args.length == 1) return newInstance1(args[0]);
-			return spreader.invoke(args == null ? EMPTY_ARGS : args);
-		}
-
-		@Override
-		public Object newInstance1(Object a0) throws Throwable {
-			if (rawIntCtorMh != null && a0 instanceof Number n0) {
-				return rawIntCtorMh.invokeExact(n0.intValue());
-			}
-			return mh.invokeExact(a0);
-		}
-	}
-
-	private static final class Arity2CtorInvoker extends MagicInvoker {
-		private final MethodHandle mh;
-		private final MethodHandle spreader;
-		private final MethodHandle rawCtorMh;
-		private final boolean      p0IsInt;
-		private final boolean      p1IsString;
-
-		Arity2CtorInvoker(MethodHandle mh, Constructor<?> targetCtor) {
-			this.mh = mh;
-			this.spreader = mh.asSpreader(Object[].class, 2);
-			MethodHandle raw   = null;
-			boolean      p0Int = false;
-			boolean      p1Str = false;
-			if (targetCtor != null) {
-				try {
-					Class<?>[] p = targetCtor.getParameterTypes();
-					if (p.length == 2 && p[0] == int.class && p[1] == String.class) {
-						p0Int = true;
-						p1Str = true;
-						MethodHandle unref = Magic.lookup.unreflectConstructor(targetCtor);
-						raw = unref.asType(MethodType.methodType(Object.class, int.class, String.class));
+					if (ret == int.class && p[0] == int.class && p[1] == int.class) {
+						intMh = raw.asType(MethodType.methodType(int.class, Object.class, int.class, int.class));
+					} else if (ret == long.class && p[0] == long.class && p[1] == long.class) {
+						longMh = raw.asType(MethodType.methodType(long.class, Object.class, long.class, long.class));
+					} else if (ret == double.class && p[0] == double.class && p[1] == double.class) {
+						doubleMh = raw.asType(MethodType.methodType(double.class, Object.class, double.class, double.class));
+					} else if (ret == boolean.class) {
+						booleanMh = raw.asType(MethodType.methodType(boolean.class, Object.class, Object.class, Object.class));
 					}
-				} catch (Throwable ignored) {
 				}
+			} catch (Throwable ignored) {
 			}
-			this.rawCtorMh = raw;
-			this.p0IsInt = p0Int;
-			this.p1IsString = p1Str;
 		}
-
-		Arity2CtorInvoker(MethodHandle mh) {
-			this(mh, null);
-		}
-
-		@Override
-		public Object invoke(Object target, Object[] args) throws Throwable {
-			return newInstance(args);
-		}
-
-		@Override
-		public Object invoke2(Object target, Object a0, Object a1) throws Throwable {
-			return newInstance2(a0, a1);
-		}
-
-		@Override
-		public Object newInstance(Object[] args) throws Throwable {
-			if (args != null && args.length == 2) return newInstance2(args[0], args[1]);
-			return spreader.invoke(args == null ? EMPTY_ARGS : args);
-		}
-
-		@Override
-		public Object newInstance2(Object a0, Object a1) throws Throwable {
-			if (rawCtorMh != null && p0IsInt && p1IsString && a0 instanceof Number n0 && (a1 == null || a1 instanceof String)) {
-				return rawCtorMh.invoke(n0.intValue(), (String) a1);
-			}
-			return mh.invoke(a0, a1);
-		}
+		return new Arity2Invoker(mh, mh.asSpreader(Object[].class, 2), intMh, longMh, doubleMh, booleanMh);
 	}
 
-	private static final class Arity3CtorInvoker extends MagicInvoker {
-		private final MethodHandle mh;
-		private final MethodHandle spreader;
-
-		Arity3CtorInvoker(MethodHandle mh, Constructor<?> targetCtor) {
-			this.mh = mh;
-			this.spreader = mh.asSpreader(Object[].class, 3);
+	private static Arity3Invoker createArity3Invoker(MethodHandle mh, Method targetMethod) {
+		MethodHandle intMh    = null;
+		MethodHandle doubleMh = null;
+		if (targetMethod != null) {
+			try {
+				boolean    isStatic = Modifier.isStatic(targetMethod.getModifiers());
+				Class<?>   ret      = targetMethod.getReturnType();
+				Class<?>[] p        = targetMethod.getParameterTypes();
+				if (p.length == 3) {
+					MethodHandle raw = Magic.lookup.unreflect(targetMethod);
+					if (isStatic) {
+						raw = MethodHandles.dropArguments(raw, 0, Object.class);
+					}
+					if (ret == int.class && p[0] == int.class && p[1] == int.class && p[2] == int.class) {
+						intMh = raw.asType(MethodType.methodType(int.class, Object.class, int.class, int.class, int.class));
+					} else if (ret == double.class && p[0] == double.class && p[1] == double.class && p[2] == double.class) {
+						doubleMh = raw.asType(MethodType.methodType(double.class, Object.class, double.class, double.class, double.class));
+					}
+				}
+			} catch (Throwable ignored) {
+			}
 		}
-
-		Arity3CtorInvoker(MethodHandle mh) {
-			this(mh, null);
-		}
-
-		@Override
-		public Object invoke(Object target, Object[] args) throws Throwable {
-			return newInstance(args);
-		}
-
-		@Override
-		public Object invoke3(Object target, Object a0, Object a1, Object a2) throws Throwable {
-			return newInstance3(a0, a1, a2);
-		}
-
-		@Override
-		public Object newInstance(Object[] args) throws Throwable {
-			if (args != null && args.length == 3) return newInstance3(args[0], args[1], args[2]);
-			return spreader.invoke(args == null ? EMPTY_ARGS : args);
-		}
-
-		@Override
-		public Object newInstance3(Object a0, Object a1, Object a2)
-		 throws Throwable { return (Object) mh.invokeExact(a0, a1, a2); }
+		return new Arity3Invoker(mh, mh.asSpreader(Object[].class, 3), intMh, doubleMh);
 	}
 
-	private static final class GenericCtorInvoker extends MagicInvoker {
-		private final MethodHandle spreader;
-		GenericCtorInvoker(MethodHandle spreader) { this.spreader = spreader; }
-		@Override
-		public Object invoke(Object target, Object[] args) throws Throwable {
-			return newInstance(args);
+	private static Arity0CtorInvoker createArity0CtorInvoker(MethodHandle mh, Constructor<?> targetCtor) {
+		return new Arity0CtorInvoker(mh);
+	}
+
+	private static Arity1CtorInvoker createArity1CtorInvoker(MethodHandle mh, Constructor<?> targetCtor) {
+		MethodHandle raw = null;
+		if (targetCtor != null) {
+			try {
+				Class<?>[] p = targetCtor.getParameterTypes();
+				if (p.length == 1 && p[0] == int.class) {
+					MethodHandle unref = Magic.lookup.unreflectConstructor(targetCtor);
+					raw = unref.asType(MethodType.methodType(Object.class, int.class));
+				}
+			} catch (Throwable ignored) {
+			}
 		}
-		@Override
-		public Object newInstance(Object[] args) throws Throwable {
-			return spreader.invoke(args == null ? EMPTY_ARGS : args);
+		return new Arity1CtorInvoker(mh, mh.asSpreader(Object[].class, 1), raw);
+	}
+
+	private static Arity2CtorInvoker createArity2CtorInvoker(MethodHandle mh, Constructor<?> targetCtor) {
+		MethodHandle raw   = null;
+		boolean      p0Int = false;
+		boolean      p1Str = false;
+		if (targetCtor != null) {
+			try {
+				Class<?>[] p = targetCtor.getParameterTypes();
+				if (p.length == 2 && p[0] == int.class && p[1] == String.class) {
+					p0Int = true;
+					p1Str = true;
+					MethodHandle unref = Magic.lookup.unreflectConstructor(targetCtor);
+					raw = unref.asType(MethodType.methodType(Object.class, int.class, String.class));
+				}
+			} catch (Throwable ignored) {
+			}
 		}
+		return new Arity2CtorInvoker(mh, mh.asSpreader(Object[].class, 2), raw, p0Int, p1Str);
+	}
+
+	private static Arity3CtorInvoker createArity3CtorInvoker(MethodHandle mh, Constructor<?> targetCtor) {
+		return new Arity3CtorInvoker(mh, mh.asSpreader(Object[].class, 3));
 	}
 
 	public static MagicInvoker getMethodInvoker(Class<?> clazz, String methodName, int arity, boolean isStatic) {
@@ -885,10 +538,10 @@ public class MagicJIT implements Opcodes {
 			MethodHandle exactMh = generateDirectMethodHandleStub(clazz, targetMethod);
 			if (exactMh == null) return null;
 			return switch (arity) {
-				case 0 -> new Arity0Invoker(exactMh, targetMethod);
-				case 1 -> new Arity1Invoker(exactMh, targetMethod);
-				case 2 -> new Arity2Invoker(exactMh, targetMethod);
-				case 3 -> new Arity3Invoker(exactMh, targetMethod);
+				case 0 -> createArity0Invoker(exactMh, targetMethod);
+				case 1 -> createArity1Invoker(exactMh, targetMethod);
+				case 2 -> createArity2Invoker(exactMh, targetMethod);
+				case 3 -> createArity3Invoker(exactMh, targetMethod);
 				default -> new GenericInvoker(exactMh.asSpreader(Object[].class, arity));
 			};
 		} catch (Throwable e) {
@@ -954,10 +607,10 @@ public class MagicJIT implements Opcodes {
 			Arrays.fill(genericParams, Object.class);
 			MethodHandle finalCtorMh = ctorMh.asType(MethodType.methodType(Object.class, genericParams));
 			return switch (arity) {
-				case 0 -> new Arity0CtorInvoker(finalCtorMh, targetCtor);
-				case 1 -> new Arity1CtorInvoker(finalCtorMh, targetCtor);
-				case 2 -> new Arity2CtorInvoker(finalCtorMh, targetCtor);
-				case 3 -> new Arity3CtorInvoker(finalCtorMh, targetCtor);
+				case 0 -> createArity0CtorInvoker(finalCtorMh, targetCtor);
+				case 1 -> createArity1CtorInvoker(finalCtorMh, targetCtor);
+				case 2 -> createArity2CtorInvoker(finalCtorMh, targetCtor);
+				case 3 -> createArity3CtorInvoker(finalCtorMh, targetCtor);
 				default -> new GenericCtorInvoker(finalCtorMh.asSpreader(Object[].class, arity));
 			};
 		} catch (Throwable e) {

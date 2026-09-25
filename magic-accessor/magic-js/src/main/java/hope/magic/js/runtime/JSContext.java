@@ -5,6 +5,7 @@ import hope.magic.js.compiler.JSCompiler;
 import hope.magic.js.module.*;
 import hope.magic.js.module.JSModuleManager.RequireFunction;
 import hope.magic.js.parser.*;
+import hope.magic.runtime.Magic;
 
 import java.lang.reflect.Array;
 import java.time.*;
@@ -18,6 +19,10 @@ import java.util.function.Consumer;
 import java.util.stream.BaseStream;
 
 public class JSContext {
+	static {
+		Magic.install();
+	}
+
 	public static final     int                                INITIAL_GLOBAL_SLOTS_CAPACITY = 64;
 	private static final    ConcurrentHashMap<String, Integer> GLOBAL_SLOT_REGISTRY          = new ConcurrentHashMap<>();
 	private static final    AtomicInteger                      NEXT_GLOBAL_SLOT              = new AtomicInteger(0);

@@ -167,15 +167,30 @@ public class Magic {
 				magicAccessorInstalled = false;
 			}
 
-			// 注入 Bootstrap 直调类 MagicInvoker 并为 java.base 开放未命名模块读取权限
+			// 注入 Bootstrap 直调类 MagicInvoker 及各 Arity Invoker 实现类，并为 java.base 开放未命名模块读取权限
 			try {
-				try {
-					Class.forName("hope.magic.runtime.MagicInvoker", false, null);
-				} catch (ClassNotFoundException e) {
-					try (InputStream in = Magic.class.getResourceAsStream("/hope/magic/runtime/MagicInvoker.class")) {
-						if (in != null) {
-							byte[] invokerBytes = in.readAllBytes();
-							defineClass(null, invokerBytes);
+				String[] bootInvokers = {
+					"hope.magic.runtime.MagicInvoker",
+					"hope.magic.runtime.Arity0Invoker",
+					"hope.magic.runtime.Arity1Invoker",
+					"hope.magic.runtime.Arity2Invoker",
+					"hope.magic.runtime.Arity3Invoker",
+					"hope.magic.runtime.GenericInvoker",
+					"hope.magic.runtime.Arity0CtorInvoker",
+					"hope.magic.runtime.Arity1CtorInvoker",
+					"hope.magic.runtime.Arity2CtorInvoker",
+					"hope.magic.runtime.Arity3CtorInvoker",
+					"hope.magic.runtime.GenericCtorInvoker"
+				};
+				for (String invokerName : bootInvokers) {
+					try {
+						Class.forName(invokerName, false, null);
+					} catch (ClassNotFoundException e) {
+						try (InputStream in = Magic.class.getResourceAsStream("/" + invokerName.replace('.', '/') + ".class")) {
+							if (in != null) {
+								byte[] invokerBytes = in.readAllBytes();
+								defineClass(null, invokerBytes);
+							}
 						}
 					}
 				}

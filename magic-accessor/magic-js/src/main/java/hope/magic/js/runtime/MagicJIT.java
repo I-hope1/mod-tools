@@ -8,6 +8,7 @@ import org.objectweb.asm.util.TraceClassVisitor;
 
 import java.io.*;
 import java.lang.invoke.*;
+import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,6 +35,7 @@ import java.util.function.BiConsumer;
 public class MagicJIT implements Opcodes {
 
 	public static final String IN_JSOps = "hope/magic/js/runtime/JSOps";
+	public static final Lookup LOOKUP = Magic.lookup;
 
 	/** 供测试与调试注入的字节码转储勾子：(className, classBytes) -> void */
 	public static volatile BiConsumer<String, byte[]> CLASS_DUMP_HOOK = null;
@@ -333,7 +335,7 @@ public class MagicJIT implements Opcodes {
 				boolean  isStatic = Modifier.isStatic(targetMethod.getModifiers());
 				Class<?> ret      = targetMethod.getReturnType();
 				if (targetMethod.getParameterCount() == 0) {
-					MethodHandle raw = Magic.lookup.unreflect(targetMethod);
+					MethodHandle raw = LOOKUP.unreflect(targetMethod);
 					if (isStatic) {
 						raw = MethodHandles.dropArguments(raw, 0, Object.class);
 					}
@@ -364,7 +366,7 @@ public class MagicJIT implements Opcodes {
 				Class<?>   ret      = targetMethod.getReturnType();
 				Class<?>[] p        = targetMethod.getParameterTypes();
 				if (p.length == 1) {
-					MethodHandle raw = Magic.lookup.unreflect(targetMethod);
+					MethodHandle raw = LOOKUP.unreflect(targetMethod);
 					if (isStatic) {
 						raw = MethodHandles.dropArguments(raw, 0, Object.class);
 					}
@@ -395,7 +397,7 @@ public class MagicJIT implements Opcodes {
 				Class<?>   ret      = targetMethod.getReturnType();
 				Class<?>[] p        = targetMethod.getParameterTypes();
 				if (p.length == 2) {
-					MethodHandle raw = Magic.lookup.unreflect(targetMethod);
+					MethodHandle raw = LOOKUP.unreflect(targetMethod);
 					if (isStatic) {
 						raw = MethodHandles.dropArguments(raw, 0, Object.class);
 					}
@@ -424,7 +426,7 @@ public class MagicJIT implements Opcodes {
 				Class<?>   ret      = targetMethod.getReturnType();
 				Class<?>[] p        = targetMethod.getParameterTypes();
 				if (p.length == 3) {
-					MethodHandle raw = Magic.lookup.unreflect(targetMethod);
+					MethodHandle raw = LOOKUP.unreflect(targetMethod);
 					if (isStatic) {
 						raw = MethodHandles.dropArguments(raw, 0, Object.class);
 					}
@@ -450,7 +452,7 @@ public class MagicJIT implements Opcodes {
 			try {
 				Class<?>[] p = targetCtor.getParameterTypes();
 				if (p.length == 1 && p[0] == int.class) {
-					MethodHandle unref = Magic.lookup.unreflectConstructor(targetCtor);
+					MethodHandle unref = LOOKUP.unreflectConstructor(targetCtor);
 					raw = unref.asType(MethodType.methodType(Object.class, int.class));
 				}
 			} catch (Throwable ignored) {
@@ -469,7 +471,7 @@ public class MagicJIT implements Opcodes {
 				if (p.length == 2 && p[0] == int.class && p[1] == String.class) {
 					p0Int = true;
 					p1Str = true;
-					MethodHandle unref = Magic.lookup.unreflectConstructor(targetCtor);
+					MethodHandle unref = LOOKUP.unreflectConstructor(targetCtor);
 					raw = unref.asType(MethodType.methodType(Object.class, int.class, String.class));
 				}
 			} catch (Throwable ignored) {
@@ -592,7 +594,7 @@ public class MagicJIT implements Opcodes {
 		targetCtor.setAccessible(true);
 		int arity = targetCtor.getParameterCount();
 		try {
-			MethodHandle ctorMh     = Magic.lookup.unreflectConstructor(targetCtor);
+			MethodHandle ctorMh     = LOOKUP.unreflectConstructor(targetCtor);
 			Class<?>[]   paramTypes = targetCtor.getParameterTypes();
 			for (int i = 0; i < arity; i++) {
 				MethodHandle filter = JSLinker.getArgumentFilter(paramTypes[i]);
@@ -770,7 +772,7 @@ public class MagicJIT implements Opcodes {
 	private static MethodHandle generateDirectConstructorStub(Class<?> clazz, Constructor<?> targetCtor) {
 		try {
 			targetCtor.setAccessible(true);
-			MethodHandle mh     = Magic.lookup.unreflectConstructor(targetCtor);
+			MethodHandle mh     = LOOKUP.unreflectConstructor(targetCtor);
 			Class<?>[]   pTypes = targetCtor.getParameterTypes();
 			for (int i = 0; i < pTypes.length; i++) {
 				MethodHandle filter = JSLinker.getArgumentFilter(pTypes[i]);
@@ -794,7 +796,7 @@ public class MagicJIT implements Opcodes {
 		targetMethod.setAccessible(true);
 		MethodHandle bound;
 		try {
-			bound = Magic.lookup.unreflect(targetMethod);
+			bound = LOOKUP.unreflect(targetMethod);
 		} catch (Throwable t) {
 			throw new RuntimeException("Failed to unreflect MethodHandle for " + clazz.getName() + "#" + targetMethod.getName(), t);
 		}
@@ -877,13 +879,13 @@ public class MagicJIT implements Opcodes {
 		Magic.install();
 		if (type instanceof MethodType mt) {
 			MethodHandle mh = switch (refKind) {
-				case 5 -> Magic.lookup.findVirtual(refc, name, mt);
-				case 6 -> Magic.lookup.findStatic(refc, name, mt);
+				case 5 -> LOOKUP.findVirtual(refc, name, mt);
+				case 6 -> LOOKUP.findStatic(refc, name, mt);
 				case 7 -> {
 					if ("<init>".equals(name)) {
-						yield Magic.lookup.findConstructor(refc, mt);
+						yield LOOKUP.findConstructor(refc, mt);
 					} else {
-						yield Magic.lookup.findSpecial(refc, name, mt, refc);
+						yield LOOKUP.findSpecial(refc, name, mt, refc);
 					}
 				}
 				default -> throw new IllegalArgumentException("Unsupported refKind: " + refKind);
@@ -891,10 +893,10 @@ public class MagicJIT implements Opcodes {
 			return LinkerHelper.extractMemberName(mh);
 		} else if (type instanceof Class<?> fieldType) {
 			MethodHandle mh = switch (refKind) {
-				case 1 -> Magic.lookup.findGetter(refc, name, fieldType);
-				case 2 -> Magic.lookup.findStaticGetter(refc, name, fieldType);
-				case 3 -> Magic.lookup.findSetter(refc, name, fieldType);
-				case 4 -> Magic.lookup.findStaticSetter(refc, name, fieldType);
+				case 1 -> LOOKUP.findGetter(refc, name, fieldType);
+				case 2 -> LOOKUP.findStaticGetter(refc, name, fieldType);
+				case 3 -> LOOKUP.findSetter(refc, name, fieldType);
+				case 4 -> LOOKUP.findStaticSetter(refc, name, fieldType);
 				default -> throw new IllegalArgumentException("Unsupported refKind: " + refKind);
 			};
 			return LinkerHelper.extractMemberName(mh);
@@ -964,7 +966,7 @@ public class MagicJIT implements Opcodes {
 		Constructor<?> ctor = createFunctionAdapterConstructor(targetType);
 		if (ctor == null) return null;
 		try {
-			return Magic.lookup.unreflectConstructor(ctor).asType(MethodType.methodType(Object.class, JSFunction.class));
+			return LOOKUP.unreflectConstructor(ctor).asType(MethodType.methodType(Object.class, JSFunction.class));
 		} catch (Throwable e) {
 			return null;
 		}
@@ -974,7 +976,7 @@ public class MagicJIT implements Opcodes {
 		Constructor<?> ctor = createObjectAdapterConstructor(targetType);
 		if (ctor == null) return null;
 		try {
-			return Magic.lookup.unreflectConstructor(ctor).asType(MethodType.methodType(Object.class, JSObject.class));
+			return LOOKUP.unreflectConstructor(ctor).asType(MethodType.methodType(Object.class, JSObject.class));
 		} catch (Throwable e) {
 			return null;
 		}

@@ -24,12 +24,16 @@ public final class Arity3Invoker extends MagicInvoker {
 		this(mh, null, null, null);
 	}
 
+	@Hidden
+	@ForceInline
 	@Override
 	public Object invoke(Object target, Object[] args) throws Throwable {
 		if (args != null && args.length == 3) return invoke3(target, args[0], args[1], args[2]);
 		return spreader.invoke(target, args == null ? EMPTY_ARGS : args);
 	}
 
+	@Hidden
+	@ForceInline
 	@Override
 	public Object invoke3(Object target, Object a0, Object a1, Object a2) throws Throwable {
 		if (a0 instanceof Number n0 && a1 instanceof Number n1 && a2 instanceof Number n2) {
@@ -43,12 +47,16 @@ public final class Arity3Invoker extends MagicInvoker {
 		return (Object) mh.invokeExact(target, a0, a1, a2);
 	}
 
+	@Hidden
+	@ForceInline
 	@Override
 	public int invokeInt3(Object target, int a0, int a1, int a2) throws Throwable {
 		if (rawIntMh != null) return (int) rawIntMh.invokeExact(target, a0, a1, a2);
 		return ((Number) invoke3(target, a0, a1, a2)).intValue();
 	}
 
+	@Hidden
+	@ForceInline
 	@Override
 	public double invokeDouble3(Object target, double a0, double a1, double a2) throws Throwable {
 		if (rawDoubleMh != null) return (double) rawDoubleMh.invokeExact(target, a0, a1, a2);

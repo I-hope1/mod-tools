@@ -26,22 +26,30 @@ public final class Arity2CtorInvoker extends MagicInvoker {
 		this(mh, null, null, false, false);
 	}
 
+	@Hidden
+	@ForceInline
 	@Override
 	public Object invoke(Object target, Object[] args) throws Throwable {
 		return newInstance(args);
 	}
 
+	@Hidden
+	@ForceInline
 	@Override
 	public Object invoke2(Object target, Object a0, Object a1) throws Throwable {
 		return newInstance2(a0, a1);
 	}
 
+	@Hidden
+	@ForceInline
 	@Override
 	public Object newInstance(Object[] args) throws Throwable {
 		if (args != null && args.length == 2) return newInstance2(args[0], args[1]);
 		return spreader.invoke(args == null ? EMPTY_ARGS : args);
 	}
 
+	@Hidden
+	@ForceInline
 	@Override
 	public Object newInstance2(Object a0, Object a1) throws Throwable {
 		if (rawCtorMh != null && p0IsInt && p1IsString && a0 instanceof Number n0 && (a1 == null || a1 instanceof String)) {

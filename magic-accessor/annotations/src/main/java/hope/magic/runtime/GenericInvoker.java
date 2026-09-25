@@ -11,6 +11,8 @@ public final class GenericInvoker extends MagicInvoker {
 		this.spreader = spreader;
 	}
 
+	@Hidden
+	@ForceInline
 	@Override
 	public Object invoke(Object target, Object[] args) throws Throwable {
 		return spreader.invoke(target, args == null ? EMPTY_ARGS : args);

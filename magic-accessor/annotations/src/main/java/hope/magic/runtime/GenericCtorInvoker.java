@@ -11,11 +11,15 @@ public final class GenericCtorInvoker extends MagicInvoker {
 		this.spreader = spreader;
 	}
 
+	@Hidden
+	@ForceInline
 	@Override
 	public Object invoke(Object target, Object[] args) throws Throwable {
 		return newInstance(args);
 	}
 
+	@Hidden
+	@ForceInline
 	@Override
 	public Object newInstance(Object[] args) throws Throwable {
 		return spreader.invoke(args == null ? EMPTY_ARGS : args);

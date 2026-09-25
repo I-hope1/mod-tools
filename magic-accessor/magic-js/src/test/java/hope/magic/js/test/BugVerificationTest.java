@@ -991,6 +991,21 @@ public class BugVerificationTest {
 		Assertions.assertNotNull(mixed.elements, "elements should be non-null for mixed literal");
 		Assertions.assertEquals("hello", mixed.getElement(1));
 	}
+
+	@Test
+	public void testInObjectFieldCountIsPositivePowerOfTwo() {
+		int count = JSObject.IN_OBJECT_FIELD_COUNT;
+		// 1. 断言为正的 2 的幂
+		Assertions.assertTrue(count > 0 && (count & (count - 1)) == 0,
+				"IN_OBJECT_FIELD_COUNT must be a positive power of 2, actual: " + count);
+
+		// 2. 验证位运算掩码数学恒等式：(offset & -count) == 0 当且仅当 0 <= offset < count
+		for (int offset = -1000; offset <= 1000; offset++) {
+			boolean expected = (offset >= 0 && offset < count);
+			boolean actual = ((offset & -count) == 0);
+			Assertions.assertEquals(expected, actual, "Bitwise mask mismatch for offset: " + offset);
+		}
+	}
 }
 
 

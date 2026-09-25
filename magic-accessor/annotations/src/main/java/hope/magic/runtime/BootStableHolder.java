@@ -28,4 +28,10 @@ public class BootStableHolder {
 
 	@Stable
 	public MagicInvoker[] instanceStableInvokerTable = new MagicInvoker[8];
+
+	@Stable
+	public static long[] JS_PRIM_OFFSETS = new long[8];
+
+	@Stable
+	public static long[] JS_OBJ_OFFSETS = new long[8];
 }

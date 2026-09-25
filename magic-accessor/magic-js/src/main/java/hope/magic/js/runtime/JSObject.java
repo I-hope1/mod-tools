@@ -242,19 +242,20 @@ public class JSObject {
 	 * </ul>
 	 */
 	public double getDoubleSlot(int offset) {
-		if (offset < IN_OBJECT_FIELD_COUNT) {
+		if (offset >= 0 && offset < IN_OBJECT_FIELD_COUNT) {
 			return UNSAFE.getDouble(this, BootStableHolder.JS_PRIM_OFFSETS[offset]);
 		}
-		return getOverflowDouble(offset - IN_OBJECT_FIELD_COUNT);
+		return offset >= IN_OBJECT_FIELD_COUNT ? getOverflowDouble(offset - IN_OBJECT_FIELD_COUNT) : Double.NaN;
 	}
 
 	private double getOverflowDouble(int idx) {
-		return (overflowPrim != null && idx < overflowPrim.length)
+		return (overflowPrim != null && idx >= 0 && idx < overflowPrim.length)
 		 ? Double.longBitsToDouble(overflowPrim[idx])
 		 : Double.NaN;
 	}
 
 	public void setDoubleSlot(int offset, double value) {
+		if (offset < 0) return;
 		setDoubleMask(offset);
 		if (offset < IN_OBJECT_FIELD_COUNT) {
 			UNSAFE.putDouble(this, BootStableHolder.JS_PRIM_OFFSETS[offset], value);
@@ -278,15 +279,15 @@ public class JSObject {
 	}
 
 	public Object getRawObjectSlot(int offset) {
-		if (offset < IN_OBJECT_FIELD_COUNT) {
+		if (offset >= 0 && offset < IN_OBJECT_FIELD_COUNT) {
 			return UNSAFE.getObject(this, BootStableHolder.JS_OBJ_OFFSETS[offset]);
 		}
-		return getOverflowObject(offset - IN_OBJECT_FIELD_COUNT);
+		return offset >= IN_OBJECT_FIELD_COUNT ? getOverflowObject(offset - IN_OBJECT_FIELD_COUNT) : null;
 	}
 
 	private Object getOverflowObject(int idx) {
 		Object[] of = overflowObj;
-		return (of != null && idx < of.length) ? of[idx] : null;
+		return (of != null && idx >= 0 && idx < of.length) ? of[idx] : null;
 	}
 
 	public Object getObjectSlot(int offset) {
@@ -302,6 +303,7 @@ public class JSObject {
 	 * 随后利用 {@link BootStableHolder#JS_OBJ_OFFSETS} 配合 Unsafe 扁平单指令写入对象引用。
 	 */
 	public void setSlot(int offset, Object value) {
+		if (offset < 0) return;
 		if (isDoubleSlot(offset)) {
 			clearDoubleMask(offset);
 			clearPrimSlot(offset);
@@ -326,9 +328,9 @@ public class JSObject {
 	}
 
 	private void clearPrimSlot(int offset) {
-		if (offset < IN_OBJECT_FIELD_COUNT) {
+		if (offset >= 0 && offset < IN_OBJECT_FIELD_COUNT) {
 			UNSAFE.putLong(this, BootStableHolder.JS_PRIM_OFFSETS[offset], 0L);
-		} else if (overflowPrim != null && offset - IN_OBJECT_FIELD_COUNT < overflowPrim.length) {
+		} else if (offset >= IN_OBJECT_FIELD_COUNT && overflowPrim != null && offset - IN_OBJECT_FIELD_COUNT < overflowPrim.length) {
 			overflowPrim[offset - IN_OBJECT_FIELD_COUNT] = 0L;
 		}
 	}

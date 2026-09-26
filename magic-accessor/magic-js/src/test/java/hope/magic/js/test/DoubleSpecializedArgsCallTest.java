@@ -88,4 +88,27 @@ public class DoubleSpecializedArgsCallTest {
 		assertEquals(50.0, ((Number) cx.eval("Math.max(10, 30, 20, 40, 50, 5);")).doubleValue(), 1e-9);
 		assertEquals(5.0, ((Number) cx.eval("Math.min(10, 30, 20, 40, 50, 5);")).doubleValue(), 1e-9);
 	}
+
+	@Test
+	public void testMathImulClz32Fround() {
+		JSContext cx = new JSContext();
+		// Math.imul
+		assertEquals(8.0, ((Number) cx.eval("Math.imul(2, 4);")).doubleValue());
+		assertEquals(-8.0, ((Number) cx.eval("Math.imul(-1, 8);")).doubleValue());
+		assertEquals(-5.0, ((Number) cx.eval("Math.imul(0xffffffff, 5);")).doubleValue());
+		assertEquals(1.0, ((Number) cx.eval("Math.imul(0x7fffffff, 0x7fffffff);")).doubleValue());
+
+		// Math.clz32
+		assertEquals(32.0, ((Number) cx.eval("Math.clz32(0);")).doubleValue());
+		assertEquals(31.0, ((Number) cx.eval("Math.clz32(1);")).doubleValue());
+		assertEquals(22.0, ((Number) cx.eval("Math.clz32(1000);")).doubleValue());
+		assertEquals(0.0, ((Number) cx.eval("Math.clz32(-1);")).doubleValue());
+		assertEquals(31.0, ((Number) cx.eval("Math.clz32(true);")).doubleValue());
+		assertEquals(32.0, ((Number) cx.eval("Math.clz32(NaN);")).doubleValue());
+
+		// Math.fround
+		assertEquals(1.5, ((Number) cx.eval("Math.fround(1.5);")).doubleValue(), 1e-9);
+		assertEquals((double) (float) 1.337, ((Number) cx.eval("Math.fround(1.337);")).doubleValue(), 1e-9);
+		assertEquals(0.0, ((Number) cx.eval("Math.fround(0);")).doubleValue(), 1e-9);
+	}
 }

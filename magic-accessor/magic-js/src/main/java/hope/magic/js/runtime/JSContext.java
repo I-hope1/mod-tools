@@ -100,6 +100,9 @@ public class JSContext {
 		public static final int OP_POW    = 21;
 		public static final int OP_ATAN2  = 22;
 		public static final int OP_HYPOT  = 23;
+		public static final int OP_IMUL   = 24;
+		public static final int OP_CLZ32  = 25;
+		public static final int OP_FROUND = 26;
 
 		private static final double LN2 = 0.6931471805599453; // Math.log(2)
 
@@ -146,6 +149,19 @@ public class JSContext {
 					}
 					yield Math.sqrt(sum) * max;
 				}
+				case OP_IMUL -> {
+					int a = args.length > 0 ? JSOps.toInt(args[0]) : 0;
+					int b = args.length > 1 ? JSOps.toInt(args[1]) : 0;
+					yield (double) (a * b);
+				}
+				case OP_CLZ32 -> {
+					int val = args.length > 0 ? JSOps.toInt(args[0]) : 0;
+					yield (double) Integer.numberOfLeadingZeros(val);
+				}
+				case OP_FROUND -> {
+					double val = args.length > 0 ? JSOps.toDouble(args[0]) : Double.NaN;
+					yield (double) (float) val;
+				}
 				default -> {
 					double a0 = args.length > 0 ? JSOps.toDouble(args[0]) : Double.NaN;
 					double a1 = args.length > 1 ? JSOps.toDouble(args[1]) : Double.NaN;
@@ -190,7 +206,8 @@ public class JSContext {
 				case OP_RANDOM -> Math.random();
 				case OP_MAX -> Double.NEGATIVE_INFINITY;
 				case OP_MIN -> Double.POSITIVE_INFINITY;
-				case OP_HYPOT -> 0.0;
+				case OP_HYPOT, OP_IMUL -> 0.0;
+				case OP_CLZ32 -> 32.0;
 				default -> Double.NaN;
 			};
 		}
@@ -200,6 +217,9 @@ public class JSContext {
 			return switch (op) {
 				case OP_MAX, OP_MIN -> a0;
 				case OP_HYPOT -> Math.abs(a0);
+				case OP_IMUL -> 0.0;
+				case OP_CLZ32 -> (double) Integer.numberOfLeadingZeros(JSOps.toInt(a0));
+				case OP_FROUND -> (double) (float) a0;
 				default -> evalDouble(a0, Double.NaN);
 			};
 		}
@@ -277,6 +297,9 @@ public class JSContext {
 				case OP_POW -> Math.pow(a0, a1);
 				case OP_ATAN2 -> Math.atan2(a0, a1);
 				case OP_HYPOT -> Math.hypot(a0, a1);
+				case OP_IMUL -> (double) (JSOps.toInt(a0) * JSOps.toInt(a1));
+				case OP_CLZ32 -> (double) Integer.numberOfLeadingZeros(JSOps.toInt(a0));
+				case OP_FROUND -> (double) (float) a0;
 				default -> Double.NaN;
 			};
 		}
@@ -973,7 +996,8 @@ public class JSContext {
 		 "PI", "E", "abs", "sqrt", "floor", "ceil", "round",
 		 "sin", "cos", "tan", "asin", "acos", "atan", "exp",
 		 "log", "log10", "log2", "cbrt", "sign", "trunc",
-		 "random", "max", "min", "pow", "atan2", "hypot"
+		 "random", "max", "min", "pow", "atan2", "hypot",
+		 "imul", "clz32", "fround"
 		);
 		private static final JSShape      MATH_SHAPE = JSShape.createStaticPrototypeShape(MATH_PROPS);
 		static final         JSObject     MATH       = createMath();
@@ -1006,6 +1030,9 @@ public class JSContext {
 			math.put("pow", new JSMathFunction(JSMathFunction.OP_POW));
 			math.put("atan2", new JSMathFunction(JSMathFunction.OP_ATAN2));
 			math.put("hypot", new JSMathFunction(JSMathFunction.OP_HYPOT));
+			math.put("imul", new JSMathFunction(JSMathFunction.OP_IMUL));
+			math.put("clz32", new JSMathFunction(JSMathFunction.OP_CLZ32));
+			math.put("fround", new JSMathFunction(JSMathFunction.OP_FROUND));
 			return math;
 		}
 	}

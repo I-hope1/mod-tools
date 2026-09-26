@@ -199,6 +199,11 @@ public class DoubleSpecializedArgsCallTest {
 		assertEquals("0", hope.magic.js.runtime.JSOps.numberToString(0.0));
 		assertEquals("1.5", hope.magic.js.runtime.JSOps.numberToString(1.5));
 		assertEquals("50000", hope.magic.js.runtime.JSOps.numberToString(50000.0));
+
+		// Safe integer fast paths (> 32-bit int, e.g. timestamps and 2^53 - 1)
+		assertEquals("1727358000000", hope.magic.js.runtime.JSOps.numberToString(1727358000000.0));
+		assertEquals("9007199254740991", hope.magic.js.runtime.JSOps.numberToString(9007199254740991.0));
+		assertEquals("-9007199254740991", hope.magic.js.runtime.JSOps.numberToString(-9007199254740991.0));
 	}
 
 	@Test

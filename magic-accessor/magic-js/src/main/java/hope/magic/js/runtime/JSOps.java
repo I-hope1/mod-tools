@@ -725,15 +725,21 @@ public class JSOps {
 	private static final double MIN_PLAIN = 1e-6;
 	private static final double MAX_PLAIN = 1e21;
 
+	public static final long MAX_SAFE_INTEGER = 9007199254740991L;  // 2^53 - 1
+	public static final long MIN_SAFE_INTEGER = -9007199254740991L; // -(2^53 - 1)
+
 	/** 严格符合 ECMAScript (ECMA-262) 规范的 Number::toString 算法 */
 	public static String numberToString(double d) {
 		if (Double.isNaN(d)) return "NaN";
 		if (d == 0.0) return "0"; // 涵盖 +0.0 与 -0.0
 		if (Double.isInfinite(d)) return d > 0 ? "Infinity" : "-Infinity";
 
-		int i = (int) d;
-		if (i == d) {
-			return fastIntToString(i);
+		long l = (long) d;
+		if ((double) l == d && l > -9007199254740992L && l < 9007199254740992L) {
+			if (l >= Integer.MIN_VALUE && l <= Integer.MAX_VALUE) {
+				return fastIntToString((int) l);
+			}
+			return Long.toString(l);
 		}
 
 		double abs = Math.abs(d);

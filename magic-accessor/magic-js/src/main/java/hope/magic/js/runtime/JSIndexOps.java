@@ -12,11 +12,15 @@ import static hope.magic.js.runtime.SlotMH.*;
 public class JSIndexOps {
 	public static final MethodHandles.Lookup LOOKUP = Magic.lookup;
 
-	public static final int      SMALL_INT_SIZE    = 1024;
-	private static final String[] SMALL_INT_STRINGS = new String[SMALL_INT_SIZE];
+	public static final  int      SMALL_INT_MIN     = -128;
+	public static final  int      SMALL_INT_MAX     = 1023;
+	public static final  int      SMALL_INT_SIZE    = 1024;
+	public static final  int      SMALL_INT_OFFSET  = -SMALL_INT_MIN;
+	public static final  int      SMALL_INT_COUNT   = SMALL_INT_MAX - SMALL_INT_MIN + 1;
+	private static final String[] SMALL_INT_STRINGS = new String[SMALL_INT_COUNT];
 
 	static {
-		for (int i = 0; i < SMALL_INT_SIZE; i++) SMALL_INT_STRINGS[i] = String.valueOf(i).intern();
+		for (int i = SMALL_INT_MIN; i <= SMALL_INT_MAX; i++) SMALL_INT_STRINGS[i + SMALL_INT_OFFSET] = String.valueOf(i).intern();
 	}
 
 	public static final MethodHandle MH_GET_INDEX_JS_ARRAY;
@@ -41,25 +45,25 @@ public class JSIndexOps {
 
 	static {
 		try {
-			MH_IS_EXACT_CLASS          = LOOKUP.findStatic(JSIndexOps.class, "isExactClass", MethodType.methodType(boolean.class, Class.class, Object.class));
+			MH_IS_EXACT_CLASS = LOOKUP.findStatic(JSIndexOps.class, "isExactClass", MethodType.methodType(boolean.class, Class.class, Object.class));
 
-			MH_GET_INDEX_JS_ARRAY        = LOOKUP.findStatic(JSIndexOps.class, "getIndexJSArray", MethodType.methodType(Object.class, Object.class, Object.class));
-			MH_GET_INDEX_LIST            = LOOKUP.findStatic(JSIndexOps.class, "getIndexList", MethodType.methodType(Object.class, Object.class, Object.class));
-			MH_GET_INDEX_OBJECT_ARRAY    = LOOKUP.findStatic(JSIndexOps.class, "getIndexObjectArray", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_GET_INDEX_JS_ARRAY = LOOKUP.findStatic(JSIndexOps.class, "getIndexJSArray", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_GET_INDEX_LIST = LOOKUP.findStatic(JSIndexOps.class, "getIndexList", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_GET_INDEX_OBJECT_ARRAY = LOOKUP.findStatic(JSIndexOps.class, "getIndexObjectArray", MethodType.methodType(Object.class, Object.class, Object.class));
 			MH_GET_INDEX_PRIMITIVE_ARRAY = LOOKUP.findStatic(JSIndexOps.class, "getIndexPrimitiveArray", MethodType.methodType(Object.class, Object.class, Object.class));
-			MH_GET_INDEX_INT_ARRAY       = LOOKUP.findStatic(JSIndexOps.class, "getIndexIntArray", MethodType.methodType(Object.class, Object.class, Object.class));
-			MH_GET_INDEX_DOUBLE_ARRAY    = LOOKUP.findStatic(JSIndexOps.class, "getIndexDoubleArray", MethodType.methodType(Object.class, Object.class, Object.class));
-			MH_GET_INDEX_LONG_ARRAY      = LOOKUP.findStatic(JSIndexOps.class, "getIndexLongArray", MethodType.methodType(Object.class, Object.class, Object.class));
-			MH_GET_INDEX_MAP             = LOOKUP.findStatic(JSIndexOps.class, "getIndexMap", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_GET_INDEX_INT_ARRAY = LOOKUP.findStatic(JSIndexOps.class, "getIndexIntArray", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_GET_INDEX_DOUBLE_ARRAY = LOOKUP.findStatic(JSIndexOps.class, "getIndexDoubleArray", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_GET_INDEX_LONG_ARRAY = LOOKUP.findStatic(JSIndexOps.class, "getIndexLongArray", MethodType.methodType(Object.class, Object.class, Object.class));
+			MH_GET_INDEX_MAP = LOOKUP.findStatic(JSIndexOps.class, "getIndexMap", MethodType.methodType(Object.class, Object.class, Object.class));
 
-			MH_SET_INDEX_JS_ARRAY        = LOOKUP.findStatic(JSIndexOps.class, "setIndexJSArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
-			MH_SET_INDEX_LIST            = LOOKUP.findStatic(JSIndexOps.class, "setIndexList", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
-			MH_SET_INDEX_OBJECT_ARRAY    = LOOKUP.findStatic(JSIndexOps.class, "setIndexObjectArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
-			MH_SET_INDEX_INT_ARRAY       = LOOKUP.findStatic(JSIndexOps.class, "setIndexIntArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
-			MH_SET_INDEX_DOUBLE_ARRAY    = LOOKUP.findStatic(JSIndexOps.class, "setIndexDoubleArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
-			MH_SET_INDEX_LONG_ARRAY      = LOOKUP.findStatic(JSIndexOps.class, "setIndexLongArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
+			MH_SET_INDEX_JS_ARRAY = LOOKUP.findStatic(JSIndexOps.class, "setIndexJSArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
+			MH_SET_INDEX_LIST = LOOKUP.findStatic(JSIndexOps.class, "setIndexList", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
+			MH_SET_INDEX_OBJECT_ARRAY = LOOKUP.findStatic(JSIndexOps.class, "setIndexObjectArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
+			MH_SET_INDEX_INT_ARRAY = LOOKUP.findStatic(JSIndexOps.class, "setIndexIntArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
+			MH_SET_INDEX_DOUBLE_ARRAY = LOOKUP.findStatic(JSIndexOps.class, "setIndexDoubleArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
+			MH_SET_INDEX_LONG_ARRAY = LOOKUP.findStatic(JSIndexOps.class, "setIndexLongArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
 			MH_SET_INDEX_PRIMITIVE_ARRAY = LOOKUP.findStatic(JSIndexOps.class, "setIndexPrimitiveArray", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
-			MH_SET_INDEX_MAP             = LOOKUP.findStatic(JSIndexOps.class, "setIndexMap", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
+			MH_SET_INDEX_MAP = LOOKUP.findStatic(JSIndexOps.class, "setIndexMap", MethodType.methodType(void.class, Object.class, Object.class, Object.class));
 		} catch (ReflectiveOperationException e) {
 			throw new ExceptionInInitializerError(e);
 		}
@@ -70,7 +74,8 @@ public class JSIndexOps {
 	}
 
 	public static String fastIntToString(int i) {
-		if (i >= 0 && i < SMALL_INT_SIZE) return SMALL_INT_STRINGS[i];
+		int idx = i + SMALL_INT_OFFSET;
+		if (idx >= 0 && idx < SMALL_INT_COUNT) return SMALL_INT_STRINGS[idx];
 		return String.valueOf(i);
 	}
 
@@ -83,7 +88,7 @@ public class JSIndexOps {
 	}
 
 	public static String toPropertyKey(Object index) {
-		return JSArray.toPropertyKey(index);
+		return JSOps.toPropertyKey(index);
 	}
 
 	public static Object getArrayElement(Object target, int idx) {
@@ -631,8 +636,8 @@ public class JSIndexOps {
 	 String name,
 	 MethodType type
 	) {
-		ChainedCallSite site = new ChainedCallSite(type, IndexMH.GET.asType(type));
-		MethodHandle fallback = IndexMH.GET_FALLBACK.bindTo(site).asType(type);
+		ChainedCallSite site     = new ChainedCallSite(type, IndexMH.GET.asType(type));
+		MethodHandle    fallback = IndexMH.GET_FALLBACK.bindTo(site).asType(type);
 		site.setInitialFallback(fallback);
 		site.setTarget(fallback);
 		return site;
@@ -643,8 +648,8 @@ public class JSIndexOps {
 	 String name,
 	 MethodType type
 	) {
-		ChainedCallSite site = new ChainedCallSite(type, IndexMH.SET.asType(type));
-		MethodHandle fallback = IndexMH.SET_FALLBACK.bindTo(site).asType(type);
+		ChainedCallSite site     = new ChainedCallSite(type, IndexMH.SET.asType(type));
+		MethodHandle    fallback = IndexMH.SET_FALLBACK.bindTo(site).asType(type);
 		site.setInitialFallback(fallback);
 		site.setTarget(fallback);
 		return site;

@@ -661,9 +661,30 @@ public class JSOps {
 		return isTruthy(val);
 	}
 
+	public static String toPropertyKey(Object key) {
+		if (key instanceof JSSymbol sym) return sym.getKey();
+		if (key instanceof String s) return s;
+		if (key instanceof Integer i) return JSIndexOps.fastIntToString(i);
+		if (key instanceof Number num) return numberToString(num.doubleValue());
+		if (key instanceof JSObject jo) {
+			Object prim = toPrimitive(jo, "string");
+			if (prim instanceof JSSymbol sym) return sym.getKey();
+			return toStr(prim);
+		}
+		return toStr(key);
+	}
+
+	public static String toStr(int val) {
+		return JSIndexOps.fastIntToString(val);
+	}
+
+	public static String toStr(double val) {
+		return numberToString(val);
+	}
+
 	public static String toStr(Object val) {
 		if (val instanceof String) return (String) val;
-		if (val instanceof Integer) return ((Integer) val).toString();
+		if (val instanceof Integer i) return JSIndexOps.fastIntToString(i);
 		// if (val instanceof Long) return ((Long)val).toString(); // 如果 |l| > 2^53，不符合规范
 		return toStrSlow(val);
 	}
@@ -690,6 +711,11 @@ public class JSOps {
 		if (Double.isNaN(d)) return "NaN";
 		if (d == 0.0) return "0"; // 涵盖 +0.0 与 -0.0
 		if (Double.isInfinite(d)) return d > 0 ? "Infinity" : "-Infinity";
+
+		int i = (int) d;
+		if (i == d) {
+			return JSIndexOps.fastIntToString(i);
+		}
 
 		double abs = Math.abs(d);
 		return (abs >= MIN_PLAIN && abs < MAX_PLAIN)

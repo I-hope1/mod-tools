@@ -246,7 +246,37 @@ public class DoubleSpecializedArgsCallTest {
 		assertEquals("100000000000000000000", cx.eval("(1e20).toString();"));
 		assertEquals("1e+21", cx.eval("(1e21).toString();"));
 	}
+
+	@Test
+	public void testSchubfachCornerCases() {
+		JSContext cx = new JSContext();
+
+		// Min / Max values
+		assertEquals("5e-324", cx.eval("Number.MIN_VALUE.toString();"));
+		assertEquals("1.7976931348623157e+308", cx.eval("Number.MAX_VALUE.toString();"));
+
+		// Zeros & Specials
+		assertEquals("0", cx.eval("(0.0).toString();"));
+		assertEquals("0", cx.eval("(-0.0).toString();"));
+		assertEquals("Infinity", cx.eval("(1 / 0).toString();"));
+		assertEquals("-Infinity", cx.eval("(-1 / 0).toString();"));
+		assertEquals("NaN", cx.eval("(0 / 0).toString();"));
+
+		// Powers of 2 and fractions
+		assertEquals("0.5", cx.eval("(0.5).toString();"));
+		assertEquals("0.25", cx.eval("(0.25).toString();"));
+		assertEquals("0.125", cx.eval("(0.125).toString();"));
+		assertEquals("0.0625", cx.eval("(0.0625).toString();"));
+		assertEquals("0.03125", cx.eval("(0.03125).toString();"));
+
+		// Subnormals
+		assertEquals("1e-323", cx.eval("(1e-323).toString();"));
+		assertEquals("1e-323", cx.eval("(2 * Number.MIN_VALUE).toString();"));
+		assertEquals("1.5e-323", cx.eval("(3 * Number.MIN_VALUE).toString();"));
+		assertEquals("2e-323", cx.eval("(4 * Number.MIN_VALUE).toString();"));
+	}
 }
+
 
 
 

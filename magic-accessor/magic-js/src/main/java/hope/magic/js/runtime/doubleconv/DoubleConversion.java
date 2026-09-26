@@ -78,10 +78,7 @@ public final class DoubleConversion {
             buffer.isNegative = true;
         }
 
-        if (!fastDtoaShortest(absValue, buffer)) {
-            buffer.reset();
-            bignumDtoa(absValue, DtoaMode.SHORTEST, 0, buffer);
-        }
+        Schubfach.toDecimal(absValue, buffer);
 
         return buffer.format(DtoaMode.SHORTEST, 0);
     }

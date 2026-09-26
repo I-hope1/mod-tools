@@ -2201,6 +2201,14 @@ public class MagicJSTest {
 
 		Object rRandom = cx.eval("var r = Math.random(); r >= 0 && r < 1;");
 		Assertions.assertEquals(true, rRandom);
+
+
+		// 评估Math.max/min
+		Object rMax = cx.eval("Math.max(10, 20, 5);");
+		Assertions.assertEquals(20.0, ((Number) rMax).doubleValue(), 0.0001);
+
+		Object rMin = cx.eval("Math.min(10, 20, 5);");
+		Assertions.assertEquals(5.0, ((Number) rMin).doubleValue(), 0.0001);
 	}
 
 	@Test

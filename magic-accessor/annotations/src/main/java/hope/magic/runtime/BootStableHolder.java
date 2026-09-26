@@ -34,4 +34,10 @@ public class BootStableHolder {
 
 	@Stable
 	public static long[] JS_OBJ_OFFSETS = new long[8];
+
+	@Stable
+	public static long[] SHAPE_KEY_OFFSETS = new long[4];
+
+	@Stable
+	public static long[] SHAPE_TYPE_OFFSETS = new long[4];
 }

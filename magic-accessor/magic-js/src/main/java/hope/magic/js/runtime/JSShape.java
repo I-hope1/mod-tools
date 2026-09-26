@@ -1,5 +1,8 @@
 package hope.magic.js.runtime;
 
+import hope.magic.runtime.*;
+import sun.misc.Unsafe;
+
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -68,6 +71,23 @@ public final class JSShape {
 		arr[id] = shape;
 		PRECOMPUTED_SHAPES = arr; // 保证元素写入在 volatile 写 (Release 屏障) 之前完成
 		return id;
+	}
+
+	private static final Unsafe UNSAFE = Magic.unsafe;
+
+	static {
+		if (INLINE_PROPERTY_CAPACITY <= 0 || (INLINE_PROPERTY_CAPACITY & (INLINE_PROPERTY_CAPACITY - 1)) != 0) {
+			throw new AssertionError("INLINE_PROPERTY_CAPACITY must be a positive power of 2: " + INLINE_PROPERTY_CAPACITY);
+		}
+		try {
+			if (!Magic.isInstalled()) Magic.install();
+			for (int i = 0; i < INLINE_PROPERTY_CAPACITY; i++) {
+				BootStableHolder.SHAPE_KEY_OFFSETS[i] = LinkerHelper.getFieldOffset(JSShape.class, "k" + i);
+				BootStableHolder.SHAPE_TYPE_OFFSETS[i] = LinkerHelper.getFieldOffset(JSShape.class, "t" + i);
+			}
+		} catch (Throwable t) {
+			throw new ExceptionInInitializerError(t);
+		}
 	}
 
 	public static final JSShape ROOT = new JSShape(null, SymbolTable.NO_SYMBOL, TYPE_UNKNOWN, false);
@@ -268,16 +288,15 @@ public final class JSShape {
 		return propId >= 0 && getPropertyId(offset) == propId;
 	}
 
-	/** Fast-Path */
+	/**
+	 * 【性能极致优化】:
+	 * 基于 JVM 内部真实字段偏移 {@link BootStableHolder#SHAPE_TYPE_OFFSETS} 结合 {@link Unsafe#getByte(Object, long)} 进行平直读取。
+	 * 方法体精确压缩至 26 字节（远低于 MaxInlineSize=35），彻底消除阶梯 if 与深层 Rest 方法调用开销。
+	 */
 	public byte getSlotType(int offset) {
-		if (offset == 0) return t0;
-		if (offset == 1) return t1;
-		return getSlotTypeRest(offset);
-	}
-
-	private byte getSlotTypeRest(int offset) {
-		if (offset == 2) return t2;
-		if (offset == 3) return t3;
+		if ((offset & -INLINE_PROPERTY_CAPACITY) == 0) {
+			return UNSAFE.getByte(this, BootStableHolder.SHAPE_TYPE_OFFSETS[offset]);
+		}
 		return getOverflowSlotType(offset);
 	}
 
@@ -287,16 +306,15 @@ public final class JSShape {
 		return (of != null && ofIdx >= 0 && ofIdx < of.length) ? of[ofIdx] : TYPE_UNKNOWN;
 	}
 
-	/** Fast-Path */
+	/**
+	 * 【性能极致优化】:
+	 * 基于 JVM 内部真实字段偏移 {@link BootStableHolder#SHAPE_KEY_OFFSETS} 结合 {@link Unsafe#getInt(Object, long)} 进行平直读取。
+	 * 方法体精确压缩至 26 字节（远低于 MaxInlineSize=35），彻底消除阶梯 if 与深层 Rest 方法调用开销。
+	 */
 	public int getPropertyId(int offset) {
-		if (offset == 0) return k0;
-		if (offset == 1) return k1;
-		return getPropertyIdRest(offset);
-	}
-
-	private int getPropertyIdRest(int offset) {
-		if (offset == 2) return k2;
-		if (offset == 3) return k3;
+		if ((offset & -INLINE_PROPERTY_CAPACITY) == 0) {
+			return UNSAFE.getInt(this, BootStableHolder.SHAPE_KEY_OFFSETS[offset]);
+		}
 		return getOverflowPropertyId(offset);
 	}
 

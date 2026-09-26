@@ -225,9 +225,9 @@ tasks.register('jmhSlotAccess', JavaExec) {
 	mainClass = 'org.openjdk.jmh.Main'
 	args = [
 			'hope.magic.example.JSObjectSlotAccessJMHBenchmark',
-			'-f', '2',
-			'-wi', '3',
-			'-i', '10',
+			'-f', '1',
+			'-wi', '2',
+			'-i', '5',
 			'-w', '1s',
 			'-r', '1s',
 			'-bm', 'avgt',

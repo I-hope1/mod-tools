@@ -1006,6 +1006,39 @@ public class BugVerificationTest {
 			Assertions.assertEquals(expected, actual, "Bitwise mask mismatch for offset: " + offset);
 		}
 	}
+
+	@Test
+	public void testJSShapeInlinePropertyCapacityAndAccess() {
+		int cap = JSShape.INLINE_PROPERTY_CAPACITY;
+		Assertions.assertTrue(cap > 0 && (cap & (cap - 1)) == 0,
+				"INLINE_PROPERTY_CAPACITY must be a positive power of 2, actual: " + cap);
+
+		// 验证 JSShape 的属性类型与键读取
+		JSShape s = JSShape.ROOT;
+		s = s.addProperty(10, JSShape.TYPE_DOUBLE);
+		s = s.addProperty(20, JSShape.TYPE_INT);
+		s = s.addProperty(30, JSShape.TYPE_OBJECT);
+		s = s.addProperty(40, JSShape.FLAG_ACCESSOR);
+		// 溢出属性
+		s = s.addProperty(50, JSShape.TYPE_INT);
+
+		Assertions.assertEquals(10, s.getPropertyId(0));
+		Assertions.assertEquals(JSShape.TYPE_DOUBLE, s.getSlotType(0));
+		Assertions.assertEquals(20, s.getPropertyId(1));
+		Assertions.assertEquals(JSShape.TYPE_INT, s.getSlotType(1));
+		Assertions.assertEquals(30, s.getPropertyId(2));
+		Assertions.assertEquals(JSShape.TYPE_OBJECT, s.getSlotType(2));
+		Assertions.assertEquals(40, s.getPropertyId(3));
+		Assertions.assertEquals(JSShape.FLAG_ACCESSOR, s.getSlotType(3));
+		Assertions.assertEquals(50, s.getPropertyId(4));
+		Assertions.assertEquals(JSShape.TYPE_INT, s.getSlotType(4));
+
+		// 越界与负数测试
+		Assertions.assertEquals(SymbolTable.NO_SYMBOL, s.getPropertyId(-1));
+		Assertions.assertEquals(JSShape.TYPE_UNKNOWN, s.getSlotType(-1));
+		Assertions.assertEquals(SymbolTable.NO_SYMBOL, s.getPropertyId(100));
+		Assertions.assertEquals(JSShape.TYPE_UNKNOWN, s.getSlotType(100));
+	}
 }
 
 

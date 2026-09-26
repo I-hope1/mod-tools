@@ -71,4 +71,21 @@ public class DoubleSpecializedArgsCallTest {
 		""");
 		assertEquals(55.0, ((Number) res5).doubleValue(), 1e-9);
 	}
+
+	@Test
+	public void testMathMinMaxVariadic() {
+		JSContext cx = new JSContext();
+		assertEquals(Double.NEGATIVE_INFINITY, ((Number) cx.eval("Math.max();")).doubleValue());
+		assertEquals(Double.POSITIVE_INFINITY, ((Number) cx.eval("Math.min();")).doubleValue());
+		assertEquals(42.0, ((Number) cx.eval("Math.max(42);")).doubleValue(), 1e-9);
+		assertEquals(42.0, ((Number) cx.eval("Math.min(42);")).doubleValue(), 1e-9);
+		assertEquals(20.0, ((Number) cx.eval("Math.max(10, 20);")).doubleValue(), 1e-9);
+		assertEquals(10.0, ((Number) cx.eval("Math.min(10, 20);")).doubleValue(), 1e-9);
+		assertEquals(30.0, ((Number) cx.eval("Math.max(10, 30, 20);")).doubleValue(), 1e-9);
+		assertEquals(10.0, ((Number) cx.eval("Math.min(10, 30, 20);")).doubleValue(), 1e-9);
+		assertEquals(40.0, ((Number) cx.eval("Math.max(10, 30, 20, 40);")).doubleValue(), 1e-9);
+		assertEquals(10.0, ((Number) cx.eval("Math.min(10, 30, 20, 40);")).doubleValue(), 1e-9);
+		assertEquals(50.0, ((Number) cx.eval("Math.max(10, 30, 20, 40, 50, 5);")).doubleValue(), 1e-9);
+		assertEquals(5.0, ((Number) cx.eval("Math.min(10, 30, 20, 40, 50, 5);")).doubleValue(), 1e-9);
+	}
 }

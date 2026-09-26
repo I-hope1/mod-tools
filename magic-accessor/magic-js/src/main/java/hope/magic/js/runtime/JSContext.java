@@ -108,27 +108,150 @@ public class JSContext {
 
 		@Override
 		public Object call(JSContext cx, Object thisObj, Object[] args) {
-			double a0 = args.length > 0 ? JSOps.toDouble(args[0]) : Double.NaN;
-			double a1 = args.length > 1 ? JSOps.toDouble(args[1]) : Double.NaN;
-			return eval(a0, a1);
+			return switch (op) {
+				case OP_MAX -> {
+					if (args.length == 0) yield Double.NEGATIVE_INFINITY;
+					double max = Double.NEGATIVE_INFINITY;
+					for (Object arg : args) {
+						max = Math.max(max, JSOps.toDouble(arg));
+					}
+					yield max;
+				}
+				case OP_MIN -> {
+					if (args.length == 0) yield Double.POSITIVE_INFINITY;
+					double min = Double.POSITIVE_INFINITY;
+					for (Object arg : args) {
+						min = Math.min(min, JSOps.toDouble(arg));
+					}
+					yield min;
+				}
+				case OP_HYPOT -> {
+					if (args.length == 0) yield 0.0;
+					if (args.length == 1) yield Math.abs(JSOps.toDouble(args[0]));
+					if (args.length == 2) yield Math.hypot(JSOps.toDouble(args[0]), JSOps.toDouble(args[1]));
+					boolean hasNan = false;
+					double max = 0.0;
+					for (Object arg : args) {
+						double d = Math.abs(JSOps.toDouble(arg));
+						if (Double.isInfinite(d)) yield Double.POSITIVE_INFINITY;
+						if (Double.isNaN(d)) hasNan = true;
+						if (d > max) max = d;
+					}
+					if (hasNan) yield Double.NaN;
+					if (max == 0.0) yield 0.0;
+					double sum = 0.0;
+					for (Object arg : args) {
+						double d = JSOps.toDouble(arg) / max;
+						sum += d * d;
+					}
+					yield Math.sqrt(sum) * max;
+				}
+				default -> {
+					double a0 = args.length > 0 ? JSOps.toDouble(args[0]) : Double.NaN;
+					double a1 = args.length > 1 ? JSOps.toDouble(args[1]) : Double.NaN;
+					yield evalDouble(a0, a1);
+				}
+			};
 		}
 
 		@Override
 		public Object call0(JSContext cx, Object thisObj) {
-			return op == OP_RANDOM ? Math.random() : Double.NaN;
+			return call0Double(cx, thisObj);
 		}
 
 		@Override
 		public Object call1(JSContext cx, Object thisObj, Object a0) {
-			return eval(JSOps.toDouble(a0), Double.NaN);
+			return call1Double(cx, thisObj, JSOps.toDouble(a0));
 		}
 
 		@Override
 		public Object call2(JSContext cx, Object thisObj, Object a0, Object a1) {
-			return eval(JSOps.toDouble(a0), JSOps.toDouble(a1));
+			return call2Double(cx, thisObj, JSOps.toDouble(a0), JSOps.toDouble(a1));
 		}
 
-		private Object eval(double a0, double a1) {
+		@Override
+		public Object call3(JSContext cx, Object thisObj, Object a0, Object a1, Object a2) {
+			return call3Double(cx, thisObj, JSOps.toDouble(a0), JSOps.toDouble(a1), JSOps.toDouble(a2));
+		}
+
+		@Override
+		public Object call4(JSContext cx, Object thisObj, Object a0, Object a1, Object a2, Object a3) {
+			return call4Double(cx, thisObj, JSOps.toDouble(a0), JSOps.toDouble(a1), JSOps.toDouble(a2), JSOps.toDouble(a3));
+		}
+
+		@Override
+		public double callDouble(JSContext cx, Object thisObj, Object[] args) {
+			return ((Number) call(cx, thisObj, args)).doubleValue();
+		}
+
+		@Override
+		public double call0Double(JSContext cx, Object thisObj) {
+			return switch (op) {
+				case OP_RANDOM -> Math.random();
+				case OP_MAX -> Double.NEGATIVE_INFINITY;
+				case OP_MIN -> Double.POSITIVE_INFINITY;
+				case OP_HYPOT -> 0.0;
+				default -> Double.NaN;
+			};
+		}
+
+		@Override
+		public double call1Double(JSContext cx, Object thisObj, double a0) {
+			return switch (op) {
+				case OP_MAX, OP_MIN -> a0;
+				case OP_HYPOT -> Math.abs(a0);
+				default -> evalDouble(a0, Double.NaN);
+			};
+		}
+
+		@Override
+		public double call2Double(JSContext cx, Object thisObj, double a0, double a1) {
+			return evalDouble(a0, a1);
+		}
+
+		@Override
+		public double call3Double(JSContext cx, Object thisObj, double a0, double a1, double a2) {
+			return switch (op) {
+				case OP_MAX -> Math.max(Math.max(a0, a1), a2);
+				case OP_MIN -> Math.min(Math.min(a0, a1), a2);
+				case OP_HYPOT -> {
+					if (Double.isInfinite(a0) || Double.isInfinite(a1) || Double.isInfinite(a2)) {
+						yield Double.POSITIVE_INFINITY;
+					}
+					if (Double.isNaN(a0) || Double.isNaN(a1) || Double.isNaN(a2)) {
+						yield Double.NaN;
+					}
+					double max = Math.max(Math.max(Math.abs(a0), Math.abs(a1)), Math.abs(a2));
+					if (max == 0.0) yield 0.0;
+					double s0 = a0 / max, s1 = a1 / max, s2 = a2 / max;
+					yield Math.sqrt(s0 * s0 + s1 * s1 + s2 * s2) * max;
+				}
+				default -> evalDouble(a0, a1);
+			};
+		}
+
+		@Override
+		public double call4Double(JSContext cx, Object thisObj, double a0, double a1, double a2, double a3) {
+			return switch (op) {
+				case OP_MAX -> Math.max(Math.max(Math.max(a0, a1), a2), a3);
+				case OP_MIN -> Math.min(Math.min(Math.min(a0, a1), a2), a3);
+				case OP_HYPOT -> {
+					if (Double.isInfinite(a0) || Double.isInfinite(a1) || Double.isInfinite(a2) || Double.isInfinite(a3)) {
+						yield Double.POSITIVE_INFINITY;
+					}
+					if (Double.isNaN(a0) || Double.isNaN(a1) || Double.isNaN(a2) || Double.isNaN(a3)) {
+						yield Double.NaN;
+					}
+					double max = Math.max(Math.max(Math.max(Math.abs(a0), Math.abs(a1)), Math.abs(a2)), Math.abs(a3));
+					if (max == 0.0) yield 0.0;
+					double s0 = a0 / max, s1 = a1 / max, s2 = a2 / max, s3 = a3 / max;
+					yield Math.sqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3) * max;
+				}
+				default -> evalDouble(a0, a1);
+			};
+		}
+
+		private double evalDouble(double a0, double a1) {
 			return switch (op) {
 				case OP_ABS -> Math.abs(a0);
 				case OP_SQRT -> Math.sqrt(a0);

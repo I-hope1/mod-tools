@@ -18,8 +18,40 @@ public final class BuiltinProtector {
 	// 2. 迭代器协议保护器 (保护 Array.prototype[Symbol.iterator] 与 String.prototype[Symbol.iterator] 未被重定义)
 	private static volatile SwitchPoint iteratorSwitchPoint = new SwitchPoint();
 
-	// 3. 全局核心单例槽位保护器 (Global Property Cells)
-	private static final ConcurrentHashMap<Integer, SwitchPoint> GLOBAL_SLOT_SWITCH_POINTS = new ConcurrentHashMap<>();
+	// 3. 全局核心单例槽位保护器 (Global Property Cells: 位掩码与 64 元素固定数组直接查表)
+	private static final long            PROTECTED_GLOBAL_SLOT_MASK;
+	private static final SwitchPoint[]   GLOBAL_SLOT_SWITCH_POINTS = new SwitchPoint[64];
+	private static final Object[]        GLOBAL_CONSTANTS          = new Object[64];
+
+	static {
+		long mask = 0L;
+		int[] slots = {
+			JSContext.SLOT_MATH,
+			JSContext.SLOT_CONSOLE,
+			JSContext.SLOT_OBJECT,
+			JSContext.SLOT_ARRAY,
+			JSContext.SLOT_NUMBER,
+			JSContext.SLOT_STRING,
+			JSContext.SLOT_BOOLEAN,
+			JSContext.SLOT_PROXY,
+			JSContext.SLOT_REFLECT,
+			JSContext.SLOT_SYMBOL,
+			JSContext.SLOT_DATE,
+			JSContext.SLOT_PROMISE,
+			JSContext.SLOT_REGEXP,
+			JSContext.SLOT_PRINT,
+			JSContext.SLOT_JAVA,
+			JSContext.SLOT_ERROR,
+			JSContext.SLOT_TYPE_ERROR
+		};
+		for (int slot : slots) {
+			if (slot >= 0 && slot < 64) {
+				mask |= (1L << slot);
+				GLOBAL_SLOT_SWITCH_POINTS[slot] = new SwitchPoint();
+			}
+		}
+		PROTECTED_GLOBAL_SLOT_MASK = mask;
+	}
 
 	// 4. Array[Symbol.species] 协议保护器 (保护 Array[Symbol.species] 与 Array.prototype.constructor 未被重写)
 	private static volatile SwitchPoint arraySpeciesSwitchPoint = new SwitchPoint();
@@ -68,61 +100,76 @@ public final class BuiltinProtector {
 	//region Global Slot Protector (Property Cells)
 
 	public static SwitchPoint getGlobalSlotSwitchPoint(int slot) {
-		return GLOBAL_SLOT_SWITCH_POINTS.computeIfAbsent(slot, k -> new SwitchPoint());
+		if (slot >= 0 && slot < 64) {
+			SwitchPoint sp = GLOBAL_SLOT_SWITCH_POINTS[slot];
+			if (sp == null) {
+				synchronized (BuiltinProtector.class) {
+					sp = GLOBAL_SLOT_SWITCH_POINTS[slot];
+					if (sp == null) {
+						GLOBAL_SLOT_SWITCH_POINTS[slot] = sp = new SwitchPoint();
+					}
+				}
+			}
+			return sp;
+		}
+		return null;
 	}
 
 	public static boolean isGlobalSlotValid(int slot) {
-		if (!isProtectedGlobalSlot(slot)) return false;
-		SwitchPoint sp = GLOBAL_SLOT_SWITCH_POINTS.computeIfAbsent(slot, k -> new SwitchPoint());
-		return !sp.hasBeenInvalidated();
+		if (slot >= 0 && slot < 64 && ((PROTECTED_GLOBAL_SLOT_MASK & (1L << slot)) != 0L)) {
+			SwitchPoint sp = GLOBAL_SLOT_SWITCH_POINTS[slot];
+			return sp != null && !sp.hasBeenInvalidated();
+		}
+		return false;
 	}
 
 	public static synchronized void invalidateGlobalSlot(int slot) {
-		SwitchPoint sp = GLOBAL_SLOT_SWITCH_POINTS.get(slot);
-		if (sp != null && !sp.hasBeenInvalidated()) {
-			SwitchPoint.invalidateAll(new SwitchPoint[]{ sp });
+		if (slot >= 0 && slot < 64) {
+			SwitchPoint sp = GLOBAL_SLOT_SWITCH_POINTS[slot];
+			if (sp != null && !sp.hasBeenInvalidated()) {
+				SwitchPoint.invalidateAll(new SwitchPoint[]{ sp });
+			}
 		}
 	}
 
 	public static boolean isProtectedGlobalSlot(int slot) {
-		return slot == JSContext.SLOT_MATH
-		    || slot == JSContext.SLOT_CONSOLE
-		    || slot == JSContext.SLOT_OBJECT
-		    || slot == JSContext.SLOT_ARRAY
-		    || slot == JSContext.SLOT_NUMBER
-		    || slot == JSContext.SLOT_STRING
-		    || slot == JSContext.SLOT_BOOLEAN
-		    || slot == JSContext.SLOT_PROXY
-		    || slot == JSContext.SLOT_REFLECT
-		    || slot == JSContext.SLOT_SYMBOL
-		    || slot == JSContext.SLOT_DATE
-		    || slot == JSContext.SLOT_PROMISE
-		    || slot == JSContext.SLOT_REGEXP
-		    || slot == JSContext.SLOT_PRINT
-		    || slot == JSContext.SLOT_JAVA
-		    || slot == JSContext.SLOT_ERROR
-		    || slot == JSContext.SLOT_TYPE_ERROR;
+		return (slot >= 0 && slot < 64) && ((PROTECTED_GLOBAL_SLOT_MASK & (1L << slot)) != 0L);
 	}
 
 	public static Object getGlobalConstant(int slot) {
-		if (slot == JSContext.SLOT_MATH) return JSContext.LazyMath.MATH;
-		if (slot == JSContext.SLOT_CONSOLE) return JSContext.LazyConsole.CONSOLE;
-		if (slot == JSContext.SLOT_OBJECT) return JSContext.LazyObject.OBJECT;
-		if (slot == JSContext.SLOT_ARRAY) return JSContext.LazyArray.ARRAY;
-		if (slot == JSContext.SLOT_NUMBER) return JSContext.LazyPrimitiveConstructors.NUMBER;
-		if (slot == JSContext.SLOT_STRING) return JSContext.LazyPrimitiveConstructors.STRING;
-		if (slot == JSContext.SLOT_BOOLEAN) return JSContext.LazyPrimitiveConstructors.BOOLEAN;
-		if (slot == JSContext.SLOT_PROXY) return JSContext.LazyProxy.PROXY;
-		if (slot == JSContext.SLOT_REFLECT) return JSContext.LazyReflect.REFLECT;
-		if (slot == JSContext.SLOT_SYMBOL) return JSContext.LazySymbol.SYMBOL;
-		if (slot == JSContext.SLOT_DATE) return JSContext.LazyDate.DATE;
-		if (slot == JSContext.SLOT_PROMISE) return JSContext.LazyBuiltins.PROMISE;
-		if (slot == JSContext.SLOT_REGEXP) return JSContext.LazyMisc.REGEXP;
-		if (slot == JSContext.SLOT_PRINT) return JSContext.LazyMisc.PRINT;
-		if (slot == JSContext.SLOT_JAVA) return JSContext.LazyMisc.JAVA;
-		if (slot == JSContext.SLOT_ERROR) return JSContext.LazyErrors.ERROR;
-		if (slot == JSContext.SLOT_TYPE_ERROR) return JSContext.LazyErrors.TYPE_ERROR;
+		if (slot >= 0 && slot < 64) {
+			Object c = GLOBAL_CONSTANTS[slot];
+			if (c != null) return c;
+			return resolveGlobalConstant(slot);
+		}
 		return null;
+	}
+
+	private static synchronized Object resolveGlobalConstant(int slot) {
+		Object c = GLOBAL_CONSTANTS[slot];
+		if (c != null) return c;
+		if (slot == JSContext.SLOT_MATH) c = JSContext.LazyMath.MATH;
+		else if (slot == JSContext.SLOT_CONSOLE) c = JSContext.LazyConsole.CONSOLE;
+		else if (slot == JSContext.SLOT_OBJECT) c = JSContext.LazyObject.OBJECT;
+		else if (slot == JSContext.SLOT_ARRAY) c = JSContext.LazyArray.ARRAY;
+		else if (slot == JSContext.SLOT_NUMBER) c = JSContext.LazyPrimitiveConstructors.NUMBER;
+		else if (slot == JSContext.SLOT_STRING) c = JSContext.LazyPrimitiveConstructors.STRING;
+		else if (slot == JSContext.SLOT_BOOLEAN) c = JSContext.LazyPrimitiveConstructors.BOOLEAN;
+		else if (slot == JSContext.SLOT_PROXY) c = JSContext.LazyProxy.PROXY;
+		else if (slot == JSContext.SLOT_REFLECT) c = JSContext.LazyReflect.REFLECT;
+		else if (slot == JSContext.SLOT_SYMBOL) c = JSContext.LazySymbol.SYMBOL;
+		else if (slot == JSContext.SLOT_DATE) c = JSContext.LazyDate.DATE;
+		else if (slot == JSContext.SLOT_PROMISE) c = JSContext.LazyBuiltins.PROMISE;
+		else if (slot == JSContext.SLOT_REGEXP) c = JSContext.LazyMisc.REGEXP;
+		else if (slot == JSContext.SLOT_PRINT) c = JSContext.LazyMisc.PRINT;
+		else if (slot == JSContext.SLOT_JAVA) c = JSContext.LazyMisc.JAVA;
+		else if (slot == JSContext.SLOT_ERROR) c = JSContext.LazyErrors.ERROR;
+		else if (slot == JSContext.SLOT_TYPE_ERROR) c = JSContext.LazyErrors.TYPE_ERROR;
+
+		if (c != null) {
+			GLOBAL_CONSTANTS[slot] = c;
+		}
+		return c;
 	}
 
 	//region Species Protectors
@@ -160,10 +207,16 @@ public final class BuiltinProtector {
 	//endregion
 
 	public static synchronized void resetAll() {
-		SwitchPoint[] sps = GLOBAL_SLOT_SWITCH_POINTS.values().toArray(new SwitchPoint[0]);
-		GLOBAL_SLOT_SWITCH_POINTS.clear();
-		if (sps.length > 0) {
-			SwitchPoint.invalidateAll(sps);
+		java.util.List<SwitchPoint> toInvalidate = new java.util.ArrayList<>();
+		for (int i = 0; i < 64; i++) {
+			SwitchPoint sp = GLOBAL_SLOT_SWITCH_POINTS[i];
+			if (sp != null) {
+				if (!sp.hasBeenInvalidated()) toInvalidate.add(sp);
+				GLOBAL_SLOT_SWITCH_POINTS[i] = new SwitchPoint();
+			}
+		}
+		if (!toInvalidate.isEmpty()) {
+			SwitchPoint.invalidateAll(toInvalidate.toArray(new SwitchPoint[0]));
 		}
 
 		SwitchPoint spArr = arrayProtoSwitchPoint;

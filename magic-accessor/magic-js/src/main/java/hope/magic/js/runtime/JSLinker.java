@@ -2446,11 +2446,11 @@ public class JSLinker {
 			}
 		}
 		if (cx != null) {
-			return cx.getSlot(slot);
+			return cx.getSlotFast(slot);
 		}
 		JSContext current = JSContext.current();
 		if (current != null) {
-			return current.getSlot(slot);
+			return current.getSlotFast(slot);
 		}
 		return JSUndefined.INSTANCE;
 	}

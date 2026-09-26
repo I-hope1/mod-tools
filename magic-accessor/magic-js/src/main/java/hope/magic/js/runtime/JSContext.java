@@ -4224,8 +4224,12 @@ public class JSContext {
 			Object constant = BuiltinProtector.getGlobalConstant(slot);
 			if (constant != null) return constant;
 		}
+		return getSlotFast(slot);
+	}
+
+	public final Object getSlotFast(int slot) {
 		Object[] slots = this.globalSlots;
-		if (slot < slots.length) {
+		if (slot >= 0 && slot < slots.length) {
 			Object val = slots[slot];
 			if (val == NULL_VALUE) return null;
 			if (val != null) return val;

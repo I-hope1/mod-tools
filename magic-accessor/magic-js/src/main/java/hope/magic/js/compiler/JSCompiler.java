@@ -3380,7 +3380,7 @@ public class JSCompiler {
 				if (entry.isComputed()) {
 					if (entry.kind() == Node.PropertyKind.GETTER) {
 						compileNode(entry.keyExpr(), ctx, true);
-						mv.visitMethodInsn(Opcodes.INVOKESTATIC, "hope/magic/js/runtime/JSArray", "toPropertyKey",
+						mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toPropertyKey",
 						 "(Ljava/lang/Object;)Ljava/lang/String;", false);
 						compileNode(entry.value(), ctx, true);
 						mv.visitTypeInsn(Opcodes.CHECKCAST, "hope/magic/js/runtime/JSFunction");
@@ -3390,7 +3390,7 @@ public class JSCompiler {
 						 "(Ljava/lang/String;Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSFunction;Z)V", false);
 					} else if (entry.kind() == Node.PropertyKind.SETTER) {
 						compileNode(entry.keyExpr(), ctx, true);
-						mv.visitMethodInsn(Opcodes.INVOKESTATIC, "hope/magic/js/runtime/JSArray", "toPropertyKey",
+						mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toPropertyKey",
 						 "(Ljava/lang/Object;)Ljava/lang/String;", false);
 						mv.visitInsn(Opcodes.ACONST_NULL);
 						compileNode(entry.value(), ctx, true);
@@ -3400,7 +3400,7 @@ public class JSCompiler {
 						 "(Ljava/lang/String;Lhope/magic/js/runtime/JSFunction;Lhope/magic/js/runtime/JSFunction;Z)V", false);
 					} else {
 						compileNode(entry.keyExpr(), ctx, true);
-						mv.visitMethodInsn(Opcodes.INVOKESTATIC, "hope/magic/js/runtime/JSArray", "toPropertyKey",
+						mv.visitMethodInsn(Opcodes.INVOKESTATIC, IN_JSOps, "toPropertyKey",
 						 "(Ljava/lang/Object;)Ljava/lang/String;", false);
 						compileNode(entry.value(), ctx, true);
 						mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IN_JSObject, "put",

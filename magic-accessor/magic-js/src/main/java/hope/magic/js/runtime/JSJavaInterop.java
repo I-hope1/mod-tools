@@ -185,7 +185,7 @@ public class JSJavaInterop {
 		if (fn instanceof JSFunction func) {
 			return func.call(JSContext.CURRENT.get(), target, args);
 		}
-		throw JSContext.makeTypeError(JSArray.toPropertyKey(index) + " is not a function");
+		throw JSContext.makeTypeError(JSOps.toPropertyKey(index) + " is not a function");
 	}
 
 	public static double invokeDoubleGeneric(Object target, Object[] args, String methodName) throws Throwable {

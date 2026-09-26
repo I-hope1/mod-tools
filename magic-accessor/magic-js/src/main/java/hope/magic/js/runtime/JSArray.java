@@ -286,7 +286,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 		if (sparseVal != null) {
 			return sparseVal == NULL_SENTINEL ? null : sparseVal;
 		}
-		String key = JSLinker.fastIntToString((int) index);
+		String key = JSOps.fastIntToString((int) index);
 		Object val = getOwn(key, this);
 		if (val != NOT_FOUND) {
 			return val;
@@ -692,7 +692,7 @@ public class JSArray extends JSObject implements Iterable<Object> {
 
 	public boolean has(long index) {
 		if (hasElement(index)) return true;
-		String key = JSLinker.fastIntToString((int) index);
+		String key = JSOps.fastIntToString((int) index);
 		int symId = SymbolTable.lookupId(key);
 		if (symId != SymbolTable.NO_SYMBOL) {
 			int offset = shape.getOffset(symId);

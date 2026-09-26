@@ -12,16 +12,9 @@ import static hope.magic.js.runtime.SlotMH.*;
 public class JSIndexOps {
 	public static final MethodHandles.Lookup LOOKUP = Magic.lookup;
 
-	public static final  int      SMALL_INT_MIN     = -128;
-	public static final  int      SMALL_INT_MAX     = 1023;
-	public static final  int      SMALL_INT_SIZE    = 1024;
-	public static final  int      SMALL_INT_OFFSET  = -SMALL_INT_MIN;
-	public static final  int      SMALL_INT_COUNT   = SMALL_INT_MAX - SMALL_INT_MIN + 1;
-	private static final String[] SMALL_INT_STRINGS = new String[SMALL_INT_COUNT];
-
-	static {
-		for (int i = SMALL_INT_MIN; i <= SMALL_INT_MAX; i++) SMALL_INT_STRINGS[i + SMALL_INT_OFFSET] = String.valueOf(i).intern();
-	}
+	public static final int SMALL_INT_MIN  = JSOps.SMALL_INT_MIN;
+	public static final int SMALL_INT_MAX  = JSOps.SMALL_INT_MAX;
+	public static final int SMALL_INT_SIZE = JSOps.SMALL_INT_SIZE;
 
 	public static final MethodHandle MH_GET_INDEX_JS_ARRAY;
 	public static final MethodHandle MH_GET_INDEX_LIST;
@@ -74,9 +67,7 @@ public class JSIndexOps {
 	}
 
 	public static String fastIntToString(int i) {
-		int idx = i + SMALL_INT_OFFSET;
-		if (idx >= 0 && idx < SMALL_INT_COUNT) return SMALL_INT_STRINGS[idx];
-		return String.valueOf(i);
+		return JSOps.fastIntToString(i);
 	}
 
 	public static Long toValidArrayLongIndex(Object index) {
@@ -233,13 +224,13 @@ public class JSIndexOps {
 			if (index instanceof JSSymbol sym) {
 				return jsArr.get(sym);
 			}
-			return jsArr.get(JSArray.toPropertyKey(index));
+			return jsArr.get(toPropertyKey(index));
 		}
 		if (target instanceof JSObject jsObj) {
 			if (index instanceof JSSymbol sym) {
 				return jsObj.get(sym);
 			}
-			return jsObj.get(JSArray.toPropertyKey(index));
+			return jsObj.get(toPropertyKey(index));
 		}
 		if (target.getClass().isArray()) {
 			Integer idx = JSArray.toValidJavaArrayIndex(index);
@@ -295,7 +286,7 @@ public class JSIndexOps {
 				jsArr.put(sym, value);
 				return;
 			}
-			jsArr.put(JSArray.toPropertyKey(index), value);
+			jsArr.put(toPropertyKey(index), value);
 			return;
 		}
 		if (target instanceof JSObject jsObj) {
@@ -303,7 +294,7 @@ public class JSIndexOps {
 				jsObj.put(sym, value);
 				return;
 			}
-			jsObj.put(JSArray.toPropertyKey(index), value);
+			jsObj.put(toPropertyKey(index), value);
 			return;
 		}
 		if (target.getClass().isArray()) {
@@ -352,7 +343,7 @@ public class JSIndexOps {
 		if (index instanceof JSSymbol sym) {
 			return jsArr.get(sym);
 		}
-		return jsArr.get(JSArray.toPropertyKey(index));
+		return jsArr.get(toPropertyKey(index));
 	}
 
 	public static Object getIndexList(Object target, Object index) {
@@ -496,7 +487,7 @@ public class JSIndexOps {
 			jsArr.put(sym, value);
 			return;
 		}
-		jsArr.put(JSArray.toPropertyKey(index), value);
+		jsArr.put(toPropertyKey(index), value);
 	}
 
 	public static void setIndexList(Object target, Object index, Object value) {

@@ -2809,7 +2809,7 @@ public class JSLinker {
 	}
 
 	public static String toPropertyKey(Object index) {
-		return JSIndexOps.toPropertyKey(index);
+		return JSOps.toPropertyKey(index);
 	}
 
 	public static Object getArrayElement(Object target, int idx) {
@@ -2820,10 +2820,10 @@ public class JSLinker {
 		JSIndexOps.setArrayElement(target, idx, value);
 	}
 
-	public static final int SMALL_INT_SIZE = JSIndexOps.SMALL_INT_SIZE;
+	public static final int SMALL_INT_SIZE = JSOps.SMALL_INT_SIZE;
 
 	public static String fastIntToString(int i) {
-		return JSIndexOps.fastIntToString(i);
+		return JSOps.fastIntToString(i);
 	}
 
 	public static Object getIndex(Object target, int index) {

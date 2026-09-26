@@ -661,10 +661,29 @@ public class JSOps {
 		return isTruthy(val);
 	}
 
+	public static final  int      SMALL_INT_MIN     = -128;
+	public static final  int      SMALL_INT_MAX     = 1023;
+	public static final  int      SMALL_INT_SIZE    = 1024;
+	public static final  int      SMALL_INT_OFFSET  = -SMALL_INT_MIN;
+	public static final  int      SMALL_INT_COUNT   = SMALL_INT_MAX - SMALL_INT_MIN + 1;
+	private static final String[] SMALL_INT_STRINGS = new String[SMALL_INT_COUNT];
+
+	static {
+		for (int i = SMALL_INT_MIN; i <= SMALL_INT_MAX; i++) {
+			SMALL_INT_STRINGS[i + SMALL_INT_OFFSET] = String.valueOf(i).intern();
+		}
+	}
+
+	public static String fastIntToString(int i) {
+		int idx = i + SMALL_INT_OFFSET;
+		if (idx >= 0 && idx < SMALL_INT_COUNT) return SMALL_INT_STRINGS[idx];
+		return String.valueOf(i);
+	}
+
 	public static String toPropertyKey(Object key) {
 		if (key instanceof JSSymbol sym) return sym.getKey();
 		if (key instanceof String s) return s;
-		if (key instanceof Integer i) return JSIndexOps.fastIntToString(i);
+		if (key instanceof Integer i) return fastIntToString(i);
 		if (key instanceof Number num) return numberToString(num.doubleValue());
 		if (key instanceof JSObject jo) {
 			Object prim = toPrimitive(jo, "string");
@@ -675,7 +694,7 @@ public class JSOps {
 	}
 
 	public static String toStr(int val) {
-		return JSIndexOps.fastIntToString(val);
+		return fastIntToString(val);
 	}
 
 	public static String toStr(double val) {
@@ -684,7 +703,7 @@ public class JSOps {
 
 	public static String toStr(Object val) {
 		if (val instanceof String) return (String) val;
-		if (val instanceof Integer i) return JSIndexOps.fastIntToString(i);
+		if (val instanceof Integer i) return fastIntToString(i);
 		// if (val instanceof Long) return ((Long)val).toString(); // 如果 |l| > 2^53，不符合规范
 		return toStrSlow(val);
 	}
@@ -714,7 +733,7 @@ public class JSOps {
 
 		int i = (int) d;
 		if (i == d) {
-			return JSIndexOps.fastIntToString(i);
+			return fastIntToString(i);
 		}
 
 		double abs = Math.abs(d);
@@ -1087,11 +1106,11 @@ public class JSOps {
 				jsArr.deleteElement(idx);
 				return true;
 			}
-			jsArr.delete(JSArray.toPropertyKey(key));
+			jsArr.delete(toPropertyKey(key));
 			return true;
 		}
 		if (target instanceof JSObject obj) {
-			obj.delete(JSArray.toPropertyKey(key));
+			obj.delete(toPropertyKey(key));
 			return true;
 		}
 		if (target instanceof Map<?, ?> map) {

@@ -1055,7 +1055,7 @@ public class JSContext {
 			JSObject proto = new JSObject(shape, null);
 			proto.put("hasOwnProperty", makeMethod("hasOwnProperty", 1, (cx, thisObj, args) -> {
 				if (args.length == 0) return Boolean.FALSE;
-				String key = JSArray.toPropertyKey(args[0]);
+				String key = JSOps.toPropertyKey(args[0]);
 				if (thisObj instanceof JSObject jsObj) {
 					return jsObj.hasOwnProperty(key);
 				}
@@ -1087,7 +1087,7 @@ public class JSContext {
 			proto.put("valueOf", makeMethod("valueOf", 0, (cx, thisObj, args) -> thisObj));
 			proto.put("propertyIsEnumerable", makeMethod("propertyIsEnumerable", 1, (cx, thisObj, args) -> {
 				if (args.length == 0 || !(thisObj instanceof JSObject jsObj)) return Boolean.FALSE;
-				String key = JSArray.toPropertyKey(args[0]);
+				String key = JSOps.toPropertyKey(args[0]);
 				if (thisObj instanceof JSGlobalThis globalThis) {
 					if (globalThis.deletedGlobals.contains(key)) return Boolean.FALSE;
 					int symId = SymbolTable.lookupId(key);
@@ -1317,7 +1317,7 @@ public class JSContext {
 				key = sym.getKey();
 				propId = sym.getSymbolId();
 			} else {
-				key = JSArray.toPropertyKey(propKey);
+				key = JSOps.toPropertyKey(propKey);
 				propId = SymbolTable.id(key);
 			}
 
@@ -1506,7 +1506,7 @@ public class JSContext {
 				key = sym.getKey();
 				propId = sym.getSymbolId();
 			} else {
-				key = JSArray.toPropertyKey(propKey);
+				key = JSOps.toPropertyKey(propKey);
 				propId = SymbolTable.id(key);
 			}
 

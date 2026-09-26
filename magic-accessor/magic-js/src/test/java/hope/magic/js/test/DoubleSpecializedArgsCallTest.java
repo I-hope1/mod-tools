@@ -178,21 +178,23 @@ public class DoubleSpecializedArgsCallTest {
 
 	@Test
 	public void testNumberToStringAndFastIntCache() {
-		// Verify cached references for [-128, 1023]
-		assertSame(hope.magic.js.runtime.JSIndexOps.fastIntToString(-128), hope.magic.js.runtime.JSIndexOps.fastIntToString(-128));
-		assertSame(hope.magic.js.runtime.JSIndexOps.fastIntToString(0), hope.magic.js.runtime.JSIndexOps.fastIntToString(0));
-		assertSame(hope.magic.js.runtime.JSIndexOps.fastIntToString(100), hope.magic.js.runtime.JSIndexOps.fastIntToString(100));
-		assertSame(hope.magic.js.runtime.JSIndexOps.fastIntToString(1023), hope.magic.js.runtime.JSIndexOps.fastIntToString(1023));
+		// Verify cached references for [-128, 1023] via JSOps and JSIndexOps
+		assertSame(hope.magic.js.runtime.JSOps.fastIntToString(-128), hope.magic.js.runtime.JSOps.fastIntToString(-128));
+		assertSame(hope.magic.js.runtime.JSOps.fastIntToString(0), hope.magic.js.runtime.JSOps.fastIntToString(0));
+		assertSame(hope.magic.js.runtime.JSOps.fastIntToString(100), hope.magic.js.runtime.JSOps.fastIntToString(100));
+		assertSame(hope.magic.js.runtime.JSOps.fastIntToString(1023), hope.magic.js.runtime.JSOps.fastIntToString(1023));
 
-		assertEquals("-128", hope.magic.js.runtime.JSIndexOps.fastIntToString(-128));
-		assertEquals("0", hope.magic.js.runtime.JSIndexOps.fastIntToString(0));
-		assertEquals("1023", hope.magic.js.runtime.JSIndexOps.fastIntToString(1023));
-		assertEquals("-129", hope.magic.js.runtime.JSIndexOps.fastIntToString(-129));
-		assertEquals("1024", hope.magic.js.runtime.JSIndexOps.fastIntToString(1024));
+		assertSame(hope.magic.js.runtime.JSOps.fastIntToString(0), hope.magic.js.runtime.JSIndexOps.fastIntToString(0));
+
+		assertEquals("-128", hope.magic.js.runtime.JSOps.fastIntToString(-128));
+		assertEquals("0", hope.magic.js.runtime.JSOps.fastIntToString(0));
+		assertEquals("1023", hope.magic.js.runtime.JSOps.fastIntToString(1023));
+		assertEquals("-129", hope.magic.js.runtime.JSOps.fastIntToString(-129));
+		assertEquals("1024", hope.magic.js.runtime.JSOps.fastIntToString(1024));
 
 		// Verify numberToString / toStr hits the cache
-		assertSame(hope.magic.js.runtime.JSIndexOps.fastIntToString(1), hope.magic.js.runtime.JSOps.numberToString(1.0));
-		assertSame(hope.magic.js.runtime.JSIndexOps.fastIntToString(-10), hope.magic.js.runtime.JSOps.numberToString(-10.0));
+		assertSame(hope.magic.js.runtime.JSOps.fastIntToString(1), hope.magic.js.runtime.JSOps.numberToString(1.0));
+		assertSame(hope.magic.js.runtime.JSOps.fastIntToString(-10), hope.magic.js.runtime.JSOps.numberToString(-10.0));
 		assertEquals("0", hope.magic.js.runtime.JSOps.numberToString(-0.0));
 		assertEquals("0", hope.magic.js.runtime.JSOps.numberToString(0.0));
 		assertEquals("1.5", hope.magic.js.runtime.JSOps.numberToString(1.5));

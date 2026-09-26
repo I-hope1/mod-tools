@@ -2018,6 +2018,7 @@ public class JSLinker {
 		}
 	}
 
+	/** 返回第一次调用结果，并设置site的target */
 	public static Object invokeFallback(ChainedCallSite site, Object target, Object[] args, String methodName)
 	 throws Throwable {
 		if (target == null || target == JSUndefined.INSTANCE) {

@@ -3205,17 +3205,28 @@ public class JSCompiler {
 	private static String compileArgsAndGetDesc(List<Node> args, CompileContext ctx) {
 		StringBuilder desc = new StringBuilder("(Ljava/lang/Object;");
 		for (Node arg : args) {
-			compileNode(arg, ctx, true);
-			desc.append("Ljava/lang/Object;");
+			if (inferVarType(arg, ctx) == VarType.DOUBLE) {
+				compileNodeAsDouble(arg, ctx);
+				desc.append("D");
+			} else {
+				compileNode(arg, ctx, true);
+				desc.append("Ljava/lang/Object;");
+			}
 		}
 		desc.append(")Ljava/lang/Object;");
 		return desc.toString();
 	}
+
 	private static String compileArgsAndGetDescDouble(List<Node> args, CompileContext ctx) {
 		StringBuilder desc = new StringBuilder("(Ljava/lang/Object;");
 		for (Node arg : args) {
-			compileNode(arg, ctx, true);
-			desc.append("Ljava/lang/Object;");
+			if (inferVarType(arg, ctx) == VarType.DOUBLE) {
+				compileNodeAsDouble(arg, ctx);
+				desc.append("D");
+			} else {
+				compileNode(arg, ctx, true);
+				desc.append("Ljava/lang/Object;");
+			}
 		}
 		desc.append(")D");
 		return desc.toString();

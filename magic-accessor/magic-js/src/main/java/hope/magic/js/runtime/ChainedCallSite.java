@@ -12,6 +12,7 @@ public class ChainedCallSite extends MutableCallSite {
 	private             int          chainDepth      = 0;
 	private volatile    boolean      megamorphic     = false;
 	private             MethodHandle megamorphicTarget;
+
 	private final List<WeakReference<Class<?>>> recordedClasses = new ArrayList<>(4);
 
 	private       int       polyCount       = 0;
@@ -43,8 +44,8 @@ public class ChainedCallSite extends MutableCallSite {
 	public static final int CACHE_SHIFT = 32 - Integer.numberOfTrailingZeros(CACHE_SIZE);
 	public static final int PHI_32      = 0x9E3779B9; // 黄金比例常数
 
-	public static final boolean ENABLE_STATS = Boolean.getBoolean("magic.cache.stats");
-	public static final LongAdder STATS_HITS = new LongAdder();
+	public static final boolean   ENABLE_STATS = Boolean.getBoolean("magic.cache.stats");
+	public static final LongAdder STATS_HITS   = new LongAdder();
 	public static final LongAdder STATS_MISSES = new LongAdder();
 
 	/** 极速 32 位黄金比例散列：单条 imul + 单条 shr 汇编指令 */
@@ -103,23 +104,23 @@ public class ChainedCallSite extends MutableCallSite {
 	}
 
 	public synchronized void recordShape(JSShape shape, int offset, byte type) {
-    int shapeId = shape.id;
+		int shapeId = shape.id;
 
-    // 检查是否已经记录过该 shape
-    for (int i = 0; i < polyCount; i++) {
-        if (unpackShapeId(recordedEntries[i]) == shapeId) {
-            return; // 已经存在，不再重复处理
-        }
-    }
+		// 检查是否已经记录过该 shape
+		for (int i = 0; i < polyCount; i++) {
+			if (unpackShapeId(recordedEntries[i]) == shapeId) {
+				return; // 已经存在，不再重复处理
+			}
+		}
 
-    // 维护 commonOffset 与 offsetEquivalent 状态
-    if (commonOffset == -1) {
-        commonOffset = offset;
-        commonType = type;
-    } else if (commonOffset != offset || commonType != type) {
-        // 只有在【真正发现 offset 不同 或 type 不同】时，才判定为不等价！
-        offsetEquivalent = false;
-    }
+		// 维护 commonOffset 与 offsetEquivalent 状态
+		if (commonOffset == -1) {
+			commonOffset = offset;
+			commonType = type;
+		} else if (commonOffset != offset || commonType != type) {
+			// 只有在【真正发现 offset 不同 或 type 不同】时，才判定为不等价！
+			offsetEquivalent = false;
+		}
 
 		// 记录到数组（仅保留前 MAX_CHAIN_DEPTH 个用于生成特化 GWT / TableSwitch）
 		if (polyCount < MAX_CHAIN_DEPTH) {
@@ -164,7 +165,7 @@ public class ChainedCallSite extends MutableCallSite {
 		int       n       = polyCount;
 		JSShape[] shapes  = new JSShape[n];
 		int[]     offsets = new int[n];
-		byte[] types = new byte[n];
+		byte[]    types   = new byte[n];
 
 		for (int i = 0; i < n; i++) {
 			shapes[i] = recordedShapes[i];
@@ -226,7 +227,6 @@ public class ChainedCallSite extends MutableCallSite {
 
 	/**
 	 * 带完整 SP 列表的原型守卫安装（深链路径使用）。
-	 *
 	 * @param allSps 链条中的全部 SwitchPoint（中间层 SP + holder SP），
 	 *               用于检测任意一级失效。只有当 {@code allSps} 中某个 SP 确实
 	 *               {@link SwitchPoint#hasBeenInvalidated()} 才触发 reset()。
@@ -278,7 +278,8 @@ public class ChainedCallSite extends MutableCallSite {
 		return installGuardWithSwitchPoint(test, classSp, fastTarget);
 	}
 
-	public synchronized boolean installGuardWithSwitchPoint(MethodHandle test, SwitchPoint switchPoint, MethodHandle fastTarget) {
+	public synchronized boolean installGuardWithSwitchPoint(MethodHandle test, SwitchPoint switchPoint,
+	                                                        MethodHandle fastTarget) {
 		return installGuardWithSwitchPoint(test, switchPoint, fastTarget, true);
 	}
 
@@ -286,7 +287,8 @@ public class ChainedCallSite extends MutableCallSite {
 	 * @param useGlobalSp if false, skip the globalSwitchPoint wrapper (preferred for JS prototype
 	 *                    method ICs where globalSp is irrelevant, saving one MH layer per call).
 	 */
-	public synchronized boolean installGuardWithSwitchPoint(MethodHandle test, SwitchPoint switchPoint, MethodHandle fastTarget, boolean useGlobalSp) {
+	public synchronized boolean installGuardWithSwitchPoint(MethodHandle test, SwitchPoint switchPoint,
+	                                                        MethodHandle fastTarget, boolean useGlobalSp) {
 		if (megamorphic) return false;
 		chainDepth++;
 		if (chainDepth > MAX_CHAIN_DEPTH) {
@@ -296,7 +298,7 @@ public class ChainedCallSite extends MutableCallSite {
 			return false;
 		}
 		MethodHandle guardedTarget = fastTarget.asType(type());
-		MethodHandle fb = initialFallback;
+		MethodHandle fb            = initialFallback;
 		if (fb != null) {
 			MethodHandle fbTyped = fb.asType(type());
 			if (switchPoint != null) {

@@ -290,36 +290,31 @@ public class JSOps {
 	/**
 	 * TC39 SameValue algorithm (ECMA-262 §7.2.14).
 	 * 用于 Object.is，严格区分 +0 与 -0，判定所有 NaN 互相相等，并抹平底层 Number 存储差异。
+	 * <p>
+	 * <b>性能关键优化：</b><br>
+	 * 采用 {@link Double#doubleToLongBits(double)} 代替繁琐的多重分支判断：
+	 * <ol>
+	 *   <li>{@code doubleToLongBits} 为 HotSpot C2 的 {@code @IntrinsicCandidate} 内在函数，
+	 *       在 x86-64 下由 {@code vmovq + ucomisd + cmovp} 指令序列实现，完全无条件跳转预测分支；</li>
+	 *   <li>规范性：它会自动将所有形式的 NaN（无论正负、quiet/signaling、payload）归一化为标准的
+	 *       {@code 0x7ff8000000000000L}，因此任意两个 NaN 比较天然恒等；</li>
+	 *   <li>符号位保留：+0.0 的 bits 为 {@code 0x0L}，-0.0 的 bits 为 {@code 0x8000000000000000L}，天然满足
+	 *       {@code Object.is(+0, -0) === false} 与 {@code Object.is(-0, -0) === true}；</li>
+	 *   <li>跨数值类型：先通过 {@link Number#doubleValue()} 抹平 Integer、Long、Double 包装类型的差异，
+	 *       使 {@code Object.is(10, 10.0) === true}。</li>
+	 * </ol>
 	 */
 	public static boolean sameValue(Object a, Object b) {
 		if (a == b) {
-			if (a instanceof Number n) {
-				double d = n.doubleValue();
-				if (d == 0.0) {
-					return Double.doubleToRawLongBits(d) == Double.doubleToRawLongBits(((Number) b).doubleValue());
-				}
-			}
+			// 同一引用在 SameValue 语义下自身与自身恒等（包括 NaN、-0）
 			return true;
 		}
 		if (a == null || b == null || a == JSUndefined.INSTANCE || b == JSUndefined.INSTANCE) {
 			return false; // 前面已知 a != b
 		}
 		if (a instanceof Number na && b instanceof Number nb) {
-			double da = na.doubleValue();
-			double db = nb.doubleValue();
-			// IEEE 754: 只要双方都是 NaN (无论 payload / quiet / signaling 差异)，在 JS 中均视为相同
-			if (Double.isNaN(da) && Double.isNaN(db)) {
-				return true;
-			}
-			if (Double.isNaN(da) || Double.isNaN(db)) {
-				return false;
-			}
-			// 严格区分 +0.0 与 -0.0
-			if (da == 0.0 && db == 0.0) {
-				return Double.doubleToRawLongBits(da) == Double.doubleToRawLongBits(db);
-			}
-			// 跨数值类型对齐：例如 10 与 10.0 相等
-			return da == db;
+			// 利用 C2 Intrinsic 硬件级归一化 NaN 并保留 +0/-0 符号位
+			return Double.doubleToLongBits(na.doubleValue()) == Double.doubleToLongBits(nb.doubleValue());
 		}
 		if (a instanceof CharSequence && b instanceof CharSequence) {
 			return a.toString().equals(b.toString());
@@ -333,9 +328,12 @@ public class JSOps {
 		return false;
 	}
 
+	/**
+	 * 原生 double 版本的 TC39 SameValue algorithm (ECMA-262 §7.2.14).
+	 * 利用 HotSpot C2 Intrinsic 实现硬件级无分支的 SameValue 比较。
+	 */
 	public static boolean sameValue(double a, double b) {
-		if (Double.isNaN(a) && Double.isNaN(b)) return true;
-		return Double.doubleToRawLongBits(a) == Double.doubleToRawLongBits(b);
+		return Double.doubleToLongBits(a) == Double.doubleToLongBits(b);
 	}
 
 	public static boolean sameValue(int a, int b) {

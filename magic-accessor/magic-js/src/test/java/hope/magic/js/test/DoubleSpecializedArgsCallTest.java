@@ -111,4 +111,25 @@ public class DoubleSpecializedArgsCallTest {
 		assertEquals((double) (float) 1.337, ((Number) cx.eval("Math.fround(1.337);")).doubleValue(), 1e-9);
 		assertEquals(0.0, ((Number) cx.eval("Math.fround(0);")).doubleValue(), 1e-9);
 	}
+
+	@Test
+	public void testObjectIsSameValue() {
+		JSContext cx = new JSContext();
+		assertEquals(true, cx.eval("Object.is(NaN, NaN);"));
+		assertEquals(false, cx.eval("Object.is(+0, -0);"));
+		assertEquals(true, cx.eval("Object.is(-0, -0);"));
+		assertEquals(true, cx.eval("Object.is(+0, +0);"));
+		assertEquals(true, cx.eval("Object.is(10, 10);"));
+		assertEquals(true, cx.eval("Object.is(10, 10.0);"));
+		assertEquals(false, cx.eval("Object.is(10, 20);"));
+		assertEquals(true, cx.eval("Object.is(undefined, undefined);"));
+		assertEquals(true, cx.eval("Object.is(null, null);"));
+		assertEquals(false, cx.eval("Object.is(null, undefined);"));
+		assertEquals(true, cx.eval("Object.is('abc', 'abc');"));
+		assertEquals(false, cx.eval("Object.is('abc', 'def');"));
+		assertEquals(true, cx.eval("Object.is(true, true);"));
+		assertEquals(false, cx.eval("Object.is(true, false);"));
+		assertEquals(false, cx.eval("Object.is({}, {});"));
+		assertEquals(true, cx.eval("let o = {}; Object.is(o, o);"));
+	}
 }

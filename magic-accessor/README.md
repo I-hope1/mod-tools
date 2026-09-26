@@ -182,3 +182,10 @@ public class Main {
 
 > **注**：仅在使用传统 `MAGIC_ACCESSOR` 方案 (JDK &le; 21) 时，才需要在程序入口处显式调用一次 `Magic.install()` 来安装特权基础类。
 
+---
+
+## 子模块导航
+
+* [**`magic-js`**](file:///E:/Users/ASUS/Desktop/Mods/mod-tools136/magic-accessor/magic-js/README.md)：专为高性能 JVM 打造的高性能现代 JavaScript 运行时引擎（ASM 动态编译、indy 多态内联缓存、隐藏类体系与工业级浮点转换支持）。
+
+

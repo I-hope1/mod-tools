@@ -287,7 +287,26 @@ public class JSJavaInterop {
 			if (strRes != null || "search".equals(methodName) || "match".equals(methodName)) {
 				return strRes;
 			}
+			Object member = JSContext.LazyPrimitiveConstructors.STRING_PROTOTYPE.get(methodName);
+			if (member instanceof JSFunction func) {
+				return func.call(null, target, args);
+			}
 		}
+
+		if (target instanceof Number) {
+			Object member = JSContext.LazyPrimitiveConstructors.NUMBER_PROTOTYPE.get(methodName);
+			if (member instanceof JSFunction func) {
+				return func.call(null, target, args);
+			}
+		}
+
+		if (target instanceof Boolean) {
+			Object member = JSContext.LazyPrimitiveConstructors.BOOLEAN_PROTOTYPE.get(methodName);
+			if (member instanceof JSFunction func) {
+				return func.call(null, target, args);
+			}
+		}
+
 
 		Class<?> clazz        = (target instanceof Class<?>) ? (Class<?>) target : target.getClass();
 		Method   targetMethod = MethodResolver.findBestMatchingMethod(clazz, methodName, args);

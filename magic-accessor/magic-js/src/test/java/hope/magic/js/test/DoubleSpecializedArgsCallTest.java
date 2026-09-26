@@ -222,6 +222,31 @@ public class DoubleSpecializedArgsCallTest {
 		""");
 		assertEquals("found_it", res);
 	}
+
+	@Test
+	public void testDoubleConversionToFixedAndToPrecision() {
+		JSContext cx = new JSContext();
+
+		// Number.prototype.toFixed
+		assertEquals("123.46", cx.eval("(123.456).toFixed(2);"));
+		assertEquals("123.400", cx.eval("(123.4).toFixed(3);"));
+		assertEquals("0.00", cx.eval("(0.0).toFixed(2);"));
+		assertEquals("-2.3", cx.eval("(-2.34).toFixed(1);"));
+		assertEquals("5", cx.eval("(5).toFixed();"));
+
+		// Number.prototype.toPrecision
+		assertEquals("123.5", cx.eval("(123.456).toPrecision(4);"));
+		assertEquals("0.00012", cx.eval("(0.000123).toPrecision(2);"));
+		assertEquals("1.2e+4", cx.eval("(12345).toPrecision(2);"));
+
+		// DoubleConversion shortest string (ECMA-262 compliance)
+		assertEquals("0.30000000000000004", cx.eval("(0.1 + 0.2).toString();"));
+		assertEquals("1e-7", cx.eval("(1e-7).toString();"));
+		assertEquals("0.000001", cx.eval("(1e-6).toString();"));
+		assertEquals("100000000000000000000", cx.eval("(1e20).toString();"));
+		assertEquals("1e+21", cx.eval("(1e21).toString();"));
+	}
 }
+
 
 

@@ -3126,6 +3126,36 @@ public class JSContext {
 				}
 				throw new RuntimeException("TypeError: Number.prototype.toString requires that 'this' be a Number");
 			}));
+			proto.put("toFixed", makeMethod("toFixed", 1, (cx, thisObj, args) -> {
+				double d;
+				if (thisObj instanceof Number n) d = n.doubleValue();
+				else if (thisObj instanceof JSObject jo && jo.has("[[PrimitiveValue]]")) d = JSOps.toDouble(jo.get("[[PrimitiveValue]]"));
+				else throw new RuntimeException("TypeError: Number.prototype.toFixed requires that 'this' be a Number");
+
+				int digits = args.length > 0 && args[0] != JSUndefined.INSTANCE ? JSOps.toInt(args[0]) : 0;
+				if (digits < 0 || digits > 100) {
+					throw JSContext.makeRangeError("toFixed() digits argument must be between 0 and 100");
+				}
+				if (Double.isNaN(d)) return "NaN";
+				if (Double.isInfinite(d)) return d > 0 ? "Infinity" : "-Infinity";
+				if (Math.abs(d) >= 1e21) return JSOps.numberToString(d);
+				return hope.magic.js.runtime.doubleconv.DoubleConversion.toFixed(d, digits);
+			}));
+			proto.put("toPrecision", makeMethod("toPrecision", 1, (cx, thisObj, args) -> {
+				double d;
+				if (thisObj instanceof Number n) d = n.doubleValue();
+				else if (thisObj instanceof JSObject jo && jo.has("[[PrimitiveValue]]")) d = JSOps.toDouble(jo.get("[[PrimitiveValue]]"));
+				else throw new RuntimeException("TypeError: Number.prototype.toPrecision requires that 'this' be a Number");
+
+				if (args.length == 0 || args[0] == JSUndefined.INSTANCE) return JSOps.numberToString(d);
+				int precision = JSOps.toInt(args[0]);
+				if (Double.isNaN(d)) return "NaN";
+				if (Double.isInfinite(d)) return d > 0 ? "Infinity" : "-Infinity";
+				if (precision < 1 || precision > 100) {
+					throw JSContext.makeRangeError("toPrecision() argument must be between 1 and 100");
+				}
+				return hope.magic.js.runtime.doubleconv.DoubleConversion.toPrecision(d, precision);
+			}));
 			return proto;
 		}
 

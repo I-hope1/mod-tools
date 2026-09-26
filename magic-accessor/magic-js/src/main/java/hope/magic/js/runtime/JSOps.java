@@ -2,7 +2,6 @@ package hope.magic.js.runtime;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
-import java.math.BigDecimal;
 import java.util.*;
 import java.util.stream.BaseStream;
 
@@ -722,9 +721,6 @@ public class JSOps {
 		return String.valueOf(val);
 	}
 
-	private static final double MIN_PLAIN = 1e-6;
-	private static final double MAX_PLAIN = 1e21;
-
 	public static final long MAX_SAFE_INTEGER = 9007199254740991L;  // 2^53 - 1
 	public static final long MIN_SAFE_INTEGER = -9007199254740991L; // -(2^53 - 1)
 
@@ -742,35 +738,7 @@ public class JSOps {
 			return Long.toString(l);
 		}
 
-		double abs = Math.abs(d);
-		return (abs >= MIN_PLAIN && abs < MAX_PLAIN)
-		 ? plainDecimal(d)
-		 : scientificNotation(d);
-	}
-
-	/** <p>[1e-6, 1e21) 区间：常规十进制，无科学计数法</p>
-	 * <p>Java 7 及更早版本会有问题，但无所谓了（0D -> "0.0"）</p>
-	 * */
-	private static String plainDecimal(double d) {
-		return BigDecimal.valueOf(d).stripTrailingZeros().toPlainString();
-	}
-
-	/** 区间外：转换为 JS 规范的科学计数法，如 "1.23e+22" / "1e-7" */
-	private static String scientificNotation(double d) {
-		String s      = Double.toString(d);
-		int    eIndex = s.indexOf('E');
-
-		String mantissa = s.substring(0, eIndex);
-		if (mantissa.endsWith(".0")) {
-			mantissa = mantissa.substring(0, mantissa.length() - 2);
-		}
-
-		String exp = s.substring(eIndex + 1);
-		if (!exp.startsWith("-")) {
-			exp = "+" + exp;
-		}
-
-		return mantissa + "e" + exp;
+		return hope.magic.js.runtime.doubleconv.DoubleConversion.toShortestString(d);
 	}
 
 	public static Object toPrimitive(Object val, boolean preferString) {

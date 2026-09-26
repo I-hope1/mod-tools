@@ -132,4 +132,48 @@ public class DoubleSpecializedArgsCallTest {
 		assertEquals(false, cx.eval("Object.is({}, {});"));
 		assertEquals(true, cx.eval("let o = {}; Object.is(o, o);"));
 	}
+
+	@Test
+	public void testStringToDoubleLiterals() {
+		JSContext cx = new JSContext();
+		// Non-decimal string literals (hex, bin, octal)
+		assertEquals(255.0, ((Number) cx.eval("Number('0xFF');")).doubleValue(), 1e-9);
+		assertEquals(16.0, ((Number) cx.eval("Number('0X10');")).doubleValue(), 1e-9);
+		assertEquals(5.0, ((Number) cx.eval("Number('0b101');")).doubleValue(), 1e-9);
+		assertEquals(15.0, ((Number) cx.eval("Number('0B1111');")).doubleValue(), 1e-9);
+		assertEquals(63.0, ((Number) cx.eval("Number('0o77');")).doubleValue(), 1e-9);
+		assertEquals(8.0, ((Number) cx.eval("Number('0O10');")).doubleValue(), 1e-9);
+
+		// Empty and whitespace strings
+		assertEquals(0.0, ((Number) cx.eval("Number('');")).doubleValue(), 1e-9);
+		assertEquals(0.0, ((Number) cx.eval("Number('   ');")).doubleValue(), 1e-9);
+		assertEquals(0.0, ((Number) cx.eval("Number('\\t\\n\\r');")).doubleValue(), 1e-9);
+
+		// String equality with numbers
+		assertEquals(true, cx.eval("'0x10' == 16;"));
+		assertEquals(true, cx.eval("16 == '0x10';"));
+		assertEquals(true, cx.eval("'0b101' == 5;"));
+		assertEquals(true, cx.eval("5 == '0b101';"));
+		assertEquals(true, cx.eval("'0o10' == 8;"));
+		assertEquals(true, cx.eval("8 == '0o10';"));
+
+		// Arithmetic fast-paths with string
+		assertEquals(97.5, ((Number) cx.eval("'100' - 2.5;")).doubleValue(), 1e-9);
+		assertEquals(97.5, ((Number) cx.eval("100.0 - '2.5';")).doubleValue(), 1e-9);
+		assertEquals(60.0, ((Number) cx.eval("'20' * 3.0;")).doubleValue(), 1e-9);
+		assertEquals(60.0, ((Number) cx.eval("20.0 * '3';")).doubleValue(), 1e-9);
+		assertEquals(10.0, ((Number) cx.eval("'30' / 3.0;")).doubleValue(), 1e-9);
+		assertEquals(10.0, ((Number) cx.eval("30.0 / '3';")).doubleValue(), 1e-9);
+		assertEquals(3.0, ((Number) cx.eval("'15' % 4.0;")).doubleValue(), 1e-9);
+		assertEquals(3.0, ((Number) cx.eval("15.0 % '4';")).doubleValue(), 1e-9);
+
+		// Relational comparisons with string & number
+		assertEquals(true, cx.eval("'5' < 10;"));
+		assertEquals(false, cx.eval("10 < '5';"));
+		assertEquals(true, cx.eval("15 > '10';"));
+		assertEquals(false, cx.eval("'10' > 15;"));
+		assertEquals(true, cx.eval("'10' <= 10;"));
+		assertEquals(true, cx.eval("10 >= '10';"));
+	}
 }
+

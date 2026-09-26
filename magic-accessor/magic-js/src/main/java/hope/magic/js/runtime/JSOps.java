@@ -136,10 +136,12 @@ public class JSOps {
 	}
 
 	public static double sub(Object a, double b) {
+		if (a instanceof String s) return stringToDouble(s) - b;
 		return toDouble(a) - b;
 	}
 
 	public static double sub(double a, Object b) {
+		if (b instanceof String s) return a - stringToDouble(s);
 		return a - toDouble(b);
 	}
 
@@ -170,10 +172,12 @@ public class JSOps {
 	}
 
 	public static double mul(Object a, double b) {
+		if (a instanceof String s) return stringToDouble(s) * b;
 		return toDouble(a) * b;
 	}
 
 	public static double mul(double a, Object b) {
+		if (b instanceof String s) return a * stringToDouble(s);
 		return a * toDouble(b);
 	}
 
@@ -199,10 +203,12 @@ public class JSOps {
 	}
 
 	public static double div(Object a, double b) {
+		if (a instanceof String s) return stringToDouble(s) / b;
 		return toDouble(a) / b;
 	}
 
 	public static double div(double a, Object b) {
+		if (b instanceof String s) return a / stringToDouble(s);
 		return a / toDouble(b);
 	}
 
@@ -232,10 +238,12 @@ public class JSOps {
 	}
 
 	public static double mod(Object a, double b) {
+		if (a instanceof String s) return stringToDouble(s) % b;
 		return toDouble(a) % b;
 	}
 
 	public static double mod(double a, Object b) {
+		if (b instanceof String s) return a % stringToDouble(s);
 		return a % toDouble(b);
 	}
 
@@ -253,11 +261,11 @@ public class JSOps {
 		if (a instanceof Number && b instanceof Number) {
 			return ((Number) a).doubleValue() == ((Number) b).doubleValue();
 		}
-		if (a instanceof String && b instanceof Number) {
-			return toDouble(a) == ((Number) b).doubleValue();
+		if (a instanceof String sa && b instanceof Number nb) {
+			return stringToDouble(sa) == nb.doubleValue();
 		}
-		if (a instanceof Number && b instanceof String) {
-			return ((Number) a).doubleValue() == toDouble(b);
+		if (a instanceof Number na && b instanceof String sb) {
+			return na.doubleValue() == stringToDouble(sb);
 		}
 		if (a instanceof JSObject && (b instanceof Number || b instanceof String)) {
 			return isEq(toPrimitive(a, false), b);
@@ -371,7 +379,7 @@ public class JSOps {
 	public static boolean isEqBool(Object a, boolean b) {
 		if (a instanceof Boolean) return ((Boolean) a) == b;
 		if (a instanceof Number) return ((Number) a).doubleValue() == (b ? 1.0 : 0.0);
-		if (a instanceof String) return toDouble(a) == (b ? 1.0 : 0.0);
+		if (a instanceof String) return stringToDouble((String) a) == (b ? 1.0 : 0.0);
 		return false;
 	}
 
@@ -390,21 +398,21 @@ public class JSOps {
 	public static boolean isEqInt(Object a, int b) {
 		if (a instanceof Number) return ((Number) a).doubleValue() == (double) b;
 		if (a instanceof Boolean) return (((Boolean) a) ? 1 : 0) == b;
-		if (a instanceof String) return toDouble(a) == (double) b;
+		if (a instanceof String) return stringToDouble((String) a) == (double) b;
 		return false;
 	}
 
 	public static boolean isEqDouble(Object a, double b) {
 		if (a instanceof Number) return ((Number) a).doubleValue() == b;
 		if (a instanceof Boolean) return (((Boolean) a) ? 1.0 : 0.0) == b;
-		if (a instanceof String) return toDouble(a) == b;
+		if (a instanceof String) return stringToDouble((String) a) == b;
 		return false;
 	}
 
 	public static boolean isEqString(Object a, String b) {
 		if (a == null || a == JSUndefined.INSTANCE) return false;
 		if (a instanceof String) return a.equals(b);
-		if (a instanceof Number) return ((Number) a).doubleValue() == toDouble(b);
+		if (a instanceof Number) return ((Number) a).doubleValue() == stringToDouble(b);
 		return Objects.equals(a.toString(), b);
 	}
 
@@ -428,28 +436,36 @@ public class JSOps {
 		if (a instanceof CharSequence sa && b instanceof CharSequence sb) {
 			return sa.toString().compareTo(sb.toString()) < 0 ? Boolean.TRUE : Boolean.FALSE;
 		}
-		return toDouble(a) < toDouble(b) ? Boolean.TRUE : Boolean.FALSE;
+		double da = (a instanceof String sa) ? stringToDouble(sa) : toDouble(a);
+		double db = (b instanceof String sb) ? stringToDouble(sb) : toDouble(b);
+		return da < db ? Boolean.TRUE : Boolean.FALSE;
 	}
 
 	public static Object lte(Object a, Object b) {
 		if (a instanceof CharSequence sa && b instanceof CharSequence sb) {
 			return sa.toString().compareTo(sb.toString()) <= 0 ? Boolean.TRUE : Boolean.FALSE;
 		}
-		return toDouble(a) <= toDouble(b) ? Boolean.TRUE : Boolean.FALSE;
+		double da = (a instanceof String sa) ? stringToDouble(sa) : toDouble(a);
+		double db = (b instanceof String sb) ? stringToDouble(sb) : toDouble(b);
+		return da <= db ? Boolean.TRUE : Boolean.FALSE;
 	}
 
 	public static Object gt(Object a, Object b) {
 		if (a instanceof CharSequence sa && b instanceof CharSequence sb) {
 			return sa.toString().compareTo(sb.toString()) > 0 ? Boolean.TRUE : Boolean.FALSE;
 		}
-		return toDouble(a) > toDouble(b) ? Boolean.TRUE : Boolean.FALSE;
+		double da = (a instanceof String sa) ? stringToDouble(sa) : toDouble(a);
+		double db = (b instanceof String sb) ? stringToDouble(sb) : toDouble(b);
+		return da > db ? Boolean.TRUE : Boolean.FALSE;
 	}
 
 	public static Object gte(Object a, Object b) {
 		if (a instanceof CharSequence sa && b instanceof CharSequence sb) {
 			return sa.toString().compareTo(sb.toString()) >= 0 ? Boolean.TRUE : Boolean.FALSE;
 		}
-		return toDouble(a) >= toDouble(b) ? Boolean.TRUE : Boolean.FALSE;
+		double da = (a instanceof String sa) ? stringToDouble(sa) : toDouble(a);
+		double db = (b instanceof String sb) ? stringToDouble(sb) : toDouble(b);
+		return da >= db ? Boolean.TRUE : Boolean.FALSE;
 	}
 
 	public static boolean instanceOf(Object left, Object right) {
@@ -518,20 +534,60 @@ public class JSOps {
 		if (val == null) return 0.0;
 		if (val == JSUndefined.INSTANCE) return Double.NaN;
 		if (val instanceof Boolean b) return b ? 1.0 : 0.0;
-		if (val instanceof String s) {
-			String trimmed = s.trim();
-			if (trimmed.isEmpty()) return 0.0;
-			try {
-				return Double.parseDouble(trimmed);
-			} catch (NumberFormatException e) {
-				return Double.NaN;
-			}
-		}
+		if (val instanceof String s) return stringToDouble(s);
 		if (val instanceof JSObject jo) {
 			Object prim = toPrimitive(jo, "number");
 			return toDouble(prim);
 		}
 		return Double.NaN;
+	}
+	/**
+	 * 严格遵循 ECMAScript (ECMA-262 §7.1.4.1) 的 String-to-Number 算法。
+	 * 支持前导/尾随空白去除、空字符串转 0.0、十进制浮点、0x/0X (十六进制)、0b/0B (二进制)、0o/0O (八进制) 及 Infinity。
+	 */
+	public static double stringToDouble(String s) {
+		String trimmed = s.trim();
+		if (trimmed.isEmpty()) return 0.0;
+		int len = trimmed.length();
+		if (len > 2 && trimmed.charAt(0) == '0') {
+			char c = trimmed.charAt(1);
+			if (c == 'x' || c == 'X') {
+				try {
+					return (double) Long.parseLong(trimmed.substring(2), 16);
+				} catch (NumberFormatException e) {
+					try {
+						return new java.math.BigInteger(trimmed.substring(2), 16).doubleValue();
+					} catch (Exception ex) {
+						return Double.NaN;
+					}
+				}
+			} else if (c == 'b' || c == 'B') {
+				try {
+					return (double) Long.parseLong(trimmed.substring(2), 2);
+				} catch (NumberFormatException e) {
+					try {
+						return new java.math.BigInteger(trimmed.substring(2), 2).doubleValue();
+					} catch (Exception ex) {
+						return Double.NaN;
+					}
+				}
+			} else if (c == 'o' || c == 'O') {
+				try {
+					return (double) Long.parseLong(trimmed.substring(2), 8);
+				} catch (NumberFormatException e) {
+					try {
+						return new java.math.BigInteger(trimmed.substring(2), 8).doubleValue();
+					} catch (Exception ex) {
+						return Double.NaN;
+					}
+				}
+			}
+		}
+		try {
+			return Double.parseDouble(trimmed);
+		} catch (NumberFormatException e) {
+			return Double.NaN;
+		}
 	}
 
 	public static long toLong(Object val) {
@@ -545,11 +601,12 @@ public class JSOps {
 		if (val instanceof Number n) return n.longValue();
 		if (val == null || val == JSUndefined.INSTANCE) return 0L;
 		if (val instanceof Boolean b) return b ? 1L : 0L;
+		if (val instanceof String s) return (long) stringToDouble(s);
 		return (long) toDouble(val);
 	}
 
 	public static int toInt(double d) {
-		if (Math.abs(d) < 9.2233720368547758E18) {
+		if (Math.abs(d) < 9.2233720368547758E18) { // double精度范围内的整数，直接转换为 long 再转 int
 			return (int) (long) d;
 		}
 		return toIntSlow(d);
@@ -569,10 +626,12 @@ public class JSOps {
 		if (val instanceof Double) return toInt(((Double) val).doubleValue());
 		if (val == null || val == JSUndefined.INSTANCE) return 0;
 		if (val instanceof Boolean) return (Boolean) val ? 1 : 0;
+		if (val instanceof String s) return toInt(stringToDouble(s));
 		return toInt(toDouble(val));
 	}
 	public static float toFloat(Object val) {
 		if (val instanceof Number n) return n.floatValue();
+		if (val instanceof String s) return (float) stringToDouble(s);
 		return (float) toDouble(val);
 	}
 
@@ -638,10 +697,11 @@ public class JSOps {
 		 : scientificNotation(d);
 	}
 
-	/** [1e-6, 1e21) 区间：常规十进制，无科学计数法 */
+	/** <p>[1e-6, 1e21) 区间：常规十进制，无科学计数法</p>
+	 * <p>Java 7 及更早版本会有问题，但无所谓了（0D -> "0.0"）</p>
+	 * */
 	private static String plainDecimal(double d) {
-		String plain = BigDecimal.valueOf(d).stripTrailingZeros().toPlainString();
-		return "-0".equals(plain) ? "0" : plain;
+		return BigDecimal.valueOf(d).stripTrailingZeros().toPlainString();
 	}
 
 	/** 区间外：转换为 JS 规范的科学计数法，如 "1.23e+22" / "1e-7" */

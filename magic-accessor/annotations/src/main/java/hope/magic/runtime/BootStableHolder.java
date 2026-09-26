@@ -40,4 +40,10 @@ public class BootStableHolder {
 
 	@Stable
 	public static long[] SHAPE_TYPE_OFFSETS = new long[4];
+
+	@Stable
+	public static long[][] TABLE_PROP_SHAPE;
+
+	@Stable
+	public static long[][] TABLE_SHAPE_PROP;
 }

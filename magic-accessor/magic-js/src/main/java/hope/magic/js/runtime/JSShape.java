@@ -251,21 +251,18 @@ public final class JSShape {
 		}
 	}
 
-	// 快速查找路径 (Fast Path: 严格 <= 22 字节，无条件 C2 JIT 内联)
+	// 快速查找路径 (Flat Fast Path: 4 路平直展开，消灭二次跳跃与方法栈层级)
 
 	public int getOffset(int propId) {
 		if (k0 == propId) return 0;
 		if (k1 == propId) return 1;
-		return getOffsetRest(propId);
-	}
-
-	private int getOffsetRest(int propId) {
 		if (k2 == propId) return 2;
 		if (k3 == propId) return 3;
 		return getOverflowOffset(propId);
 	}
 
 	private int getOverflowOffset(int propId) {
+		if (propertyCount <= INLINE_PROPERTY_CAPACITY) return -1;
 		int[] of = this.overflowKeys;
 		return of == null ? -1 : scanOverflow(of, propId);
 	}

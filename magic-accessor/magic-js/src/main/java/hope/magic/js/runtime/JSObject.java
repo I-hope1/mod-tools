@@ -48,18 +48,26 @@ public class JSObject {
 	public long      doubleFieldMask/*  = 0L */; // 记录哪些 offset 槽位存储的是 double (低 64 位)
 	public long[]    overflowDoubleMask;
 
+	public final boolean isDoubleSlot64Bit(int offset) {
+		return (doubleFieldMask & (1L << offset)) != 0L;
+	}
+
 	public boolean isDoubleSlot(int offset) {
 		if (offset < 64) {
-			return (doubleFieldMask & (1L << offset)) != 0L;
+			return isDoubleSlot64Bit(offset);
 		}
 		int    wordIdx = (offset >> 6) - 1;
 		long[] ofm     = overflowDoubleMask;
 		return ofm != null && wordIdx < ofm.length && (ofm[wordIdx] & (1L << (offset & 63))) != 0L;
 	}
 
+	public final void setDoubleMask64Bit(int offset) {
+		doubleFieldMask |= (1L << offset);
+	}
+
 	public void setDoubleMask(int offset) {
 		if (offset < 64) {
-			doubleFieldMask |= (1L << offset);
+			setDoubleMask64Bit(offset);
 		} else {
 			int wordIdx = (offset >> 6) - 1;
 			if (overflowDoubleMask == null) {
@@ -259,14 +267,19 @@ public class JSObject {
 	}
 
 	public void setDoubleSlot(int offset, double value) {
-		if (offset < 0) return;
-		setDoubleMask(offset);
-		if (offset < IN_OBJECT_FIELD_COUNT) {
+		if ((offset & -IN_OBJECT_FIELD_COUNT) == 0) {
+			setDoubleMask64Bit(offset);
 			UNSAFE.putDouble(this, BootStableHolder.JS_PRIM_OFFSETS[offset], value);
 			UNSAFE.putObject(this, BootStableHolder.JS_OBJ_OFFSETS[offset], null);
 		} else {
-			setOverflowDouble(offset - IN_OBJECT_FIELD_COUNT, value);
+			setDoubleSlotSlow(offset, value);
 		}
+	}
+
+	private void setDoubleSlotSlow(int offset, double value) {
+		if (offset < 0) return;
+		setDoubleMask(offset);
+		setOverflowDouble(offset - IN_OBJECT_FIELD_COUNT, value);
 	}
 
 	private void setOverflowDouble(int idx, double value) {
@@ -302,26 +315,38 @@ public class JSObject {
 	 * 设置指定槽位的对象引用。
 	 *
 	 * <p>【性能优化说明】：
-	 * 仅当该槽位之前记录为 Double 属性时（由 {@link #isDoubleSlot(int)} 位掩码以单条指令快速检查），
-	 * 才需要执行 {@link #clearDoubleMask(int)} 以及将 {@code primX} 置 0 的 {@link #clearPrimSlot(int)}。
-	 * 随后利用 {@link BootStableHolder#JS_OBJ_OFFSETS} 配合 Unsafe 扁平单指令写入对象引用。
+	 * 采用快慢路径分离（Fast/Slow Path Outlining）：
+	 * 快路径（0 <= offset < IN_OBJECT_FIELD_COUNT）单分支命中，内联 64-bit 掩码快速更新与 Unsafe 纯平直写入；
+	 * 慢路径（越界或溢出槽位）抽取至独立方法，不占用外层 JIT 内联预算。
 	 */
 	public void setSlot(int offset, Object value) {
+		if ((offset & -IN_OBJECT_FIELD_COUNT) == 0) {
+			if (isDoubleSlot64Bit(offset)) {
+				clearDoubleMask64Bit(offset);
+				UNSAFE.putLong(this, BootStableHolder.JS_PRIM_OFFSETS[offset], 0L);
+			}
+			UNSAFE.putObject(this, BootStableHolder.JS_OBJ_OFFSETS[offset], value);
+		} else {
+			setSlotSlow(offset, value);
+		}
+	}
+
+	private void setSlotSlow(int offset, Object value) {
 		if (offset < 0) return;
 		if (isDoubleSlot(offset)) {
 			clearDoubleMask(offset);
 			clearPrimSlot(offset);
 		}
-		if (offset < IN_OBJECT_FIELD_COUNT) {
-			UNSAFE.putObject(this, BootStableHolder.JS_OBJ_OFFSETS[offset], value);
-		} else {
-			setOverflowSlot(offset, value);
-		}
+		setOverflowSlot(offset, value);
+	}
+
+	public final void clearDoubleMask64Bit(int offset) {
+		doubleFieldMask &= ~(1L << offset);
 	}
 
 	public void clearDoubleMask(int offset) {
 		if (offset < 64) {
-			doubleFieldMask &= ~(1L << offset);
+			clearDoubleMask64Bit(offset);
 		} else {
 			int    wordIdx = (offset >> 6) - 1;
 			long[] ofm     = overflowDoubleMask;

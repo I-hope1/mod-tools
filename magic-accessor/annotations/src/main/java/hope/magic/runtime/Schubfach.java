@@ -1,5 +1,6 @@
-package hope.magic.js.runtime.doubleconv;
+package hope.magic.runtime;
 
+import jdk.internal.vm.annotation.Stable;
 import static java.lang.Double.*;
 import static java.lang.Long.numberOfLeadingZeros;
 import static java.lang.Math.multiplyHigh;
@@ -32,6 +33,7 @@ public final class Schubfach {
     private static final int Q_2 = 38;
     private static final long C_2 = 913_124_641_741L;
 
+    @Stable
     private static final long[] pow10 = {
         1L,
         10L,
@@ -88,13 +90,14 @@ public final class Schubfach {
 
     /**
      * Converts a finite positive double value into its shortest decimal representation,
-     * writing directly into the provided DtoaBuffer.
+     * writing directly into the provided character buffer.
      *
      * @param v positive finite double value
-     * @param buffer DtoaBuffer to receive digits, length and decimalPoint
-     * @return true if successful
+     * @param chars destination buffer (must have capacity >= 18)
+     * @return packed long where high 32 bits is decimalPoint and low 32 bits is length,
+     *         or -1L if the input is non-finite (NaN / Infinity)
      */
-    public static boolean toDecimal(double v, DtoaBuffer buffer) {
+    public static long toDecimal(double v, char[] chars) {
         long bits = doubleToRawLongBits(v);
         long t = bits & T_MASK;
         int bq = (int) (bits >>> P - 1) & BQ_MASK;
@@ -107,24 +110,22 @@ public final class Schubfach {
                 if (0 < mq & mq < P) {
                     long f = c >> mq;
                     if (f << mq == c) {
-                        return toChars(f, 0, buffer);
+                        return toChars(f, 0, chars);
                     }
                 }
-                return toDecimal(-mq, c, 0, buffer);
+                return toDecimal(-mq, c, 0, chars);
             }
             if (t != 0) {
                 /* subnormal value */
-                return toDecimal(Q_MIN, t, 0, buffer);
+                return toDecimal(Q_MIN, t, 0, chars);
             }
-            buffer.chars[0] = '0';
-            buffer.length = 1;
-            buffer.decimalPoint = 1;
-            return true;
+            chars[0] = '0';
+            return (1L << 32) | 1L;
         }
-        return false;
+        return -1L;
     }
 
-    private static boolean toDecimal(int q, long c, int dk, DtoaBuffer buffer) {
+    private static long toDecimal(int q, long c, int dk, char[] chars) {
         int out = (int) c & 0x1;
         long cb = c << 2;
         long cbr = cb + 2;
@@ -155,7 +156,7 @@ public final class Schubfach {
             boolean upin = vbl + out <= sp10 << 2;
             boolean wpin = (tp10 << 2) + out <= vbr;
             if (upin != wpin) {
-                return toChars(upin ? sp10 : tp10, k, buffer);
+                return toChars(upin ? sp10 : tp10, k, chars);
             }
         }
 
@@ -164,17 +165,53 @@ public final class Schubfach {
         boolean win = (t << 2) + out <= vbr;
         if (uin != win) {
             /* Exactly one of u or w lies in Rv */
-            return toChars(uin ? s : t, k + dk, buffer);
+            return toChars(uin ? s : t, k + dk, chars);
         }
         /*
          * Both u and w lie in Rv: determine the one closest to v.
          */
         long cmp = vb - (s + t << 1);
-        return toChars(cmp < 0 || cmp == 0 && (s & 0x1) == 0 ? s : t, k + dk, buffer);
+        return toChars(cmp < 0 || cmp == 0 && (s & 0x1) == 0 ? s : t, k + dk, chars);
     }
 
-    private static boolean toChars(long f, int e, DtoaBuffer buffer) {
-        while (f % 10 == 0) {
+    @Stable
+    private static final char[] DIGIT_TENS = {
+        '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
+        '1', '1', '1', '1', '1', '1', '1', '1', '1', '1',
+        '2', '2', '2', '2', '2', '2', '2', '2', '2', '2',
+        '3', '3', '3', '3', '3', '3', '3', '3', '3', '3',
+        '4', '4', '4', '4', '4', '4', '4', '4', '4', '4',
+        '5', '5', '5', '5', '5', '5', '5', '5', '5', '5',
+        '6', '6', '6', '6', '6', '6', '6', '6', '6', '6',
+        '7', '7', '7', '7', '7', '7', '7', '7', '7', '7',
+        '8', '8', '8', '8', '8', '8', '8', '8', '8', '8',
+        '9', '9', '9', '9', '9', '9', '9', '9', '9', '9'
+    };
+
+    @Stable
+    private static final char[] DIGIT_ONES = {
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'
+    };
+
+    private static long toChars(long f, int e, char[] chars) {
+        while (f % 10_000 == 0) {
+            f /= 10_000;
+            e += 4;
+        }
+        while (f % 100 == 0) {
+            f /= 100;
+            e += 2;
+        }
+        if (f % 10 == 0) {
             f /= 10;
             e++;
         }
@@ -184,20 +221,29 @@ public final class Schubfach {
             len += 1;
         }
 
-        buffer.decimalPoint = len + e;
-        buffer.length = len;
-
+        int decimalPoint = len + e;
         long temp = f;
-        for (int i = len - 1; i >= 0; i--) {
-            buffer.chars[i] = (char) ('0' + (int) (temp % 10));
-            temp /= 10;
+        int i = len - 1;
+        while (temp >= 100) {
+            int r = (int) (temp % 100);
+            temp /= 100;
+            chars[i--] = DIGIT_ONES[r];
+            chars[i--] = DIGIT_TENS[r];
         }
-        return true;
+        if (temp >= 10) {
+            int r = (int) temp;
+            chars[i--] = DIGIT_ONES[r];
+            chars[i] = DIGIT_TENS[r];
+        } else {
+            chars[0] = (char) ('0' + (int) temp);
+        }
+        return ((long) decimalPoint << 32) | (len & 0xFFFF_FFFFL);
     }
 
     /*
      * The precomputed values for g1(int) and g0(int).
      */
+    @Stable
     private static final long[] g = {
         0x4F0C_EDC9_5A71_8DD4L, 0x5B01_E8B0_9AA0_D1B5L, // -324
         0x7E7B_160E_F71C_1621L, 0x119C_A780_F767_B5EEL, // -323
@@ -817,4 +863,8 @@ public final class Schubfach {
         0x4FD5_679E_FB9B_04D8L, 0x5DEC_6458_6315_3A6CL, //  291
         0x7FBB_D8FE_5F5E_6E27L, 0x497A_3A27_04EE_C3DFL, //  292
     };
+
+    static {
+        assert java.util.Arrays.stream(g).noneMatch(x -> x == 0) : "Schubfach g table must not contain zero entries";
+    }
 }

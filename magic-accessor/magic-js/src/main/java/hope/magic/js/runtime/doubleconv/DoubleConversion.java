@@ -57,12 +57,24 @@
 
 package hope.magic.js.runtime.doubleconv;
 
+import hope.magic.runtime.Magic;
+import hope.magic.runtime.Schubfach;
+
 /**
  * This class provides the public API for the double conversion package.
  */
 public final class DoubleConversion {
 
     private final static int BUFFER_LENGTH = 30;
+
+    static {
+        if (!Magic.isInstalled()) {
+            Magic.install();
+        }
+    }
+
+    private static final ThreadLocal<DtoaBuffer> LOCAL_BUFFER =
+            ThreadLocal.withInitial(() -> new DtoaBuffer(FastDtoa.kFastDtoaMaximalLength));
 
     /**
      * Converts a double number to its shortest string representation.
@@ -71,16 +83,49 @@ public final class DoubleConversion {
      * @return formatted number
      */
     public static String toShortestString(final double value) {
-        final DtoaBuffer buffer = new DtoaBuffer(FastDtoa.kFastDtoaMaximalLength);
+        final DtoaBuffer buffer = LOCAL_BUFFER.get();
+        buffer.reset();
         final double absValue = Math.abs(value);
 
         if (value < 0) {
             buffer.isNegative = true;
         }
 
-        Schubfach.toDecimal(absValue, buffer);
+        final long packed = Schubfach.toDecimal(absValue, buffer.chars);
+        if (packed == -1L) {
+            return String.valueOf(value);
+        }
+        buffer.decimalPoint = (int) (packed >> 32);
+        buffer.length = (int) packed;
 
         return buffer.format(DtoaMode.SHORTEST, 0);
+    }
+
+    /**
+     * Appends a double number to the target StringBuilder in its shortest string representation,
+     * achieving zero intermediate object allocation.
+     *
+     * @param sb target StringBuilder
+     * @param value number to convert
+     */
+    public static void appendTo(final StringBuilder sb, final double value) {
+        final DtoaBuffer buffer = LOCAL_BUFFER.get();
+        buffer.reset();
+        final double absValue = Math.abs(value);
+
+        if (value < 0) {
+            buffer.isNegative = true;
+        }
+
+        final long packed = Schubfach.toDecimal(absValue, buffer.chars);
+        if (packed == -1L) {
+            sb.append(value);
+            return;
+        }
+        buffer.decimalPoint = (int) (packed >> 32);
+        buffer.length = (int) packed;
+
+        buffer.format(sb, DtoaMode.SHORTEST, 0);
     }
 
     /**

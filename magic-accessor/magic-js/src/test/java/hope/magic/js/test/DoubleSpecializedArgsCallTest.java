@@ -248,7 +248,7 @@ public class DoubleSpecializedArgsCallTest {
 	}
 
 	@Test
-	public void testSchubfachCornerCases() {
+	public void testSchubfachCornerCases() throws Throwable {
 		JSContext cx = new JSContext();
 
 		// Min / Max values
@@ -274,6 +274,31 @@ public class DoubleSpecializedArgsCallTest {
 		assertEquals("1e-323", cx.eval("(2 * Number.MIN_VALUE).toString();"));
 		assertEquals("1.5e-323", cx.eval("(3 * Number.MIN_VALUE).toString();"));
 		assertEquals("2e-323", cx.eval("(4 * Number.MIN_VALUE).toString();"));
+
+		// Verify Schubfach class loader (must be BootstrapClassLoader)
+		org.junit.jupiter.api.Assertions.assertNull(
+			hope.magic.runtime.Schubfach.class.getClassLoader(),
+			"Schubfach must be loaded by BootstrapClassLoader"
+		);
+
+		// CI Assertion: verify table integrity (no zero entries in g table)
+		java.lang.reflect.Field gField = hope.magic.runtime.Schubfach.class.getDeclaredField("g");
+		gField.setAccessible(true);
+		long[] g = (long[]) gField.get(null);
+		org.junit.jupiter.api.Assertions.assertNotNull(g);
+		org.junit.jupiter.api.Assertions.assertEquals(1234, g.length, "g table length must be 1234");
+		org.junit.jupiter.api.Assertions.assertTrue(
+			java.util.Arrays.stream(g).noneMatch(x -> x == 0),
+			"Arrays.stream(g).noneMatch(x -> x == 0) must hold true"
+		);
+
+		// Verify DoubleConversion.appendTo (zero-alloc direct write)
+		StringBuilder sb = new StringBuilder();
+		hope.magic.js.runtime.doubleconv.DoubleConversion.appendTo(sb, 0.30000000000000004);
+		assertEquals("0.30000000000000004", sb.toString());
+		sb.setLength(0);
+		hope.magic.js.runtime.doubleconv.DoubleConversion.appendTo(sb, -1.5e-323);
+		assertEquals("-1.5e-323", sb.toString());
 	}
 }
 

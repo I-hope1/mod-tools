@@ -101,6 +101,7 @@ public class DtoaBuffer {
     public void reset() {
         length = 0;
         decimalPoint = 0;
+        isNegative = false;
     }
 
     /**
@@ -137,6 +138,19 @@ public class DtoaBuffer {
      */
     public String format(final DtoaMode mode, final int digitsAfterPoint) {
         final StringBuilder buffer = new StringBuilder();
+        format(buffer, mode, digitsAfterPoint);
+        return buffer.toString();
+    }
+
+    /**
+     * Appends the formatted buffer content directly to the provided StringBuilder,
+     * avoiding intermediate String and StringBuilder allocations.
+     *
+     * @param buffer target StringBuilder
+     * @param mode conversion mode
+     * @param digitsAfterPoint number of digits after point
+     */
+    public void format(final StringBuilder buffer, final DtoaMode mode, final int digitsAfterPoint) {
         if (isNegative) {
             buffer.append('-');
         }
@@ -161,8 +175,12 @@ public class DtoaBuffer {
                 }
                 break;
         }
+    }
 
-        return buffer.toString();
+    private static void repeatZero(final StringBuilder buffer, int count) {
+        while (count-- > 0) {
+            buffer.append('0');
+        }
     }
 
     private void toFixedFormat(final StringBuilder buffer, final int digitsAfterPoint) {
@@ -172,7 +190,7 @@ public class DtoaBuffer {
             if (length > 0) {
                 buffer.append('.');
                 final int padding = -decimalPoint;
-                buffer.append("0".repeat(Math.max(0, padding)));
+                repeatZero(buffer, padding);
                 buffer.append(chars, 0, length);
             } else {
                 decimalPoint = 1;
@@ -180,7 +198,7 @@ public class DtoaBuffer {
         } else if (decimalPoint >= length) {
             // large integer, add trailing zeroes
             buffer.append(chars, 0, length);
-            buffer.append("0".repeat(Math.max(0, decimalPoint - length)));
+            repeatZero(buffer, decimalPoint - length);
         } else if (decimalPoint < length) {
             // >= 1, split decimals and insert decimalPoint
             buffer.append(chars, 0, decimalPoint);
@@ -193,8 +211,7 @@ public class DtoaBuffer {
             if (decimalPoint >= length) {
                 buffer.append('.');
             }
-            buffer.append("0".repeat(Math.max(0,
-                digitsAfterPoint - Math.max(0, length - decimalPoint))));
+            repeatZero(buffer, digitsAfterPoint - Math.max(0, length - decimalPoint));
         }
     }
 

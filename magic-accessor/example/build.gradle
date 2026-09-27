@@ -86,9 +86,9 @@ tasks.register('jmhDoubleToString', JavaExec) {
 	args = [
 			'hope.magic.example.DoubleToStringJMHBenchmark',
 			'-f', '1',
-			'-wi', '1',
+			'-wi', '3',
 			'-w', '1s',
-			'-i', '2',
+			'-i', '5',
 			'-r', '1s',
 			'-bm', 'avgt',
 			'-tu', 'ns'

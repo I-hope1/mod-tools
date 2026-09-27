@@ -1,18 +1,13 @@
 package hope.magic.example;
 
-import hope.magic.js.runtime.FastAccessor;
 import hope.magic.js.runtime.JSObject;
-import hope.magic.runtime.BootStableHolder;
 import hope.magic.runtime.Magic;
-import jdk.internal.vm.annotation.Stable;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.infra.Blackhole;
 import org.openjdk.jmh.runner.Runner;
-import org.openjdk.jmh.runner.options.Options;
-import org.openjdk.jmh.runner.options.OptionsBuilder;
+import org.openjdk.jmh.runner.options.*;
 import sun.misc.Unsafe;
 
-import java.lang.reflect.Field;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
@@ -44,14 +39,6 @@ public class JSObjectSlotAccessJMHBenchmark {
 		jsObj = new JSObject();
 		// 初始化 0..7 内置槽位
 		for (int i = 0; i < 8; i++) {
-			Field primField = JSObject.class.getField("prim" + i);
-			Field objField = JSObject.class.getField("obj" + i);
-			long pOff = UNSAFE.objectFieldOffset(primField);
-			long oOff = UNSAFE.objectFieldOffset(objField);
-
-			BootStableHolder.JS_PRIM_OFFSETS[i] = pOff;
-			BootStableHolder.JS_OBJ_OFFSETS[i] = oOff;
-
 			jsObj.setDoubleSlot(i, (double) (i * 10 + 1));
 		}
 

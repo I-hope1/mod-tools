@@ -1,7 +1,7 @@
 package hope.magic.example;
 
 import hope.magic.js.runtime.MagicJIT;
-import hope.magic.runtime.BootStableHolder;
+import hope.magic.runtime.BootTestStableHolder;
 import hope.magic.runtime.Magic;
 import hope.magic.runtime.MagicInvoker;
 import jdk.internal.vm.annotation.Stable;
@@ -57,7 +57,7 @@ public class MethodHandleIndirectCallJMHBenchmark {
 	public final MagicInvoker appStableInvoker = MagicJIT.getMethodInvoker(SingleTarget.class, "calculate", 2, false);
 
 	// 位于 BootstrapClassLoader 的 Holder 实例（其实例字段带有受 C2 信任的 @Stable）
-	public BootStableHolder bootHolder;
+	public BootTestStableHolder bootHolder;
 
 	// --- 2. 8 类巨态 (Megamorphic) 测试目标体系 ---
 	public interface TaskContract {
@@ -95,12 +95,12 @@ public class MethodHandleIndirectCallJMHBenchmark {
 	public void setup() throws Throwable {
 		if (!Magic.isInstalled()) Magic.install();
 
-		bootHolder = new BootStableHolder();
+		bootHolder = new BootTestStableHolder();
 		bootHolder.instanceStableMh = STATIC_FINAL_MH;
 		bootHolder.instanceStableInvoker = appStableInvoker;
 
-		BootStableHolder.STATIC_STABLE_MH = STATIC_FINAL_MH;
-		BootStableHolder.STATIC_STABLE_INVOKER = appStableInvoker;
+		BootTestStableHolder.STATIC_STABLE_MH = STATIC_FINAL_MH;
+		BootTestStableHolder.STATIC_STABLE_INVOKER = appStableInvoker;
 
 		for (int i = 0; i < 8; i++) {
 			Class<?> clazz = tasks[i].getClass();
@@ -117,8 +117,8 @@ public class MethodHandleIndirectCallJMHBenchmark {
 			appInvokerTable[i] = invoker;
 
 			// 填充 BootLoader 受信 Holder 表
-			BootStableHolder.STATIC_STABLE_TABLE[i] = exactMh;
-			BootStableHolder.STATIC_STABLE_INVOKER_TABLE[i] = invoker;
+			BootTestStableHolder.STATIC_STABLE_TABLE[i] = exactMh;
+			BootTestStableHolder.STATIC_STABLE_INVOKER_TABLE[i] = invoker;
 			bootHolder.instanceStableTable[i] = exactMh;
 			bootHolder.instanceStableInvokerTable[i] = invoker;
 		}
@@ -151,7 +151,7 @@ public class MethodHandleIndirectCallJMHBenchmark {
 	public void single_4_bootStableStaticMh(Blackhole bh) throws Throwable {
 		int i = counter++;
 		// BootLoader 下的 @Stable static 字段：C2 信任，可直接折叠为常量
-		bh.consume((int) BootStableHolder.STATIC_STABLE_MH.invokeExact(singleTarget, i, 2));
+		bh.consume((int) BootTestStableHolder.STATIC_STABLE_MH.invokeExact(singleTarget, i, 2));
 	}
 
 	@Benchmark
@@ -172,7 +172,7 @@ public class MethodHandleIndirectCallJMHBenchmark {
 	public void single_7_bootStableStaticInvoker(Blackhole bh) throws Throwable {
 		int i = counter++;
 		// BootLoader @Stable static 引用指向 MagicInvoker
-		bh.consume(BootStableHolder.STATIC_STABLE_INVOKER.invokeInt2(singleTarget, i, 2));
+		bh.consume(BootTestStableHolder.STATIC_STABLE_INVOKER.invokeInt2(singleTarget, i, 2));
 	}
 
 	@Benchmark
@@ -197,7 +197,7 @@ public class MethodHandleIndirectCallJMHBenchmark {
 	public void const_idx_2_bootStaticTable(Blackhole bh) throws Throwable {
 		int i = counter++;
 		// BootLoader @Stable 数组 + 常量下标 0（验证 C2 是否能折叠数组元素并内联）
-		bh.consume((int) BootStableHolder.STATIC_STABLE_TABLE[0].invokeExact((Object) tasks[0], i, 2));
+		bh.consume((int) BootTestStableHolder.STATIC_STABLE_TABLE[0].invokeExact((Object) tasks[0], i, 2));
 	}
 
 	// =========================================================================
@@ -223,7 +223,7 @@ public class MethodHandleIndirectCallJMHBenchmark {
 		int i = counter++;
 		int idx = i & 7;
 		// 动态下标访问 BootLoader @Stable 数组
-		bh.consume((int) BootStableHolder.STATIC_STABLE_TABLE[idx].invokeExact((Object) tasks[idx], i, 2));
+		bh.consume((int) BootTestStableHolder.STATIC_STABLE_TABLE[idx].invokeExact((Object) tasks[idx], i, 2));
 	}
 
 	@Benchmark
@@ -237,7 +237,7 @@ public class MethodHandleIndirectCallJMHBenchmark {
 	public void mega_5_bootStaticInvokerTable(Blackhole bh) throws Throwable {
 		int i = counter++;
 		int idx = i & 7;
-		bh.consume(BootStableHolder.STATIC_STABLE_INVOKER_TABLE[idx].invokeInt2(tasks[idx], i, 2));
+		bh.consume(BootTestStableHolder.STATIC_STABLE_INVOKER_TABLE[idx].invokeInt2(tasks[idx], i, 2));
 	}
 
 	@Benchmark

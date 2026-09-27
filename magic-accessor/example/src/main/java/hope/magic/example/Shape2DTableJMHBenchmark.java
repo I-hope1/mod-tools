@@ -2,7 +2,7 @@ package hope.magic.example;
 
 import hope.magic.js.runtime.JSShape;
 import hope.magic.js.runtime.SymbolTable;
-import hope.magic.runtime.BootStableHolder;
+import hope.magic.runtime.BootTestStableHolder;
 import hope.magic.runtime.Magic;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.infra.Blackhole;
@@ -48,8 +48,8 @@ public class Shape2DTableJMHBenchmark {
 		if (!Magic.isInstalled()) Magic.install();
 
 		// 1. 初始化 @Stable 二维数组
-		BootStableHolder.TABLE_PROP_SHAPE = new long[NUM_PROPS][NUM_SHAPES];
-		BootStableHolder.TABLE_SHAPE_PROP = new long[NUM_SHAPES][NUM_PROPS];
+		BootTestStableHolder.TABLE_PROP_SHAPE = new long[NUM_PROPS][NUM_SHAPES];
+		BootTestStableHolder.TABLE_SHAPE_PROP = new long[NUM_SHAPES][NUM_PROPS];
 
 		// 2. 构造 4 个具有重叠属性的不同 Shape (模拟 4-态 Polymorphic)
 		// Shape 0: { x, y, a, b }
@@ -105,8 +105,8 @@ public class Shape2DTableJMHBenchmark {
 				} else {
 					entry = -1L;
 				}
-				BootStableHolder.TABLE_PROP_SHAPE[p][sId] = entry;
-				BootStableHolder.TABLE_SHAPE_PROP[sId][p] = entry;
+				BootTestStableHolder.TABLE_PROP_SHAPE[p][sId] = entry;
+				BootTestStableHolder.TABLE_SHAPE_PROP[sId][p] = entry;
 				NON_STABLE_PROP_SHAPE[p][sId] = entry;
 				NON_STABLE_SHAPE_PROP[sId][p] = entry;
 			}
@@ -133,13 +133,13 @@ public class Shape2DTableJMHBenchmark {
 
 	@Benchmark
 	public void c1_mono_const_2_stable_prop_shape(Blackhole bh) {
-		long entry = BootStableHolder.TABLE_PROP_SHAPE[CONST_PROP_X][monoShape.id];
+		long entry = BootTestStableHolder.TABLE_PROP_SHAPE[CONST_PROP_X][monoShape.id];
 		bh.consume(entry);
 	}
 
 	@Benchmark
 	public void c1_mono_const_3_stable_shape_prop(Blackhole bh) {
-		long entry = BootStableHolder.TABLE_SHAPE_PROP[monoShape.id][CONST_PROP_X];
+		long entry = BootTestStableHolder.TABLE_SHAPE_PROP[monoShape.id][CONST_PROP_X];
 		bh.consume(entry);
 	}
 
@@ -158,14 +158,14 @@ public class Shape2DTableJMHBenchmark {
 	@Benchmark
 	public void c2_poly_const_2_stable_prop_shape(Blackhole bh) {
 		JSShape s = patternShapes[counter++ & (PATTERN_SIZE - 1)];
-		long entry = BootStableHolder.TABLE_PROP_SHAPE[CONST_PROP_X][s.id];
+		long entry = BootTestStableHolder.TABLE_PROP_SHAPE[CONST_PROP_X][s.id];
 		bh.consume(entry);
 	}
 
 	@Benchmark
 	public void c2_poly_const_3_stable_shape_prop(Blackhole bh) {
 		JSShape s = patternShapes[counter++ & (PATTERN_SIZE - 1)];
-		long entry = BootStableHolder.TABLE_SHAPE_PROP[s.id][CONST_PROP_X];
+		long entry = BootTestStableHolder.TABLE_SHAPE_PROP[s.id][CONST_PROP_X];
 		bh.consume(entry);
 	}
 
@@ -202,7 +202,7 @@ public class Shape2DTableJMHBenchmark {
 		int idx = counter++ & (PATTERN_SIZE - 1);
 		JSShape s = patternShapes[idx];
 		int prop = patternProps[idx];
-		long entry = BootStableHolder.TABLE_PROP_SHAPE[prop][s.id];
+		long entry = BootTestStableHolder.TABLE_PROP_SHAPE[prop][s.id];
 		bh.consume(entry);
 	}
 
@@ -211,7 +211,7 @@ public class Shape2DTableJMHBenchmark {
 		int idx = counter++ & (PATTERN_SIZE - 1);
 		JSShape s = patternShapes[idx];
 		int prop = patternProps[idx];
-		long entry = BootStableHolder.TABLE_SHAPE_PROP[s.id][prop];
+		long entry = BootTestStableHolder.TABLE_SHAPE_PROP[s.id][prop];
 		bh.consume(entry);
 	}
 

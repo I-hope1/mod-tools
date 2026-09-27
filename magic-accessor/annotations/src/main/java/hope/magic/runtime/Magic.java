@@ -182,6 +182,7 @@ public class Magic {
 					"hope.magic.runtime.Arity3CtorInvoker",
 					"hope.magic.runtime.GenericCtorInvoker",
 					"hope.magic.runtime.BootStableHolder",
+					"hope.magic.runtime.BootTestStableHolder",
 					"hope.magic.runtime.Schubfach"
 				};
 				for (String invokerName : bootInvokers) {

@@ -1044,30 +1044,68 @@ public class BugVerificationTest {
 
 	@Test
 	public void testGradientShapeSpecialization() throws Throwable {
-		JSContext cx = new JSContext();
-		cx.eval("""
-			test_data_1 = [];
-			for (var i = 0; i < 2000; i++) {
-				test_data_1[i] = { val: 10.5 };
+		StringBuilder sb = new StringBuilder();
+		JSCompiler.CLASS_DUMP_HOOK = (name, bytes) -> {
+			if (name.contains("MagicJSFunction")) {
+				sb.append(JSCompiler.disassemble(bytes));
 			}
-		""");
-		String accessCode = """
-			var data = test_data_1;
-			var total = 0;
-			for (var i = 0; i < 2000; i++) {
-				var item = data[i];
-				total = total + item.val;
-			}
-			return total;
-		""";
-		JSFunction magicFunc = (JSFunction) cx.eval("(function() {\n" + accessCode + "\n})");
+		};
+		try {
+			JSContext cx = new JSContext();
+			cx.eval("""
+				test_data_1 = [];
+				for (var i = 0; i < 2000; i++) {
+					test_data_1[i] = { val: 10.5 };
+				}
+			""");
+			String accessCode = """
+				var data = test_data_1;
+				var total = 0;
+				for (var i = 0; i < 2000; i++) {
+					var item = data[i];
+					total = total + item.val;
+				}
+				return total;
+			""";
+			JSFunction magicFunc = (JSFunction) cx.eval("(function() {\n" + accessCode + "\n})");
 
-		// 验证是否成功生成并特化了 call0Double 原生方法
-		Assertions.assertDoesNotThrow(() -> magicFunc.getClass().getMethod("call0Double", JSContext.class, Object.class),
-				"Specialized double method call0Double must be generated");
+			// 1. 验证是否直接在生成类上声明了 call0Double 原生方法 (不能走接口默认方法)
+			var m = Assertions.assertDoesNotThrow(() -> magicFunc.getClass().getDeclaredMethod("call0Double", JSContext.class, Object.class),
+					"Specialized double method call0Double must be generated directly on " + magicFunc.getClass());
+			Assertions.assertEquals(double.class, m.getReturnType(), "call0Double return type must be primitive double");
 
-		double res = magicFunc.call0Double(cx, null);
-		Assertions.assertEquals(21000.0, res, 1e-6);
+			// 2. 验证计算结果正确性
+			double res = magicFunc.call0Double(cx, null);
+			Assertions.assertEquals(21000.0, res, 1e-6);
+
+			// 3. 严格字节码断言：确保 0 装箱、原生 int 索引、原生 double 累加
+			String disasm = sb.toString();
+			// ① 必须生成 call0Double 方法签名
+			Assertions.assertTrue(disasm.contains("call0Double(Lhope/magic/js/runtime/JSContext;Ljava/lang/Object;)D"),
+					"Bytecode must declare call0Double with (JSContext, Object)D");
+			// ② 循环计数器必须为原生 int (IINC 递增)
+			Assertions.assertTrue(disasm.contains("IINC"), "Loop induction variable must use IINC");
+			// ③ 数组访问必须走 JSArray.getElement(int) 原生快径
+			Assertions.assertTrue(disasm.contains("INVOKEVIRTUAL hope/magic/js/runtime/JSArray.getElement (I)Ljava/lang/Object;"),
+					"Array index access must directly invoke JSArray.getElement(int)");
+			// ④ 属性访问必须走 getPropDouble 零装箱直读
+			Assertions.assertTrue(disasm.contains("getPropDouble(Ljava/lang/Object;)D"),
+					"Property access must use getPropDouble(Object)D invokedynamic");
+			// ⑤ 累加必须为原生浮点 DADD
+			Assertions.assertTrue(disasm.contains("DADD"), "Accumulator addition must use DADD");
+			// ⑥ 返回必须为原生 DRETURN
+			Assertions.assertTrue(disasm.contains("DRETURN"), "Method return must use DRETURN");
+			// ⑦ call0Double 方法体内绝不能有 Double.valueOf 装箱
+			int call0DoubleIdx = disasm.indexOf("call0Double(");
+			int call0Idx = disasm.indexOf("call0(", call0DoubleIdx);
+			String call0DoubleBody = (call0DoubleIdx >= 0 && call0Idx > call0DoubleIdx)
+					? disasm.substring(call0DoubleIdx, call0Idx)
+					: disasm;
+			Assertions.assertFalse(call0DoubleBody.contains("java/lang/Double.valueOf"),
+					"call0Double method body must have ZERO java/lang/Double.valueOf heap allocations");
+		} finally {
+			JSCompiler.CLASS_DUMP_HOOK = null;
+		}
 	}
 }
 

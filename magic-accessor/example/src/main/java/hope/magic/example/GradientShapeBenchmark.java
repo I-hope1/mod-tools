@@ -47,7 +47,23 @@ public class GradientShapeBenchmark {
 		magicFunc = (JSFunction) magicContext.eval("(function() {\n" + accessCode + "\n})");
 		graalFunc = graalContext.eval("js", "(function() {\n" + accessCode + "\n})");
 
-		// 3. 初始正确性校验 (逐 bit 浮点对齐校验)
+		// 3. 高性能契约强校验与断言保证：
+		// 核心高性能支柱 (确保单次循环调用处于 ~2000ns，即每次迭代 1.0~1.5ns 的关键依赖)：
+		// ① 生成类必须直接声明 call0Double(JSContext, Object)D 原生特化方法，不能走接口默认方法或反射回退；
+		// ② 循环计数器 i 必须被推导为 JVM 原生 int (IINC 递增，IF_ICMPGE 比较)；
+		// ③ data[i] 必须命中 JSArray.getElement(int) 零装箱快径，不能降级为 Double.valueOf(i) + BSM_GET_INDEX；
+		// ④ total 必须被推导为 JVM 原生 double (DADD 累加)，item.val 必须走 BSM_GET_PROP_DOUBLE 零装箱直读；
+		// ⑤ 循环体内必须 0 次 Double.valueOf 堆分配。
+		try {
+			var m = magicFunc.getClass().getDeclaredMethod("call0Double", JSContext.class, Object.class);
+			if (m.getReturnType() != double.class) {
+				throw new IllegalStateException("magicFunc call0Double must return primitive double, but got: " + m.getReturnType());
+			}
+		} catch (NoSuchMethodException e) {
+			throw new IllegalStateException("magicFunc must generate specialized call0Double method directly on " + magicFunc.getClass(), e);
+		}
+
+		// 4. 初始正确性校验 (逐 bit 浮点对齐校验)
 		verifyOnce("Setup-ColdCheck");
 	}
 

@@ -1441,11 +1441,92 @@ public class JSCompiler {
 			if ((un.op == TokenType.PLUS_PLUS || un.op == TokenType.MINUS_MINUS)
 			    && un.expr instanceof Node.IdentifierExpr ident
 			    && ident.name.equals(name)) {
+				if (isBoundedIntLoopVar(name, ctx)) {
+					return VarType.INT;
+				}
 				return VarType.DOUBLE;
 			}
 			return findAssignedType(name, un.expr, ctx);
 		}
 		return null;
+	}
+
+	private static boolean isBoundedIntLoopVar(String name, CompileContext ctx) {
+		if (ctx == null || ctx.rootNode == null) return false;
+		return findBoundedForLoop(name, ctx.rootNode);
+	}
+
+	private static boolean findBoundedForLoop(String name, Node node) {
+		if (node == null) return false;
+		if (node instanceof Node.ForStmt forStmt) {
+			if (isLoopVarMatching(name, forStmt)) {
+				return true;
+			}
+		}
+		boolean[] found = new boolean[1];
+		forEachChildNode(node, child -> {
+			if (!found[0] && findBoundedForLoop(name, child)) {
+				found[0] = true;
+			}
+		});
+		return found[0];
+	}
+
+	private static boolean isLoopVarMatching(String name, Node.ForStmt f) {
+		boolean initMatch = false;
+		if (f.init instanceof Node.VarDecl vd && vd.name.equals(name)) {
+			if (vd.init instanceof Node.LiteralExpr lit && lit.value instanceof Number num) {
+				double v = num.doubleValue();
+				if (v >= 0 && v <= 1_000_000_000 && v == Math.floor(v)) initMatch = true;
+			}
+		} else if (f.init instanceof Node.AssignExpr assign && assign.target instanceof Node.IdentifierExpr id && id.name.equals(name)) {
+			if (assign.value instanceof Node.LiteralExpr lit && lit.value instanceof Number num) {
+				double v = num.doubleValue();
+				if (v >= 0 && v <= 1_000_000_000 && v == Math.floor(v)) initMatch = true;
+			}
+		}
+		if (!initMatch) return false;
+
+		if (f.condition instanceof Node.BinaryExpr bin) {
+			if (bin.left instanceof Node.IdentifierExpr id && id.name.equals(name)) {
+				if (bin.op == TokenType.LT || bin.op == TokenType.LTE) {
+					boolean boundOk = false;
+					if (bin.right instanceof Node.LiteralExpr lit && lit.value instanceof Number num) {
+						double v = num.doubleValue();
+						if (v >= 0 && v <= 1_000_000_000) boundOk = true;
+					} else if (bin.right instanceof Node.MemberAccessExpr mem && "length".equals(mem.property)) {
+						boundOk = true;
+					}
+					if (boundOk) {
+						if (f.update instanceof Node.UnaryExpr un && (un.op == TokenType.PLUS_PLUS)
+						    && un.expr instanceof Node.IdentifierExpr uid && uid.name.equals(name)) {
+							return !hasAssignmentTo(name, f.body);
+						}
+					}
+				}
+			}
+		}
+		return false;
+	}
+
+	private static boolean hasAssignmentTo(String name, Node node) {
+		if (node == null) return false;
+		if (node instanceof Node.AssignExpr assign) {
+			if (assign.target instanceof Node.IdentifierExpr id && id.name.equals(name)) return true;
+		}
+		if (node instanceof Node.UnaryExpr un) {
+			if ((un.op == TokenType.PLUS_PLUS || un.op == TokenType.MINUS_MINUS)
+			    && un.expr instanceof Node.IdentifierExpr id && id.name.equals(name)) {
+				return true;
+			}
+		}
+		boolean[] found = new boolean[1];
+		forEachChildNode(node, child -> {
+			if (!found[0] && hasAssignmentTo(name, child)) {
+				found[0] = true;
+			}
+		});
+		return found[0];
 	}
 
 	private static boolean isZeroLiteral(Node node) {
@@ -3855,7 +3936,7 @@ public class JSCompiler {
 		List<Node.VarDecl> varDecls     = new ArrayList<>();
 		collectVarDecls(body, varDecls);
 		for (Node.VarDecl vd : varDecls) {
-			if (isVarUsedAsNumeric(vd.name, body)) {
+			if (isVarUsedAsNumeric(vd.name, body) || isVarStrictlyNumeric(vd.name, vd.init, body)) {
 				numericNames.add(vd.name);
 			}
 		}
@@ -3866,6 +3947,38 @@ public class JSCompiler {
 			}
 		}
 		return true;
+	}
+
+	private static boolean isVarStrictlyNumeric(String name, Node init, Node body) {
+		if (init == null || !isNumericExpr(init)) return false;
+		if (isIdentUsedAsObject(name, body)) return false;
+		return !isAssignedNonNumeric(name, body);
+	}
+
+	private static boolean isAssignedNonNumeric(String name, Node node) {
+		if (node == null) return false;
+		if (node instanceof Node.AssignExpr assign) {
+			if (assign.target instanceof Node.IdentifierExpr target && target.name.equals(name)) {
+				if (assign.op == TokenType.ASSIGN) {
+					if (assign.value instanceof Node.BinaryExpr bin) {
+						if (bin.op == TokenType.PLUS) {
+							if (isStringExpr(bin.left) || isStringExpr(bin.right)) return true;
+						}
+					} else if (!isNumericExpr(assign.value)) {
+						return true;
+					}
+				} else if (assign.op == TokenType.PLUS_ASSIGN) {
+					if (isStringExpr(assign.value)) return true;
+				}
+			}
+		}
+		boolean[] found = new boolean[1];
+		forEachChildNode(node, child -> {
+			if (!found[0] && isAssignedNonNumeric(name, child)) {
+				found[0] = true;
+			}
+		});
+		return found[0];
 	}
 
 	private static boolean isNumericReturnExpr(Node node, Set<String> params, String functionName) {
@@ -3888,8 +4001,8 @@ public class JSCompiler {
 			if (bin.op == TokenType.PLUS) {
 				return isNumericReturnExpr(bin.left, params, functionName)
 				       && isNumericReturnExpr(bin.right, params, functionName)
-				       && hasProvenNumericExpr(bin.left, functionName)
-				       && hasProvenNumericExpr(bin.right, functionName);
+				       && hasProvenNumericExpr(bin.left, params, functionName)
+				       && hasProvenNumericExpr(bin.right, params, functionName);
 			}
 			return false;
 		}
@@ -3898,6 +4011,9 @@ public class JSCompiler {
 		}
 		if (node instanceof Node.CallExpr call) {
 			if (isMathCall(call, null)) {
+				return true;
+			}
+			if (isKnownNumericCall(call)) {
 				return true;
 			}
 			if (call.callee instanceof Node.IdentifierExpr ident && ident.name.equals(functionName)) {
@@ -3912,12 +4028,13 @@ public class JSCompiler {
 		return false;
 	}
 
-	private static boolean hasProvenNumericExpr(Node node, String functionName) {
+	private static boolean hasProvenNumericExpr(Node node, Set<String> params, String functionName) {
 		if (node == null) return false;
 		if (node instanceof Node.LiteralExpr lit && lit.value instanceof Number) return true;
+		if (node instanceof Node.IdentifierExpr ident && params != null && params.contains(ident.name)) return true;
 		if (node instanceof Node.BinaryExpr bin) {
 			if (bin.op == TokenType.PLUS) {
-				return hasProvenNumericExpr(bin.left, functionName) && hasProvenNumericExpr(bin.right, functionName);
+				return hasProvenNumericExpr(bin.left, params, functionName) && hasProvenNumericExpr(bin.right, params, functionName);
 			}
 			return isNumericBinaryOp(bin.op);
 		}
@@ -3926,6 +4043,7 @@ public class JSCompiler {
 		}
 		if (node instanceof Node.CallExpr call) {
 			if (isMathCall(call, null)) return true;
+			if (isKnownNumericCall(call)) return true;
 			if (functionName != null && call.callee instanceof Node.IdentifierExpr ident && ident.name.equals(functionName)) {
 				return true;
 			}

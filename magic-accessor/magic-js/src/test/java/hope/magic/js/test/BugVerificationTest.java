@@ -1041,6 +1041,34 @@ public class BugVerificationTest {
 		Assertions.assertEquals(SymbolTable.NO_SYMBOL, s.getPropertyId(100));
 		Assertions.assertEquals(JSShape.TYPE_UNKNOWN, s.getSlotType(100));
 	}
+
+	@Test
+	public void testGradientShapeSpecialization() throws Throwable {
+		JSContext cx = new JSContext();
+		cx.eval("""
+			test_data_1 = [];
+			for (var i = 0; i < 2000; i++) {
+				test_data_1[i] = { val: 10.5 };
+			}
+		""");
+		String accessCode = """
+			var data = test_data_1;
+			var total = 0;
+			for (var i = 0; i < 2000; i++) {
+				var item = data[i];
+				total = total + item.val;
+			}
+			return total;
+		""";
+		JSFunction magicFunc = (JSFunction) cx.eval("(function() {\n" + accessCode + "\n})");
+
+		// 验证是否成功生成并特化了 call0Double 原生方法
+		Assertions.assertDoesNotThrow(() -> magicFunc.getClass().getMethod("call0Double", JSContext.class, Object.class),
+				"Specialized double method call0Double must be generated");
+
+		double res = magicFunc.call0Double(cx, null);
+		Assertions.assertEquals(21000.0, res, 1e-6);
+	}
 }
 
 

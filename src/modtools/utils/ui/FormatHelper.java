@@ -51,9 +51,26 @@ public class FormatHelper {
 	}
 
 	public static String fixed(float value, int digits) {
-		if (Float.isNaN(value)) return "NAN";
+		if (Float.isNaN(value)) return "NaN";
 		if (Float.isInfinite(value)) return value > 0 ? "+∞" : "-∞";
 		return digits <= 4 ? Strings.autoFixed(value, digits) : Strings.fixed(value, digits);
+	}
+
+	private static final char[] HEX_DIGITS = "0123456789ABCDEF".toCharArray();
+
+	/**
+	 * 固定输出 8 位 16 进制（如颜色 0xFFC66DFF），0 分配
+	 */
+	public static StringBuilder appendHex8(StringBuilder sb, int val) {
+		sb.append(HEX_DIGITS[(val >>> 28) & 0xF]);
+		sb.append(HEX_DIGITS[(val >>> 24) & 0xF]);
+		sb.append(HEX_DIGITS[(val >>> 20) & 0xF]);
+		sb.append(HEX_DIGITS[(val >>> 16) & 0xF]);
+		sb.append(HEX_DIGITS[(val >>> 12) & 0xF]);
+		sb.append(HEX_DIGITS[(val >>> 8) & 0xF]);
+		sb.append(HEX_DIGITS[(val >>> 4) & 0xF]);
+		sb.append(HEX_DIGITS[val & 0xF]);
+		return sb;
 	}
 
 	// 去除颜色

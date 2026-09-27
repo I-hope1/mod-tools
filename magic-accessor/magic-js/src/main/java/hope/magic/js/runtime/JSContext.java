@@ -2903,6 +2903,17 @@ public class JSContext {
 		public static final JSObject URI_ERROR       = createErrorConstructor("URIError");
 		public static final JSObject EVAL_ERROR      = createErrorConstructor("EvalError");
 
+		static {
+			ERROR.put("captureStackTrace", (JSFunction) (cx, thisObj, args) -> {
+				if (args.length > 0 && args[0] instanceof JSObject target) {
+					Object ctorOpt = args.length > 1 ? args[1] : null;
+					JSStackTrace.captureStackTrace(target, ctorOpt);
+				}
+				return JSUndefined.INSTANCE;
+			});
+			ERROR.put("stackTraceLimit", JSStackTrace.DEFAULT_STACK_TRACE_LIMIT);
+		}
+
 		public static JSObject createErrorInstance(JSObject constructor, String message) {
 			try {
 				if (constructor instanceof JSFunction fn) {
@@ -2959,6 +2970,7 @@ public class JSContext {
 					} else {
 						err.put("message", "");
 					}
+					JSStackTrace.attach(err, new Throwable(), 1);
 					return err;
 				}
 			}
@@ -4517,6 +4529,10 @@ public class JSContext {
 	}
 
 	public Object eval(String code) {
+		return eval(code, "eval.js");
+	}
+
+	public Object eval(String code, String sourceFile) {
 		JSContext old = CURRENT.get();
 		CURRENT.set(this);
 		try {
@@ -4526,10 +4542,10 @@ public class JSContext {
 			Node.Program program = parser.parse();
 
 			if (ModuleTransformer.hasModuleSyntax(program)) {
-				return evalModule(code);
+				return evalModule(code, sourceFile != null ? sourceFile : "eval_module.js");
 			}
 
-			JSScript script = JSCompiler.compile(program);
+			JSScript script = JSCompiler.compile(program, sourceFile != null ? sourceFile : "eval.js");
 			return script.run(this);
 		} catch (Throwable t) {
 			if (t instanceof RuntimeException) {
@@ -4542,19 +4558,24 @@ public class JSContext {
 	}
 
 	public Object evalModule(String code) {
+		return evalModule(code, "eval_module.js");
+	}
+
+	public Object evalModule(String code, String filename) {
 		JSContext old = CURRENT.get();
 		CURRENT.set(this);
 		try {
-			JSFunction moduleFunc = JSCompiler.compileModule(code, "eval_module.js");
+			String fn = (filename != null && !filename.isEmpty()) ? filename : "eval_module.js";
+			JSFunction moduleFunc = JSCompiler.compileModule(code, fn);
 			JSObject   exports    = new JSObject();
-			JSModule   module     = new JSModule("eval_module", "eval_module.js", "", null);
+			JSModule   module     = new JSModule("eval_module", fn, "", null);
 			module.setExports(exports);
 			RequireFunction localRequire = getModuleManager().createRequireFunction(module);
 			Object[] args = new Object[]{
 			 exports,
 			 localRequire,
 			 module,
-			 "eval_module.js",
+			 fn,
 			 ""
 			};
 			moduleFunc.call(this, exports, args);

@@ -1371,6 +1371,17 @@ public class JSOps {
 			super(JSOps.toStr(value));
 			this.value = value;
 		}
+
+		@Override
+		public String getMessage() {
+			if (value instanceof JSObject jo) {
+				Object stack = jo.get("stack");
+				if (stack != null && stack != JSUndefined.INSTANCE) {
+					return JSOps.toStr(stack);
+				}
+			}
+			return super.getMessage();
+		}
 	}
 
 	public static RuntimeException throwValue(Object val) {

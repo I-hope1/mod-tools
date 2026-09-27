@@ -64,11 +64,18 @@ public class JSCompiler {
 		return sw.toString();
 	}
 
+	public static final ThreadLocal<String>           CURRENT_SOURCE_FILE     = new ThreadLocal<>();
+	public static final ConcurrentHashMap<String, String> FUNCTION_NAMES      = new ConcurrentHashMap<>();
+
 	public static JSScript compile(String code) throws Exception {
+		return compile(code, "eval.js");
+	}
+
+	public static JSScript compile(String code, String sourceFile) throws Exception {
 		JSLexer      lexer   = new JSLexer(code);
 		JSParser     parser  = new JSParser(lexer.tokenize());
 		Node.Program program = parser.parse();
-		return compile(program);
+		return compile(program, sourceFile);
 	}
 
 	public static class ScriptClassLoader extends ClassLoader {
@@ -98,12 +105,18 @@ public class JSCompiler {
 	private static final ThreadLocal<Set<String>>       CURRENT_NUMERIC_METHODS = new ThreadLocal<>();
 
 	public static byte[] compileToBytes(String code) {
+		return compileToBytes(code, "eval.js");
+	}
+
+	public static byte[] compileToBytes(String code, String sourceFile) {
 		ClassLoader parent = Thread.currentThread().getContextClassLoader();
 		if (parent == null) parent = JSCompiler.class.getClassLoader();
 		ScriptClassLoader scriptLoader = new ScriptClassLoader(parent);
 
-		ClassLoader prev = CURRENT_LOADER.get();
+		ClassLoader prevLoader = CURRENT_LOADER.get();
+		String prevFile = CURRENT_SOURCE_FILE.get();
 		CURRENT_LOADER.set(scriptLoader);
+		CURRENT_SOURCE_FILE.set(sourceFile != null && !sourceFile.isEmpty() ? sourceFile : "eval.js");
 		try {
 			JSLexer      lexer         = new JSLexer(code);
 			JSParser     parser        = new JSParser(lexer.tokenize());
@@ -113,21 +126,32 @@ public class JSCompiler {
 			String       className     = "hope/magic/gen/MagicJSScript_" + SCRIPT_ID.incrementAndGet();
 			return generateScriptBytecode(className, foldedProgram);
 		} finally {
-			if (prev != null) {
-				CURRENT_LOADER.set(prev);
+			if (prevLoader != null) {
+				CURRENT_LOADER.set(prevLoader);
 			} else {
 				CURRENT_LOADER.remove();
+			}
+			if (prevFile != null) {
+				CURRENT_SOURCE_FILE.set(prevFile);
+			} else {
+				CURRENT_SOURCE_FILE.remove();
 			}
 		}
 	}
 
 	public static JSScript compile(Node.Program program) throws Exception {
+		return compile(program, "eval.js");
+	}
+
+	public static JSScript compile(Node.Program program, String sourceFile) throws Exception {
 		ClassLoader parent = Thread.currentThread().getContextClassLoader();
 		if (parent == null) parent = JSCompiler.class.getClassLoader();
 		ScriptClassLoader scriptLoader = new ScriptClassLoader(parent);
 
-		ClassLoader prev = CURRENT_LOADER.get();
+		ClassLoader prevLoader = CURRENT_LOADER.get();
+		String prevFile = CURRENT_SOURCE_FILE.get();
 		CURRENT_LOADER.set(scriptLoader);
+		CURRENT_SOURCE_FILE.set(sourceFile != null && !sourceFile.isEmpty() ? sourceFile : "eval.js");
 		try {
 			Node.Program modProg       = ModuleTransformer.transform(program);
 			Node.Program foldedProgram = ConstantFolder.fold(modProg);
@@ -136,10 +160,15 @@ public class JSCompiler {
 			Class<?>     loadedClass   = scriptLoader.defineScriptClass(className, classBytes);
 			return (JSScript) Magic.unsafe.allocateInstance(loadedClass); // 不需要<init>()V
 		} finally {
-			if (prev != null) {
-				CURRENT_LOADER.set(prev);
+			if (prevLoader != null) {
+				CURRENT_LOADER.set(prevLoader);
 			} else {
 				CURRENT_LOADER.remove();
+			}
+			if (prevFile != null) {
+				CURRENT_SOURCE_FILE.set(prevFile);
+			} else {
+				CURRENT_SOURCE_FILE.remove();
 			}
 		}
 	}
@@ -149,8 +178,10 @@ public class JSCompiler {
 		if (parent == null) parent = JSCompiler.class.getClassLoader();
 		ScriptClassLoader scriptLoader = new ScriptClassLoader(parent);
 
-		ClassLoader prev = CURRENT_LOADER.get();
+		ClassLoader prevLoader = CURRENT_LOADER.get();
+		String prevFile = CURRENT_SOURCE_FILE.get();
 		CURRENT_LOADER.set(scriptLoader);
+		CURRENT_SOURCE_FILE.set(filename != null && !filename.isEmpty() ? filename : "module.js");
 		try {
 			JSLexer        lexer         = new JSLexer(code);
 			JSParser       parser        = new JSParser(lexer.tokenize());
@@ -163,10 +194,15 @@ public class JSCompiler {
 			Class<?>       clazz         = scriptLoader.loadClass(funcClass.replace('/', '.'));
 			return (JSFunction) clazz.getDeclaredConstructor().newInstance();
 		} finally {
-			if (prev != null) {
-				CURRENT_LOADER.set(prev);
+			if (prevLoader != null) {
+				CURRENT_LOADER.set(prevLoader);
 			} else {
 				CURRENT_LOADER.remove();
+			}
+			if (prevFile != null) {
+				CURRENT_SOURCE_FILE.set(prevFile);
+			} else {
+				CURRENT_SOURCE_FILE.remove();
 			}
 		}
 	}
@@ -195,6 +231,9 @@ public class JSCompiler {
 		}
 		try {
 			ClassWriter cw = new FastClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+			String sourceFile = CURRENT_SOURCE_FILE.get();
+			if (sourceFile == null || sourceFile.isEmpty()) sourceFile = "eval.js";
+			cw.visitSource(sourceFile, null);
 			cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, className, null, IN_JSScript, null);
 
 			// 默认构造函数 <init>()
@@ -452,6 +491,7 @@ public class JSCompiler {
 		boolean isDoubleSpecializedMethod = false;
 		boolean isAsync                   = false;
 		int     scopeSlot                 = -1;
+		int     lastLineNumber            = -1;
 
 		final Deque<Label> breakTargets    = new ArrayDeque<>();
 		final Deque<Label> continueTargets = new ArrayDeque<>();
@@ -1540,7 +1580,17 @@ public class JSCompiler {
 		mv.visitMethodInsn(Opcodes.INVOKESPECIAL, funcClass, "<init>", "(L" + IN_JSContext + ";L" + IN_JSObject + ";)V", false);
 	}
 
+	private static void emitLineNumber(Node node, CompileContext ctx) {
+		if (node != null && node.line > 0 && node.line != ctx.lastLineNumber) {
+			Label label = new Label();
+			ctx.mv.visitLabel(label);
+			ctx.mv.visitLineNumber(node.line, label);
+			ctx.lastLineNumber = node.line;
+		}
+	}
+
 	private static void compileNode(Node node, CompileContext ctx, boolean needResult) {
+		emitLineNumber(node, ctx);
 		MethodVisitor mv = ctx.mv;
 
 		if (node instanceof VarDecl varDecl) {
@@ -4010,7 +4060,14 @@ public class JSCompiler {
 			if (body != null) {
 				cache.put(body, funcClassName);
 			}
+			String dotClassName = funcClassName.replace('/', '.');
+			if (functionName != null && !functionName.isEmpty()) {
+				FUNCTION_NAMES.put(dotClassName, functionName);
+			}
 			ClassWriter cw = new FastClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+			String sourceFile = CURRENT_SOURCE_FILE.get();
+			if (sourceFile == null || sourceFile.isEmpty()) sourceFile = "eval.js";
+			cw.visitSource(sourceFile, null);
 			cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, funcClassName, null, IN_JSObject, isAsync
 			 ? new String[]{Type.getInternalName(JSFunction.class), "hope/magic/js/runtime/JSLinker$AsyncJSFunction"}
 			 : new String[]{Type.getInternalName(JSFunction.class)});
@@ -4569,6 +4626,7 @@ public class JSCompiler {
 	}
 
 	private static void compileNodeAsInt(Node node, CompileContext ctx) {
+		emitLineNumber(node, ctx);
 		MethodVisitor mv = ctx.mv;
 
 		if (node instanceof Node.LiteralExpr lit) {
@@ -4672,6 +4730,7 @@ public class JSCompiler {
 	}
 
 	private static void compileNodeAsLong(Node node, CompileContext ctx) {
+		emitLineNumber(node, ctx);
 		MethodVisitor mv = ctx.mv;
 
 		if (node instanceof Node.LiteralExpr lit) {
@@ -4752,6 +4811,7 @@ public class JSCompiler {
 	}
 
 	private static void compileNodeAsDouble(Node node, CompileContext ctx) {
+		emitLineNumber(node, ctx);
 		MethodVisitor mv = ctx.mv;
 
 		if (node instanceof Node.LiteralExpr lit) {

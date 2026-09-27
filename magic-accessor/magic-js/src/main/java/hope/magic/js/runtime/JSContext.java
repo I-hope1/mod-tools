@@ -2790,11 +2790,14 @@ public class JSContext {
 		return CURRENT.get();
 	}
 
-	private final    ArrayDeque<Runnable> microtaskQueue = new ArrayDeque<>();
-	private final    Object               microtaskLock  = new Object();
-	private volatile boolean              hasMicrotasks  = false;
+	private ArrayDeque<Runnable> microtaskQueue = new ArrayDeque<>();
+	private ArrayDeque<Runnable> drainQueue     = new ArrayDeque<>();
+	private final   Object       microtaskLock  = new Object();
+	private volatile boolean     hasMicrotasks  = false;
+	private boolean              isDraining     = false;
 
 	public void queueMicrotask(Runnable task) {
+		if (task == null) return;
 		synchronized (microtaskLock) {
 			microtaskQueue.add(task);
 			hasMicrotasks = true;
@@ -2802,29 +2805,37 @@ public class JSContext {
 	}
 
 	public void drainMicrotasks() {
-		if (!hasMicrotasks) return;
+		if (!hasMicrotasks || isDraining) return;
 		drainMicrotasksSlow();
 	}
 
 	private void drainMicrotasksSlow() {
+		isDraining = true;
 		JSContext old = CURRENT.get();
 		CURRENT.set(this);
 		try {
 			while (true) {
-				Runnable task;
+				ArrayDeque<Runnable> local;
 				synchronized (microtaskLock) {
-					task = microtaskQueue.poll();
-					if (task == null) {
+					if (microtaskQueue.isEmpty()) {
 						hasMicrotasks = false;
 						break;
 					}
+					local = microtaskQueue;
+					microtaskQueue = drainQueue;
+					drainQueue = local;
 				}
-				try {
-					task.run();
-				} catch (Throwable ignored) {
+
+				while (!local.isEmpty()) {
+					Runnable task = local.poll();
+					try {
+						task.run();
+					} catch (Throwable ignored) {
+					}
 				}
 			}
 		} finally {
+			isDraining = false;
 			CURRENT.set(old);
 		}
 	}

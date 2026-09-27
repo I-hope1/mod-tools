@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit;
 @State(Scope.Benchmark)
 @Warmup(iterations = 3, time = 1, timeUnit = TimeUnit.SECONDS)
 @Measurement(iterations = 5, time = 1, timeUnit = TimeUnit.SECONDS)
-@Fork(value = 1, jvmArgsAppend = {
+@Fork(value = 3, jvmArgsAppend = {
 	"-XX:+UnlockDiagnosticVMOptions"
 })
 public class DoubleToStringJMHBenchmark {

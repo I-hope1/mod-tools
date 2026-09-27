@@ -80,6 +80,24 @@ tasks.register('jmh', JavaExec) {
 	}
 }
 
+tasks.register('jmhDoubleToString', JavaExec) {
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'org.openjdk.jmh.Main'
+	args = [
+			'hope.magic.example.DoubleToStringJMHBenchmark',
+			'-f', '1',
+			'-wi', '1',
+			'-w', '1s',
+			'-i', '2',
+			'-r', '1s',
+			'-bm', 'avgt',
+			'-tu', 'ns'
+	]
+	if (new File("F:/files/java/jdks/openjdk-21.0.2/bin/java.exe").exists()) {
+		executable = "F:/files/java/jdks/openjdk-21.0.2/bin/java.exe"
+	}
+}
+
 tasks.register('jmhWarmup1', JavaExec) {
 	classpath = sourceSets.main.runtimeClasspath
 	mainClass = 'org.openjdk.jmh.Main'

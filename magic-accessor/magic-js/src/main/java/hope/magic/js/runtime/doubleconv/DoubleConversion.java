@@ -57,6 +57,8 @@
 
 package hope.magic.js.runtime.doubleconv;
 
+import java.nio.charset.StandardCharsets;
+
 import hope.magic.runtime.Magic;
 import hope.magic.runtime.Schubfach;
 
@@ -76,29 +78,34 @@ public final class DoubleConversion {
     private static final ThreadLocal<DtoaBuffer> LOCAL_BUFFER =
             ThreadLocal.withInitial(() -> new DtoaBuffer(FastDtoa.kFastDtoaMaximalLength));
 
+    private static final ThreadLocal<byte[]> LOCAL_DIGITS =
+            ThreadLocal.withInitial(() -> new byte[24]);
+
     /**
-     * Converts a double number to its shortest string representation.
+     * Converts a double number to its shortest string representation according to ECMA-262 § 7.1.12.1.
+     * Formats directly into a Latin-1 byte buffer to avoid ThreadLocal DtoaBuffer, StringBuilder allocation,
+     * and char-to-byte transcoding overhead, mirroring OpenJDK's {@code DoubleToDecimal.toString} mechanism.
      *
      * @param value number to convert
      * @return formatted number
      */
     public static String toShortestString(final double value) {
-        final DtoaBuffer buffer = LOCAL_BUFFER.get();
-        buffer.reset();
-        final double absValue = Math.abs(value);
-
-        if (value < 0) {
-            buffer.isNegative = true;
+        if (Double.isNaN(value)) {
+            return "NaN";
+        }
+        if (value == Double.POSITIVE_INFINITY) {
+            return "Infinity";
+        }
+        if (value == Double.NEGATIVE_INFINITY) {
+            return "-Infinity";
+        }
+        if (value == 0.0) {
+            return "0";
         }
 
-        final long packed = Schubfach.toDecimal(absValue, buffer.chars);
-        if (packed == -1L) {
-            return String.valueOf(value);
-        }
-        buffer.decimalPoint = (int) (packed >> 32);
-        buffer.length = (int) packed;
-
-        return buffer.format(DtoaMode.SHORTEST, 0);
+        final byte[] str = new byte[32];
+        final int len = toShortestBytes(value, str, 0);
+        return new String(str, 0, len, StandardCharsets.ISO_8859_1);
     }
 
     /**
@@ -126,6 +133,106 @@ public final class DoubleConversion {
         buffer.length = (int) packed;
 
         buffer.format(sb, DtoaMode.SHORTEST, 0);
+    }
+
+    /**
+     * Formats the shortest representation of a double into the specified byte buffer
+     * using the ECMA-262 § 7.1.12.1 rules.
+     *
+     * @param value double value to format
+     * @param str target byte array
+     * @param pos starting offset
+     * @return final written offset (total bytes written = return value - starting offset)
+     */
+    public static int toShortestBytes(final double value, final byte[] str, int pos) {
+        if (Double.isNaN(value)) {
+            str[pos++] = 'N'; str[pos++] = 'a'; str[pos++] = 'N';
+            return pos;
+        }
+        if (value == Double.POSITIVE_INFINITY) {
+            str[pos++] = 'I'; str[pos++] = 'n'; str[pos++] = 'f'; str[pos++] = 'i';
+            str[pos++] = 'n'; str[pos++] = 'i'; str[pos++] = 't'; str[pos++] = 'y';
+            return pos;
+        }
+        if (value == Double.NEGATIVE_INFINITY) {
+            str[pos++] = '-';
+            str[pos++] = 'I'; str[pos++] = 'n'; str[pos++] = 'f'; str[pos++] = 'i';
+            str[pos++] = 'n'; str[pos++] = 'i'; str[pos++] = 't'; str[pos++] = 'y';
+            return pos;
+        }
+        if (value == 0.0) {
+            str[pos++] = '0';
+            return pos;
+        }
+
+        if (value < 0.0) {
+            str[pos++] = '-';
+        }
+        final double absValue = Math.abs(value);
+        final byte[] digits = LOCAL_DIGITS.get();
+        final long packed = Schubfach.toDecimal(absValue, digits);
+        if (packed == -1L) {
+            String s = String.valueOf(value);
+            for (int i = 0; i < s.length(); i++) {
+                str[pos++] = (byte) s.charAt(i);
+            }
+            return pos;
+        }
+
+        final int decimalPoint = (int) (packed >> 32);
+        final int len = (int) packed;
+
+        if (decimalPoint < -5 || decimalPoint > 21) {
+            str[pos++] = digits[0];
+            if (len > 1) {
+                str[pos++] = '.';
+                System.arraycopy(digits, 1, str, pos, len - 1);
+                pos += len - 1;
+            }
+            str[pos++] = 'e';
+            int exp = decimalPoint - 1;
+            if (exp > 0) {
+                str[pos++] = '+';
+            } else {
+                str[pos++] = '-';
+                exp = -exp;
+            }
+            if (exp < 10) {
+                str[pos++] = (byte) ('0' + exp);
+            } else if (exp < 100) {
+                str[pos++] = Schubfach.BYTE_DIGIT_TENS[exp];
+                str[pos++] = Schubfach.BYTE_DIGIT_ONES[exp];
+            } else {
+                int d = exp / 100;
+                str[pos++] = (byte) ('0' + d);
+                int rem = exp - d * 100;
+                str[pos++] = Schubfach.BYTE_DIGIT_TENS[rem];
+                str[pos++] = Schubfach.BYTE_DIGIT_ONES[rem];
+            }
+        } else if (decimalPoint <= 0) {
+            str[pos++] = '0';
+            str[pos++] = '.';
+            int padding = -decimalPoint;
+            for (int i = 0; i < padding; i++) {
+                str[pos++] = '0';
+            }
+            System.arraycopy(digits, 0, str, pos, len);
+            pos += len;
+        } else if (decimalPoint >= len) {
+            System.arraycopy(digits, 0, str, pos, len);
+            pos += len;
+            int zeros = decimalPoint - len;
+            for (int i = 0; i < zeros; i++) {
+                str[pos++] = '0';
+            }
+        } else {
+            System.arraycopy(digits, 0, str, pos, decimalPoint);
+            pos += decimalPoint;
+            str[pos++] = '.';
+            System.arraycopy(digits, decimalPoint, str, pos, len - decimalPoint);
+            pos += len - decimalPoint;
+        }
+        return pos;
     }
 
     /**

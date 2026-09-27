@@ -219,6 +219,39 @@ public final class Schubfach {
         return -1L;
     }
 
+    /**
+     * Direct byte[] overload of {@link #toDecimal(double, char[])} for Latin-1/ASCII
+     * byte buffer formatting without char-to-byte transcoding.
+     *
+     * @param v double value to format
+     * @param bytes byte array destination (at least 17 bytes)
+     * @return packed long containing (decimalPoint &lt;&lt; 32) | len, or -1L for non-finite
+     */
+    public static long toDecimal(double v, byte[] bytes) {
+        long bits = doubleToRawLongBits(v);
+        long t = bits & T_MASK;
+        int bq = (int) (bits >>> P - 1) & BQ_MASK;
+        if (bq < BQ_MASK) {
+            if (bq != 0) {
+                int mq = -Q_MIN + 1 - bq;
+                long c = C_MIN | t;
+                if (0 < mq & mq < P) {
+                    long f = c >> mq;
+                    if (f << mq == c) {
+                        return toBytes(f, 0, bytes);
+                    }
+                }
+                return toDecimal(-mq, c, 0, bytes);
+            }
+            if (t != 0) {
+                return toDecimal(Q_MIN, t, 0, bytes);
+            }
+            bytes[0] = '0';
+            return (1L << 32) | 1L;
+        }
+        return -1L;
+    }
+
     private static long toDecimal(int q, long c, int dk, char[] chars) {
         /*
          * The skeleton corresponds to figure 7 of [1].
@@ -315,6 +348,78 @@ public final class Schubfach {
         return toChars(cmp < 0 || cmp == 0 && (s & 0x1) == 0 ? s : t, k + dk, chars);
     }
 
+    private static long toDecimal(int q, long c, int dk, byte[] bytes) {
+        int out = (int) c & 0x1;
+        long cb = c << 2;
+        long cbr = cb + 2;
+        long cbl;
+        int k;
+
+        if (c != C_MIN | q == Q_MIN) {
+            cbl = cb - 2;
+            k = flog10pow2(q);
+        } else {
+            cbl = cb - 1;
+            k = flog10threeQuartersPow2(q);
+        }
+        int h = q + flog2pow10(-k) + 2;
+
+        long g1 = g1(k);
+        long g0 = g0(k);
+
+        long vb = rop(g1, g0, cb << h);
+        long vbl = rop(g1, g0, cbl << h);
+        long vbr = rop(g1, g0, cbr << h);
+
+        long s = vb >> 2;
+        if (s >= 100) {
+            long sp10 = 10 * multiplyHigh(s, 115_292_150_460_684_698L << 4);
+            long tp10 = sp10 + 10;
+            boolean upin = vbl + out <= sp10 << 2;
+            boolean wpin = (tp10 << 2) + out <= vbr;
+            if (upin != wpin) {
+                return toBytes(upin ? sp10 : tp10, k, bytes);
+            }
+        }
+
+        long t = s + 1;
+        boolean uin = vbl + out <= s << 2;
+        boolean win = (t << 2) + out <= vbr;
+        if (uin != win) {
+            return toBytes(uin ? s : t, k + dk, bytes);
+        }
+        long cmp = vb - (s + t << 1);
+        return toBytes(cmp < 0 || cmp == 0 && (s & 0x1) == 0 ? s : t, k + dk, bytes);
+    }
+
+    @Stable
+    public static final byte[] BYTE_DIGIT_TENS = {
+        '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
+        '1', '1', '1', '1', '1', '1', '1', '1', '1', '1',
+        '2', '2', '2', '2', '2', '2', '2', '2', '2', '2',
+        '3', '3', '3', '3', '3', '3', '3', '3', '3', '3',
+        '4', '4', '4', '4', '4', '4', '4', '4', '4', '4',
+        '5', '5', '5', '5', '5', '5', '5', '5', '5', '5',
+        '6', '6', '6', '6', '6', '6', '6', '6', '6', '6',
+        '7', '7', '7', '7', '7', '7', '7', '7', '7', '7',
+        '8', '8', '8', '8', '8', '8', '8', '8', '8', '8',
+        '9', '9', '9', '9', '9', '9', '9', '9', '9', '9'
+    };
+
+    @Stable
+    public static final byte[] BYTE_DIGIT_ONES = {
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'
+    };
+
     @Stable
     private static final char[] DIGIT_TENS = {
         '0', '0', '0', '0', '0', '0', '0', '0', '0', '0',
@@ -342,6 +447,44 @@ public final class Schubfach {
         '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
         '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'
     };
+
+    private static long toBytes(long f, int e, byte[] bytes) {
+        while (f % 10_000 == 0) {
+            f /= 10_000;
+            e += 4;
+        }
+        while (f % 100 == 0) {
+            f /= 100;
+            e += 2;
+        }
+        if (f % 10 == 0) {
+            f /= 10;
+            e++;
+        }
+
+        int len = flog10pow2(Long.SIZE - numberOfLeadingZeros(f));
+        if (f >= pow10(len)) {
+            len += 1;
+        }
+
+        int decimalPoint = len + e;
+        long temp = f;
+        int i = len - 1;
+        while (temp >= 100) {
+            int r = (int) (temp % 100);
+            temp /= 100;
+            bytes[i--] = BYTE_DIGIT_ONES[r];
+            bytes[i--] = BYTE_DIGIT_TENS[r];
+        }
+        if (temp >= 10) {
+            int r = (int) temp;
+            bytes[i--] = BYTE_DIGIT_ONES[r];
+            bytes[i] = BYTE_DIGIT_TENS[r];
+        } else {
+            bytes[0] = (byte) ('0' + (int) temp);
+        }
+        return ((long) decimalPoint << 32) | (len & 0xFFFF_FFFFL);
+    }
 
     private static long toChars(long f, int e, char[] chars) {
         while (f % 10_000 == 0) {

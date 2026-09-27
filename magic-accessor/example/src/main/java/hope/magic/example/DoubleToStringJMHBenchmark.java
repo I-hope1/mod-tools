@@ -45,6 +45,7 @@ public class DoubleToStringJMHBenchmark {
 
 	private final StringBuilder sharedSb = new StringBuilder(64);
 	private final char[] rawCharBuffer = new char[32];
+	private final byte[] rawByteBuffer = new byte[32];
 	private final byte[] jdkByteBuffer = new byte[32];
 	private int counter = 0;
 
@@ -110,6 +111,12 @@ public class DoubleToStringJMHBenchmark {
 	public void c1_mixed_5_core_schubfachRaw(Blackhole bh) {
 		double v = randomDoubles[counter++ & (PATTERN_SIZE - 1)];
 		bh.consume(Schubfach.toDecimal(Math.abs(v), rawCharBuffer));
+	}
+
+	@Benchmark
+	public void c1_mixed_6_core_schubfachByteRaw(Blackhole bh) {
+		double v = randomDoubles[counter++ & (PATTERN_SIZE - 1)];
+		bh.consume(Schubfach.toDecimal(Math.abs(v), rawByteBuffer));
 	}
 
 	// =========================================================================

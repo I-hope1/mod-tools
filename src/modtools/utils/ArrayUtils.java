@@ -99,12 +99,11 @@ public class ArrayUtils {
 		return 0 <= i && i < list.size ? list.get(i) : null;
 	}
 
-	public static void forEach(Object arr, AllCons cons, Cons<Runnable> appendCallback) {
+	public static void forEach(Object arr, AllCons cons) {
 		Class<?> type = arr.getClass().getComponentType();
 		if (type == null) throw new IllegalArgumentException("Not an array: " + arr);
 		if (!type.isPrimitive()) {
 			int len = Array.getLength(arr);
-			appendCallback.get(() -> cons.append(null));
 			for (int i = 0; i < len; i++) {
 				cons.get(Array.get(arr, i));
 			}
@@ -112,35 +111,27 @@ public class ArrayUtils {
 		}
 		switch (arr) {
 			case int[] ia -> {
-				appendCallback.get(() -> cons.append(0));
 				for (int i : ia) cons.get(i);
 			}
 			case float[] fa -> {
-				appendCallback.get(() -> cons.append(0F));
 				for (float i : fa) cons.get(i);
 			}
 			case double[] da -> {
-				appendCallback.get(() -> cons.append(0D));
 				for (double i : da) cons.get(i);
 			}
 			case long[] la -> {
-				appendCallback.get(() -> cons.append(0L));
 				for (long i : la) cons.get(i);
 			}
 			case boolean[] ba -> {
-				appendCallback.get(() -> cons.append(false));
 				for (boolean i : ba) cons.get(i);
 			}
 			case char[] ca -> {
-				appendCallback.get(() -> cons.append('\0'));
 				for (char i : ca) cons.get(i);
 			}
 			case byte[] ba -> {
-				appendCallback.get(() -> cons.append((byte) 0));
 				for (byte i : ba) cons.get(i);
 			}
 			case short[] sa -> {
-				appendCallback.get(() -> cons.append((short) 0));
 				for (short i : sa) cons.get(i);
 			}
 			default -> throw new IllegalStateException("Unexpected value: " + arr);

@@ -42,7 +42,13 @@ public final class BuiltinProtector {
 			JSContext.SLOT_PRINT,
 			JSContext.SLOT_JAVA,
 			JSContext.SLOT_ERROR,
-			JSContext.SLOT_TYPE_ERROR
+			JSContext.SLOT_TYPE_ERROR,
+			JSContext.SLOT_JSON,
+			JSContext.SLOT_PARSE_INT,
+			JSContext.SLOT_PARSE_FLOAT,
+			JSContext.SLOT_IS_NAN,
+			JSContext.SLOT_IS_FINITE,
+			JSContext.SLOT_EVAL
 		};
 		for (int slot : slots) {
 			if (slot >= 0 && slot < 64) {
@@ -165,6 +171,12 @@ public final class BuiltinProtector {
 		else if (slot == JSContext.SLOT_JAVA) c = JSContext.LazyMisc.JAVA;
 		else if (slot == JSContext.SLOT_ERROR) c = JSContext.LazyErrors.ERROR;
 		else if (slot == JSContext.SLOT_TYPE_ERROR) c = JSContext.LazyErrors.TYPE_ERROR;
+		else if (slot == JSContext.SLOT_JSON) c = JSJSON.JSON;
+		else if (slot == JSContext.SLOT_PARSE_INT) c = JSContext.LazyMisc.PARSE_INT;
+		else if (slot == JSContext.SLOT_PARSE_FLOAT) c = JSContext.LazyMisc.PARSE_FLOAT;
+		else if (slot == JSContext.SLOT_IS_NAN) c = JSContext.LazyMisc.IS_NAN;
+		else if (slot == JSContext.SLOT_IS_FINITE) c = JSContext.LazyMisc.IS_FINITE;
+		else if (slot == JSContext.SLOT_EVAL) c = JSContext.LazyMisc.EVAL;
 
 		if (c != null) {
 			GLOBAL_CONSTANTS[slot] = c;

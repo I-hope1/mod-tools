@@ -524,6 +524,12 @@ public class JSContext {
 	public static final int SLOT_DOLLAR_262      = getGlobalSlot("$262");
 	public static final int SLOT_SYMBOL          = getGlobalSlot("Symbol");
 	public static final int SLOT_REQUIRE         = getGlobalSlot("require");
+	public static final int SLOT_JSON            = getGlobalSlot("JSON");
+	public static final int SLOT_PARSE_INT       = getGlobalSlot("parseInt");
+	public static final int SLOT_PARSE_FLOAT     = getGlobalSlot("parseFloat");
+	public static final int SLOT_IS_NAN          = getGlobalSlot("isNaN");
+	public static final int SLOT_IS_FINITE       = getGlobalSlot("isFinite");
+	public static final int SLOT_EVAL            = getGlobalSlot("eval");
 
 	public static volatile Consumer<JSContext> realmCreatedListener;
 
@@ -979,6 +985,36 @@ public class JSContext {
 			String flags = args.length > 1 && args[1] != null && args[1] != JSUndefined.INSTANCE ? JSOps.toStr(args[1]) : "";
 			return new JSRegExp(pat, flags);
 		};
+
+		static final JSBuiltinMethod PARSE_INT = makeMethod("parseInt", 2, (cx, thisObj, args) -> {
+			Object s = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
+			Object r = args.length > 1 ? args[1] : JSUndefined.INSTANCE;
+			return JSOps.parseInt(s, r);
+		});
+
+		static final JSBuiltinMethod PARSE_FLOAT = makeMethod("parseFloat", 1, (cx, thisObj, args) -> {
+			Object s = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
+			return JSOps.parseFloat(s);
+		});
+
+		static final JSBuiltinMethod IS_NAN = makeMethod("isNaN", 1, (cx, thisObj, args) -> {
+			Object v = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
+			return JSOps.isNaN(v);
+		});
+
+		static final JSBuiltinMethod IS_FINITE = makeMethod("isFinite", 1, (cx, thisObj, args) -> {
+			Object v = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
+			return JSOps.isFinite(v);
+		});
+
+		static final JSBuiltinMethod EVAL = makeMethod("eval", 1, (cx, thisObj, args) -> {
+			if (args.length == 0) return JSUndefined.INSTANCE;
+			Object arg = args[0];
+			if (!(arg instanceof String s)) {
+				return arg;
+			}
+			return (cx != null ? cx : JSContext.current()).eval(s);
+		});
 	}
 
 	static class LazyConsole {
@@ -2823,6 +2859,12 @@ public class JSContext {
 		public static final JSObject            PROMISE_PROTOTYPE = LazyPromise.PROMISE_PROTOTYPE;
 		public static final JSObject            PROMISE           = LazyPromise.PROMISE;
 		public static final JSFunction          QUEUE_MICROTASK   = LazyPromise.QUEUE_MICROTASK;
+		public static final JSObject            JSON              = JSJSON.JSON;
+		public static final JSFunction          PARSE_INT         = LazyMisc.PARSE_INT;
+		public static final JSFunction          PARSE_FLOAT       = LazyMisc.PARSE_FLOAT;
+		public static final JSFunction          IS_NAN            = LazyMisc.IS_NAN;
+		public static final JSFunction          IS_FINITE         = LazyMisc.IS_FINITE;
+		public static final JSFunction          EVAL              = LazyMisc.EVAL;
 	}
 
 	public static JSOps.JSException makeTypeError(String message) {
@@ -3173,6 +3215,27 @@ public class JSContext {
 			ctor.put("NEGATIVE_INFINITY", Double.NEGATIVE_INFINITY);
 			ctor.put("MAX_VALUE", Double.MAX_VALUE);
 			ctor.put("MIN_VALUE", Double.MIN_VALUE);
+			ctor.put("EPSILON", JSOps.EPSILON);
+			ctor.put("MAX_SAFE_INTEGER", (double) JSOps.MAX_SAFE_INTEGER);
+			ctor.put("MIN_SAFE_INTEGER", (double) JSOps.MIN_SAFE_INTEGER);
+			ctor.put("parseInt", LazyMisc.PARSE_INT);
+			ctor.put("parseFloat", LazyMisc.PARSE_FLOAT);
+			ctor.put("isNaN", makeMethod("isNaN", 1, (cx, thisObj, args) -> {
+				Object v = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
+				return JSOps.numberIsNaN(v);
+			}));
+			ctor.put("isFinite", makeMethod("isFinite", 1, (cx, thisObj, args) -> {
+				Object v = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
+				return JSOps.numberIsFinite(v);
+			}));
+			ctor.put("isInteger", makeMethod("isInteger", 1, (cx, thisObj, args) -> {
+				Object v = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
+				return JSOps.numberIsInteger(v);
+			}));
+			ctor.put("isSafeInteger", makeMethod("isSafeInteger", 1, (cx, thisObj, args) -> {
+				Object v = args.length > 0 ? args[0] : JSUndefined.INSTANCE;
+				return JSOps.numberIsSafeInteger(v);
+			}));
 			return ctor;
 		}
 
@@ -3909,9 +3972,10 @@ public class JSContext {
 		 "NaN", "Infinity", "undefined",
 		 "Object", "Function", "Array", "String", "Boolean", "Number", "Symbol",
 		 "Date", "RegExp", "Error", "EvalError", "RangeError", "ReferenceError",
-		 "SyntaxError", "TypeError", "URIError", "Math",
+		 "SyntaxError", "TypeError", "URIError", "Math", "JSON",
 		 "Promise", "Proxy", "Reflect",
 		 "console", "print", "queueMicrotask",
+		 "parseInt", "parseFloat", "isNaN", "isFinite", "eval",
 		 "globalThis", "window", "global",
 		 "Packages", "Java", "java", "javax", "importClass", "importPackage", "importPackages", "JSOps", "$262"
 		);
@@ -4270,6 +4334,18 @@ public class JSContext {
 			val = getModuleManager().getRequireFunction();
 		} else if (slot == SLOT_IMPORT_PACKAGE || slot == SLOT_IMPORT_PACKAGES) {
 			val = LazyMisc.IMPORT_PACKAGE;
+		} else if (slot == SLOT_JSON) {
+			val = JSJSON.JSON;
+		} else if (slot == SLOT_PARSE_INT) {
+			val = LazyMisc.PARSE_INT;
+		} else if (slot == SLOT_PARSE_FLOAT) {
+			val = LazyMisc.PARSE_FLOAT;
+		} else if (slot == SLOT_IS_NAN) {
+			val = LazyMisc.IS_NAN;
+		} else if (slot == SLOT_IS_FINITE) {
+			val = LazyMisc.IS_FINITE;
+		} else if (slot == SLOT_EVAL) {
+			val = LazyMisc.EVAL;
 		}
 
 		if (val != null) {

@@ -721,8 +721,203 @@ public class JSOps {
 		return String.valueOf(val);
 	}
 
-	public static final long MAX_SAFE_INTEGER = 9007199254740991L;  // 2^53 - 1
-	public static final long MIN_SAFE_INTEGER = -9007199254740991L; // -(2^53 - 1)
+	public static final long   MAX_SAFE_INTEGER = 9007199254740991L;  // 2^53 - 1
+	public static final long   MIN_SAFE_INTEGER = -9007199254740991L; // -(2^53 - 1)
+	public static final double EPSILON          = 2.220446049250313e-16; // 2^-52
+
+	public static boolean isNaN(Object val) {
+		return Double.isNaN(toDouble(val));
+	}
+
+	public static boolean isFinite(Object val) {
+		return Double.isFinite(toDouble(val));
+	}
+
+	public static boolean numberIsNaN(Object val) {
+		return (val instanceof Number n) && Double.isNaN(n.doubleValue());
+	}
+
+	public static boolean numberIsFinite(Object val) {
+		return (val instanceof Number n) && Double.isFinite(n.doubleValue());
+	}
+
+	public static boolean numberIsInteger(Object val) {
+		if (val instanceof Number n) {
+			double d = n.doubleValue();
+			return Double.isFinite(d) && Math.floor(Math.abs(d)) == Math.abs(d);
+		}
+		return false;
+	}
+
+	public static boolean numberIsSafeInteger(Object val) {
+		if (val instanceof Number n) {
+			double d = n.doubleValue();
+			return Double.isFinite(d) && Math.floor(Math.abs(d)) == Math.abs(d) && Math.abs(d) <= MAX_SAFE_INTEGER;
+		}
+		return false;
+	}
+
+	/**
+	 * 严格遵循 ECMAScript (ECMA-262 § 19.2.5) 的 parseInt(string, radix) 规范。
+	 */
+	public static Object parseInt(Object strArg, Object radixArg) {
+		String str = toStr(strArg);
+		int len = str.length();
+		int idx = 0;
+		while (idx < len && (str.charAt(idx) <= ' ' || Character.isWhitespace(str.charAt(idx)))) {
+			idx++;
+		}
+		if (idx >= len) return Double.NaN;
+
+		int sign = 1;
+		char c = str.charAt(idx);
+		if (c == '-') {
+			sign = -1;
+			idx++;
+		} else if (c == '+') {
+			idx++;
+		}
+
+		int radix = 0;
+		if (radixArg != null && radixArg != JSUndefined.INSTANCE) {
+			radix = toInt(radixArg);
+		}
+
+		boolean stripPrefix = true;
+		if (radix != 0) {
+			if (radix < 2 || radix > 36) return Double.NaN;
+			if (radix != 16) stripPrefix = false;
+		} else {
+			radix = 10;
+		}
+
+		if (stripPrefix && (idx + 1 < len)) {
+			char c0 = str.charAt(idx);
+			char c1 = str.charAt(idx + 1);
+			if (c0 == '0' && (c1 == 'x' || c1 == 'X')) {
+				idx += 2;
+				radix = 16;
+			}
+		}
+
+		int start = idx;
+		while (idx < len) {
+			c = str.charAt(idx);
+			int digit;
+			if (c >= '0' && c <= '9') digit = c - '0';
+			else if (c >= 'a' && c <= 'z') digit = c - 'a' + 10;
+			else if (c >= 'A' && c <= 'Z') digit = c - 'A' + 10;
+			else break;
+			if (digit >= radix) break;
+			idx++;
+		}
+
+		if (start == idx) return Double.NaN;
+
+		boolean overflow = false;
+		long longVal = 0L;
+		double dblVal = 0.0;
+		for (int i = start; i < idx; i++) {
+			c = str.charAt(i);
+			int digit;
+			if (c >= '0' && c <= '9') digit = c - '0';
+			else if (c >= 'a' && c <= 'z') digit = c - 'a' + 10;
+			else digit = c - 'A' + 10;
+
+			if (!overflow) {
+				if (longVal <= (Long.MAX_VALUE - digit) / radix) {
+					longVal = longVal * radix + digit;
+				} else {
+					overflow = true;
+					dblVal = (double) longVal * radix + digit;
+				}
+			} else {
+				dblVal = dblVal * radix + digit;
+			}
+		}
+
+		if (!overflow) {
+			long signedLong = sign * longVal;
+			if (signedLong == 0 && sign < 0) {
+				return -0.0;
+			}
+			if (signedLong >= Integer.MIN_VALUE && signedLong <= Integer.MAX_VALUE) {
+				return (int) signedLong;
+			}
+			return (double) signedLong;
+		}
+
+		return sign * dblVal;
+	}
+
+	/**
+	 * 严格遵循 ECMAScript (ECMA-262 § 19.2.4) 的 parseFloat(string) 规范。
+	 */
+	public static Object parseFloat(Object strArg) {
+		String str = toStr(strArg);
+		int len = str.length();
+		int idx = 0;
+		while (idx < len && (str.charAt(idx) <= ' ' || Character.isWhitespace(str.charAt(idx)))) {
+			idx++;
+		}
+		if (idx >= len) return Double.NaN;
+
+		int start = idx;
+		int sign = 1;
+		char c = str.charAt(idx);
+		if (c == '-') {
+			sign = -1;
+			idx++;
+		} else if (c == '+') {
+			idx++;
+		}
+
+		if (str.startsWith("Infinity", idx)) {
+			return sign == 1 ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
+		}
+
+		boolean hasDigits = false;
+		while (idx < len && (c = str.charAt(idx)) >= '0' && c <= '9') {
+			hasDigits = true;
+			idx++;
+		}
+		if (idx < len && str.charAt(idx) == '.') {
+			idx++;
+			while (idx < len && (c = str.charAt(idx)) >= '0' && c <= '9') {
+				hasDigits = true;
+				idx++;
+			}
+		}
+		if (!hasDigits) return Double.NaN;
+
+		if (idx < len && ((c = str.charAt(idx)) == 'e' || c == 'E')) {
+			int next = idx + 1;
+			if (next < len && ((c = str.charAt(next)) == '+' || c == '-')) {
+				next++;
+			}
+			int expDigits = next;
+			while (expDigits < len && (c = str.charAt(expDigits)) >= '0' && c <= '9') {
+				expDigits++;
+			}
+			if (expDigits > next) {
+				idx = expDigits;
+			}
+		}
+
+		String sub = str.substring(start, idx);
+		try {
+			double d = Double.parseDouble(sub);
+			if (d == 0.0 && sign < 0) {
+				return -0.0;
+			}
+			if (d >= Integer.MIN_VALUE && d <= Integer.MAX_VALUE && (double) (int) d == d && !(d == 0.0 && Double.doubleToRawLongBits(d) < 0)) {
+				return (int) d;
+			}
+			return d;
+		} catch (NumberFormatException e) {
+			return Double.NaN;
+		}
+	}
 
 	/** 严格符合 ECMAScript (ECMA-262) 规范的 Number::toString 算法 */
 	public static String numberToString(double d) {

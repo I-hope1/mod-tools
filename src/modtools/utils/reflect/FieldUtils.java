@@ -47,7 +47,7 @@ public class FieldUtils {
 
 
 	public static <T> void walkAllConstOf(Class<?> cls, Cons2<Field, T> cons, Boolf<T> boolf,
-	                                  Object object) {
+	                                      Object object) {
 		for (Field field : cls.getDeclaredFields()) {
 			if (!Modifier.isStatic(field.getModifiers())) continue;
 			setOverride(field);
@@ -56,7 +56,7 @@ public class FieldUtils {
 		}
 	}
 	public static <T> void walkAllConstOf(Class<?> cls, Cons2<Field, T> cons, Class<T> filterClass,
-	                                   Object object) {
+	                                      Object object) {
 		for (Field field : cls.getDeclaredFields()) {
 			if (!Modifier.isStatic(field.getModifiers()) || !filterClass.isAssignableFrom(field.getType())) continue;
 			setOverride(field);
@@ -134,6 +134,32 @@ public class FieldUtils {
 		return $OffsetGetter.impl.fieldOffset(isStatic, f);
 	}
 
+	public static long getFieldPrimValue(Object o, long off, Class<?> type) {
+		if (type == long.class || type == double.class) {
+			return unsafe.getLong(o, off);
+		}
+		if (type == int.class || type == float.class) {
+			return (long) unsafe.getInt(o, off) & 0xFFFFFFFFL;
+		}
+
+		// 16 位宽：movzx / movsx 精准读 2 字节，绝不污染邻居
+		if (type == short.class) {
+			return (long) unsafe.getShort(o, off);
+		}
+		if (type == char.class) {
+			return (long) unsafe.getChar(o, off) & 0xFFFFL; // char 是无符号的
+		}
+
+		// 8 位宽：精准读 1 字节
+		if (type == byte.class) {
+			return (long) unsafe.getByte(o, off);
+		}
+		if (type == boolean.class) {
+			return unsafe.getBoolean(o, off) ? 1L : 0L;
+		}
+
+		throw new IllegalArgumentException("Not a primitive type: " + type);
+	}
 	/**
 	 * 不检查对象的合理性，但是不正确的参数会导致<b>JVM崩溃</b>
 	 * @param o   field.get(obj); obj不能为null，静态字段时，obj是类.
@@ -229,6 +255,7 @@ public class FieldUtils {
 			default -> null;
 		};
 	}
+
 }
 
 @SuppressWarnings("removal")

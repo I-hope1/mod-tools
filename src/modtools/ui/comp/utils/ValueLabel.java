@@ -31,6 +31,7 @@ import modtools.ui.comp.utils.Viewers.ViewerItem;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.menu.*;
 import modtools.utils.*;
+import modtools.utils.doubleconv.DoubleConversion;
 import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.FormatHelper;
@@ -49,12 +50,15 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public static final Object  unset  = new Object();
 	public static final Color   c_enum = new Color(0xFFC66D_FF);
 
+	public static long longNaN = Double.doubleToLongBits(Double.NaN);
+
 	public static final String NULL_MARK = "`*null";
 	public static final String ERROR     = "<ERROR>";
 	public static final String STR_EMPTY = "<EMPTY>";
 
 	private static       ValueLabel hoveredLabel;
 	private static       Object     hoveredVal;
+	private static       long       hoveredPrimVal;
 	private static final Point2     hoveredChunk = new Point2();
 
 	/** configuration */
@@ -68,12 +72,14 @@ public abstract class ValueLabel extends ExtendingLabel {
 	//endregion
 
 	//region Instance Fields
-	public Object   val;
-	public Class<?> type;
-	public int      maxItemCount   = STEP_SIZE;
+	public  Object   val;
+	public  long     primVal;
+	private boolean  primInited     = false;
+	public  Class<?> type;
+	public  int      maxItemCount   = STEP_SIZE;
 	/** 是否启用截断文本（当文本过长时，容易内存占用过大） */
-	public boolean
-	                enableTruncate = true,
+	public  boolean
+	                 enableTruncate = true,
 	/** 是否启用更新 */
 	enableUpdate = true;
 	/** 当前美化输出的嵌套深度（由 Viewers 管理，外部勿改） */
@@ -81,18 +87,20 @@ public abstract class ValueLabel extends ExtendingLabel {
 	/** 非空时覆盖 postAppendDelimiter() 中调度的默认分隔符（用于美化输出缩进） */
 	public Runnable overrideDelimiter = null;
 
-	public Func<Object, Object> valueFunc = o -> o;
-
 	public final IntMap<Object>                       startIndexMap   = new IntMap<>(); // startIndex -> value
 	public final IntIntMap                            endIndexMap     = new IntIntMap(); // startIndex -> endIndex
 	// 用于记录数组或map的类型
 	public final IdentityHashMap<Object, Class<?>>    valToType       = new IdentityHashMap<>();
 	// 用于记录数组或map的值
 	public final IdentityHashMap<Object, Object>      valToObj        = new IdentityHashMap<>();
+	// 用于记录数组或map的值
+	public final LongMap<Object>                      primValToObj    = new LongMap<>();
 	// 用于记录数组或map是否展开
 	public final IdentityHashMap<Object, Boolean>     expandVal       = new IdentityHashMap<>();
 	// 用于记录数组或map的更多按钮是否注册
 	public final IdentityHashMap<Object, DelegteProv> expandMoreClick = new IdentityHashMap<>();
+
+	private final IntSeq sortedKeys = new IntSeq();
 
 
 	private int bgIndex;
@@ -150,23 +158,18 @@ public abstract class ValueLabel extends ExtendingLabel {
 				hoveredChunk.set(UNSET_P);
 
 				int cursor = getCursor(x, y);
-				if (cursor == UNSET_I) return; // 提前退出
+				if (cursor == UNSET_I || sortedKeys.isEmpty()) return;
 
-				Keys keys1 = startIndexMap.keys();
-				keys.clear();
-				while (keys1.hasNext) keys.add(keys1.next());
-				keys.sort();
-
-				for (int i = keys.size - 1; i >= 0; i--) {
-					int    index   = keys.get(i);
-					Object o       = startIndexMap.get(index);
-					int    toIndex = endIndexMap.get(index);
+				// 直接复用已经排好序的 sortedKeys，开销降到几十纳秒级别
+				for (int i = sortedKeys.size - 1; i >= 0; i--) {
+					int index   = sortedKeys.get(i);
+					int toIndex = endIndexMap.get(index);
 
 					if (index <= cursor && cursor <= toIndex) {
 						hoveredChunk.set(index, toIndex);
 						hoveredLabel = ValueLabel.this;
-						hoveredVal = o;
-						return; // 找到最具体的对象后立即返回
+						hoveredVal = startIndexMap.get(index);
+						return;
 					}
 				}
 			}
@@ -178,6 +181,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			if (val != null) {
 				Class<?> type1 = valToType.get(val);
 				Object   obj   = valToObj.get(val);
+				if (obj == null && val instanceof Number n) obj = primValToObj.get(n.longValue());
 				if (type1 != null && obj != null) {
 					label = ItemValueLabel.of(obj, type1, () -> val);
 				}
@@ -211,9 +215,34 @@ public abstract class ValueLabel extends ExtendingLabel {
 	/** <b>PS:</b> 这可能会设置字段值 */
 	public void setNewVal(Object newVal) { }
 
-	public void setVal(Object newVal) {
+	public void setVal(boolean val) {
+		setVal(val ? 1L : 0L);
+	}
+	public void setVal(long newPrimVal) {
+		if (!type.isPrimitive()) throw new IllegalStateException(type + " should not call this method");
+
+		if (primInited && newPrimVal == this.primVal) return;
+		this.primVal = newPrimVal;
+		primInited = true;
 		try {
-			setValInternal(valueFunc.get(newVal));
+			setAndProcessTextPrim(newPrimVal);
+		} catch (Throwable th) {
+			resolveThrow(th);
+			text.setLength(0);
+			text.append(newPrimVal);
+		} finally {
+			if (afterSet != null) afterSet.run();
+		}
+		invalidateHierarchy();
+	}
+	public void setVal(Object newVal) {
+		if (type.isPrimitive()) {
+			if (newVal == null) return;
+			setVal(PrimPack.packObject(newVal));
+			return;
+		}
+		try {
+			setValInternal(newVal);
 		} catch (Throwable th) {
 			Log.err(th);
 			setValInternal(newVal);
@@ -239,21 +268,13 @@ public abstract class ValueLabel extends ExtendingLabel {
 		invalidateHierarchy();
 	}
 
-	public void setAndProcessText(Object val) {
-		text.setLength(0);
-		colorMap.clear();
-		startIndexMap.clear();
-		endIndexMap.clear();
-		// clearMouseEvents();
-		clearDrawRuns();
+	public void setAndProcessText(Object newVal) {
+		resetRender();
+		appendValue(newVal);
 
-		valToType.clear();
-		valToObj.clear();
-
-		bgIndex = 0;
-		prettyDepth = 0;
-		overrideDelimiter = null;
-		appendValue(val);
+		Keys k = startIndexMap.keys();
+		while (k.hasNext) sortedKeys.add(k.next());
+		sortedKeys.sort();
 
 		if (hover_outline.enabled()) {
 			Point2 chunk = hoveredChunk();
@@ -267,9 +288,56 @@ public abstract class ValueLabel extends ExtendingLabel {
 			text.append(ellipsis);
 		}
 	}
+	private void resetRender() {
+		text.setLength(0);
+		colorMap.clear();
+		startIndexMap.clear();
+		endIndexMap.clear();
+		// clearMouseEvents();
+		clearDrawRuns();
+
+		valToType.clear();
+		valToObj.clear();
+		primValToObj.clear();
+
+		bgIndex = 0;
+		prettyDepth = 0;
+		overrideDelimiter = null;
+
+		sortedKeys.clear();
+	}
+	public void setAndProcessTextPrim(long newPrimVal) {
+		resetRender();
+		if (type == int.class) {
+			appendValue(PrimPack.unpackInt(newPrimVal));
+		} else if (type == float.class) {
+			appendValue(PrimPack.unpackFloat(newPrimVal));
+		} else if (type == double.class) {
+			appendValue(PrimPack.unpackDouble(newPrimVal));
+		} else if (type == char.class) {
+			appendValue(PrimPack.unpackChar(newPrimVal));
+		} else if (type == short.class) {
+			appendValue(PrimPack.unpackShort(newPrimVal));
+		} else if (type == byte.class) {
+			appendValue(PrimPack.unpackByte(newPrimVal));
+		} else if (type == boolean.class) {
+			appendValue(PrimPack.unpackBoolean(newPrimVal));
+		} else if (type == long.class) {
+			appendValue(PrimPack.unpackLong(newPrimVal));
+		} else {
+			throw new IllegalArgumentException("Unsupported primitive type: " + type);
+		}
+
+		if (isTruncate()) {
+			text.setLength(truncate_length.getInt());
+			text.append(ellipsis);
+		}
+	}
 
 	public void clearVal() {
 		val = null;
+		primVal = 0;
+		primInited = false;
 		super.setText((CharSequence) null);
 		prefSizeInvalid = true;
 	}
@@ -350,7 +418,12 @@ public abstract class ValueLabel extends ExtendingLabel {
 	// 对于浮点数类型的处理 (包括 float 和 double)
 	public void appendValue(float val) {
 		startColor(Syntax.c_number);
-		text.append(FormatHelper.fixed(val, 2));
+		DoubleConversion.appendTo(text, val);
+		endColor();
+	}
+	public void appendValue(double val) {
+		startColor(Syntax.c_number);
+		DoubleConversion.appendTo(text, val);
 		endColor();
 	}
 
@@ -358,6 +431,11 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public void appendValue(char val) {
 		startColor(Syntax.c_string);
 		text.append('\'').append(val).append('\'');
+		endColor();
+	}
+	public void appendValue(boolean val) {
+		startColor(Syntax.c_keyword);
+		text.append(val);
 		endColor();
 	}
 
@@ -372,7 +450,8 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public void appendMap(Object mapObj,
 	                      double key,
 	                      double value) {
-		valToObj.put(value, mapObj);
+		// valToObj.put(value, mapObj);
+		primValToObj.put(Double.doubleToLongBits(value), mapObj);
 		postAppendDelimiter();
 		appendValue(key);
 		text.append('=');
@@ -381,7 +460,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public void appendMap(Object mapObj,
 	                      long key,
 	                      double value) {
-		valToObj.put(value, mapObj);
+		primValToObj.put(Double.doubleToLongBits(value), mapObj);
 		postAppendDelimiter();
 		appendValue(key);
 		text.append('=');
@@ -390,7 +469,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public void appendMap(Object mapObj,
 	                      long key,
 	                      long value) {
-		valToObj.put(value, mapObj);
+		primValToObj.put(value, mapObj);
 		postAppendDelimiter();
 		appendValue(key);
 		text.append('=');
@@ -399,7 +478,6 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public void appendMap(Object mapObj,
 	                      long key,
 	                      Object value) {
-		valToObj.put(value, mapObj);
 		valToType.put(value, value == null ? Object.class : value.getClass());
 		postAppendDelimiter();
 		appendValue(key);
@@ -409,7 +487,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public void appendMap(Object mapObj,
 	                      Object key,
 	                      long value) {
-		valToObj.put(key, mapObj);
+		primValToObj.put(value, mapObj);
 		valToType.put(key, key == null ? Object.class : key.getClass());
 		postAppendDelimiter();
 		appendValue(key);
@@ -491,8 +569,8 @@ public abstract class ValueLabel extends ExtendingLabel {
 		 CheckboxList.withc("autoRefresh", Icon.refresh1Small, "Auto Refresh", () -> enableUpdate, () -> {
 			 enableUpdate = !enableUpdate;
 		 }) : null);
-
-		list.add(MenuBuilder.copyAsJSMenu("value", () -> val));
+		
+		list.add(MenuBuilder.copyAsJSMenu("value", this::currentVal));
 		list.add(UnderlineItem.with());
 		list.add(DisabledList.withd("change.class", Icon.pencilSmall, "Change Class",
 		 () -> val == null || Reflect.isWrapper(val.getClass()),
@@ -579,7 +657,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 		 }, Cell.class)
 		 .isExtend(_ -> {
 			 list.add(DisabledList.withd("selection.showOnWorld", HopeIcons.position,
-			  (val == null ? "" : selection.focusInternal.contains(val) ? "Hide from" : "Show on") + " world",
+				(val == null ? "" : selection.focusInternal.contains(val) ? "Hide from" : "Show on") + " world",
 				this::valueIsNull, () -> {
 					if (!selection.focusInternal.add(val)) selection.focusInternal.remove(val);
 				}));
@@ -708,8 +786,44 @@ public abstract class ValueLabel extends ExtendingLabel {
 		expandVal.clear();
 	}
 	public final void flushValExpand() {
-		setVal(val);
+		if (type.isPrimitive()) {
+			setVal(primVal);
+		} else {
+			setVal(val);
+		}
 	}
+	public long getValAsLong() {
+		return PrimPack.unpackLong(primVal);
+	}
+	public boolean getValAsBoolean() {
+		return PrimPack.unpackBoolean(primVal);
+	}
+	public int getValAsInt() {
+		return PrimPack.unpackInt(primVal);
+	}
+	public float getValAsFloat() {
+		return PrimPack.unpackFloat(primVal);
+	}
+
+	public <T> T getVal(Class<T> type) {
+		return type.cast(val);
+	}
+	/** 自动包括primVal，用于右键菜单  */
+	public Object currentVal() {
+		if (type != null && type.isPrimitive()) {
+			if (!primInited) return null;
+			if (type == boolean.class) return PrimPack.unpackBoolean(primVal);
+			if (type == int.class) return PrimPack.unpackInt(primVal);
+			if (type == long.class) return PrimPack.unpackLong(primVal);
+			if (type == float.class) return PrimPack.unpackFloat(primVal);
+			if (type == double.class) return PrimPack.unpackDouble(primVal);
+			if (type == char.class) return PrimPack.unpackChar(primVal);
+			if (type == byte.class) return PrimPack.unpackByte(primVal);
+			if (type == short.class) return PrimPack.unpackShort(primVal);
+		}
+		return val;
+	}
+
 	public final void toggleExpand(Object val) {
 		expandVal.put(val, !expandVal.getOrDefault(val, false));
 		Core.app.post(this::flushValExpand);

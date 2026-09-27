@@ -10,6 +10,7 @@ import java.lang.reflect.Field;
 
 import static test0.ModuleOpen.openModule;
 
+@SuppressWarnings("removal")
 @HMarkMagic(magicClass = MAGICIMPL.class)
 public class Magic {
 	/** @see TestAccess#xp */

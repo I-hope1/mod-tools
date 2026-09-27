@@ -77,8 +77,14 @@ public class FieldValueLabel extends ReflectValueLabel {
 			// 内联类型改了也没用
 			if (isStatic && isFinal() && field.getType().isPrimitive()) return;
 
-			Object value = getFieldValue();
-			setVal(value);
+			if (type.isPrimitive()) {
+				setVal(FieldUtils.getFieldPrimValue(
+				 isStatic ? field.getDeclaringClass() : obj,
+				 getOffset(),
+				 field.getType()));
+			} else {
+				setVal(getFieldValue());
+			}
 		} else {
 			setText0(null);
 		}

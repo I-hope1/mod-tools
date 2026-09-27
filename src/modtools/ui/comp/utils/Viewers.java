@@ -168,7 +168,8 @@ public class Viewers {
 	static {
 		loadViewer();
 	}
-	static void loadViewer(){
+
+	static void loadViewer() {
 		// map.put(String.class, (val, label) -> {
 		// 	label.appendValue(label.getText(), val);
 		// 	return true;
@@ -743,12 +744,31 @@ public class Viewers {
 			default -> throw new UnsupportedOperationException();
 		};
 	}
+	/**
+	 * @see Color#toString(StringBuilder)
+	 * @see Vec2#toString()
+	 * @see Vec3#toString()
+	 * @see Rect#toString()
+	 * @see Point2#toString()
+	 * */
 	public static void defaultAppend(ValueLabel label, int startIndex, Object val) {
 		StringBuilder text      = label.getText();
 		Color         mainColor = colorOf(val);
 		label.startColor(mainColor);
 		label.startIndexMap.put(startIndex, val);
-		text.append(toString(val));
+		switch (val) {
+			case Color c -> c.toString(text);
+			case Vec2 vec2 -> text.append('(').append(vec2.x).append(',').append(vec2.y).append(')');
+			case Vec3 vec3 ->
+			 text.append('(').append(vec3.x).append(',').append(vec3.y).append(',').append(vec3.z).append(')');
+			case Rect rect ->
+			 text.append('[').append(rect.x).append(',').append(rect.y)
+			  .append(',').append(rect.width).append(',').append(rect.height).append(']');
+			case Point2 point2 ->
+				text.append('(').append(point2.x)
+				 .append(", "/* 微小差异，不是bug，就是有一个空格 */).append(point2.y).append(')');
+			default -> text.append(toString(val));
+		}
 		int endI = text.length();
 		label.endIndexMap.put(startIndex, endI);
 		label.endColor();
@@ -776,7 +796,7 @@ public class Viewers {
 			 val instanceof String ? '"' + (String) val + '"'
 				: val instanceof Character ? "'" + val + "'"
 				: val instanceof Float || val instanceof Double ? FormatHelper.fixed(((Number) val).floatValue(), 2)
-			  : val instanceof Number ? String.valueOf(val)
+				: val instanceof Number ? String.valueOf(val)
 				: val instanceof Class ? ((Class<?>) val).getSimpleName()
 
 				: val instanceof Element ? ReviewElement.getElementName((Element) val)

@@ -408,16 +408,16 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		btn.setDisabled(() -> !editable.get());
 		btn.update(() -> {
 			l.flushVal();
-			if (l.val == null) {
+			if (l.type == Boolean.class/* 包装类型 */ && l.val == null) {
 				btn.setDisabled(() -> true);
 				btn.setText("ERROR");
 				return;
 			}
-			btn.setText((boolean) l.val ? "TRUE" : "FALSE");
-			btn.setChecked((boolean) l.val);
+			btn.setText(l.getValAsBoolean() ? "TRUE" : "FALSE");
+			btn.setChecked(l.getValAsBoolean());
 		});
 		btn.clicked(Tools.runT(() -> {
-			boolean b = !(boolean) l.val;
+			boolean b = !l.getValAsBoolean();
 			btn.setText(b ? "TRUE" : "FALSE");
 			l.setNewVal(b);
 		}));

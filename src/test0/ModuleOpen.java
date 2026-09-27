@@ -4,6 +4,7 @@ import java.lang.invoke.*;
 
 import static test0.Magic.*;
 
+@SuppressWarnings("removal")
 public class ModuleOpen {
 	private static final MethodHandle OPEN_MODULE;
 

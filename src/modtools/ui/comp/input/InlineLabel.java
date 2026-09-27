@@ -19,7 +19,6 @@ import arc.util.*;
 import arc.util.pooling.Pools;
 import mindustry.ui.Styles;
 import modtools.ui.control.HopeInput;
-import modtools.utils.ArrayUtils;
 
 import java.util.Objects;
 
@@ -29,12 +28,12 @@ import java.util.Objects;
  * <p>可以对局部添加点击事件
  **/
 public class InlineLabel extends NoMarkupLabel {
-	private static final Seq<GlyphRun> result = new Seq<>();
+	private static final ThreadLocal<Seq<GlyphRun>> resultLocal    = ThreadLocal.withInitial(Seq::new);
+	private static final ThreadLocal<IntSeq>        colorKeysLocal = ThreadLocal.withInitial(IntSeq::new);
 
-	private static final IntSeq colorKeys = new IntSeq();
-	public static final  int    UNSET_I   = -1;
-	public static final  Point2 UNSET_P   = new Point2(UNSET_I, UNSET_I);
-	public               float  labelX, labelY;
+	public static final int    UNSET_I = -1;
+	public static final Point2 UNSET_P = new Point2(UNSET_I, UNSET_I);
+	public              float  labelX, labelY;
 
 	public InlineLabel(CharSequence text) {
 		super(text);
@@ -50,18 +49,22 @@ public class InlineLabel extends NoMarkupLabel {
 		super.clear();
 		cache.clear();
 	}
+
 	//region 文本染色
-	public static Seq<GlyphRun> splitAndColorize(Seq<GlyphRun> runs, IntMap<Color> colorMap, StringBuilder text) {
-		if (runs.isEmpty() || text.length() == 0) return runs;
-		if (colorMap.isEmpty()) return runs;
+	/** splitAndColorize里不会触发splitAndColorize */
+	public static void splitAndColorize(Seq<GlyphRun> runs, IntMap<Color> colorMap, StringBuilder text) {
+		if (runs.isEmpty() || text.length() == 0) return;
+		if (colorMap.isEmpty()) return;
 		if (!colorMap.containsKey(0)) colorMap.put(0, Color.white);
 
 		if (colorMap.size == 1 || (colorMap.size == 2 && Color.white.equals(colorMap.get(text.length())))) {
 			Color color = colorMap.get(0);
 			runs.each(r -> r.color.set(color));
-			return runs;
+			return;
 		}
 
+		var result    = resultLocal.get();
+		var colorKeys = colorKeysLocal.get();
 		result.clear();
 		colorKeys.clear();
 		Keys keys = colorMap.keys();
@@ -74,8 +77,9 @@ public class InlineLabel extends NoMarkupLabel {
 		int   currentIndex = 0;
 		int   itemIndex    = 0;
 
-		var      iter = runs.iterator();
-		GlyphRun item = iter.next();
+		var      iter     = runs.iterator();
+		GlyphRun item     = iter.next();
+		float    currentX = item.x;
 		for (int i = 1; i < colorKeys.size; i++) {
 			final int endIndex = colorKeys.get(i);
 			if (currentIndex == endIndex) {
@@ -88,12 +92,18 @@ public class InlineLabel extends NoMarkupLabel {
 				// 判断是否超出当前颜色范围
 				if (size <= endIndex - currentIndex) {
 					// 整个item在当前颜色范围
-					result.add(InlineLabel.sub(item, itemIndex, item.glyphs.size, color));
+					result.add(InlineLabel.sub(item, itemIndex, item.glyphs.size, color, currentX));
 					currentIndex += size;
 				} else {
 					// [1, {2, 3}, 4] | []: item, {}: color
 					// 仅部分item在当前颜色范围
-					result.add(InlineLabel.sub(item, itemIndex, itemIndex += endIndex - currentIndex, color));
+					int nextIndex = itemIndex + (endIndex - currentIndex);
+					result.add(InlineLabel.sub(item, itemIndex, nextIndex, color, currentX));
+					FloatSeq adv = item.xAdvances;
+					for (int k = itemIndex; k < nextIndex; k++) {
+						currentX += adv.get(k);
+					}
+					itemIndex = nextIndex;
 					currentIndex = endIndex;
 					continue;
 				}
@@ -103,6 +113,7 @@ public class InlineLabel extends NoMarkupLabel {
 					} while (item.glyphs.isEmpty() && iter.hasNext());
 
 					itemIndex = 0;
+					currentX = item.x;
 					// 对自动换行偏移
 					while (currentIndex < text.length() && (char) item.glyphs.first().id != text.charAt(currentIndex)) {
 						currentIndex++;
@@ -116,24 +127,37 @@ public class InlineLabel extends NoMarkupLabel {
 			color = colorMap.get(endIndex);
 		}
 		if (itemIndex < item.glyphs.size) {
-			result.add(InlineLabel.sub(item, itemIndex, item.glyphs.size, color));
+			result.add(InlineLabel.sub(item, itemIndex, item.glyphs.size, color, currentX));
 		}
 
 		result.removeAll(Objects::isNull);
 
-		return result;
+		Pools.freeAll(runs, true);
+		runs.clear();
+		runs.addAll(result);
+
+		result.clear();
 	}
-	private static GlyphRun sub(GlyphRun glyphRun, int startIndex, int endIndex, Color color) {
+	private static GlyphRun sub(GlyphRun glyphRun, int startIndex, int endIndex, Color color, float currentX) {
 		if (startIndex < 0) return null;
 		if (endIndex <= startIndex) return null;
 		GlyphRun newRun = Pools.obtain(GlyphRun.class, GlyphRun::new);
 		boolean  isSame = startIndex == 0 && endIndex == glyphRun.glyphs.size;
 
 		newRun.y = glyphRun.y;
-		newRun.x = glyphRun.x + (isSame ? 0 : ArrayUtils.sumf(glyphRun.xAdvances, 0, startIndex));
+		newRun.x = currentX;
 		newRun.xAdvances.addAll(glyphRun.xAdvances, startIndex, endIndex - startIndex + 1);
 		newRun.glyphs.addAll(glyphRun.glyphs, startIndex, Math.max(0, endIndex - startIndex));
-		newRun.width = isSame ? glyphRun.width : ArrayUtils.sumf(glyphRun.xAdvances, startIndex + 1, endIndex + 1);
+		if (isSame) {
+			newRun.width = glyphRun.width;
+		} else {
+			float    width = 0;
+			FloatSeq adv   = glyphRun.xAdvances;
+			for (int k = startIndex + 1; k <= endIndex; k++) {
+				width += adv.get(k);
+			}
+			newRun.width = width;
+		}
 		newRun.color.set(color);
 		return newRun;
 	}
@@ -199,13 +223,7 @@ public class InlineLabel extends NoMarkupLabel {
 		labelY = y;
 		layout.setText(font, text, 0, text.length(), Color.white, textWidth, lineAlign, wrap, ellipsis);
 
-		var newRuns = splitAndColorize(layout.runs, colorMap, text);
-		if (newRuns != layout.runs) {
-			Pools.freeAll(layout.runs, true);
-			layout.runs.clear();
-			layout.runs.addAll(newRuns);
-			// Log.info(layout);
-		}
+		splitAndColorize(layout.runs, colorMap, text);
 		cache.setText(layout, x, y);
 		// Pools.freeAll(layout.runs);
 
@@ -257,7 +275,7 @@ public class InlineLabel extends NoMarkupLabel {
 		return UNSET_I;
 	}
 
-/** 遍历指定index区域 */
+	/** 遍历指定index区域 */
 	public void getRect(Point2 region, Cons<Rect> callback) {
 		float   lineHeight = style.font.getLineHeight();
 		float   currentX   = 0, currentY = 0;
@@ -280,7 +298,8 @@ public class InlineLabel extends NoMarkupLabel {
 			if (startX == -1) startX = currentX;
 
 			currentY = labelY + run.y;
-			while (lineStart < text.length() && (char) run.glyphs.first().id != text.charAt(lineStart)) lineStart++; // 弥补offset
+			while (lineStart < text.length() && (char) run.glyphs.first().id != text.charAt(lineStart))
+				lineStart++; // 弥补offset
 
 			for (int i = 1; i < xAdvances.size; i++) {
 				int j = i - 1;

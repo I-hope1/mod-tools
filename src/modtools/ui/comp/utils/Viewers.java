@@ -29,6 +29,7 @@ import modtools.utils.*;
 import modtools.utils.ArrayUtils.AllCons;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.SR.SatisfyException;
+import modtools.utils.doubleconv.DoubleConversion;
 import modtools.utils.reflect.FieldUtils;
 import modtools.utils.ui.*;
 import modtools.utils.world.WorldUtils;
@@ -38,7 +39,6 @@ import java.lang.reflect.*;
 import java.util.*;
 
 import static modtools.events.E_JSFunc.chunk_background;
-import static modtools.jsfunc.type.CAST.box;
 import static modtools.ui.comp.input.highlight.Syntax.c_map;
 
 public class Viewers {
@@ -123,8 +123,9 @@ public class Viewers {
 		}
 	};
 
-	public static final  boolean ARRAY_DEBUG  = false;
-	private static final int     SIZE_MAX_BIT = 6;
+	public static final  boolean ARRAY_DEBUG      = false;
+	private static final int     SIZE_MAX_BIT     = 6;
+	private static final String  SIZE_PLACEHOLDER = StringUtils.repeat('\u200d', SIZE_MAX_BIT);
 
 	/** 每层缩进使用的括号颜色，循环取用 */
 	private static final Color[] PRETTY_BRACKET_COLORS = {
@@ -152,11 +153,38 @@ public class Viewers {
 	private static String prettyIndent(int depth) {
 		if (depth <= 0) return "";
 		if (depth < INDENT_CACHE_SIZE) return INDENT_CACHE[depth];
-		return "  ".repeat(depth); // 超出缓存范围（极深嵌套）才真正 repeat
+		return SINGLE_INDENT.repeat(depth); // 超出缓存范围（极深嵌套）才真正 repeat
 	}
 	private static Color prettyBracketColor(int depth) {
 		return PRETTY_BRACKET_COLORS[depth % PRETTY_BRACKET_COLORS.length];
 	}
+	private static final int MAX_SIZE_LIMIT = 1_000_000; // 10^6
+	private static final int OVERFLOW_LIMIT = 99_999;     // 10^5 - 1
+
+	// 纯就地无分配填充 6 个字符
+	private static void fillFixedSize(StringBuilder text, int offset, int size) {
+		if (size < MAX_SIZE_LIMIT) {
+			// 倒序填充数字，高位补空格
+			int temp = size;
+			for (int i = offset + SIZE_MAX_BIT - 1; i >= offset; i--) {
+				if (temp > 0 || i == offset + SIZE_MAX_BIT - 1) {
+					text.setCharAt(i, (char) ('0' + (temp % 10)));
+					temp /= 10;
+				} else {
+					text.setCharAt(i, ' '); // 前导空格补齐
+				}
+			}
+		} else {
+			// 溢出显示 "99999+"
+			int temp = OVERFLOW_LIMIT;
+			text.setCharAt(offset + SIZE_MAX_BIT - 1, '+');
+			for (int i = offset + SIZE_MAX_BIT - 2; i >= offset; i--) {
+				text.setCharAt(i, (char) ('0' + (temp % 10)));
+				temp /= 10;
+			}
+		}
+	}
+
 
 	public static <T> void addViewer(Class<T> clazz, Viewer<T> viewer) {
 		internalViewers.add(new ViewerItem<>(clazz, viewer));
@@ -217,7 +245,12 @@ public class Viewers {
 			// 提取 entries 遍历，避免在 pretty/普通 两个分支中重复
 			Runnable runEntries = () -> {
 				switch (val) {
-					case ObjectMap<?, ?> m -> appendMap(val, label, m.entries(), e -> e.key, e -> e.value);
+					case ObjectMap<?, ?> m -> {
+						for (var entry : m) {
+							label.appendMap(val, entry.key, entry.value);
+							if (label.isTruncate(label.getText().length())) break;
+						}
+					}
 					case IntMap<?> m -> {
 						for (var entry : m) {
 							label.appendMap(val, entry.key, entry.value);
@@ -306,9 +339,8 @@ public class Viewers {
 			label.startIndexMap.put(start, val);
 
 			text.append("|Array");
-			int    sizeIndex = text.length();
-			String repeat    = StringUtils.repeat('\u200d', SIZE_MAX_BIT);
-			text.append(repeat).append('|');
+			int sizeIndex = text.length();
+			text.append(SIZE_PLACEHOLDER).append('|');
 
 			label.endIndexMap.put(start, text.length());
 			label.endColor();
@@ -340,33 +372,28 @@ public class Viewers {
 				text.append("\n[");
 				label.postAppendDelimiter(null);
 			}
-			Runnable[] append = {null};
 			try {
 				switch (val) {
 					case Iterable<?> iter -> {
-						append[0] = () -> cons.append(null);
 						for (Object item : iter) {
 							cons.get(item);
 						}
 					}
 					case IntSeq seq -> {
-						append[0] = () -> cons.append(0);
 						seq.each(cons::get);
 					}
 					case FloatSeq seq -> {
-						append[0] = () -> cons.append(0f);
 						for (int i = 0; i < seq.size; i++) {
 							cons.get(seq.get(i));
 						}
 					}
 					case LongSeq seq -> {
-						append[0] = () -> cons.append(0L);
 						for (int i = 0; i < seq.size; i++) {
 							cons.get(seq.get(i));
 						}
 					}
 					default -> {
-						if (val.getClass().isArray()) ArrayUtils.forEach(val, cons, r -> append[0] = r);
+						if (val.getClass().isArray()) ArrayUtils.forEach(val, cons);
 					}
 				}
 			} catch (SatisfyException ignored) {
@@ -383,12 +410,8 @@ public class Viewers {
 				// append[0] 必须先于 prev 恢复运行：它负责输出最后一个缓冲元素。
 				// 恢复时直接赋值而非调用 postAppendDelimiter，避免触发末尾多余分隔符，
 				// 也避免把外层 prev 注入到数组内部（即 "a, <outer_delim>b]" 的 bug）。
-				try {
-					if (append[0] != null) append[0].run();
-				} catch (SatisfyException ignored) {
-				} catch (Throwable e) {
-					Log.err(e);
-				}
+				cons.flush();
+
 				label.appendTail = prev; // 丢弃末尾多余分隔符，还原外层上下文
 				if (prettyPrint) {
 					label.prettyDepth = ppDepth;
@@ -398,16 +421,10 @@ public class Viewers {
 				// 会插入多余字符，把之后所有 colorMap / startIndexMap / endIndexMap 的下标
 				// 全部错位（静默破坏，不报错）。
 				// 用 %-5s 截断到固定宽度：超过 99999 时显示 "9999+"（含前导空格仍为5字符）。
-				int    size = cons.size();
-				String sizeStr;
-				if (size < (int) Math.pow(10, SIZE_MAX_BIT)) {
-					sizeStr = String.format("%" + SIZE_MAX_BIT + "d", size); // 右对齐，宽度固定
-				} else {
-					sizeStr = String.format("%" + (SIZE_MAX_BIT - 1) + "d+", // 最后一位留给 '+'
-					 (int) Math.pow(10, SIZE_MAX_BIT - 1) - 1); // e.g. "99999+"
-				}
+
+				int size = cons.size();
+				fillFixedSize(text, sizeIndex, size); // 右对齐，宽度固定
 				// assert sizeStr.length() == SIZE_MAX_BIT;
-				text.replace(sizeIndex, sizeIndex + SIZE_MAX_BIT, sizeStr);
 				pool.free(cons);
 			}
 			if (prettyPrint) {
@@ -520,6 +537,19 @@ public class Viewers {
 		boolean view(T val, ValueLabel label); /* 是否成功 */
 	}
 	static class IterCons extends AllCons implements Poolable {
+		// 1. 类型模式标记
+		private static final byte
+			TYPE_NONE   = 0,
+			TYPE_OBJECT = 1,
+			TYPE_LONG   = 2,
+			TYPE_DOUBLE = 3,
+			TYPE_BOOL   = 4,
+			TYPE_CHAR   = 5;
+
+		private byte   itemType;
+		private Object last;     // 仅供 Object 引用类型使用
+		private long   primLast; // 统一接管 long, double(raw bits), boolean(1/0), char(int)
+
 		private ValueLabel    self;
 		private Object        val;
 		private StringBuilder text;
@@ -527,37 +557,187 @@ public class Viewers {
 		private int     count;
 		private boolean gotFirst;
 		private int     index;
+
 		public int size() {
 			if (index == -1) throw new IllegalStateException("size() must be called after forEach()");
 			return index;
 		}
+
 		public IterCons init(ValueLabel self, Object val, StringBuilder text) {
 			this.self = self;
 			this.val = val;
 			this.text = text;
 			this.index = 0;
+			this.itemType = TYPE_NONE;
 			return this;
 		}
-		private Object last;
+
+		// ================= Object 分支 =================
 		public void get(Object item) {
 			if (!gotFirst) {
 				gotFirst = true;
+				itemType = TYPE_OBJECT;
 				last = item;
 			}
-			// Log.info("item = " + item);
 			checkCount();
 			if (item != null) {
 				self.valToObj.put(item, val);
-				self.valToType.put(item, item.getClass()); // fix: 应存元素自身的类型，而非父集合的类型
+				self.valToType.put(item, item.getClass());
 			}
 
-			boolean b = (last != null && identityClasses.contains(last.getClass())) // fix: 应检查元素类型，而非父集合类型
+			boolean b = (last != null && identityClasses.contains(last.getClass()))
 			 ? !last.equals(item) : last != item;
 			if (b) {
 				append(item);
 			} else {
 				count++;
 			}
+		}
+
+		public void append(Object item) {
+			if (count == 0) return;
+			self.postAppendDelimiter();
+			self.appendValue(last);
+			self.addCountText(count);
+
+			if (afterAppend != null) afterAppend.run();
+			if (self.isTruncate()) throw new SatisfyException();
+			last = item;
+			count = 1;
+		}
+
+		// ================= Long / 整数 分支 =================
+		public void get(long item) {
+			if (!gotFirst) {
+				gotFirst = true;
+				itemType = TYPE_LONG;
+				primLast = item;
+			}
+			checkCount();
+
+			if (item != primLast) {
+				append(item);
+			} else {
+				count++;
+			}
+		}
+
+		public void append(long item) {
+			if (count == 0) return;
+			self.postAppendDelimiter();
+			self.appendValue(primLast);
+			self.addCountText(count);
+			if (afterAppend != null) afterAppend.run();
+			if (self.isTruncate()) throw new SatisfyException();
+			primLast = item;
+			count = 1;
+		}
+
+		// ================= Double / 浮点 分支 =================
+		public void get(double item) {
+			long bits = Double.doubleToRawLongBits(item);
+			if (!gotFirst) {
+				gotFirst = true;
+				itemType = TYPE_DOUBLE;
+				primLast = bits;
+			}
+			checkCount();
+
+			// 使用 raw bits 比对：零开销且完美支持 NaN 折叠
+			if (bits != primLast) {
+				append(item);
+			} else {
+				count++;
+			}
+		}
+
+		public void append(double item) {
+			if (count == 0) return;
+			self.postAppendDelimiter();
+			self.appendValue(Double.longBitsToDouble(primLast));
+			self.addCountText(count);
+			if (afterAppend != null) afterAppend.run();
+			if (self.isTruncate()) throw new SatisfyException();
+			primLast = Double.doubleToRawLongBits(item);
+			count = 1;
+		}
+		// NOTE: float[] 数组元素经 AllCons.get(float)->get((double)f) 走 TYPE_DOUBLE 分支，
+		// primLast 存储的是 double raw bits，flush()/append(double) 负责正确输出，无需 append(float)。
+
+		// ================= Boolean 分支 =================
+		public void get(boolean item) {
+			long b = item ? 1L : 0L;
+			if (!gotFirst) {
+				gotFirst = true;
+				itemType = TYPE_BOOL;
+				primLast = b;
+			}
+			checkCount();
+
+			if (b != primLast) {
+				append(item);
+			} else {
+				count++;
+			}
+		}
+
+		public void append(boolean item) {
+			if (count == 0) return;
+			self.postAppendDelimiter();
+			self.appendValue(primLast != 0L);
+			self.addCountText(count);
+			if (afterAppend != null) afterAppend.run();
+			if (self.isTruncate()) throw new SatisfyException();
+			primLast = item ? 1L : 0L;
+			count = 1;
+		}
+
+		// ================= Char 分支 =================
+		public void get(char item) {
+			if (!gotFirst) {
+				gotFirst = true;
+				itemType = TYPE_CHAR;
+				primLast = item;
+			}
+			checkCount();
+
+			if (item != (char) primLast) {
+				append(item);
+			} else {
+				count++;
+			}
+		}
+
+		public void append(char item) {
+			if (count == 0) return;
+			self.postAppendDelimiter();
+			self.appendValue((char) primLast);
+			self.addCountText(count);
+			if (afterAppend != null) afterAppend.run();
+			if (self.isTruncate()) throw new SatisfyException();
+			primLast = item;
+			count = 1;
+		}
+
+		// ================= 统一零模糊 Flush =================
+		public void flush() {
+			if (!gotFirst || count == 0) return;
+
+			self.postAppendDelimiter();
+			switch (itemType) {
+				case TYPE_OBJECT -> self.appendValue(last);
+				case TYPE_LONG   -> self.appendValue(primLast);
+				case TYPE_DOUBLE -> self.appendValue(Double.longBitsToDouble(primLast));
+				case TYPE_BOOL   -> self.appendValue(primLast != 0L);
+				case TYPE_CHAR   -> self.appendValue((char) primLast);
+			}
+			self.addCountText(count);
+
+			if (afterAppend != null) afterAppend.run();
+
+			count = 0;
+			gotFirst = false;
+			itemType = TYPE_NONE;
 		}
 
 		private Runnable afterAppend;
@@ -597,122 +777,16 @@ public class Viewers {
 
 			throw new SatisfyException();
 		}
-		public void append(Object item) {
-			if (count == 0) return;
-			self.postAppendDelimiter();
-			self.appendValue(last);
-			self.addCountText(count);
-
-			if (afterAppend != null) afterAppend.run();
-			if (self.isTruncate()) throw new SatisfyException();
-			last = item;
-			count = 1;
-		}
-		private long llast;
-		public void get(long item) {
-			if (!gotFirst) {
-				gotFirst = true;
-				llast = item;
-			}
-			checkCount();
-
-			if (item != llast) {
-				append(item);
-			} else {
-				count++;
-			}
-		}
-		public void append(long item) {
-			if (count == 0) return;
-			self.postAppendDelimiter();
-			self.appendValue(llast);
-			self.addCountText(count);
-			if (afterAppend != null) afterAppend.run();
-			if (self.isTruncate()) throw new SatisfyException();
-			llast = item;
-			count = 1;
-		}
-		private double dlast;
-		public void get(double item) {
-			if (!gotFirst) {
-				gotFirst = true;
-				dlast = item;
-			}
-			checkCount();
-
-			if (item != dlast) {
-				append(item);
-			} else {
-				count++;
-			}
-		}
-		public void append(double item) {
-			if (count == 0) return;
-			self.postAppendDelimiter();
-			self.appendValue(dlast);
-			self.addCountText(count);
-			if (afterAppend != null) afterAppend.run();
-			if (self.isTruncate()) throw new SatisfyException();
-			dlast = item;
-			count = 1;
-		}
-		private boolean zlast;
-		public void get(boolean item) {
-			if (!gotFirst) {
-				gotFirst = true;
-				zlast = item;
-			}
-			checkCount();
-
-			if (item != zlast) {
-				append(item);
-			} else {
-				count++;
-			}
-		}
-		public void append(boolean item) {
-			if (count == 0) return;
-			self.postAppendDelimiter();
-			self.appendValue(zlast);
-			self.addCountText(count);
-			if (afterAppend != null) afterAppend.run();
-			if (self.isTruncate()) throw new SatisfyException();
-			zlast = item;
-			count = 1;
-		}
-		private char clast;
-		public void get(char item) {
-			if (!gotFirst) {
-				gotFirst = true;
-				clast = item;
-			}
-			checkCount();
-
-			if (item != clast) {
-				append(item);
-			} else {
-				count++;
-			}
-		}
-		public void append(char item) {
-			if (count == 0) return;
-			self.postAppendDelimiter();
-			self.appendValue(clast);
-			self.addCountText(count);
-			if (afterAppend != null) afterAppend.run();
-			if (self.isTruncate()) throw new SatisfyException();
-			clast = item;
-			count = 1;
-		}
-
 
 		public void reset() {
 			last = null;
+			primLast = 0L;
 			self = null;
 			index = 0;
 			count = 0;
 			afterAppend = null;
 			gotFirst = false;
+			itemType = TYPE_NONE;
 		}
 	}
 
@@ -750,7 +824,8 @@ public class Viewers {
 	 * @see Vec3#toString()
 	 * @see Rect#toString()
 	 * @see Point2#toString()
-	 * */
+	 *
+	 */
 	public static void defaultAppend(ValueLabel label, int startIndex, Object val) {
 		StringBuilder text      = label.getText();
 		Color         mainColor = colorOf(val);
@@ -758,15 +833,43 @@ public class Viewers {
 		label.startIndexMap.put(startIndex, val);
 		switch (val) {
 			case Color c -> c.toString(text);
-			case Vec2 vec2 -> text.append('(').append(vec2.x).append(',').append(vec2.y).append(')');
-			case Vec3 vec3 ->
-			 text.append('(').append(vec3.x).append(',').append(vec3.y).append(',').append(vec3.z).append(')');
-			case Rect rect ->
-			 text.append('[').append(rect.x).append(',').append(rect.y)
-			  .append(',').append(rect.width).append(',').append(rect.height).append(']');
-			case Point2 point2 ->
-				text.append('(').append(point2.x)
-				 .append(", "/* 微小差异，不是bug，就是有一个空格 */).append(point2.y).append(')');
+
+			case Vec2 vec2 -> {
+				text.append('(');
+				DoubleConversion.appendTo(text, vec2.x);
+				text.append(',');
+				DoubleConversion.appendTo(text, vec2.y);
+				text.append(')');
+			}
+
+			case Vec3 vec3 -> {
+				text.append('(');
+				DoubleConversion.appendTo(text, vec3.x);
+				text.append(',');
+				DoubleConversion.appendTo(text, vec3.y);
+				text.append(',');
+				DoubleConversion.appendTo(text, vec3.z);
+				text.append(')');
+			}
+
+			case Rect rect -> {
+				text.append('[');
+				DoubleConversion.appendTo(text, rect.x);
+				text.append(',');
+				DoubleConversion.appendTo(text, rect.y);
+				text.append(',');
+				DoubleConversion.appendTo(text, rect.width);
+				text.append(',');
+				DoubleConversion.appendTo(text, rect.height);
+				text.append(']');
+			}
+
+			case Point2 point2 -> {
+				text.append('(').append(point2.x);
+				text.append(", "/* 微小差异，不是bug，就是有一个空格 */);
+				text.append(point2.y).append(')');
+			}
+
 			default -> text.append(toString(val));
 		}
 		int endI = text.length();
@@ -786,8 +889,8 @@ public class Viewers {
 		 : val instanceof String || val instanceof Character ? Syntax.c_string
 		 : val instanceof Number ? Syntax.c_number
 		 : val instanceof Class ? TmpVars.c1.set(JColor.c_type)
-		 : val.getClass().isEnum() ? ValueLabel.c_enum
-		 : box(val.getClass()) == Boolean.class ? Syntax.c_keyword
+		 : val instanceof Enum ? ValueLabel.c_enum
+		 : val instanceof Boolean ? Syntax.c_keyword
 		 : Color.white;
 	}
 	static String toString(Object val) {
@@ -795,7 +898,8 @@ public class Viewers {
 		 CatchSR.of(() ->
 			 val instanceof String ? '"' + (String) val + '"'
 				: val instanceof Character ? "'" + val + "'"
-				: val instanceof Float || val instanceof Double ? FormatHelper.fixed(((Number) val).floatValue(), 2)
+				: val instanceof Float ? DoubleConversion.toShortestString((Float) val)
+				: val instanceof Double ? DoubleConversion.toShortestString((Double) val)
 				: val instanceof Number ? String.valueOf(val)
 				: val instanceof Class ? ((Class<?>) val).getSimpleName()
 
@@ -813,9 +917,9 @@ public class Viewers {
 
 	public enum Type {
 		/** @see #getMapSize(Object) */
-		map(ObjectMap.class, IntMap.class, IntIntMap.class, IntFloatMap.class,
-		 LongMap.class,
-		 ObjectIntMap.class, ObjectFloatMap.class, Map.class),
+		map(o -> o instanceof ObjectMap<?, ?> || o instanceof IntMap<?> || o instanceof IntIntMap
+		         || o instanceof IntFloatMap || o instanceof LongMap<?> || o instanceof ObjectIntMap<?>
+		         || o instanceof ObjectFloatMap<?> || o instanceof Map<?, ?>),
 		array(o -> o instanceof Iterable<?> ||
 		           (o instanceof IntSeq || o instanceof FloatSeq || o instanceof LongSeq) ||
 		           (o != null && o.getClass().isArray()));

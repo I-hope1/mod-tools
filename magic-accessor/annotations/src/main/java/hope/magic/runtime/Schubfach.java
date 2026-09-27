@@ -1,3 +1,18 @@
+/*
+ * Copyright (c) 2021, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2024, Alibaba Group Holding Limited. All Rights Reserved.
+ *
+ * For full details about this code see the following references:
+ * [1] Giulietti, "The Schubfach way to render doubles",
+ *     https://drive.google.com/file/d/1gp5xv4CAa78SVgCeWfGqqI4FfYYYuNFb
+ * [2] IEEE Computer Society, "IEEE Standard for Floating-Point Arithmetic"
+ * [3] Bouvier & Zimmermann, "Division-Free Binary-to-Decimal Conversion"
+ *
+ * Divisions are avoided altogether for the benefit of architectures
+ * that do not provide specific machine instructions or where they are slow.
+ * This is discussed in section 10 of [1].
+ */
+
 package hope.magic.runtime;
 
 import jdk.internal.vm.annotation.Stable;
@@ -14,17 +29,65 @@ import static java.lang.Math.multiplyHigh;
  */
 public final class Schubfach {
 
-    private static final int P = 53;
+    /* The precision in bits */
+    static final int P = 53;
+
+    /* Exponent width in bits */
     private static final int W = (Double.SIZE - 1) - (P - 1); // 11
-    private static final int Q_MIN = (-1 << (W - 1)) - P + 3; // -1074
-    private static final int Q_MAX = (1 << (W - 1)) - P;     // 971
-    private static final long C_TINY = 3;
-    private static final int K_MIN = -324;
-    private static final int K_MAX = 292;
-    private static final int H = 17;
+
+    /* Minimum value of the exponent: -(2^(W-1)) - P + 3 */
+    static final int Q_MIN = (-1 << (W - 1)) - P + 3; // -1074
+
+    /* Maximum value of the exponent: 2^(W-1) - P */
+    static final int Q_MAX = (1 << (W - 1)) - P;     // 971
+
+    /* 10^(E_MIN - 1) <= MIN_VALUE < 10^E_MIN */
+    static final int E_MIN = -323;
+
+    /* 10^(E_MAX - 1) <= MAX_VALUE < 10^E_MAX */
+    static final int E_MAX = 309;
+
+    /*
+     * Threshold to detect tiny values, as in section 8.2.1 of [1].
+     *
+     * Note on C_TINY and Java Legacy Compatibility vs ECMA-262:
+     * In JDK's DoubleToDecimal, `t < C_TINY ? toDecimal(..., 10 * t, -1) : toDecimal(..., t, 0)`
+     * was introduced strictly to preserve Java 1.0 legacy Javadoc behavior for Double.MIN_VALUE
+     * (outputting "4.9E-324").
+     * In ECMAScript (ECMA-262 § 7.1.12.1), JavaScript engines (V8, SpiderMonkey, JSC) require the
+     * shortest representation in the round-to-nearest interval (0, 1.5 * 2^-1074), which is
+     * uniquely "5e-324" (1 digit '5' instead of 2 digits '49'). Hence subnormals pass t directly.
+     */
+    static final long C_TINY = 3;
+
+    /* The minimum and maximum k, as in section 8 of [1] */
+    static final int K_MIN = -324;
+    static final int K_MAX = 292;
+
+    /*
+     * H is as in section 8.1 of [1]: maximum decimal digits to distinguish distinct doubles.
+     * H = max{e : 10^(e-2) <= 2^P} = 17.
+     */
+    public static final int H = 17;
+
+    /*
+     * Room for the longer of the forms:
+     *     -ddddd.dddddddddddd         H + 2 characters
+     *     -0.00ddddddddddddddddd      H + 5 characters
+     *     -d.ddddddddddddddddE-eee    H + 7 characters
+     */
+    public static final int MAX_CHARS = H + 7;
+
+    /* Minimum value of the significand of a normal value: 2^(P-1) */
     private static final long C_MIN = 1L << (P - 1);
+
+    /* Mask to extract the biased exponent */
     private static final int BQ_MASK = (1 << W) - 1;
+
+    /* Mask to extract the fraction bits */
     private static final long T_MASK = (1L << (P - 1)) - 1;
+
+    /* Used in rop() */
     private static final long MASK_63 = (1L << 63) - 1;
 
     private static final int Q_10 = 41;
@@ -59,6 +122,11 @@ public final class Schubfach {
         return pow10[e];
     }
 
+    /*
+     * flog10pow2(e) = floor(log_10(2^e))
+     * flog10threeQuartersPow2(e) = floor(log_10(3/4 2^e))
+     * flog2pow10(e) = floor(log_2(10^e))
+     */
     private static int flog10pow2(int e) {
         return (int) (e * C_10 >> Q_10);
     }
@@ -79,6 +147,10 @@ public final class Schubfach {
         return g[k - K_MIN << 1 | 1];
     }
 
+    /*
+     * Computes rop(cp g 2^(-127)), where g = g1 2^63 + g0.
+     * See section 9.9 and figure 8 of [1].
+     */
     private static long rop(long g1, long g0, long cp) {
         long x1 = multiplyHigh(g0, cp);
         long y0 = g1 * cp;
@@ -98,6 +170,15 @@ public final class Schubfach {
      *         or -1L if the input is non-finite (NaN / Infinity)
      */
     public static long toDecimal(double v, char[] chars) {
+        /*
+         * For full details see references [2] and [1].
+         *
+         * For finite v != 0, determine integers c and q such that
+         *     |v| = c 2^q    and
+         *     Q_MIN <= q <= Q_MAX    and
+         *         either    2^(P-1) <= c < 2^P                 (normal)
+         *         or        0 < c < 2^(P-1)  and  q = Q_MIN    (subnormal)
+         */
         long bits = doubleToRawLongBits(v);
         long t = bits & T_MASK;
         int bq = (int) (bits >>> P - 1) & BQ_MASK;
@@ -106,7 +187,11 @@ public final class Schubfach {
                 /* normal value. Here mq = -q */
                 int mq = -Q_MIN + 1 - bq;
                 long c = C_MIN | t;
-                /* Fast path for integers */
+                /*
+                 * The fast path discussed in section 8.3 of [1].
+                 * Also intercepts common positive integer powers of 2 (1.0, 2.0, 4.0, ...),
+                 * eliminating irregular spacing handling for standard integer powers of 2.
+                 */
                 if (0 < mq & mq < P) {
                     long f = c >> mq;
                     if (f << mq == c) {
@@ -116,7 +201,16 @@ public final class Schubfach {
                 return toDecimal(-mq, c, 0, chars);
             }
             if (t != 0) {
-                /* subnormal value */
+                /*
+                 * Subnormal value.
+                 *
+                 * Note on C_TINY and ECMAScript vs Java Legacy Compatibility:
+                 * JDK's DoubleToDecimal uses `t < C_TINY ? toDecimal(..., 10 * t, -1) : toDecimal(..., t, 0)`
+                 * specifically to preserve Java 1.0 legacy Javadoc behavior for Double.MIN_VALUE ("4.9E-324").
+                 * Under ECMA-262 (§ 7.1.12.1), JavaScript engines (V8, SpiderMonkey, JSC) require the
+                 * SHORTEST representation in the round-to-nearest interval (0, 1.5 * 2^-1074), which is
+                 * uniquely "5e-324" (1 digit '5' instead of 2 digits '49'). Thus we pass t directly.
+                 */
                 return toDecimal(Q_MIN, t, 0, chars);
             }
             chars[0] = '0';
@@ -126,11 +220,39 @@ public final class Schubfach {
     }
 
     private static long toDecimal(int q, long c, int dk, char[] chars) {
+        /*
+         * The skeleton corresponds to figure 7 of [1].
+         * The efficient computations are those summarized in figure 9.
+         *
+         * Here's a correspondence between Java names and names in [1]:
+         * cb:     \bar{c}     "c-bar"
+         * cbr:    \bar{c}_r   "c-bar-r"
+         * cbl:    \bar{c}_l   "c-bar-l"
+         * vb:     \bar{v}     "v-bar"
+         * vbr:    \bar{v}_r   "v-bar-r"
+         * vbl:    \bar{v}_l   "v-bar-l"
+         * rop:    r_o'        "r-o-prime"
+         */
         int out = (int) c & 0x1;
         long cb = c << 2;
         long cbr = cb + 2;
         long cbl;
         int k;
+
+        /*
+         * Irregular numbers handling (Section 3.8 & 8.2 of [1]):
+         * For powers of 2 (c == C_MIN && q != Q_MIN), the round-to-nearest interval is asymmetric:
+         *     v - vl = 2^(q-2)  while  vr - v = 2^(q-1).
+         * In Schubfach's scaled coordinates (where 1 unit is 2^(q-2)), Giulietti elegantly parameterizes
+         * this by setting cbl = cb - 1 (instead of cb - 2) and k = flog10threeQuartersPow2(q).
+         * All subsequent steps (rop, interval inclusion, digit extraction) remain 100% unified.
+         *
+         * Note on Java C2 JIT branch prediction vs unconditional execution (e.g. C++ xjb):
+         * Non-powers of 2 account for >99.999% of values. In HotSpot C2, the heavily biased branch
+         * (c != C_MIN | q == Q_MIN) is predicted with zero pipeline stall, and the irregular branch
+         * is placed out-of-line in cold code. Unconditionally computing both paths (as done in some
+         * C++ libraries to force CMOV) would add unnecessary arithmetic and table lookups on HotSpot.
+         */
         if (c != C_MIN | q == Q_MIN) {
             /* regular spacing */
             cbl = cb - 2;
@@ -142,6 +264,7 @@ public final class Schubfach {
         }
         int h = q + flog2pow10(-k) + 2;
 
+        /* g1 and g0 are as in section 9.8.3 of [1], so g = g1 2^63 + g0 */
         long g1 = g1(k);
         long g0 = g0(k);
 
@@ -151,6 +274,17 @@ public final class Schubfach {
 
         long s = vb >> 2;
         if (s >= 100) {
+            /*
+             * For n = 17, m = 1 the table in section 10 of [1] shows
+             *     s' = floor(s / 10) = floor(s 115_292_150_460_684_698 / 2^60)
+             *        = floor(s 115_292_150_460_684_698 2^4 / 2^64)
+             *
+             * sp10 = 10 s'
+             * tp10 = 10 t'
+             * upin    iff    u' = sp10 10^k in Rv
+             * wpin    iff    w' = tp10 10^k in Rv
+             * See section 9.3 of [1].
+             */
             long sp10 = 10 * multiplyHigh(s, 115_292_150_460_684_698L << 4);
             long tp10 = sp10 + 10;
             boolean upin = vbl + out <= sp10 << 2;
@@ -160,6 +294,12 @@ public final class Schubfach {
             }
         }
 
+        /*
+         * 10 <= s < 100    or    s >= 100  and  u', w' not in Rv
+         * uin    iff    u = s 10^k in Rv
+         * win    iff    w = t 10^k in Rv
+         * See section 9.3 of [1].
+         */
         long t = s + 1;
         boolean uin = vbl + out <= s << 2;
         boolean win = (t << 2) + out <= vbr;
@@ -169,6 +309,7 @@ public final class Schubfach {
         }
         /*
          * Both u and w lie in Rv: determine the one closest to v.
+         * See section 9.3 of [1].
          */
         long cmp = vb - (s + t << 1);
         return toChars(cmp < 0 || cmp == 0 && (s & 0x1) == 0 ? s : t, k + dk, chars);

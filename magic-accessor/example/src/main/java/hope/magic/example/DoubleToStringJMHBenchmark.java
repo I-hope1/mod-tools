@@ -3,6 +3,7 @@ package hope.magic.example;
 import hope.magic.js.runtime.doubleconv.DoubleConversion;
 import hope.magic.runtime.Magic;
 import hope.magic.runtime.Schubfach;
+import jdk.internal.math.DoubleToDecimal;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.infra.Blackhole;
 import org.openjdk.jmh.runner.Runner;
@@ -16,12 +17,13 @@ import java.util.concurrent.TimeUnit;
  * 浮点转十进制字符串（Float/Double to Decimal String）JMH 基准测试。
  * <p>全面量化对比：
  * <ul>
- *   <li>1. OpenJDK 官方内置 {@link Double#toString(double)}（JDK 21 基线）</li>
- *   <li>2. 引擎优化版 {@link DoubleConversion#toShortestString(double)}（Schubfach + 2-Digit LUT + 跳跃尾随零剥离）</li>
- *   <li>3. 零堆分配直写路径 {@link DoubleConversion#appendTo(StringBuilder, double)}（0-Alloc）</li>
- *   <li>4. 底层标量核心 {@link Schubfach#toDecimal(double, char[])}（纯寄存器 / 原语缓冲解码开销）</li>
+ *   <li>1. OpenJDK 官方内置 {@link Double#toString(double)}（JDK 25 公共基线）</li>
+ *   <li>2. JDK 内部原生 {@link DoubleToDecimal#LATIN1}（JDK 内部 0-Alloc 直写字节数组）</li>
+ *   <li>3. 引擎优化版 {@link DoubleConversion#toShortestString(double)}（Schubfach + 2-Digit LUT + 跳跃尾随零剥离）</li>
+ *   <li>4. 引擎零堆分配直写路径 {@link DoubleConversion#appendTo(StringBuilder, double)}（0-Alloc）</li>
+ *   <li>5. 底层标量核心 {@link Schubfach#toDecimal(double, char[])}（纯寄存器 / 原语缓冲解码开销）</li>
  * </ul>
- * 覆盖场景：正规浮点数、纯整数快速路径、极小次正规数、科学计数法与 1024 尺度真实随机混合数据。
+ * 覆盖场景：1024 混合随机数据分布、纯整数快速路径、常规小数、极小次正规数。
  */
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
@@ -29,7 +31,9 @@ import java.util.concurrent.TimeUnit;
 @Warmup(iterations = 3, time = 1, timeUnit = TimeUnit.SECONDS)
 @Measurement(iterations = 5, time = 1, timeUnit = TimeUnit.SECONDS)
 @Fork(value = 3, jvmArgsAppend = {
-	"-XX:+UnlockDiagnosticVMOptions"
+	"-XX:+UnlockDiagnosticVMOptions",
+	"--add-exports=java.base/jdk.internal.math=ALL-UNNAMED",
+	"--add-opens=java.base/jdk.internal.math=ALL-UNNAMED"
 })
 public class DoubleToStringJMHBenchmark {
 
@@ -41,6 +45,7 @@ public class DoubleToStringJMHBenchmark {
 
 	private final StringBuilder sharedSb = new StringBuilder(64);
 	private final char[] rawCharBuffer = new char[32];
+	private final byte[] jdkByteBuffer = new byte[32];
 	private int counter = 0;
 
 	@Setup(Level.Trial)
@@ -82,13 +87,19 @@ public class DoubleToStringJMHBenchmark {
 	}
 
 	@Benchmark
-	public void c1_mixed_2_engine_toShortestString(Blackhole bh) {
+	public void c1_mixed_2_jdk_doubleToDecimal_putDecimal(Blackhole bh) {
+		double v = randomDoubles[counter++ & (PATTERN_SIZE - 1)];
+		bh.consume(DoubleToDecimal.LATIN1.putDecimal(jdkByteBuffer, 0, v));
+	}
+
+	@Benchmark
+	public void c1_mixed_3_engine_toShortestString(Blackhole bh) {
 		double v = randomDoubles[counter++ & (PATTERN_SIZE - 1)];
 		bh.consume(DoubleConversion.toShortestString(v));
 	}
 
 	@Benchmark
-	public void c1_mixed_3_engine_appendTo_zeroAlloc(Blackhole bh) {
+	public void c1_mixed_4_engine_appendTo_zeroAlloc(Blackhole bh) {
 		double v = randomDoubles[counter++ & (PATTERN_SIZE - 1)];
 		sharedSb.setLength(0);
 		DoubleConversion.appendTo(sharedSb, v);
@@ -96,7 +107,7 @@ public class DoubleToStringJMHBenchmark {
 	}
 
 	@Benchmark
-	public void c1_mixed_4_core_schubfachRaw(Blackhole bh) {
+	public void c1_mixed_5_core_schubfachRaw(Blackhole bh) {
 		double v = randomDoubles[counter++ & (PATTERN_SIZE - 1)];
 		bh.consume(Schubfach.toDecimal(Math.abs(v), rawCharBuffer));
 	}
@@ -112,13 +123,19 @@ public class DoubleToStringJMHBenchmark {
 	}
 
 	@Benchmark
-	public void c2_int_2_engine_toShortestString(Blackhole bh) {
+	public void c2_int_2_jdk_doubleToDecimal_putDecimal(Blackhole bh) {
+		double v = integerDoubles[counter++ & (PATTERN_SIZE - 1)];
+		bh.consume(DoubleToDecimal.LATIN1.putDecimal(jdkByteBuffer, 0, v));
+	}
+
+	@Benchmark
+	public void c2_int_3_engine_toShortestString(Blackhole bh) {
 		double v = integerDoubles[counter++ & (PATTERN_SIZE - 1)];
 		bh.consume(DoubleConversion.toShortestString(v));
 	}
 
 	@Benchmark
-	public void c2_int_3_engine_appendTo_zeroAlloc(Blackhole bh) {
+	public void c2_int_4_engine_appendTo_zeroAlloc(Blackhole bh) {
 		double v = integerDoubles[counter++ & (PATTERN_SIZE - 1)];
 		sharedSb.setLength(0);
 		DoubleConversion.appendTo(sharedSb, v);
@@ -136,13 +153,19 @@ public class DoubleToStringJMHBenchmark {
 	}
 
 	@Benchmark
-	public void c3_decimal_2_engine_toShortestString(Blackhole bh) {
+	public void c3_decimal_2_jdk_doubleToDecimal_putDecimal(Blackhole bh) {
+		double v = decimalDoubles[counter++ & (PATTERN_SIZE - 1)];
+		bh.consume(DoubleToDecimal.LATIN1.putDecimal(jdkByteBuffer, 0, v));
+	}
+
+	@Benchmark
+	public void c3_decimal_3_engine_toShortestString(Blackhole bh) {
 		double v = decimalDoubles[counter++ & (PATTERN_SIZE - 1)];
 		bh.consume(DoubleConversion.toShortestString(v));
 	}
 
 	@Benchmark
-	public void c3_decimal_3_engine_appendTo_zeroAlloc(Blackhole bh) {
+	public void c3_decimal_4_engine_appendTo_zeroAlloc(Blackhole bh) {
 		double v = decimalDoubles[counter++ & (PATTERN_SIZE - 1)];
 		sharedSb.setLength(0);
 		DoubleConversion.appendTo(sharedSb, v);
@@ -160,13 +183,19 @@ public class DoubleToStringJMHBenchmark {
 	}
 
 	@Benchmark
-	public void c4_subnormal_2_engine_toShortestString(Blackhole bh) {
+	public void c4_subnormal_2_jdk_doubleToDecimal_putDecimal(Blackhole bh) {
+		double v = subnormalDoubles[counter++ & (PATTERN_SIZE - 1)];
+		bh.consume(DoubleToDecimal.LATIN1.putDecimal(jdkByteBuffer, 0, v));
+	}
+
+	@Benchmark
+	public void c4_subnormal_3_engine_toShortestString(Blackhole bh) {
 		double v = subnormalDoubles[counter++ & (PATTERN_SIZE - 1)];
 		bh.consume(DoubleConversion.toShortestString(v));
 	}
 
 	@Benchmark
-	public void c4_subnormal_3_engine_appendTo_zeroAlloc(Blackhole bh) {
+	public void c4_subnormal_4_engine_appendTo_zeroAlloc(Blackhole bh) {
 		double v = subnormalDoubles[counter++ & (PATTERN_SIZE - 1)];
 		sharedSb.setLength(0);
 		DoubleConversion.appendTo(sharedSb, v);

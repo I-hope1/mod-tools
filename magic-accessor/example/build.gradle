@@ -93,6 +93,10 @@ tasks.register('jmhDoubleToString', JavaExec) {
 			'-bm', 'avgt',
 			'-tu', 'ns'
 	]
+	jvmArgs(
+			'--add-exports=java.base/jdk.internal.math=ALL-UNNAMED',
+			'--add-opens=java.base/jdk.internal.math=ALL-UNNAMED'
+	)
 	if (new File("F:/files/java/jdks/openjdk-25.0.1/bin/java.exe").exists()) {
 		executable = "F:/files/java/jdks/openjdk-25.0.1/bin/java.exe"
 	} else if (new File("F:/files/java/jdks/jbrsdk_jcef-25.0.2/bin/java.exe").exists()) {

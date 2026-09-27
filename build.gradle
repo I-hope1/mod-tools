@@ -24,6 +24,7 @@ allprojects {
 			"java.base/jdk.internal.misc",
 			"java.base/jdk.internal.reflect",
 			"java.base/jdk.internal.loader",
+			"java.base/jdk.internal.math",
 			"java.base/jdk.internal.module",
 			"java.base/jdk.internal.org.objectweb.asm",
 			"java.base/jdk.internal.org.objectweb.asm.tree",

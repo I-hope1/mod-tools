@@ -102,15 +102,18 @@ public final class DoubleConversion {
 		// sb.append('D');
 	}
 
-	@SuppressWarnings("StringRepeatCanBeUsed")
-	public static void internalAppendTo(StringBuilder sb, final double value) {
-		if (value == 0.0) {
+	public static void internalAppendTo(StringBuilder sb, float value) {
+		if (value == 0.0f) {
 			sb.append('0');
 			return;
 		}
+		if (value < 0.0f) {
+			sb.append('-');
+			value = -value;
+		}
 
-		final char[] digits   = LOCAL_CHARS.get();
-		long   packed = Schubfach.toDecimal(value, digits);
+		final char[] digits = LOCAL_CHARS.get();
+		long packed = Schubfach.toDecimal(value, digits);
 		if (packed == -1L) {
 			sb.append(value);
 			return;
@@ -118,7 +121,33 @@ public final class DoubleConversion {
 
 		int decimalPoint = (int) (packed >> 32);
 		int len          = (int) packed;
+		formatDigits(sb, digits, decimalPoint, len);
+	}
 
+	public static void internalAppendTo(StringBuilder sb, double value) {
+		if (value == 0.0) {
+			sb.append('0');
+			return;
+		}
+		if (value < 0.0) {
+			sb.append('-');
+			value = -value;
+		}
+
+		final char[] digits = LOCAL_CHARS.get();
+		long packed = Schubfach.toDecimal(value, digits);
+		if (packed == -1L) {
+			sb.append(value);
+			return;
+		}
+
+		int decimalPoint = (int) (packed >> 32);
+		int len          = (int) packed;
+		formatDigits(sb, digits, decimalPoint, len);
+	}
+
+	@SuppressWarnings("StringRepeatCanBeUsed")
+	private static void formatDigits(StringBuilder sb, char[] digits, int decimalPoint, int len) {
 		if (decimalPoint < -5 || decimalPoint > 21) {
 			sb.append(digits[0]);
 			if (len > 1) {
@@ -173,6 +202,25 @@ public final class DoubleConversion {
 	 * @param value number to convert
 	 * @return formatted number
 	 */
+	public static String toShortestString(final float value) {
+		if (Float.isNaN(value)) {
+			return "NaN";
+		}
+		if (value == Float.POSITIVE_INFINITY) {
+			return "Infinity";
+		}
+		if (value == Float.NEGATIVE_INFINITY) {
+			return "-Infinity";
+		}
+		if (value == 0.0f) {
+			return "0";
+		}
+
+		final byte[] str = new byte[32];
+		final int    len = toShortestBytes(value, str, 0);
+		return new String(str, 0, len, StandardCharsets.ISO_8859_1);
+	}
+
 	public static String toShortestString(final double value) {
 		if (Double.isNaN(value)) {
 			return "NaN";
@@ -192,14 +240,60 @@ public final class DoubleConversion {
 		return new String(str, 0, len, StandardCharsets.ISO_8859_1);
 	}
 
-	/**
-	 * Formats the shortest representation of a double into the specified byte buffer
-	 * using the ECMA-262 § 7.1.12.1 rules.
-	 * @param value double value to format
-	 * @param str   target byte array
-	 * @param pos   starting offset
-	 * @return final written offset (total bytes written = return value - starting offset)
-	 */
+	public static int toShortestBytes(final float value, final byte[] str, int pos) {
+		if (Float.isNaN(value)) {
+			str[pos++] = 'N';
+			str[pos++] = 'a';
+			str[pos++] = 'N';
+			return pos;
+		}
+		if (value == Float.POSITIVE_INFINITY) {
+			str[pos++] = 'I';
+			str[pos++] = 'n';
+			str[pos++] = 'f';
+			str[pos++] = 'i';
+			str[pos++] = 'n';
+			str[pos++] = 'i';
+			str[pos++] = 't';
+			str[pos++] = 'y';
+			return pos;
+		}
+		if (value == Float.NEGATIVE_INFINITY) {
+			str[pos++] = '-';
+			str[pos++] = 'I';
+			str[pos++] = 'n';
+			str[pos++] = 'f';
+			str[pos++] = 'i';
+			str[pos++] = 'n';
+			str[pos++] = 'i';
+			str[pos++] = 't';
+			str[pos++] = 'y';
+			return pos;
+		}
+		if (value == 0.0f) {
+			str[pos++] = '0';
+			return pos;
+		}
+
+		if (value < 0.0f) {
+			str[pos++] = '-';
+		}
+		final float  absValue = Math.abs(value);
+		final byte[] digits   = LOCAL_DIGITS.get();
+		final long   packed   = Schubfach.toDecimal(absValue, digits);
+		if (packed == -1L) {
+			String s = String.valueOf(value);
+			for (int i = 0; i < s.length(); i++) {
+				str[pos++] = (byte) s.charAt(i);
+			}
+			return pos;
+		}
+
+		final int decimalPoint = (int) (packed >> 32);
+		final int len          = (int) packed;
+		return formatBytes(str, pos, digits, decimalPoint, len);
+	}
+
 	public static int toShortestBytes(final double value, final byte[] str, int pos) {
 		if (Double.isNaN(value)) {
 			str[pos++] = 'N';
@@ -251,7 +345,10 @@ public final class DoubleConversion {
 
 		final int decimalPoint = (int) (packed >> 32);
 		final int len          = (int) packed;
+		return formatBytes(str, pos, digits, decimalPoint, len);
+	}
 
+	private static int formatBytes(byte[] str, int pos, byte[] digits, int decimalPoint, int len) {
 		if (decimalPoint < -5 || decimalPoint > 21) {
 			str[pos++] = digits[0];
 			if (len > 1) {

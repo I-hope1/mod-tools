@@ -89,6 +89,16 @@ public final class Schubfach {
     /* Used in rop() */
     private static final long MASK_63 = (1L << 63) - 1;
 
+    /* --- Float Constants (IEEE 754 single precision) --- */
+    static final int P_FLOAT = 24;
+    private static final int W_FLOAT = (Float.SIZE - 1) - (P_FLOAT - 1); // 8
+    static final int Q_MIN_FLOAT = (-1 << (W_FLOAT - 1)) - P_FLOAT + 3; // -149
+    static final int Q_MAX_FLOAT = (1 << (W_FLOAT - 1)) - P_FLOAT;     // 104
+    private static final int C_MIN_FLOAT = 1 << (P_FLOAT - 1);
+    private static final int BQ_MASK_FLOAT = (1 << W_FLOAT) - 1;
+    private static final int T_MASK_FLOAT = (1 << (P_FLOAT - 1)) - 1;
+    private static final long MASK_32 = (1L << 32) - 1;
+
     private static final int Q_10 = 41;
     private static final long C_10 = 661_971_961_083L;
     private static final long A_10 = -274_743_187_321L;
@@ -248,6 +258,163 @@ public final class Schubfach {
             return (1L << 32) | 1L;
         }
         return -1L;
+    }
+
+    /**
+     * Converts a finite positive float value into its shortest decimal representation,
+     * writing directly into the provided character buffer.
+     *
+     * @param v positive finite float value
+     * @param chars destination buffer (must have capacity >= 10)
+     * @return packed long where high 32 bits is decimalPoint and low 32 bits is length,
+     *         or -1L if the input is non-finite (NaN / Infinity)
+     */
+    public static long toDecimal(float v, char[] chars) {
+        int bits = Float.floatToRawIntBits(v);
+        int t = bits & T_MASK_FLOAT;
+        int bq = (bits >>> (P_FLOAT - 1)) & BQ_MASK_FLOAT;
+        if (bq < BQ_MASK_FLOAT) {
+            if (bq != 0) {
+                int mq = -Q_MIN_FLOAT + 1 - bq;
+                int c = C_MIN_FLOAT | t;
+                if (0 < mq & mq < P_FLOAT) {
+                    int f = c >> mq;
+                    if (f << mq == c) {
+                        return toChars(f, 0, chars);
+                    }
+                }
+                return toDecimalFloat(-mq, c, 0, chars);
+            }
+            if (t != 0) {
+                return toDecimalFloat(Q_MIN_FLOAT, t, 0, chars);
+            }
+            chars[0] = '0';
+            return (1L << 32) | 1L;
+        }
+        return -1L;
+    }
+
+    /**
+     * Direct byte[] overload of {@link #toDecimal(float, char[])} for Latin-1/ASCII
+     * byte buffer formatting without char-to-byte transcoding.
+     *
+     * @param v float value to format
+     * @param bytes byte array destination (at least 10 bytes)
+     * @return packed long containing (decimalPoint &lt;&lt; 32) | len, or -1L for non-finite
+     */
+    public static long toDecimal(float v, byte[] bytes) {
+        int bits = Float.floatToRawIntBits(v);
+        int t = bits & T_MASK_FLOAT;
+        int bq = (bits >>> (P_FLOAT - 1)) & BQ_MASK_FLOAT;
+        if (bq < BQ_MASK_FLOAT) {
+            if (bq != 0) {
+                int mq = -Q_MIN_FLOAT + 1 - bq;
+                int c = C_MIN_FLOAT | t;
+                if (0 < mq & mq < P_FLOAT) {
+                    int f = c >> mq;
+                    if (f << mq == c) {
+                        return toBytes(f, 0, bytes);
+                    }
+                }
+                return toDecimalFloat(-mq, c, 0, bytes);
+            }
+            if (t != 0) {
+                return toDecimalFloat(Q_MIN_FLOAT, t, 0, bytes);
+            }
+            bytes[0] = '0';
+            return (1L << 32) | 1L;
+        }
+        return -1L;
+    }
+
+    private static long toDecimalFloat(int q, int c, int dk, char[] chars) {
+        int out = c & 0x1;
+        long cb = (long) c << 2;
+        long cbr = cb + 2;
+        long cbl;
+        int k;
+        if (c != C_MIN_FLOAT | q == Q_MIN_FLOAT) {
+            cbl = cb - 2;
+            k = flog10pow2(q);
+        } else {
+            cbl = cb - 1;
+            k = flog10threeQuartersPow2(q);
+        }
+        int h = q + flog2pow10(-k) + 33;
+
+        long g = g1(k) + 1;
+
+        int vb = ropFloat(g, cb << h);
+        int vbl = ropFloat(g, cbl << h);
+        int vbr = ropFloat(g, cbr << h);
+
+        int s = vb >> 2;
+        if (s >= 100) {
+            int sp10 = 10 * (int) (s * 1_717_986_919L >>> 34);
+            int tp10 = sp10 + 10;
+            boolean upin = vbl + out <= sp10 << 2;
+            boolean wpin = (tp10 << 2) + out <= vbr;
+            if (upin != wpin) {
+                return toChars(upin ? sp10 : tp10, k, chars);
+            }
+        }
+
+        int t = s + 1;
+        boolean uin = vbl + out <= s << 2;
+        boolean win = (t << 2) + out <= vbr;
+        if (uin != win) {
+            return toChars(uin ? s : t, k + dk, chars);
+        }
+        int cmp = vb - (s + t << 1);
+        return toChars(cmp < 0 || (cmp == 0 && (s & 0x1) == 0) ? s : t, k + dk, chars);
+    }
+
+    private static long toDecimalFloat(int q, int c, int dk, byte[] bytes) {
+        int out = c & 0x1;
+        long cb = (long) c << 2;
+        long cbr = cb + 2;
+        long cbl;
+        int k;
+        if (c != C_MIN_FLOAT | q == Q_MIN_FLOAT) {
+            cbl = cb - 2;
+            k = flog10pow2(q);
+        } else {
+            cbl = cb - 1;
+            k = flog10threeQuartersPow2(q);
+        }
+        int h = q + flog2pow10(-k) + 33;
+
+        long g = g1(k) + 1;
+
+        int vb = ropFloat(g, cb << h);
+        int vbl = ropFloat(g, cbl << h);
+        int vbr = ropFloat(g, cbr << h);
+
+        int s = vb >> 2;
+        if (s >= 100) {
+            int sp10 = 10 * (int) (s * 1_717_986_919L >>> 34);
+            int tp10 = sp10 + 10;
+            boolean upin = vbl + out <= sp10 << 2;
+            boolean wpin = (tp10 << 2) + out <= vbr;
+            if (upin != wpin) {
+                return toBytes(upin ? sp10 : tp10, k, bytes);
+            }
+        }
+
+        int t = s + 1;
+        boolean uin = vbl + out <= s << 2;
+        boolean win = (t << 2) + out <= vbr;
+        if (uin != win) {
+            return toBytes(uin ? s : t, k + dk, bytes);
+        }
+        int cmp = vb - (s + t << 1);
+        return toBytes(cmp < 0 || (cmp == 0 && (s & 0x1) == 0) ? s : t, k + dk, bytes);
+    }
+
+    private static int ropFloat(long g, long cp) {
+        long x1 = multiplyHigh(g, cp);
+        long vbp = x1 >>> 31;
+        return (int) (vbp | ((x1 & MASK_32) + MASK_32 >>> 32));
     }
 
     private static long toDecimal(int q, long c, int dk, char[] chars) {

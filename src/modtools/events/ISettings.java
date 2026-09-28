@@ -40,6 +40,7 @@ import static modtools.utils.Tools.or;
 import static modtools.utils.ui.CellTools.rowSelf;
 
 /**
+ * 以 ‘_’ 开头的键，会变成下划线
  * @see SettingsInit
  */
 @SuppressWarnings({"StringTemplateMigration", "unused"})

@@ -140,12 +140,14 @@ public class MySettings {
 			return toBool(get(name, def));
 		}
 
-		/** 将 Data 及其所有值递归转为 Jval */
+		/** 将 Data 及其所有值递归转为 Jval，跳过以 ‘_’ 开头的键 */
 		private static Jval toJval(Object v) {
 			return switch (v) {
 				case Data data -> {
 					Jval obj = Jval.newObject();
-					data.each((k, val) -> obj.add(k, toJval(val)));
+					data.each((k, val) -> {
+						if (!k.startsWith("_")) obj.add(k, toJval(val));
+					});
 					yield obj;
 				}
 				case String[] arr -> {

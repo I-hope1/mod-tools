@@ -63,12 +63,17 @@ export fn GetInstances(
     }
 
     if (count == 0) {
-        return jni_env.*.NewObjectArray.?(
+		_ = jvmti_env.*.Deallocate.?(
+	        jvmti_ptr,
+	        @ptrCast(instances),
+	    );
+
+        return jni_env.*.NewGlobalRef.?(env_ptr, jni_env.*.NewObjectArray.?(
             env_ptr,
             0,
             klass,
             null,
-        );
+        ));
     }
 
     // 3. 创建 Java 对象数组
@@ -188,6 +193,7 @@ export fn GetReferrers(
         obj_class,
         null,
     );
+    jni_env.*.DeleteLocalRef.?(env_ptr, obj_class);
 
     // 7. 填充数组、重置引用者的 Tag 标签，并及时清理本地引用防止溢出
     var i: jvm.jint = 0;

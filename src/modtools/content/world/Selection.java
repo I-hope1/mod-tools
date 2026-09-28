@@ -956,6 +956,7 @@ public class Selection extends Content {
 	}
 
 	public class FocusWindow extends NoTopWindow {
+		private final int b = 218;
 		public FocusWindow(String title) {
 			super(title, 0, 42, false);
 		}

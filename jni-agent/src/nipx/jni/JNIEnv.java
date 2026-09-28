@@ -605,11 +605,13 @@ public class JNIEnv {
 			if (address == 0) return null;
 			jValuesPtr.copyFrom(MemorySegment.ofArray(new long[]{address}));
 			jniToJava.remove();
-			JNIEnvFunctions.CallStaticVoidMethodA_MH.invokeExact(
-			 functions.CallStaticVoidMethodAFp, jniEnvPointer, classJNIEnvRef.ref(), midSetSecret, jValuesPtr);
-			Object res = jniToJava.get();
-			jniToJava.remove();
-			return res;
+			try {
+				JNIEnvFunctions.CallStaticVoidMethodA_MH.invokeExact(
+				 functions.CallStaticVoidMethodAFp, jniEnvPointer, classJNIEnvRef.ref(), midSetSecret, jValuesPtr);
+				return jniToJava.get();
+			} finally {
+				jniToJava.remove();
+			}
 		});
 	}
 

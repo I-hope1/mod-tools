@@ -88,8 +88,13 @@ public class LibTool {
 				}
 
 				// 将 native 的 jobjectArray 转换回 Java 侧真实的 T[] 数组
-				Object arrayObj = jniEnv.jObjectToJavaObject(resultArrayRef);
-				return (T[]) arrayObj;
+				try {
+					Object arrayObj = jniEnv.jObjectToJavaObject(resultArrayRef);
+					return (T[]) arrayObj;
+				} finally {
+					jniEnv.DeleteGlobalRef(resultArrayRef);
+				}
+
 			}
 		} catch (Throwable t) {
 			throw new RuntimeException("Failed to retrieve instances from JVMTI", t);

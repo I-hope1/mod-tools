@@ -3,117 +3,153 @@ package modtools.misc;
 import arc.func.*;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
-
-import static modtools.utils.ui.FormatHelper.*;
+import modtools.utils.doubleconv.FastFormat;
+import modtools.utils.ui.CellTools;
 
 /**
- * PairProv类实现了Prov接口，用于生成和提供表示向量对的字符序列
- * 它可以通过指定的分隔符连接两个浮点数，并可选择是否使用括号包围
+ * PairProv 类实现了 Prov 接口，用于生成和提供表示向量对的字符序列。
+ * 它可以通过指定的分隔符连接两个浮点数，并可选择是否使用括号包围。
+ * <p>注意：为了极致性能，每次 get() 返回的是同一个 StringBuilder 实例（零 GC 分配），
+ * 调用方不得在外部异步清空或长期持有该实例的内容。</p>
  */
 public class PairProv implements Prov<CharSequence> {
-	// vecProv用于获取向量值
 	public final Prov<Vec2> vecProv;
-	// delimiter用于定义两个浮点数之间的分隔符
 	public final String     delimiter;
-	// parentheses表示结果是否被括号包围
 	public final boolean    parentheses;
-	public       int        digits = 2;
+	public final int        digits;
 
-	// 构造函数：初始化vecProv和delimiter，使用默认的parentheses值true
+	// 真正复用的 StringBuilder，零 GC 分配
+	protected final StringBuilder result = new StringBuilder(32);
+	// 缓存上次的数值
+	protected       float         lastX  = Float.NaN, lastY = Float.NaN;
+	protected boolean lastSuccess = false;
+
 	public PairProv(Prov<Vec2> vecProv, String delimiter) {
-		this(vecProv, delimiter, true);
+		this(vecProv, delimiter, true, 2);
 	}
 
-	// 构造函数：初始化vecProv和parentheses，使用默认的delimiter值"\n"
+	public PairProv(Prov<Vec2> vecProv, String delimiter, int digits) {
+		this(vecProv, delimiter, true, digits);
+	}
+
 	public PairProv(Prov<Vec2> vecProv, boolean parentheses) {
-		this(vecProv, "\n", parentheses);
+		this(vecProv, "\n", parentheses, 2);
 	}
 
-	// 构造函数：初始化vecProv、delimiter和parentheses
 	public PairProv(Prov<Vec2> vecProv, String delimiter, boolean parentheses) {
+		this(vecProv, delimiter, parentheses, 2);
+	}
+
+
+	public PairProv(Prov<Vec2> vecProv, String delimiter, boolean parentheses, int digits) {
 		this.vecProv = vecProv;
 		this.delimiter = delimiter;
 		this.parentheses = parentheses;
+		this.digits = digits;
 	}
 
-	// lastX和lastY用于缓存上一次的向量值，以优化getString的调用
-	float lastX, lastY;
-	String lastStr;
-
-	public String getString(float f) {
-		return fixed(f, digits);
+	public void appendTo(StringBuilder sb, float f) {
+		FastFormat.autoFixed(sb, f, digits);
 	}
 
-	/**
-	 * 根据给定的向量生成字符序列
-	 * @param vec 输入的向量值
-	 * @return 格式化后的字符序列
-	 */
-	public String getString(Vec2 vec) {
-		return parentheses ? "(" + getString(vec.x) + delimiter + getString(vec.y) + ")"
-		 : getString(vec.x) + delimiter + getString(vec.y);
+	public void appendTo(StringBuilder sb, Vec2 vec) {
+		if (parentheses) {
+			sb.append('(');
+			appendTo(sb, vec.x);
+			sb.append(delimiter);
+			appendTo(sb, vec.y);
+			sb.append(')');
+		} else {
+			appendTo(sb, vec.x);
+			sb.append(delimiter);
+			appendTo(sb, vec.y);
+		}
 	}
 
-	/**
-	 * 获取并格式化向量值，如果结果未变化则返回缓存的结果
-	 * @return 格式化后的字符序列
-	 */
-	public final String get() {
+	/** 判断数值是否有变动，子类可按需覆写（例如只检查 x） */
+	protected boolean hasChanged(Vec2 vec) {
+		return !lastSuccess || !Mathf.equal(lastX, vec.x) || !Mathf.equal(lastY, vec.y);
+	}
+
+	@Override
+	public final StringBuilder get() {
 		Vec2 vec;
 		try {
-			// 尝试获取新的向量值
 			vec = vecProv.get();
+			if (vec == null) throw new NullPointerException("vec is null");
 		} catch (Throwable e) {
-			// 如果获取过程中发生异常，返回错误提示
-			return "[red]ERROR";
+			if (lastSuccess || result.length() == 0) {
+				result.setLength(0);
+				result.append("[red]ERROR");
+				lastSuccess = false;
+			}
+			return result;
 		}
 
-		// 如果缓存结果有效且向量值未变化，则返回缓存结果
-		if (lastStr == null || !Mathf.equal(lastX, vec.x) || !Mathf.equal(lastY, vec.y)) {
-			lastStr = getString(vec);
+		// 数值变动或之前处于异常状态，重新构建
+		if (hasChanged(vec)) {
+			result.setLength(0);
+			appendTo(result, vec);
+			lastX = vec.x;
+			lastY = vec.y;
+			lastSuccess = true;
 		}
-		return lastStr;
+		return result;
 	}
 
 	/**
-	 * SizeProv是PairProv的子类，用于提供表示尺寸的字符序列
-	 * 它使用特定的分隔符"×"连接两个浮点数，并不使用括号包围
+	 * SizeProv 是 PairProv 的子类，用于提供表示尺寸的字符序列
 	 */
 	public static class SizeProv extends PairProv {
-		// 构造函数：初始化vecProv和特定的delimiter"×"
 		public SizeProv(Prov<Vec2> vecProv) {
 			this(vecProv, "[accent]×[]");
 		}
 
-		// 构造函数：初始化vecProv为固定向量值和特定的delimiter"×"
 		public SizeProv(Vec2 vec2) {
 			this(() -> vec2, "[accent]×[]");
 		}
 
-		// 构造函数：初始化vecProv、自定义的delimiter，并设置parentheses为false
 		public SizeProv(Prov<Vec2> vecProv, String delimiter) {
-			super(vecProv, delimiter, false);
+			this(vecProv, delimiter, 2);
 		}
 
-		/** @see modtools.utils.ui.FormatHelper#fixedUnlessUnset(float) */
-		public String getString(float f) {
-			return fixedUnlessUnset(f);
+		public SizeProv(Prov<Vec2> vecProv, String delimiter, int digits) {
+			super(vecProv, delimiter, false, digits);
+		}
+
+		@Override
+		public void appendTo(StringBuilder sb, float f) {
+			if (f == CellTools.unset) {
+				sb.append("[gray]UNSET[]");
+			} else {
+				FastFormat.autoFixed(sb, f, digits);
+			}
 		}
 	}
 
-	/** 只取第一个作为String */
+	/** 只取第一个分量并支持后缀追加 */
 	public static class SingleProv extends PairProv {
-		public final Func<String, String> builder;
-		public SingleProv(Prov<Vec2> vecProv) {
-			this(vecProv, null);
+		public final Cons<StringBuilder> builder;
+
+		public SingleProv(Prov<Vec2> vecProv, int digits) {
+			this(vecProv, null, digits);
 		}
-		public SingleProv(Prov<Vec2> vecProv, Func<String, String> builder) {
-			super(vecProv, "");
+
+		public SingleProv(Prov<Vec2> vecProv, Cons<StringBuilder> builder, int digits) {
+			super(vecProv, "", false, digits); // 显式设置 parentheses 为 false
 			this.builder = builder;
 		}
-		public String getString(Vec2 vec) {
-			if (builder == null) return getString(vec.x);
-			return builder.get(getString(vec.x));
+
+		/** 覆写变动检测：只关心 x，避免因 y 变动导致无意义重建 */
+		@Override
+		protected boolean hasChanged(Vec2 vec) {
+			return !lastSuccess || !Mathf.equal(lastX, vec.x);
+		}
+
+		@Override
+		public void appendTo(StringBuilder sb, Vec2 vec) {
+			FastFormat.autoFixed(sb, vec.x, digits);
+			if (builder != null) builder.get(sb);
 		}
 	}
 }

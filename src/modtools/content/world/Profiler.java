@@ -176,17 +176,16 @@ public class Profiler extends Content {
 							Tmp.v1.set((float) avg, 0);
 						}
 						return Tmp.v1;
-					});
-					avgProv.digits = 6;
+					}, 6);
 					t.label(avgProv).color(Pal.accent);
 					t.label(new SingleProv(() -> {
 						MethodStats stat = ProfilerData.stats.get(mName);
 						return Tmp.v1.set(stat != null ? stat.time().sum() / 1_000_000f : 0f, 0);
-					}));
+					}, 6));
 					t.label(new SingleProv(() -> {
 						MethodStats stat = ProfilerData.stats.get(mName);
 						return Tmp.v1.set(stat != null ? stat.count().sum() : 0, 0);
-					})).color(Color.gray);
+					}, 6)).color(Color.gray);
 				}).name(mName).growX().pad(2).row();
 			}
 			statsTable.unbind();

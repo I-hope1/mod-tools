@@ -97,7 +97,7 @@ public class HotSwapAgent {
 		}
 		if (UI_HOOK) {
 			LambdaRef.init();
-			CellPropertyRef.enable();
+			// CellPropertyRef.enable();
 		}
 
 		// 解析传入的监控路径 (支持分号或冒号分割)，按类型分流

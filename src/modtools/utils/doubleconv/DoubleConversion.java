@@ -69,6 +69,7 @@ public final class DoubleConversion {
 	 ThreadLocal.withInitial(() -> new byte[24]);
 	private static final ThreadLocal<char[]> LOCAL_CHARS  =
 	 ThreadLocal.withInitial(() -> new char[24]);
+
 	public static void appendTo(StringBuilder sb, final float value) {
 		if (Float.isNaN(value)) {
 			sb.append("NaN");

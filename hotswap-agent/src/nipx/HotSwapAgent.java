@@ -34,6 +34,7 @@ public class HotSwapAgent {
 	public static String[]     HOTSWAP_BLACKLIST;
 	public static boolean      RETRANSFORM_LOADED = Boolean.parseBoolean(System.getProperty("nipx.agent.retransform_loaded", "false"));
 	public static boolean      ENABLE_HOTSWAP_EVENT;
+	public static boolean      FORCE_REINIT;
 	public static boolean      LAMBDA_ALIGN;
 	public static boolean      HOTSWAP_PLUS;
 	public static boolean      UI_HOOK;
@@ -146,6 +147,8 @@ public class HotSwapAgent {
 		info("HotSwap Plus: " + HOTSWAP_PLUS);
 		ENABLE_HOTSWAP_EVENT = Boolean.parseBoolean(System.getProperty("nipx.agent.hotswap_event", "false"));
 		info("HotSwap Event: " + ENABLE_HOTSWAP_EVENT);
+		FORCE_REINIT = Boolean.parseBoolean(System.getProperty("nipx.agent.force_reinit", "true"));
+		info("Force Reinit: " + FORCE_REINIT);
 		LAMBDA_ALIGN = Boolean.parseBoolean(System.getProperty("nipx.agent.lambda_align", "true"));
 		info("Lambda Align: " + LAMBDA_ALIGN);
 		if (LAMBDA_ALIGN) {
@@ -338,7 +341,7 @@ public class HotSwapAgent {
 		for (ClassDefinition def : definitions) {
 			Class<?> clazz = def.getDefinitionClass();
 
-			if (!clazz.isAnnotationPresent(Reloadable.class)) continue;
+			if (!(FORCE_REINIT || clazz.isAnnotationPresent(Reloadable.class))) continue;
 
 			Core.app.post(() -> Core.app.post(() -> processAnnotationsInternal(clazz)));
 		}

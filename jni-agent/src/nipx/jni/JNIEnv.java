@@ -604,6 +604,7 @@ public class JNIEnv {
 			long          address    = jobject.address();
 			if (address == 0) return null;
 			jValuesPtr.copyFrom(MemorySegment.ofArray(new long[]{address}));
+			jniToJava.remove();
 			JNIEnvFunctions.CallStaticVoidMethodA_MH.invokeExact(
 			 functions.CallStaticVoidMethodAFp, jniEnvPointer, classJNIEnvRef.ref(), midSetSecret, jValuesPtr);
 			Object res = jniToJava.get();

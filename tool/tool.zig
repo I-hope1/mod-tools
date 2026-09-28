@@ -103,7 +103,9 @@ export fn GetInstances(
         @ptrCast(instances),
     );
 
-    return result_array;
+    const global = jni_env.*.NewGlobalRef.?(env_ptr, result_array);
+	_ = jni_env.*.DeleteLocalRef.?(env_ptr, result_array);
+	return global;
 }
 
 export fn GetReferrers(
@@ -214,7 +216,9 @@ export fn GetReferrers(
         @ptrCast(instances),
     );
 
-    return result_array;
+    const global = jni_env.*.NewGlobalRef.?(env_ptr, result_array);
+	_ = jni_env.*.DeleteLocalRef.?(env_ptr, result_array);
+	return global;
 }
 
 /// FollowReferences 核心回调函数：当 JVM 扫描到 A 引用 B 时触发

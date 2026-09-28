@@ -32,6 +32,8 @@ public enum E_Hook implements ISettings {
 	@Switch(dependency = "hot_swap")
 	hotswap_event,
 	@Switch(dependency = "hot_swap")
+	force_reinit,
+	@Switch(dependency = "hot_swap")
 	lambda_align,
 	@Switch(dependency = "hot_swap")
 	ui_hook,
@@ -74,8 +76,9 @@ public enum E_Hook implements ISettings {
 
 		hotswapOnChange(redefine_mode, func);
 		hotswapOnChange(hotswap_blacklist, x -> String.join(",", x.getArray().map(Jval::asString)));
-		hotswapOnChange(hotswap_event, func);
 		hotswapOnChange(hotswap_plus, func);
+		hotswapOnChange(hotswap_event, func);
+		hotswapOnChange(force_reinit, func);
 		hotswapOnChange(lambda_align, func);
 		hotswapOnChange(ui_hook, func);
 

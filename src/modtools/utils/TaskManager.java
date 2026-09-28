@@ -1,22 +1,25 @@
 package modtools.utils;
 
 import arc.func.*;
-import arc.struct.ObjectMap;
 import arc.util.*;
 import arc.util.Timer.Task;
 
 public class TaskManager {
-	private static final ObjectMap<Runnable, Task> map = new ObjectMap<>();
 
+	/** 快捷创建任务 */
 	public static Task newTask(Runnable run) {
 		return new Task() {
+			@Override
 			public void run() {
 				run.run();
 			}
 		};
 	}
+
+	/** 快捷创建可拿到自身 task 的任务（方便自取消） */
 	public static Task newTaskc(Cons<Task> cons) {
 		return new Task() {
+			@Override
 			public void run() {
 				cons.get(this);
 			}
@@ -24,74 +27,92 @@ public class TaskManager {
 	}
 
 	/**
-	 * <p>新建任务{@link Time#runTask(float, Runnable)}
-	 * <p>如果任务没有完成，不新建
-	 * @param delay 单位tick (正常60tick/s)
-	 * @return 进行的任务
-	 * @see Time#runTask(float, Runnable)
-	 *  */
-	public static Task acquireTask(float delay, Runnable run) {
-		return SR.of(map.get(run, () -> Time.runTask(delay, run)))
-		 .consNot(Task::isScheduled, task -> Timer.schedule(task, delay / 60f)).get();
-	}
-	/** @param delay 延迟的帧（tick，60tick/s) */
-	public static boolean scheduleOrCancel(int delay, Runnable run) {
-		return scheduleOrCancel(delay / 60f, run);
-	}
-
-
-	public static boolean scheduleOrCancel(float delaySeconds, Runnable run) {
-		return scheduleOrCancel(delaySeconds, map.get(run, () -> Timer.schedule(run, delaySeconds)));
-	}
-	/**
-	 * @param task 执行代码
-	 *
-	 * @return 是否新建了任务
+	 * 防抖/重置任务：如果正在排队则取消并重新倒计时
 	 */
-	public static boolean scheduleOrCancel(float delaySeconds, Task task) {
-		if (trySchedule(delaySeconds, task)) {
-			return true;
+	public static void reset(Task task, float delaySeconds) {
+		synchronized (Timer.instance()) {
+			synchronized (task) {
+				if (task.isScheduled()) {
+					task.cancel();
+				}
+				Timer.schedule(task, delaySeconds);
+			}
 		}
-		task.cancel();
-		return false;
-	}
-	/** 将task添加到计时器
-	 * @param run 一定要缓存，field或其他常量 */
-	public static void  scheduleOrReset(float delaySeconds, Runnable run) {
-		scheduleOrReset(delaySeconds, map.get(run, () -> acquireTask(delaySeconds * 60f, run)));
-	}
-	/** 将task添加到计时器  */
-	public static void scheduleOrReset(float delaySeconds, Task task) {
-		if (task.isScheduled()) {
-			task.cancel();
-		}
-		Timer.schedule(task, delaySeconds);
 	}
 
-	/** 尝试添加任务
-	 * @return true 如果添加成功 */
-	public static boolean trySchedule(float delaySeconds, Task task) {
-		if (task.isScheduled()) {
-			return false;
-		} else {
-			Timer.schedule(task, delaySeconds);
-			return true;
+	public static void resetTicks(Task task, float delayTicks) {
+		reset(task, delayTicks / 60f);
+	}
+
+	/**
+	 * 启停任务（Toggle）：排队中则取消，未排队则调度
+	 * @return true 表示启动了调度；false 表示取消了调度
+	 */
+	public static boolean toggle(Task task, float delaySeconds) {
+		synchronized (Timer.instance()) {
+			synchronized (task) {
+				if (task.isScheduled()) {
+					task.cancel();
+					return false;
+				} else {
+					Timer.schedule(task, delaySeconds);
+					return true;
+				}
+			}
 		}
 	}
+
+	public static boolean toggleTicks(Task task, float delayTicks) {
+		return toggle(task, delayTicks / 60f);
+	}
+
 	/**
-	 * 重复运行直到返回{@code true}
-	 * @param boolp 布尔提供者
+	 * 尝试调度：只有未在排队时才添加调度
+	 * @return true 表示添加成功；false 表示已有排队中任务，未作处理
 	 */
-	public static void forceRun(Boolp boolp) {
-		Timer.schedule(new Task() {
+	public static boolean trySchedule(Task task, float delaySeconds) {
+		synchronized (Timer.instance()) {
+			synchronized (task) {
+				if (task.isScheduled()) {
+					return false;
+				} else {
+					Timer.schedule(task, delaySeconds);
+					return true;
+				}
+			}
+		}
+	}
+
+	public static boolean tryScheduleTicks(Task task, float delayTicks) {
+		return trySchedule(task, delayTicks / 60f);
+	}
+
+	/** 轮询等待重试 */
+	public static Task forceRun(float intervalSeconds, int maxRetries, Boolp boolp) {
+		return Timer.schedule(new Task() {
+			int retries = 0;
+			@Override
 			public void run() {
 				try {
-					if (boolp.get()) cancel();
+					if (boolp.get()) {
+						cancel();
+						return;
+					}
 				} catch (Throwable e) {
-					Log.err(e);
+					Log.err("Error in forceRun", e);
+				}
+				if (maxRetries > 0 && ++retries >= maxRetries) {
 					cancel();
 				}
 			}
-		}, 0f, 0.5f, -1);
+		}, 0f, intervalSeconds);
+	}
+
+	public static void runWhen(Boolp boolp, Runnable run) {
+		Tools.TASKS.add(() -> {
+			if (!boolp.get()) return true;
+			run.run();
+			return false;
+		});
 	}
 }

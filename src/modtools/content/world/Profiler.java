@@ -20,8 +20,8 @@ import modtools.ui.comp.Window;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.windows.profile.FlameGraphWindow;
 import modtools.unsupported.HotSwapManager;
+import modtools.utils.*;
 import modtools.utils.MySettings.Data;
-import modtools.utils.Tools;
 import modtools.utils.profiler.SamplingProfiler;
 import modtools.utils.search.*;
 import modtools.utils.ui.ShowInfoWindow;
@@ -338,7 +338,7 @@ public class Profiler extends Content {
 
 		static {
 			Runnable r = () -> {
-				Tools.runWhen(HotSwapManager::loaded, () -> {
+				TaskManager.runWhen(HotSwapManager::loaded, () -> {
 					SamplingProfiler.toggleSampling(R_profiler.mode == Mode.sample);
 					Tools.TASKS.add(() -> GlTimerProfiler.enabled = sample_gpu_time.enabled());
 				});
@@ -346,23 +346,23 @@ public class Profiler extends Content {
 			capture_method_signature.def(isPanama());
 
 			/* 不用@FlushField是因为SamplingProfiler可能还未加载  */
-			Tools.runWhen(HotSwapManager::loaded, () -> {
+			TaskManager.runWhen(HotSwapManager::loaded, () -> {
 				SamplingProfiler.intervalMs = sample_freq.getInt();
 				SamplingProfiler.includePackages = include_packages.getArray().map(Jval::toString).toArray(String.class);
 				SamplingProfiler.captureMethodSignature = capture_method_signature.enabled();
 			});
 			sample_freq.onChange(() -> {
-				Tools.runWhen(HotSwapManager::loaded, () -> {
+				TaskManager.runWhen(HotSwapManager::loaded, () -> {
 					SamplingProfiler.intervalMs = sample_freq.getInt();
 				});
 			});
 			sample_gpu_time.onChange(() -> {
-				Tools.runWhen(HotSwapManager::loaded, () -> {
+				TaskManager.runWhen(HotSwapManager::loaded, () -> {
 					GlTimerProfiler.enabled = sample_gpu_time.enabled();
 				});
 			});
 			capture_method_signature.onChange(() -> {
-				Tools.runWhen(HotSwapManager::loaded, () -> {
+				TaskManager.runWhen(HotSwapManager::loaded, () -> {
 					SamplingProfiler.captureMethodSignature = capture_method_signature.enabled();
 					ProfilerData.clear();
 				});

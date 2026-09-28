@@ -212,7 +212,7 @@ public class EventHelper {
 			if (super.touchDown(event, x, y, pointer, button)) {
 				last.set(mouseVec);
 				lastPointer = pointer;
-				TaskManager.scheduleOrReset(duration / 1000f, task);
+				TaskManager.reset(task, duration / 1000f);
 				return true;
 			}
 			return false;
@@ -247,6 +247,8 @@ public class EventHelper {
 
 	public static class DoubleClick extends ClickListener {
 		Runnable click, d_click;
+		final Vec2 firstClickPos = new Vec2(); // 专门记录第 1 次点击的位置
+
 		public DoubleClick(Runnable click, Runnable d_click) {
 			this.click = click;
 			this.d_click = d_click;
@@ -262,16 +264,22 @@ public class EventHelper {
 		public void clicked(InputEvent event, float x, float y) {
 			if (last.dst(mouseVec) > IntUI.MAX_DCLICK_OFF) return;
 			super.clicked(event, x, y);
-			// 至少满足一个，可能是个坑
+			// 如果没有双击回调，直接触发单击
 			if (click != null && d_click == null) {
 				click.run();
 				return;
 			}
-			if (TaskManager.scheduleOrCancel(0.3f, clickTask)) {
-				last.set(mouseVec);
+			if (TaskManager.toggle(clickTask, 0.3f)) {
+				firstClickPos.set(mouseVec);
 				return;
 			}
-			if (mouseVec.dst(last) < IntUI.MAX_DCLICK_OFF) d_clicked(event, x, y);
+			// 判定两次点击之间的距离，防止点在两个不同的地方误触发双击
+			if (d_click != null && mouseVec.dst(firstClickPos) < IntUI.MAX_DCLICK_OFF) {
+				d_clicked(event, x, y);
+			} else {
+				// 距离过远，无法形成双击，按正常单击处理第 2 次操作
+				if (click != null) click.run();
+			}
 		}
 		public void d_clicked(InputEvent event, float x, float y) {
 			d_click.run();

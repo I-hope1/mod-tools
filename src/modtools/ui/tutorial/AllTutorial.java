@@ -10,9 +10,10 @@ import arc.math.*;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.event.*;
+import arc.util.*;
 import arc.util.Timer.Task;
-import arc.util.Tmp;
 import mindustry.Vars;
+import modtools.IntVars;
 import modtools.events.E_Extending;
 import modtools.graphics.MyShaders;
 import modtools.ui.IntUI;
@@ -99,14 +100,15 @@ public class AllTutorial {
 			viewport.setWorldHeight(Core.graphics.getHeight() - 50);
 		}); */
 		InputListener listener = new InputListener() {
-			final Task task = TaskManager.newTask(() -> {});
+			final Task task = TaskManager.newTask(IntVars.EMPTY_RUN);
+
 			public boolean keyDown(InputEvent event, KeyCode keycode) {
 				if (!E_Extending.double_shift_highlight.enabled()) return false;
 
 				if (keycode == KeyCode.shiftLeft) {
-					if (!TaskManager.scheduleOrCancel(0.2f, task)) {
+					// 如果距离上次按下在 200 毫秒以内，判定为双击
+					if (!TaskManager.toggle(task, 0.2f)) {
 						enableFocusMouse = !enableFocusMouse;
-						task.cancel();
 					}
 				}
 				return false;
@@ -136,7 +138,7 @@ public class AllTutorial {
 					 Mathf.lerp(1000f, 80f, fun.applyV)
 					);
 				}, Tmp.c2.set(Color.white).a(aLerp));
-			} else fun.enabled = false;
+			} else { fun.enabled = false; }
 		});
 		// boolean valid[] = {false};
 		// viewport.setScreenBounds(20, 40,

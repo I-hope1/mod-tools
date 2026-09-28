@@ -32,7 +32,7 @@ public class TransformTable extends Table {
 		if (transformParent != null) {
 			transformParent.addChild(group);
 			pack();
-		} else TaskManager.forceRun(() -> {
+		} else TaskManager.forceRun(0.5f, -1, () -> {
 			if (group.parent == null && target.parent != null) {
 				target.parent.addChild(group);
 				pack();

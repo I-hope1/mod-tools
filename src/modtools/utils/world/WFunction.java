@@ -14,12 +14,13 @@ import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.struct.ObjectMap.Entry;
 import arc.util.*;
+import arc.util.Timer.Task;
 import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
 import mindustry.game.Team;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
-import mindustry.ui.*;
+import mindustry.ui.Styles;
 import mindustry.world.Tile;
 import modtools.IntVars;
 import modtools.content.debug.Tester;
@@ -42,8 +43,8 @@ import modtools.utils.*;
 import modtools.utils.search.TemplateTable;
 import modtools.utils.ui.LerpFun;
 
-import java.util.Vector;
 import java.util.*;
+import java.util.Vector;
 import java.util.concurrent.*;
 import java.util.function.*;
 
@@ -77,7 +78,7 @@ public abstract class WFunction<T> {
 
 	// for select
 	public        Seq<OrderedSet<T>> select      = new Seq<>();
-	private final Runnable           changeEvent = () -> MyEvents.fire(this);
+	private final Task               changeEvent = TaskManager.newTask(() -> MyEvents.fire(this));
 	public final  String             name;
 	public final  WorldDraw          WD;
 
@@ -334,7 +335,7 @@ public abstract class WFunction<T> {
 	}
 	public final void add(T item) {
 		if (item == null) return;
-		TaskManager.acquireTask(15f, changeEvent);
+		TaskManager.resetTicks(changeEvent, 15);
 		list.add(item);
 		if (SC.drawSelect) {
 			// 异步无法创建FrameBuffer
@@ -410,12 +411,12 @@ public abstract class WFunction<T> {
 
 
 	public boolean onRemoved = false;
-	Runnable fireRun = () -> {
+	Task fireTask = TaskManager.newTask(() -> {
 		onRemoved = false;
 		MyEvents.fire(this);
-	};
+	});
 	private void onRemoved() {
-		TaskManager.scheduleOrReset(0.1f, fireRun);
+		TaskManager.reset(fireTask, 0.1f);
 		onRemoved = true;
 	}
 

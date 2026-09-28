@@ -3,6 +3,7 @@ package modtools.utils;
 import arc.files.Fi;
 import arc.struct.*;
 import arc.util.*;
+import arc.util.Timer.Task;
 import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.*;
 import modtools.IntVars;
@@ -74,15 +75,15 @@ public class MySettings {
 			write();
 		}
 
-		public Runnable task = () -> {
+		public final Task task = TaskManager.newTask(() -> {
 			if (parent == null && fi != null) {
 				fi.writeString(toString());
 			} else if (parent != null) {
 				parent.write();
 			}
-		};
+		});
 		public void write() {
-			TaskManager.scheduleOrReset(0.2f, task);
+			TaskManager.reset(task, 0.2f);
 		}
 
 		public void setDef(String key, Object value) {

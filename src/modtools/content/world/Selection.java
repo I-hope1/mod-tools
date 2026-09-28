@@ -129,7 +129,7 @@ public class Selection extends Content {
 	}
 	public void load() {
 		loadSettings();
-		TaskManager.forceRun(() -> {
+		TaskManager.forceRun(0.5f, -1, () -> {
 			if (!state.isGame()) return false;
 			initTask();
 			loadFocusWindow();
@@ -956,7 +956,6 @@ public class Selection extends Content {
 	}
 
 	public class FocusWindow extends NoTopWindow {
-		private final int b = 218;
 		public FocusWindow(String title) {
 			super(title, 0, 42, false);
 		}

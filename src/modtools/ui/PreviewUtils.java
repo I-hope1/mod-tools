@@ -28,7 +28,7 @@ import modtools.utils.ui.*;
 import static modtools.ui.IntUI.topGroup;
 import static modtools.ui.comp.utils.ValueLabel.DEBUG;
 
-/** 用于添加preview侦听器  */
+/** 用于添加preview侦听器 */
 public class PreviewUtils {
 	public static final float PREVIEW_SHOW_DELAY_SECONDS = 0.11f;
 	public static Cell<?> buildImagePreviewButton(
@@ -97,8 +97,9 @@ public class PreviewUtils {
 	}
 	public static void addPreviewListener(Element element, Cons<Table> cons) {
 		element.addListener(new HoverAndExitListener() {
-			Hitter hitter = null;
-			SelectTable table;
+			Hitter      hitter = null;
+			SelectTable table  = null;
+
 			final Task showTask = TaskManager.newTask(this::show);
 			final Task hideTask = TaskManager.newTask(() -> {
 				if (hitter != null && hitter.hide()) hitter = null;
@@ -106,23 +107,28 @@ public class PreviewUtils {
 			void hide() {
 				showTask.cancel();
 				if (hitter != null && hitter.canHide()) {
-					TaskManager.trySchedule(0.1f, hideTask);
+					TaskManager.trySchedule(hideTask, 0.1f);
 				}
 			}
 			public void enter0(InputEvent event, float x, float y, int pointer, Element fromActor) {
 				if (hideTask.isScheduled()) {
 					hideTask.cancel();
-					return;
 				}
-				TaskManager.scheduleOrReset(PREVIEW_SHOW_DELAY_SECONDS, showTask);
+				if (hitter == null || !hitter.hasParent()) {
+					TaskManager.reset(showTask, PREVIEW_SHOW_DELAY_SECONDS);
+				}
 			}
-			void show(){
+			void show() {
+				// 如果正在准备隐藏，取消隐藏并放弃显示
 				if (hideTask.isScheduled()) {
 					hideTask.cancel();
 					return;
 				}
 				if (hitter != null) hitter.hide(); // 移除上一次的
-				if (Hitter.peek() != hitter) Hitter.peek().hide();
+				Hitter top = Hitter.peek();
+				if (top != null && top != hitter) {
+					top.hide();
+				}
 
 				table = IntUI.showSelectTable(element, (p, _, _) -> cons.get(p), false, Align.bottom);
 				hitter = Hitter.peek();

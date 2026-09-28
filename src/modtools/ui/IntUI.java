@@ -20,6 +20,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
+import arc.util.Timer.Task;
 import arc.util.pooling.Pools;
 import mindustry.Vars;
 import mindustry.ctype.UnlockableContent;
@@ -783,7 +784,7 @@ public class IntUI {
 			});
 			super.show(element, x, y);
 		}
-		Runnable hideRun = super::hide;
+		Task hideTask = TaskManager.newTask(super::hide);
 		public void hide() {
 			shown.remove(this);
 
@@ -793,7 +794,7 @@ public class IntUI {
 			// }
 
 			if (mobile) {
-				TaskManager.scheduleOrReset(Math.max(0, 1f - Time.timeSinceMillis(lastShowTime) / 1000f), hideRun);
+				TaskManager.reset(hideTask, Math.max(0, 1f - Time.timeSinceMillis(lastShowTime) / 1000f));
 			} else {
 				super.hide();
 			}

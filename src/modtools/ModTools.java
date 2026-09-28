@@ -161,7 +161,8 @@ public class ModTools extends Mod {
 	}
 
 	private static void planB_resolveLibs() {
-		TaskManager.forceRun(() -> {
+		// 最多10s
+		TaskManager.forceRun(0.5f, 20, () -> {
 			if (mods.getMod(ModTools.class) == null) { return false; }
 			loadLibs();
 			return true;

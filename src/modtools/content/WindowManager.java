@@ -3,6 +3,7 @@ package modtools.content;
 import arc.graphics.Color;
 import arc.scene.ui.ImageButton;
 import arc.scene.ui.layout.Table;
+import arc.util.Timer.Task;
 import mindustry.gen.*;
 import modtools.ui.HopeStyles;
 import modtools.ui.comp.Window;
@@ -26,9 +27,9 @@ public class WindowManager extends Content {
 
 		ui.cont.pane(cont = new LimitTable()).grow();
 	}
-	Runnable run = this::rebuild0;
+	Task run = TaskManager.newTask(this::rebuild0);
 	public void rebuild() {
-		TaskManager.scheduleOrReset(0.1f, run);
+		TaskManager.reset(run, 0.1f);
 	}
 
 	private void rebuild0() {

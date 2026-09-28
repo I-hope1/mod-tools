@@ -15,6 +15,7 @@ import static nipx.HotSwapAgent.log;
 /**
  * Hotswap时初始化修复器
  * <p>新增字段的初始化表达式如果依赖构造器参数、局部变量、含分支/内联，存量实例不会被初始化</p>
+ * <p>注意：会去除final字段，可能会改变语义</p>
  */
 public class InitFix {
 	private static final String PATCH_METHOD        = "$hotswap$initNewFields$";
@@ -43,6 +44,14 @@ public class InitFix {
 
 		ClassNode newClass = new ClassNode();
 		new ClassReader(newBytes).accept(newClass, 0);
+
+		Set<String> added = new HashSet<>(addedInstanceFields);
+		added.addAll(addedStaticFields);
+		for (FieldNode fn : newClass.fields) {
+			if (added.contains(fn.name) && (fn.access & Opcodes.ACC_FINAL) != 0) {
+				fn.access &= ~Opcodes.ACC_FINAL;
+			}
+		}
 
 		// 提取实例字段<init>指令
 		List<AbstractInsnNode> initInsns = new ArrayList<>();

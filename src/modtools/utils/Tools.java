@@ -203,13 +203,6 @@ public class Tools {
 		return arr.selectFrom(items, predicate);
 	}
 
-	public static void runWhen(Boolp boolp, Runnable run) {
-		TASKS.add(() -> {
-			if (!boolp.get()) return true;
-			run.run();
-			return false;
-		});
-	}
 	/**
 	 * 运行带有异常捕获的任务，忽略报错
 	 * @param run 要运行的任务

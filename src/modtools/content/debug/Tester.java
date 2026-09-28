@@ -1095,7 +1095,7 @@ public class Tester extends Content {
 
 		final Task completionTask = TaskManager.newTask(this::complement);
 		private void postCompletion() {
-			TaskManager.trySchedule(0.05f, completionTask);
+			TaskManager.trySchedule(completionTask, 0.05f);
 		}
 		private void hideCompletion() {
 			if (completionPopup != null) {

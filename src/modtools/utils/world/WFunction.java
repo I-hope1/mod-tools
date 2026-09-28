@@ -324,6 +324,7 @@ public abstract class WFunction<T> {
 	}
 
 	public abstract void buildTable(T item, Table table);
+	// public abstract void updateTable(T item, Table table);
 
 	public final void addUnique(T item) {
 		if (item == null) return;
@@ -616,9 +617,9 @@ public abstract class WFunction<T> {
 	}
 
 
-	public static void buildPos(Table table, Position u) {
-		table.label(new PairProv(() -> Tmp.v1.set(u),
-			u instanceof Building || u instanceof Vec2 ? ", " : "\n"))
+	public static void buildPos(Table table, Position pos) {
+		table.label(new PairProv(() -> Tmp.v1.set(pos),
+			pos instanceof Building || pos instanceof Vec2 ? ", " : "\n"))
 		 .fontScale(0.7f).color(Color.lightGray)
 		 .get().act(0.1f);
 	}

@@ -6,8 +6,9 @@ import arc.scene.style.Drawable;
 import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Table;
 import arc.struct.*;
-import arc.util.*;
+import arc.util.Align;
 import mindustry.gen.*;
+import modtools.IntVars;
 import modtools.ui.*;
 import modtools.utils.PatternUtils;
 import modtools.utils.reflect.ModifierR;
@@ -47,7 +48,7 @@ public class Search<T> {
 	}
 	public Search<T> addFilter(Drawable icon, String key, SearchItem<T>[] items, SearchItem<T> def) {
 		filters.put(key, def);
-		top.button(icon, HopeStyles.clearNonei, () -> { })
+		top.button(icon, HopeStyles.clearNonei, IntVars.EMPTY_RUN)
 		 .with(b -> b.clicked(() -> {
 			 IntUI.showSelectListTable(b, new Seq<>(items),
 				() -> filters.get(key), s -> filters.put(key, s),

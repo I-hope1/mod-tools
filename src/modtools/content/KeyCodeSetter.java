@@ -335,7 +335,7 @@ public class KeyCodeSetter extends Content {
 		return cont;
 	}
 	private static void keyCodeButton(FilterTable<?> pane, KeyCodeData data, HKeyCode[] keyCode, String[] elementKey) {
-		TextButton button = pane.button(keyCode[0].toString(), Styles.flatt, () -> { })
+		TextButton button = pane.button(keyCode[0].toString(), Styles.flatt, IntVars.EMPTY_RUN)
 		 .minWidth(100).height(45).growX().get();
 		button.clicked(() -> keyCodeBindWindow.get().show(button, newKeyCode -> {
 			button.setText(newKeyCode.getText());

@@ -259,7 +259,7 @@ public class Tester extends Content {
 			 t.defaults().padRight(4f).size(42);
 			 // t.addListener(new KeepFocusListener(area));
 
-			 ImageButton move = t.button(Icon.move, HopeStyles.hope_flati, () -> { }).get();
+			 ImageButton move = t.button(Icon.move, HopeStyles.hope_flati, IntVars.EMPTY_RUN).get();
 			 move.clicked(() -> {
 				 IntUI.showSelectTable(move, (p, hide, _) -> {
 					 p.defaults().size(42);

@@ -16,6 +16,7 @@ import modtools.ui.comp.input.JSRequest;
 import modtools.ui.menu.MenuItem;
 import modtools.utils.ArrayUtils;
 import modtools.utils.reflect.FieldUtils;
+import nipx.annotation.*;
 
 import java.lang.reflect.Field;
 
@@ -33,17 +34,17 @@ public class FieldValueLabel extends ReflectValueLabel {
 		setVal(newVal != unset ? newVal : getFieldValue());
 		addUpdate();
 	}
+	private final Runnable r = () -> {
+		if (!visible) return;
+		if (E_JSFunc.auto_refresh.enabled() && enableUpdate) {
+			flushVal();
+		}
+	};
 	void addUpdate() {
-		Runnable r = () -> {
-			if (!visible) return;
-			if (E_JSFunc.auto_refresh.enabled() && enableUpdate) {
-				flushVal();
-			}
-		};
 		update(r);
-			/* update(() -> {
-				if (!E_JSFunc.update_async.enabled()) r.run();
-			}); */
+		/* update(() -> {
+			if (!E_JSFunc.update_async.enabled()) r.run();
+		}); */
 	}
 
 	public void setNewVal(Object newVal) {

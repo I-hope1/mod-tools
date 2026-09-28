@@ -14,6 +14,7 @@ import arc.struct.Seq;
 import arc.util.*;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 import modtools.content.ui.ShowUIList;
 import modtools.ui.*;
 import modtools.ui.IntUI.*;
@@ -99,8 +100,8 @@ public class DrawablePicker extends Window implements IHitter, PopupWindow {
 						.get(() -> "" + drawable)
 					)).fontScale(0.6f).growX().labelAlign(Align.left).row();
 					buttons.left().defaults().growX().height(32);
-					buttons.button("Icon", Styles.fullTogglet, () -> { }).row();
-					buttons.button("Background", Styles.fullTogglet, () -> { }).row();
+					buttons.button("Icon", Styles.fullTogglet, IntVars.EMPTY_RUN).row();
+					buttons.button("Background", Styles.fullTogglet, IntVars.EMPTY_RUN).row();
 
 					Seq<TextButton>         allButtons = buttons.getChildren().select(el -> el instanceof TextButton).as();
 					ButtonGroup<TextButton> group      = new ButtonGroup<>();

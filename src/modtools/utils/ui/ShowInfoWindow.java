@@ -17,6 +17,7 @@ import arc.util.pooling.*;
 import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import modtools.IntVars;
 import modtools.events.*;
 import modtools.jsfunc.INFO_DIALOG;
 import modtools.jsfunc.reflect.InitMethodHandle;
@@ -237,7 +238,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		// 功能按钮栏
 		topTable.pane(t -> {
 			t.left().defaults().left().size(42);
-			t.button(Icon.settingsSmall, clearNonei, () -> { })
+			t.button(Icon.settingsSmall, clearNonei, IntVars.EMPTY_RUN)
 			 .with(b -> b.clicked(() -> {
 				 IntUI.showSelectTable(b, (p, _, _) -> {
 					 p.left().defaults().left().growX();
@@ -247,7 +248,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 					 ISettings.buildAllWrap("jsfunc.edit", p, "Edit", E_JSFuncEdit.class);
 				 }, false, Align.bottom);
 			 }));
-			t.button(Icon.boxSmall, clearNonei, () -> { }).with(b -> b.clicked(() -> {
+			t.button(Icon.boxSmall, clearNonei, IntVars.EMPTY_RUN).with(b -> b.clicked(() -> {
 				IntUI.showSelectTable(b, (p, hide, _) -> {
 					p.defaults().size(140, 45);
 					Boolf<TextButton> boolf = _ -> !(HotSwapManager.valid() && clazz != null);

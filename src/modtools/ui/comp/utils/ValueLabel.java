@@ -569,7 +569,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 		 CheckboxList.withc("autoRefresh", Icon.refresh1Small, "Auto Refresh", () -> enableUpdate, () -> {
 			 enableUpdate = !enableUpdate;
 		 }) : null);
-		
+
 		list.add(MenuBuilder.copyAsJSMenu("value", this::currentVal));
 		list.add(UnderlineItem.with());
 		list.add(DisabledList.withd("change.class", Icon.pencilSmall, "Change Class",
@@ -577,7 +577,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 		 () -> {
 			 new ChangeClassDialog(this).show();
 		 }));
-		// list.add(MenuItem.with("viewer.set", Icon.eyeSmall, "Set Viewer",  () -> { }));
+		// list.add(MenuItem.with("viewer.set", Icon.eyeSmall, "Set Viewer", IntVars.EMPTY_RUN));
 		list.add(UnderlineItem.with());
 		if (String.class.isAssignableFrom(type) || val instanceof String) {
 			list.add(DisabledList.withd("string.copy", Icon.copySmall, "Copy", this::valueIsNull, () -> {

@@ -2,6 +2,7 @@ package modtools.content.debug;
 
 import arc.scene.ui.ImageButton;
 import mindustry.gen.Icon;
+import modtools.IntVars;
 import modtools.content.Content;
 import modtools.content.SettingsUI.SettingsBuilder;
 import modtools.jframe.MyJFrame;
@@ -43,7 +44,7 @@ public class Pause extends Content {
 			Class<?> key = entry.key;
 			table.add(key.getName());
 			table.defaults().size(42);
-			ImageButton button = table.button(Icon.playSmall, HopeStyles.hope_flati, () -> { }).get();
+			ImageButton button = table.button(Icon.playSmall, HopeStyles.hope_flati, IntVars.EMPTY_RUN).get();
 			button.clicked(() -> {
 				boolean paused = pauseMap.get(key, 0) > 0;
 				boolean next   = !paused;

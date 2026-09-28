@@ -17,7 +17,6 @@ import java.util.*;
  * 4. 解决热交换时因Lambda表达式名称变化导致的NoSuchMethodError问题
  */
 public class LambdaAligner {
-	public static final int LAMBDA_LENGTH = 7;// "lambda$".length()
 
 	public static final ThreadLocal<MatchContext> CONTEXT = ThreadLocal.withInitial(MatchContext::new);
 
@@ -29,6 +28,7 @@ public class LambdaAligner {
 		/** 已使用的旧方法名集合 */
 		final Set<String>         usedOldNames     = new HashSet<>(64);
 		final Set<String>         existingNewNames = new HashSet<>(64);
+		final Set<String>         oldNameDescSet   = new HashSet<>(64);
 		final MethodFingerprinter fingerprinter    = MethodFingerprinter.CONTEXT.get();
 		/** 当前处理的类名 */
 		String currentClass;
@@ -50,12 +50,12 @@ public class LambdaAligner {
 		// 预分配的一堆 SyntheticInfo
 		private final List<SyntheticInfo> infoPool    = new ArrayList<>();
 		private       int                 infoPoolIdx = 0;
-		SyntheticInfo acquireInfo(String n, String d, long h, String l) {
+		SyntheticInfo acquireInfo(String name, String desc, int access, long hash, String logicalName) {
 			if (infoPoolIdx >= infoPool.size()) {
-				infoPool.add(new SyntheticInfo(n, d, h, l));
+				infoPool.add(new SyntheticInfo(name, desc, access, hash, logicalName));
 			}
 			SyntheticInfo info = infoPool.get(infoPoolIdx++);
-			info.update(n, d, h, l); // 增加一个更新方法
+			info.update(name, desc, access, hash, logicalName); // 增加一个更新方法
 			return info;
 		}
 		//endregion
@@ -67,6 +67,7 @@ public class LambdaAligner {
 			renameMap.clear();
 			usedOldNames.clear();
 			existingNewNames.clear();
+			oldNameDescSet.clear();
 			fingerprinter.reset();
 			currentClass = null;
 			oldGroups.clear();
@@ -88,7 +89,7 @@ public class LambdaAligner {
 	public static byte[] align(byte[] oldBytes, byte[] newBytes) {
 		if (oldBytes == null || oldBytes.length == 0) return newBytes;
 
-		MatchContext ctx = CONTEXT.get();
+		LambdaAligner.MatchContext ctx = CONTEXT.get();
 		ctx.reset();
 
 		ctx.currentClass = scan(oldBytes, ctx, true);
@@ -111,11 +112,20 @@ public class LambdaAligner {
 			}
 		}
 
+		// 旧类中存在的所有 (name+desc)，阶段二用来判断冲突
+		Set<String> oldNameDescSet = ctx.oldNameDescSet;
+		for (Object v : oldGroups.values()) {
+			if (!LongObjectMap.isValid(v)) continue;
+			@SuppressWarnings("unchecked")
+			var g = (List<SyntheticInfo>) v;
+			for (SyntheticInfo oi : g) oldNameDescSet.add(oi.name + oi.desc);
+		}
+
 		long[]   ks  = newGroups.keys();
 		Object[] vs  = newGroups.values();
 		int      cap = newGroups.capacity();
 
-		// 【阶段一】全力抢占和复用旧名，杜绝外部调用的 NoSuchMethodError
+		// 【阶段一】抢占/复用旧名
 		for (int i = 0; i < cap; i++) {
 			Object v = vs[i];
 			if (!LongObjectMap.isValid(v)) continue;
@@ -133,7 +143,7 @@ public class LambdaAligner {
 				SyntheticInfo ni = newGroup.get(j);
 				for (int k = 0; k < oldSize; k++) {
 					SyntheticInfo oi = oldGroup.get(k);
-					if (!oi.matched && ni.hash == oi.hash) {
+					if (!oi.matched && ni.hash == oi.hash && oi.isStatic() == ni.isStatic()) {
 						if (!ni.name.equals(oi.name)) {
 							ctx.renameMap.put(ni.name, oi.name);
 						}
@@ -145,28 +155,44 @@ public class LambdaAligner {
 				}
 			}
 
-			// Step 2: 顺序对齐 (解决小改动导致 Hash 变更后的平稳降级)
-			int oldPtr = 0;
+			// Step 2: 顺序对齐（static 属性必须一致）
 			for (SyntheticInfo ni : newGroup) {
 				if (ni.matched) continue;
-				while (oldPtr < oldGroup.size() && ctx.usedOldNames.contains(oldGroup.get(oldPtr).name)) {
-					oldPtr++;
+
+				SyntheticInfo bestOld = null;
+
+				// 第一优先级：组内同名且 static 一致
+				for (SyntheticInfo oi : oldGroup) {
+					if (oi.matched) continue;
+					if (oi.isStatic() != ni.isStatic()) continue;
+					if (oi.name.equals(ni.name)) {
+						bestOld = oi;
+						break;
+					}
 				}
-				if (oldPtr < oldGroup.size()) {
-					SyntheticInfo oi         = oldGroup.get(oldPtr);
-					String        targetName = oi.name;
 
-					// 必须强行占用 targetName，新类里原有的同名方法将在阶段二被我们安全重命名
-					ctx.renameMap.put(ni.name, targetName);
+				// 第二优先级：第一个 static 一致的未匹配旧方法
+				if (bestOld == null) {
+					for (SyntheticInfo oi : oldGroup) {
+						if (oi.matched) continue;
+						if (oi.isStatic() != ni.isStatic()) continue;
+						bestOld = oi;
+						break;
+					}
+				}
+
+				if (bestOld != null) {
+					if (!ni.name.equals(bestOld.name)) {
+						ctx.renameMap.put(ni.name, bestOld.name);
+					}
 					ni.matched = true;
-					ctx.usedOldNames.add(targetName);
-
-					oldPtr++;
+					bestOld.matched = true;
+					ctx.usedOldNames.add(bestOld.name);
 				}
 			}
 		}
 
-		// 【阶段二】统一处理全部未匹配的新方法，防止内部重组带来的 ClassFormatError
+		// 【阶段二】未匹配的新方法统一处理
 		int freshId = 0;
 		for (int i = 0; i < cap; i++) {
 			Object v = vs[i];
@@ -176,19 +202,22 @@ public class LambdaAligner {
 			var newGroup = (List<SyntheticInfo>) v;
 
 			for (SyntheticInfo ni : newGroup) {
-				if (!ni.matched) {
-					// 检查它的原名是否已经在阶段一被分配给了其他重要逻辑
-					if (ctx.usedOldNames.contains(ni.name)) {
-						String freshName;
-						do {
-							freshName = ni.logicalName + (freshId++);
-						} while (ctx.usedOldNames.contains(freshName) || existingNewNames.contains(freshName));
+				if (ni.matched) continue;
+				String key = ni.name + ni.desc;
+				boolean conflict =
+				 ctx.usedOldNames.contains(ni.name) || oldNameDescSet.contains(key);
+				if (conflict) {
+					String freshName;
+					do {
+						freshName = ni.logicalName + (freshId++);
+					} while (ctx.usedOldNames.contains(freshName)
+					         || existingNewNames.contains(freshName)
+					         || oldNameDescSet.contains(freshName + ni.desc));
 
-						ctx.renameMap.put(ni.name, freshName);
-						ctx.usedOldNames.add(freshName);
-					} else {
-						ctx.usedOldNames.add(ni.name);
-					}
+					ctx.renameMap.put(ni.name, freshName);
+					ctx.usedOldNames.add(freshName);
+				} else {
+					ctx.usedOldNames.add(ni.name);
 				}
 			}
 		}
@@ -230,7 +259,7 @@ public class LambdaAligner {
 			/** 处理 $deserializeLambda$ 内部的方法名字符串常量 */
 			@Override
 			public Object mapValue(Object value) {
-				if (value instanceof String s && s.length() > LAMBDA_LENGTH) { // 为了kotlin/scala的lambda
+				if (value instanceof String s && MethodFingerprinter.isSyntheticName(s)) { // 为了kotlin/scala的lambda
 					if (ctx.renameMap.containsKey(s)) { // 快速预过滤 lambda$ 或 access$
 						return ctx.renameMap.get(s);
 					}
@@ -250,7 +279,7 @@ public class LambdaAligner {
 	 * @param isOld 是否为旧版本
 	 * @return 类名
 	 */
-	private static String scan(byte[] bytes, MatchContext ctx, boolean isOld) {
+	private static String scan(byte[] bytes, LambdaAligner.MatchContext ctx, boolean isOld) {
 		var visitor = new ClassVisitor(Opcodes.ASM9) {
 			public String className;
 			@Override
@@ -282,10 +311,10 @@ public class LambdaAligner {
 				return new MethodVisitor(Opcodes.ASM9, fingerprinter) {
 					@Override
 					public void visitEnd() {
-						String        logicalName = extractLogicalName(name);
-						SyntheticInfo info        = ctx.acquireInfo(name, desc, fingerprinter.getHash(), logicalName);
-						groupByLogic(ctx, isOld ? ctx.oldGroups : ctx.newGroups, info);
 						super.visitEnd();
+						String        logicalName = extractLogicalName(name);
+						SyntheticInfo info        = ctx.acquireInfo(name, desc, acc, fingerprinter.getHash(), logicalName);
+						groupByLogic(ctx, isOld ? ctx.oldGroups : ctx.newGroups, info);
 					}
 				};
 			}
@@ -302,24 +331,32 @@ public class LambdaAligner {
 	 * @return 注入幽灵方法后的最终字节码
 	 */
 	private static byte[] resurrectOrphanedLambdas(byte[] oldBytes, byte[] newBytes, MatchContext ctx) {
-		// 1. 寻找被彻底遗弃（既没有被精确匹配，也没有被顺位占用的旧版本 Lambda）
-		Set<String> orphanedNames = new HashSet<>();
+		// 1. 收集对齐后的新类里实际存在的所有方法键
+		Set<String> presentKeys = new HashSet<>();
+		new ClassReader(newBytes).accept(new ClassVisitor(Opcodes.ASM9) {
+			@Override
+			public MethodVisitor visitMethod(int acc, String name, String desc, String sig, String[] exc) {
+				presentKeys.add(name + desc);
+				return null;
+			}
+		}, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+
+		// 2. 旧类里的合成方法键集合，差集就是孤儿
+		Set<String> orphanedKeys = new HashSet<>();
 		for (Object v : ctx.oldGroups.values()) {
 			if (!LongObjectMap.isValid(v)) continue;
 			@SuppressWarnings("unchecked")
 			var oldGroup = (List<SyntheticInfo>) v;
 			for (SyntheticInfo oi : oldGroup) {
-				// 如果旧方法名不在 usedOldNames 中，说明新类中彻底抛弃了它，它成了一个致命的游离端点
-				if (!ctx.usedOldNames.contains(oi.name)) {
-					orphanedNames.add(oi.name + oi.desc);
+				String key = oi.name + oi.desc;
+				if (!presentKeys.contains(key)) {
+					orphanedKeys.add(key);
 				}
 			}
 		}
 
 		// 如果所有的旧 Lambda 都被复用了，那我们就无需多此一举
-		if (orphanedNames.isEmpty()) {
-			return newBytes;
-		}
+		if (orphanedKeys.isEmpty()) return newBytes;
 
 		// 2. 从旧字节码中提取这些遗弃方法的签名信息（access, exceptions 等）
 		ClassNode oldClass = new ClassNode();
@@ -327,15 +364,15 @@ public class LambdaAligner {
 
 		List<MethodNode> toInject = new ArrayList<>();
 		for (MethodNode mn : oldClass.methods) {
-			if (orphanedNames.contains(mn.name + mn.desc)) {
+			if (orphanedKeys.contains(mn.name + mn.desc)) {
 				toInject.add(mn);
 			}
 		}
 
-		// 3. 将它们以“安全空壳”的形式追加到新类的末尾
+		// 4. 以空壳形式追加到新类末尾
 		ClassReader cr = new ClassReader(newBytes);
-		// 关键点：开启 COMPUTE_MAXS 和 COMPUTE_FRAMES，让 ASM 自动帮我们计算局部变量表和操作数栈深度
-		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES);
+		// 关键：不再使用 COMPUTE_FRAMES，避免 getCommonSuperClass 触发目标类加载
+		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
 
 		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
 			@Override
@@ -352,7 +389,7 @@ public class LambdaAligner {
 				super.visitEnd();
 			}
 		};
-		cr.accept(cv, ClassReader.EXPAND_FRAMES);
+		cr.accept(cv, 0);
 		return cw.toByteArray();
 	}
 
@@ -467,21 +504,27 @@ public class LambdaAligner {
 		String  desc;
 		/** 逻辑名称（用于分组） */
 		String  logicalName;
+		/** 方法访问修饰符 */
+		int     access;
 		/** 方法指纹哈希值 */
 		long    hash;
 		/** 是否已匹配 */
 		boolean matched;
 
-		SyntheticInfo(String n, String d, long h, String l) {
-			update(n, d, h, l);
+		SyntheticInfo(String name, String desc, int access, long hash, String logicalName) {
+			update(name, desc, access, hash, logicalName);
 		}
 
-		void update(String n, String d, long h, String l) {
-			name = n;
-			desc = d;
-			hash = h;
-			logicalName = l;
-			matched = false;
+		void update(String name, String desc, int access, long hash, String logicalName) {
+			this.name = name;
+			this.desc = desc;
+			this.access = access;
+			this.hash = hash;
+			this.logicalName = logicalName;
+			this.matched = false;
+		}
+		public boolean isStatic() {
+			return (access & Opcodes.ACC_STATIC) != 0;
 		}
 	}
 	//endregion

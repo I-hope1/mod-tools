@@ -65,6 +65,8 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		if (HotSwapAgent.isBlacklisted(dotClassName)) return null;
 
 		byte[]  bytes    = classfileBuffer;  // 不clone，用引用做"是否修改"判断
+
+
 		boolean modified = false;
 		if (HOTSWAP_PLUS) {
 			classfileBuffer = forceStaticLambdas(classfileBuffer, className, loader);
@@ -105,7 +107,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			error("Transformer crashed for class: " + dotClassName, t);
 			return null;
 		}
-		return null;
+		return modified ? bytes : null;
 	}
 	//endregion
 

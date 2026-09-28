@@ -18,7 +18,7 @@ public class PairProv implements Prov<CharSequence> {
 	public final boolean    parentheses;
 	public final int        digits;
 
-	// 真正复用的 StringBuilder，零 GC 分配
+	// 复用的 StringBuilder，零 GC 分配
 	protected final StringBuilder result = new StringBuilder(32);
 	// 缓存上次的数值
 	protected       float         lastX  = Float.NaN, lastY = Float.NaN;

@@ -84,13 +84,65 @@ public final class MethodFingerprinter extends MethodVisitor {
 	 * @return 屏蔽编号后的安全描述符
 	 */
 	private String maskAnonymousClass(String owner) {
-		if (currentClassName != null && owner.startsWith(currentClassName + "$")) {
-			// 只要是内部类（带有 $ 符号），在计算指纹时都应视为不稳定的（为了kotlin等）
-			// 我们可以根据它在当前方法中出现的顺序给它分配 ID
-			int relId = anonClassIds.computeIfAbsent(owner, k -> nextAnonId++);
-			return "#ANON_" + relId + "#";
+		if (currentClassName == null) return owner;
+		if (owner.startsWith("[")) {
+			int dims = 0;
+			while (dims < owner.length() && owner.charAt(dims) == '[') dims++;
+			if (dims < owner.length() && owner.charAt(dims) == 'L' && owner.endsWith(";")) {
+				String internal = owner.substring(dims + 1, owner.length() - 1);
+				String masked   = maskAnonymousClass(internal);
+				if (!masked.equals(internal)) {
+					return owner.substring(0, dims) + "L" + masked + ";";
+				}
+			}
+			return owner;
 		}
-		return owner;
+		if (!owner.startsWith(currentClassName + "$")) return owner;
+		String suffix = owner.substring(currentClassName.length() + 1);
+		if (!isUnstableNestedSuffix(suffix)) return owner;
+		int relId = anonClassIds.computeIfAbsent(owner, k -> nextAnonId++);
+		return "#ANON_" + relId + "#";
+	}
+	/**
+	 * 判断嵌套类后缀是否「可能随编译顺序位移」：
+	 * 取最后一段（以 $ 分隔），如果它以数字开头，就视为不稳定。
+	 * 1      -> 不稳定（匿名类）
+	 * 1$2    -> 不稳定
+	 * bar$1  -> 不稳定（Kotlin 的 Foo$bar$1）
+	 * 1Local -> 不稳定（javac 具名局部类，编号仍可能位移）
+	 * Builder-> 具名，稳定
+	 */
+	private static boolean isUnstableNestedSuffix(String suffix) {
+		int lastSep = suffix.lastIndexOf('$');
+		int start   = lastSep + 1;
+		if (start >= suffix.length()) return false;
+		return Character.isDigit(suffix.charAt(start));
+	}
+
+	/**
+	 * 屏蔽描述符中的匿名类引用，例如 (LOuter$1;)V -> (L#ANON_0#;)V
+	 * 保证匿名类编号位移不会影响指纹。
+	 */
+	private String maskDescriptor(String desc) {
+		if (desc == null || currentClassName == null || desc.indexOf('$') < 0) return desc;
+		String prefix = "L" + currentClassName + "$";
+		int    idx    = desc.indexOf(prefix);
+		if (idx < 0) return desc;
+
+		StringBuilder sb  = new StringBuilder(desc.length() + 8);
+		int           pos = 0;
+		while (idx >= 0) {
+			sb.append(desc, pos, idx);
+			int end = desc.indexOf(';', idx);
+			if (end < 0) return desc;
+			String owner  = desc.substring(idx + 1, end);
+			String masked = maskAnonymousClass(owner);
+			sb.append('L').append(masked).append(';');
+			pos = end + 1;
+			idx = desc.indexOf(prefix, pos);
+		}
+		sb.append(desc, pos, desc.length());
+		return sb.toString();
 	}
 	//endregion
 
@@ -98,9 +150,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 	/** 当前累积的CRC64哈希值 */
 	private long crc = CRC64.init();
 
-	/**
-	 * 构造函数，初始化ASM访问器
-	 */
+	/** 构造函数，初始化ASM访问器 */
 	public MethodFingerprinter() {
 		super(Opcodes.ASM9);
 	}
@@ -158,14 +208,19 @@ public final class MethodFingerprinter extends MethodVisitor {
 		// 如果调用的是本类的合成方法（Lambda），不要哈希它的名字
 		// 因为名字是我们要对齐的对象，它是变量，不是常量。
 		String name = h.getName();
-		if (isSelf && isSyntheticName(name)) {
+		if (isSelfSynthetic(owner, name)) {
 			updateString("#SYNTHETIC_METHOD#");
 		} else {
 			updateString(name);
 		}
 
-		updateString(h.getDesc()); // 描述符通常是稳定的，或者由对齐器另行处理
+		updateString(maskDescriptor(h.getDesc())); // 描述符通常是稳定的，或者由对齐器另行处理
 		updateInt(h.isInterface() ? 1 : 0);
+	}
+	/** 共享的判定：owner 是本类 + name 是合成名 */
+	private boolean isSelfSynthetic(String owner, String name) {
+		return owner.equals(currentClassName)
+		       && isSyntheticName(name);
 	}
 	static boolean isSyntheticName(String name) {
 		// 仅针对名称具有随机/递增序号、且逻辑上可能发生偏移的方法
@@ -177,62 +232,50 @@ public final class MethodFingerprinter extends MethodVisitor {
 	//endregion
 
 	//region  字节码指令处理
-	/**
-	 * 处理无操作数指令（如NOP, ACONST_NULL等）
-	 */
+	/** 处理无操作数指令（如NOP, ACONST_NULL等） */
 	@Override
 	public void visitInsn(int opcode) {
 		updateInt(opcode);
 	}
 
-	/**
-	 * 处理单操作数整数指令（如BIPUSH, SIPUSH, NEWARRAY）
-	 */
+	/** 处理单操作数整数指令（如BIPUSH, SIPUSH, NEWARRAY） */
 	@Override
 	public void visitIntInsn(int opcode, int operand) {
 		updateInt(opcode);
 		updateInt(operand);
 	}
 
-	/**
-	 * 处理局部变量指令（如ILOAD, ISTORE等）
-	 */
+	/** 处理局部变量指令（如ILOAD, ISTORE等） */
 	@Override
 	public void visitVarInsn(int opcode, int var) {
 		updateInt(opcode);
 		updateInt(var);
 	}
 
-	/**
-	 * 处理类型指令（如NEW, ANEWARRAY, CHECKCAST, INSTANCEOF）
-	 */
+	/** 处理类型指令（如NEW, ANEWARRAY, CHECKCAST, INSTANCEOF） */
 	@Override
 	public void visitTypeInsn(int opcode, String type) {
 		updateInt(opcode);
 		updateString(maskAnonymousClass(type)); // 拦截 NEW, CHECKCAST 等
 	}
 
-	/**
-	 * 处理字段访问指令（GETFIELD, PUTFIELD, GETSTATIC, PUTSTATIC）
-	 */
+	/** 处理字段访问指令（GETFIELD, PUTFIELD, GETSTATIC, PUTSTATIC） */
 	@Override
 	public void visitFieldInsn(int opcode, String owner, String name, String desc) {
 		updateInt(opcode);
 		updateString(maskAnonymousClass(owner)); // 拦截字段所属的匿名类
 		updateString(name);   // 字段名
-		updateString(desc);   // 字段描述符
+		updateString(maskDescriptor(desc));   // 字段描述符
 	}
 
-	/**
-	 * 处理方法调用指令（INVOKEVIRTUAL, INVOKESPECIAL, INVOKESTATIC, INVOKEINTERFACE）
-	 */
+	/** 处理方法调用指令（INVOKEVIRTUAL, INVOKESPECIAL, INVOKESTATIC, INVOKEINTERFACE） */
 	@Override
 	public void visitMethodInsn(int opcode, String owner, String name,
 	                            String desc, boolean isInterface) {
 		updateInt(opcode);
 		updateString(maskAnonymousClass(owner)); // 拦截 INVOKESPECIAL (构造函数调用) 等
-		updateString(name);       // 方法名
-		updateString(desc);       // 方法描述符
+		updateString(isSelfSynthetic(owner, name) ? "#SYNTHETIC_METHOD#" : name);       // 方法名
+		updateString(maskDescriptor(desc));       // 方法描述符
 		updateInt(isInterface ? 1 : 0); // 是否接口方法
 	}
 
@@ -249,7 +292,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 		updateInt(MARK_INVOKEDYNAMIC);
 
 		updateString(name);    // 动态调用的方法名
-		updateString(desc);    // 方法描述符
+		updateString(maskDescriptor(desc));    // 方法描述符
 		updateHandle(bsm);     // 引导方法句柄
 
 		// 处理引导方法参数
@@ -263,18 +306,14 @@ public final class MethodFingerprinter extends MethodVisitor {
 		}
 	}
 
-	/**
-	 * 处理常量加载指令（LDC）
-	 */
+	/** 处理常量加载指令（LDC） */
 	@Override
 	public void visitLdcInsn(Object value) {
 		updateInt(MARK_LDC);
 		updateConstant(value);
 	}
 
-	/**
-	 * 处理局部变量自增指令（IINC）
-	 */
+	/** 处理局部变量自增指令（IINC） */
 	@Override
 	public void visitIincInsn(int var, int increment) {
 		updateInt(MARK_IINC);
@@ -282,9 +321,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 		updateInt(increment);
 	}
 
-	/**
-	 * 处理表查找switch指令
-	 */
+	/** 处理表查找switch指令 */
 	@Override
 	public void visitTableSwitchInsn(int min, int max,
 	                                 Label dflt, Label... labels) {
@@ -299,9 +336,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 		}
 	}
 
-	/**
-	 * 处理查找表switch指令
-	 */
+	/** 处理查找表switch指令 */
 	@Override
 	public void visitLookupSwitchInsn(Label dflt,
 	                                  int[] keys,
@@ -317,9 +352,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 		}
 	}
 
-	/**
-	 * 处理跳转指令（IFEQ, IFNULL等）
-	 */
+	/** 处理跳转指令（IFEQ, IFNULL等） */
 	@Override
 	public void visitJumpInsn(int opcode, Label label) {
 		updateInt(opcode);
@@ -327,18 +360,14 @@ public final class MethodFingerprinter extends MethodVisitor {
 		updateInt(getLabelId(label)); // 跳转目标标签
 	}
 
-	/**
-	 * 处理标签（代码位置标记）
-	 */
+	/** 处理标签（代码位置标记） */
 	@Override
 	public void visitLabel(Label label) {
 		updateInt(MARK_LABEL);
 		updateInt(getLabelId(label));
 	}
 
-	/**
-	 * 处理异常处理块
-	 */
+	/** 处理异常处理块 */
 	@Override
 	public void visitTryCatchBlock(Label start,
 	                               Label end,
@@ -358,25 +387,21 @@ public final class MethodFingerprinter extends MethodVisitor {
 	@Override
 	public void visitMultiANewArrayInsn(String desc, int dims) {
 		updateInt(MARK_MULTIANEWARRAY);
-		updateString(desc); // 数组类型描述符
+		updateString(maskDescriptor(desc)); // 数组类型描述符
 		updateInt(dims);    // 维度数量
 	}
 	//endregion
 
 	//region 注解处理
 
-	/**
-	 * 处理注解默认值
-	 */
+	/** 处理注解默认值 */
 	@Override
 	public AnnotationVisitor visitAnnotationDefault() {
 		updateInt(MARK_ANNOT_DEFAULT);
 		return new FingerprintAnnotationVisitor();
 	}
 
-	/**
-	 * 处理可注解参数计数
-	 */
+	/** 处理可注解参数计数 */
 	@Override
 	public void visitAnnotableParameterCount(int parameterCount,
 	                                         boolean visible) {
@@ -416,7 +441,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 			}
 			case Type t -> {
 				updateInt(6);      // 类型标记
-				updateString(t.getDescriptor()); // 类型描述符
+				updateString(maskDescriptor(t.getDescriptor())); // 类型描述符
 			}
 			case Handle h -> {
 				updateInt(7);      // 类型标记
@@ -425,7 +450,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 			case ConstantDynamic cd -> {
 				updateInt(8);                          // 类型标记
 				updateString(cd.getName());            // 名称
-				updateString(cd.getDescriptor());      // 描述符
+				updateString(maskDescriptor(cd.getDescriptor()));      // 描述符
 				updateHandle(cd.getBootstrapMethod()); // 引导方法
 
 				// 处理引导方法参数
@@ -452,39 +477,31 @@ public final class MethodFingerprinter extends MethodVisitor {
 			super(Opcodes.ASM9);
 		}
 
-		/**
-		 * 处理普通注解值
-		 */
+		/** 处理普通注解值 */
 		@Override
 		public void visit(String name, Object value) {
 			updateString(name);
 			updateConstant(value);
 		}
 
-		/**
-		 * 处理枚举注解值
-		 */
+		/** 处理枚举注解值 */
 		@Override
 		public void visitEnum(String name, String desc, String value) {
 			updateString(name);
 			updateString("enum");
-			updateString(desc);  // 枚举类型描述符
+			updateString(maskDescriptor(desc));  // 枚举类型描述符
 			updateString(value); // 枚举值名称
 		}
 
-		/**
-		 * 处理嵌套注解
-		 */
+		/** 处理嵌套注解 */
 		@Override
 		public AnnotationVisitor visitAnnotation(String name, String desc) {
 			updateString(name);
-			updateString(desc);
+			updateString(maskDescriptor(desc));
 			return this; // 返回自身继续处理嵌套内容
 		}
 
-		/**
-		 * 处理注解数组值
-		 */
+		/** 处理注解数组值 */
 		@Override
 		public AnnotationVisitor visitArray(String name) {
 			updateString(name);
@@ -496,15 +513,11 @@ public final class MethodFingerprinter extends MethodVisitor {
 	//endregion
 
 	//region 忽略信息
-	/**
-	 * 忽略行号信息（不影响程序逻辑）
-	 */
+	/** 忽略行号信息（不影响程序逻辑） */
 	@Override
 	public void visitLineNumber(int line, Label start) { }
 
-	/**
-	 * 忽略局部变量信息（不影响程序逻辑）
-	 */
+	/** 忽略局部变量信息（不影响程序逻辑） */
 	@Override
 	public void visitLocalVariable(String name, String desc,
 	                               String sig, Label start,

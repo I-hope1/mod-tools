@@ -15,6 +15,7 @@ import java.util.*;
  * 3. 忽略调试信息（行号、局部变量等），只关注实际执行逻辑
  * 4. 相同逻辑的方法会产生相同的哈希值，用于精确匹配
  */
+@SuppressWarnings("unused")
 public final class MethodFingerprinter extends MethodVisitor {
 	public static final ThreadLocal<MethodFingerprinter> CONTEXT = ThreadLocal.withInitial(MethodFingerprinter::new);
 
@@ -73,7 +74,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 	 * @return 标签的整数ID
 	 */
 	private int getLabelId(Label l) {
-		return labelIds.computeIfAbsent(l, _ -> nextLabelId++);
+		return labelIds.computeIfAbsent(l, k -> nextLabelId++);
 	}
 
 	private final Map<String, Integer> anonClassIds = new HashMap<>();
@@ -86,7 +87,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 		if (currentClassName != null && owner.startsWith(currentClassName + "$")) {
 			// 只要是内部类（带有 $ 符号），在计算指纹时都应视为不稳定的（为了kotlin等）
 			// 我们可以根据它在当前方法中出现的顺序给它分配 ID
-			int relId = anonClassIds.computeIfAbsent(owner, _ -> nextAnonId++);
+			int relId = anonClassIds.computeIfAbsent(owner, k -> nextAnonId++);
 			return "#ANON_" + relId + "#";
 		}
 		return owner;
@@ -154,10 +155,10 @@ public final class MethodFingerprinter extends MethodVisitor {
 
 		updateString(isSelf ? "#THIS#" : maskAnonymousClass(owner));
 
-		// 关键修正：如果调用的是本类的合成方法（Lambda），不要哈希它的名字！
+		// 如果调用的是本类的合成方法（Lambda），不要哈希它的名字
 		// 因为名字是我们要对齐的对象，它是变量，不是常量。
 		String name = h.getName();
-		if (isSelf && (name.contains("$lambda") || name.contains("access$"))) {
+		if (isSelf && isSyntheticName(name)) {
 			updateString("#SYNTHETIC_METHOD#");
 		} else {
 			updateString(name);
@@ -165,6 +166,13 @@ public final class MethodFingerprinter extends MethodVisitor {
 
 		updateString(h.getDesc()); // 描述符通常是稳定的，或者由对齐器另行处理
 		updateInt(h.isInterface() ? 1 : 0);
+	}
+	static boolean isSyntheticName(String name) {
+		// 仅针对名称具有随机/递增序号、且逻辑上可能发生偏移的方法
+		return name.contains("lambda$")    // Java / Kotlin Indy
+		       || name.contains("$lambda")    // Kotlin
+		       || name.contains("$anonfun$")  // Scala
+		       || name.contains("access$");   // Accessors (内部类访问桩)
 	}
 	//endregion
 

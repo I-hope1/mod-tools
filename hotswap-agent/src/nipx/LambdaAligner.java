@@ -270,7 +270,7 @@ public class LambdaAligner {
 				if (isBridge) return null;
 
 				boolean isSynthetic    = (acc & Opcodes.ACC_SYNTHETIC) != 0;
-				boolean matchesPattern = isSyntheticName(name);
+				boolean matchesPattern = MethodFingerprinter.isSyntheticName(name);
 
 				if (!isSynthetic && !matchesPattern) {
 					return null; // 业务方法（如 aaa）直接跳过，不参与 hash 和 rename 映射
@@ -285,6 +285,7 @@ public class LambdaAligner {
 						String        logicalName = extractLogicalName(name);
 						SyntheticInfo info        = ctx.acquireInfo(name, desc, fingerprinter.getHash(), logicalName);
 						groupByLogic(ctx, isOld ? ctx.oldGroups : ctx.newGroups, info);
+						super.visitEnd();
 					}
 				};
 			}
@@ -401,13 +402,6 @@ public class LambdaAligner {
 	//endregion
 
 	//region 辅助方法
-	private static boolean isSyntheticName(String name) {
-		// 仅针对名称具有随机/递增序号、且逻辑上可能发生偏移的方法
-		return name.contains("lambda$")    // Java / Kotlin Indy
-		       || name.contains("$lambda")    // Kotlin
-		       || name.contains("$anonfun$")  // Scala
-		       || name.contains("access$");   // Accessors (内部类访问桩)
-	}
 	/**
 	 * 从方法名中提取逻辑名称用于分组
 	 * 滑动去除字符串中所有“紧跟在 $ 符号后面的纯数字”

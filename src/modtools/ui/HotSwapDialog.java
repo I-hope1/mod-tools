@@ -134,6 +134,12 @@ public class HotSwapDialog extends Window {
 			}
 
 			@Override
+			public void warn(String msg) {
+				originalLogger.warn(msg);
+				appendUI("[yellow]" + msg + "[]");
+			}
+
+			@Override
 			public void error(String msg) {
 				originalLogger.error(msg);
 				appendUI("[red]" + msg + "[]");

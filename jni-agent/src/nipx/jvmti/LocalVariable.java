@@ -60,9 +60,18 @@ public record LocalVariable(
 	public String toString() {
 		return typeName() + " " + name + " = " + value + "  [slot=" + slot + "]";
 	}
+
+	/** Closes the local variable and releases any resources it holds. */
 	public void close() throws Exception {
 		if (value instanceof GlobalRef ref) {
 			ref.close();
 		}
+	}
+
+	public boolean isPrimitive() {
+		return !isReference();
+	}
+	public boolean isString() {
+		return "Ljava/lang/String;".equals(typeSignature);
 	}
 }

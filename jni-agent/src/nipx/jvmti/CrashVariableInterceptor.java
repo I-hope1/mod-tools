@@ -2,10 +2,9 @@ package nipx.jvmti;
 
 import nipx.jni.JNIEnv;
 
-import java.io.IOException;
 import java.lang.foreign.*;
 import java.lang.invoke.*;
-import java.util.*;
+import java.lang.ref.WeakReference;
 
 import static nipx.jvmti.JVMTIEnv.*;
 
@@ -28,6 +27,9 @@ public class CrashVariableInterceptor {
 	 ValueLayout.JAVA_LONG  // jlocation catch_location
 	);
 
+	private static final boolean DEBUG = false;
+
+
 	private static final MethodHandle CALLBACK_MH;
 
 	static {
@@ -43,39 +45,51 @@ public class CrashVariableInterceptor {
 	}
 
 
-	private static final ThreadLocal<Boolean>       IN_CALLBACK = ThreadLocal.withInitial(() -> false);
-	private static final ThreadLocal<StringBuilder> SB          = ThreadLocal.withInitial(StringBuilder::new);
+	private static final ThreadLocal<Boolean>                  IN_CALLBACK   = ThreadLocal.withInitial(() -> false);
+	private static final ThreadLocal<StringBuilder>            SB            = ThreadLocal.withInitial(StringBuilder::new);
+	private static final ThreadLocal<WeakReference<Throwable>> THROWABLE_REF = ThreadLocal.withInitial(() -> new WeakReference<>(null));
 	// 异常抛出时的 C++ 回调入口
 	public static void onExceptionThrown(
 	 MemorySegment jvmtiEnvPtr, MemorySegment jniEnvPtr, MemorySegment jthread,
 	 MemorySegment method, long location, MemorySegment exception,
 	 MemorySegment catchMethod, long catchLocation) {
-		if (Thread.currentThread().getContextClassLoader() == null
-		    || exception.address() == 0) { return; }
-		boolean isFatal = catchMethod.address() == 0L;
-		// if (isFatal) return;
-
-		if (IN_CALLBACK.get() == Boolean.TRUE) return;
-		IN_CALLBACK.set(Boolean.TRUE);
-
-
 		try (Arena arena = Arena.ofConfined()) {
-			if (!isFatal && !captureAllExceptions() && !isCatchMethodInClass(arena, JVMTIEnv.getInstance(), catchMethod, "arc/backend/sdl/SdlApplication")) {
+			if (Thread.currentThread().getContextClassLoader() == null
+			    || exception.address() == 0) { return; }
+			boolean isFatal = catchMethod.address() == 0L;
+			// if (isFatal) return;
+
+			if (IN_CALLBACK.get() == Boolean.TRUE) return;
+			IN_CALLBACK.set(Boolean.TRUE);
+
+			if (!isFatal && !captureAllExceptions()
+			    && !isCatchMethodInClass(arena, JVMTIEnv.getInstance(), catchMethod, "arc/backend/sdl/SdlApplication")) {
 				return;
 			}
-			StringBuilder sb = SB.get();
-			JNIEnv jniEnv = new JNIEnv(arena, jniEnvPtr);
+
+			StringBuilder sb     = SB.get();
+			JNIEnv        jniEnv = new JNIEnv(arena, jniEnvPtr);
 			// 将底层的 jobject exception 转换回 Java 的 Throwable 实例
 			// System.out.println(Thread.currentThread());
 			Object javaThrowable = jniEnv.jObjectToJavaObject(exception);
-			if (javaThrowable instanceof IOException
-			    || javaThrowable instanceof ReflectiveOperationException) return;
-			if (javaThrowable.getClass().getName().startsWith("sun.nio.fs.")) return;
+
 			if (javaThrowable instanceof Throwable th) {
-				var locals = JVMTIEnv.getInstance().captureThreadLocals(MemorySegment.NULL, 32, 14);
+				Throwable root = th;
+				while (root.getCause() != null && root.getCause() != root) root = root.getCause();
+				// if (root instanceof IOException || root instanceof ReflectiveOperationException) return;
+				// if (root.getClass().getName().startsWith("sun.nio.fs.")) return;
+				if (root == THROWABLE_REF.get().get()) return;
+
+				THROWABLE_REF.set(new WeakReference<>(root));
+
+				var locals = JVMTIEnv.getInstance().captureThreadLocals(MemorySegment.NULL, 32, 3);
 				sb.setLength(0);
 				sb.append(th.getClass().getName()).append(": ").append(th.getMessage()).append('\n');
+				boolean isFirstFrame = false;
 				for (FrameLocals frame : locals) {
+					if (frame.methodID() == method.address()) isFirstFrame = true;
+					if (!isFirstFrame) continue;
+
 					try (frame) {
 						int lineNumber = JVMTIEnv.getInstance().getLineNumber(MemorySegment.ofAddress(frame.methodID()), frame.location());
 						// int lineNumber = stackTrace[frame.depth()].getLineNumber();
@@ -83,9 +97,15 @@ public class CrashVariableInterceptor {
 						 .append(frame.className()).append('.').append(frame.methodName()).append(frame.methodSignature())
 						 .append(" :").append(lineNumber)
 						 .append('\n');
+						if (isInternal(frame.className())) continue;
+
 						for (LocalVariable local : (frame.locals())) {
 							sb.append('\t').append(local.name()).append(": ");
-							if (local.isReference() && !local.isNull()) {
+							if (local.isPrimitive()) {
+								sb.append(local.value());
+							} else if (local.isString()) {
+								sb.append('"').append(local.value()).append('"');
+							} else if (local.isReference() && !local.isNull()) {
 								String str = local.typeName();
 							/* if (local.value() instanceof MemorySegment ref) {
 								Object o = jniEnv.jObjectToJavaObject(ref);
@@ -104,19 +124,26 @@ public class CrashVariableInterceptor {
 					System.out.println(methodSig);
 				})); */
 			}
-		} catch (Throwable _) {
+		} catch (Throwable e) {
+			if (DEBUG) System.out.println(e);
 		} finally {
 			IN_CALLBACK.set(Boolean.FALSE);
 		}
 	}
+	private static boolean isInternal(String className) {
+		return className.startsWith("java.") || className.startsWith("javax.")
+		       || className.startsWith("sun.") || className.startsWith("com.sun.")
+		       || className.startsWith("jdk.");
+	}
 	private static boolean captureAllExceptions() {
 		return Boolean.parseBoolean(System.getProperty("nipx.agent.capture_all_exceptions"));
 	}
+
 	/**
 	 * 判断 catchMethod 是否属于指定类的方法
 	 * @param jvmtiEnv             JVMTI 环境指针 (MemorySegment)
 	 * @param catchMethod          要检查的 methodID (MemorySegment)
-	 * @param targetClassSignature 目标类的 JVM 内部签名，如 "Ljava/lang/RuntimeException;"
+	 * @param targetClassSignature 目标类的 JVM 内部签名，如 "java/lang/RuntimeException"
 	 * @return true 如果 catchMethod 属于目标类
 	 */
 	public static boolean isCatchMethodInClass(
@@ -154,8 +181,11 @@ public class CrashVariableInterceptor {
 		       c == Void.class;
 	} */
 
+	private static boolean installed = false;
 	/** 在游戏启动初始化时调用此方法，开启崩溃现场变量捕获 */
 	public static void install() {
+		if (installed) return;
+		installed = true;
 		try {
 			Arena         globalArena = Arena.global();
 			JVMTIEnv      jvmtiEnv    = JVMTIEnv.getInstance();

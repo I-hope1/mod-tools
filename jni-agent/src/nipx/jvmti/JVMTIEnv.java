@@ -646,7 +646,7 @@ public class JVMTIEnv {
 					int    hash  = -1;
 
 					try {
-						switch (kind) {
+						l:switch (kind) {
 							// ---- object / array --------------------------------
 							case 'L', '[' -> {
 								MemorySegment out = arena.allocate(ValueLayout.ADDRESS);
@@ -660,6 +660,10 @@ public class JVMTIEnv {
 										MemorySegment ref = jniEnv.NewGlobalRef(localRef);
 										try {
 											hash = jniEnv.identityHashCode(ref);
+											if ("Ljava/lang/String;".equals(v.sig)) {
+												value = jniEnv.jObjectToJavaObject(ref);
+												break;
+											}
 										} finally {
 											jniEnv.DeleteGlobalRef(ref);
 										}

@@ -805,6 +805,11 @@ public class HotSwapAgent {
 		}
 
 		@Override
+		public void warn(String msg) {
+			System.out.println("[NIPX] [WARN] " + msg);
+		}
+
+		@Override
 		public void error(String msg) {
 			System.err.println("[NIPX] " + msg);
 		}
@@ -819,12 +824,14 @@ public class HotSwapAgent {
 	public interface Logger {
 		void log(String msg);
 		void info(String msg);
+		void warn(String msg);
 		void error(String msg);
 		void error(String msg, Throwable t);
 	}
 
 	public static void log(String msg) { logger.log(msg); }
 	public static void info(String msg) { logger.info(msg); }
+	public static void warn(String s) { logger.warn(s); }
 	public static void error(String msg) { logger.error(msg); }
 	public static void error(String msg, Throwable t) { logger.error(msg, t); }
 	//endregion

@@ -300,6 +300,7 @@ public class Viewers {
 				// 彩色左括号
 				text.append('\n');
 				label.startColor(bColor);
+				text.append(baseIndent);
 				text.append('{');
 				label.endColor();
 				// 第一个 entry 前只需换行+缩进；后续 entry 前追加 ",\n<indent>"
@@ -363,6 +364,7 @@ public class Viewers {
 			if (prettyPrint) {
 				text.append('\n');
 				label.startColor(bColor);
+				text.append(baseIndent);
 				text.append('[');
 				label.endColor();
 				label.overrideDelimiter = () -> text.append(",\n").append(entryIndent);

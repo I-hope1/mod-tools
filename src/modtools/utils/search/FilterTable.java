@@ -107,19 +107,22 @@ public class FilterTable<E> extends LimitTable {
 
 	/**
 	 * 清空表中的所有数据和状态。
+	 * <p>顺序很重要：先 dispose 各 CellGroup（此时 cell 还没归还池），再
+	 * {@code super.clear()} 把 cell 归还给 Table 的池。否则归还后再 clearElement
+	 * 可能误清已经被别的表 obtain 走的 cell。
 	 */
 	public void clear() {
-		super.clear();
 		unbind();
 		if (map != null) {
 			map.forEach((key, set) -> {
-				// Cell 会被自动回收，不在这里回收
+				// Cell 会被 Table 回收，不在这里回收
 				if (!(key instanceof Cell) && key instanceof Pool.Poolable p) Pools.free(p);
 				set.dispose();
 			});
 			map.clear();
 			map = null;
 		}
+		super.clear();
 		update(null);
 		current = null;
 		cons = null;
@@ -189,7 +192,6 @@ public class FilterTable<E> extends LimitTable {
 		});
 	}
 
-
 	/**
 	 * 过滤表中的元素。
 	 * @param boolf 过滤条件。
@@ -197,17 +199,38 @@ public class FilterTable<E> extends LimitTable {
 	public void filter(Boolf<E> boolf) {
 		if (map == null) return;
 		map.forEach((name, seq) -> {
-			seq.each(boolf.get(name) ? BindCell::build : BindCell::remove);
+			seq.matched = boolf.get(name);
+			applyGroup(seq);
 		});
+	}
+	/** 只按缓存的结果 build / remove，不做任何匹配，不产生垃圾 */
+	public void filterCached() {
+		if (map == null) return;
+		for (CellGroup g : map.values()) applyGroup(g);
+	}
+
+	private static void applyGroup(CellGroup g) {
+		for (int i = 0; i < g.size; i++) {
+			BindCell b = g.get(i);
+			if (g.matched) {
+				b.build();
+			} else {
+				b.remove();
+			}
+		}
 	}
 
 	/**
 	 * 判断表是否为空。
+	 * <p>手写循环，避免每次调用都分配 stream。
 	 * @return 如果表为空则返回 true，否则返回 false。
 	 */
 	public boolean isEmpty() {
-		// 没有任何未被移除的组，才叫 empty
-		return map == null || map.isEmpty() || map.values().stream().allMatch(group -> group.removed);
+		if (map == null || map.isEmpty()) return true;
+		for (CellGroup group : map.values()) {
+			if (!group.removed) return false;
+		}
+		return true;
 	}
 
 	public int getMapSize() {
@@ -219,10 +242,16 @@ public class FilterTable<E> extends LimitTable {
 	 */
 	public static class CellGroup extends Seq<BindCell> {
 
-		/**
-		 * 标记是否已被移除。
-		 */
+		/** 标记是否已被移除。 */
 		public boolean removed = false;
+		/** 最近一次过滤的结果 */
+		public boolean matched = true;
+
+		/** 大多数 CellGroup 只装 1 个 BindCell，默认容量 16 太浪费 */
+		public CellGroup() {
+			super(true, 1);
+		}
+
 		/**
 		 * 移除当前 CellGroup 中的所有元素。
 		 */

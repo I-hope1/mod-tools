@@ -389,7 +389,7 @@ public abstract class WFunction<T> {
 	 Cons<SelectTable> builder, Cons2<List<T>, R> cons) {
 		FunctionBuild(name, from -> {
 			var table = IntUI.showSelectImageTable(
-			 IntVars.mouseVec.cpy(), list.get(), () -> null,
+			 IntVars.mouseVec, list.get(), () -> null,
 			 n -> cons.get(from, n), 42f, 32, 6,
 			 true);
 			if (builder != null) builder.get(table);

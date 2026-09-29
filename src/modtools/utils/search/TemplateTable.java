@@ -11,15 +11,28 @@ public class TemplateTable<R> extends Table {
 	public        Boolf<R> validator;
 	public        boolean  noFilter;
 	private final Runnable rebuild;
+	private       boolean  evalDirty = true;
+	private       boolean  lastNoFilter;
+
+	private Runnable outerUpdater;
+
+	private final Boolf<R> internalFilter = p -> noFilter || p == NORMAL || (validator != null && validator.get(p));
 	public TemplateTable(R NORMAL, Boolf<R> boolf) {
 		this.NORMAL = NORMAL;
 		this.validator = boolf;
 
-		update(rebuild = () -> {
-			template.filter(p -> {
-				if (noFilter || p == NORMAL) return true;
-				return boolf.get(p);
-			});
+		super.update(rebuild = () -> {
+			if (outerUpdater != null) outerUpdater.run();
+			boolean re = evalDirty || noFilter != lastNoFilter
+			             || (validator instanceof FilterTable.Condition<?> c && c.needUpdate());
+			// if (!needFilter()) return;
+			if (re) {
+				evalDirty = false;
+				lastNoFilter = noFilter;
+				template.filter(internalFilter);
+			} else {
+				template.filterCached();   // 每帧只补回元素
+			}
 			/*var seq  = pane.getCells();
 				int size = seq.size;
 				for (int i = 0; i < size; i++) {
@@ -37,13 +50,19 @@ public class TemplateTable<R> extends Table {
 		});
 		act(0);
 	}
+	@Override
+	public Element update(Runnable r) {
+		outerUpdater = r;
+		return this;
+	}
+	@Override
 	public void act(float delta) {
 		super.act(delta);
 		template.act(delta);
 		if (!template.needsLayout()) return;
 		template.layout();
 
-		defaults().reset();
+		super.defaults().reset();
 		super.clearChildren();
 
 		var cells     = template.getCells();
@@ -87,27 +106,35 @@ public class TemplateTable<R> extends Table {
 		 .tooltip("@mod-tools.tips.template.no_filter")
 		 .growX();
 	}
+	@Override
 	public float getPrefWidth() {
 		return template.getPrefWidth() + 12/* 好烦啊 */;
 	}
+	@Override
 	public Cell defaults() {
 		return template.defaults();
 	}
 	public void updateNow() {
+		evalDirty = true;
 		rebuild.run();
 	}
 
+	@Override
 	public void clear() {
 		super.clear();
 		template.clear();
 	}
+	@Override
 	public <T extends Element> Cell<T> add(T element) {
+		evalDirty = true;
 		return template.add(element);
 	}
+	@Override
 	public Table row() {
 		return template.row();
 	}
 	public void bind(R name) {
+		evalDirty = true;
 		template.bind(name);
 	}
 	public void unbind() {

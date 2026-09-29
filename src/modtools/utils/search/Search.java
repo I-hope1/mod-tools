@@ -7,10 +7,11 @@ import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Table;
 import arc.struct.*;
 import arc.util.Align;
+import arc.util.Timer.Task;
 import mindustry.gen.*;
 import modtools.IntVars;
 import modtools.ui.*;
-import modtools.utils.PatternUtils;
+import modtools.utils.*;
 import modtools.utils.reflect.ModifierR;
 import modtools.utils.ui.ReflectTools;
 import modtools.utils.ui.ReflectTools.MarkedCode;
@@ -68,13 +69,16 @@ public class Search<T> {
 		}
 		return true;
 	}
+
+	private Task debounce;
 	public void build(Table title, Table cont) {
 		title.add(top).padRight(8f).growX().top().row();
 		top.image(Icon.zoomSmall);
 		field = fieldProvider();
 		field.setMessageText("@players.search");
 		top.add(field).growX();
-		field.changed(() -> rebuild(cont, PatternUtils.compileRegExpOrNull(field.getText())));
+		debounce = TaskManager.newTask(() -> rebuild(cont, PatternUtils.compileRegExpOrNull(field.getText())));
+		field.changed(() -> TaskManager.reset(debounce, 0.1f));
 		rebuild(cont, PatternUtils.ANY);
 	}
 	public TextField fieldProvider() {

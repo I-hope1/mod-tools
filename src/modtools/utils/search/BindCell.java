@@ -75,9 +75,11 @@ public final class BindCell implements Poolable {
 		getCpy();
 		cell.set(UNSET_CELL).colspan(origColspan).clearElement();
 	}
-	/** clear时会回收自己（不包括cell，cell由table回收） */
+	/**
+	 * clear 时会回收自己（不包括 cell，cell 由 table 回收）。
+	 * <p>不再调用 {@code el.clear()}：元素马上就要被丢弃，这一步只是多做事。
+	 */
 	public void clear() {
-		if (el != null) el.clear();
 		if (cell != null) cell.clearElement();
 		if (pooled) bindCellPool.free(this);
 	}

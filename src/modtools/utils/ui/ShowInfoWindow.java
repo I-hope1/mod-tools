@@ -116,7 +116,8 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 	Search<Member> search;
 
 	public enum SearchType implements SearchItem<Member> {
-		name((p, member) -> find(p, member.getName())),
+		name((p, member) ->  find(p, member.getName()) ||
+    (member instanceof ClassMember cs && find(p, cs.getDelegator().getSimpleName()))),
 		fieldTypeOrReturnType((p, member) -> find(p, (member instanceof Field f ? f.getType() :
 		 member instanceof Method m ? m.getReturnType() :
 			member instanceof ClassMember cs ? cs.getDelegator() : null))),

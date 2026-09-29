@@ -73,6 +73,7 @@ public final class DoubleConversion {
 	/**
 	 * 用于UI显示，而非内部 JS 兼容
 	 * Infinity and NaN are represented as "+∞", "-∞" and "NaN" respectively, instead of "Infinity", "-Infinity" and "NaN".
+	 * -0 is represented as "-0" instead of "0".
 	 */
 	public static void appendTo(StringBuilder sb, final float value) {
 		if (Float.isNaN(value)) {
@@ -87,12 +88,21 @@ public final class DoubleConversion {
 			sb.append("-∞");
 			return;
 		}
+		if (value == 0.0f) {
+			if (Float.floatToRawIntBits(value) < 0) {
+				sb.append("-0");
+			} else {
+				sb.append('0');
+			}
+			return;
+		}
 		internalAppendTo(sb, value);
 		// sb.append('F');
 	}
 	/**
 	 * 用于UI显示，而非内部 JS 兼容
 	 * Infinity and NaN are represented as "+∞", "-∞" and "NaN" respectively, instead of "Infinity", "-Infinity" and "NaN".
+	 * -0 is represented as "-0" instead of "0".
 	 */
 	public static void appendTo(StringBuilder sb, final double value) {
 		if (Double.isNaN(value)) {
@@ -105,6 +115,14 @@ public final class DoubleConversion {
 		}
 		if (value == Double.NEGATIVE_INFINITY) {
 			sb.append("-∞");
+			return;
+		}
+		if (value == 0.0) {
+			if (Double.doubleToRawLongBits(value) < 0) {
+				sb.append("-0");
+			} else {
+				sb.append('0');
+			}
 			return;
 		}
 		internalAppendTo(sb, value);

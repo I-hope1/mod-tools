@@ -41,7 +41,7 @@ public class WatchWindow extends HiddenTopWindow implements IDisposable {
 		return Core.input.ctrl() || E_JSFunc.watch_multi.enabled();
 	}
 	public static final ObjectMap<String, WatchWindow> instances = new ObjectMap<>();
-	public WatchWindow fromInstance(String id) {
+	public static WatchWindow fromInstance(String id) {
 		return instances.get(id, WatchWindow::new);
 	}
 

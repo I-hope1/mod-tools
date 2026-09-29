@@ -42,17 +42,42 @@ public class TemplateTable<R> extends Table {
 		template.act(delta);
 		if (!template.needsLayout()) return;
 		template.layout();
+
 		defaults().reset();
 		super.clearChildren();
 
-		var cells = template.getCells();
-		for (int i = 0; i < cells.size; i++) {
-			var c = cells.get(i);
-			if (c.get() == null) continue;
-			super.add(c.get()).set(c);
-			if (cells.get(getChildren().size - 1).isEndRow()) super.row();
-		}
+		var cells     = template.getCells();
+		int slotIndex = 0; // 当前前台填充到的“槽位”下标
 
+		for (int i = 0; i < cells.size; i++) {
+			var     c  = cells.get(i);
+			Element el = c.get();
+			if (el == null) continue;
+
+			// 添加可见元素
+			Cell<?> newCell = super.add(el);
+
+			// 越界安全检查：防止可见元素数量超过模板总槽位数
+			if (slotIndex < cells.size) {
+				// 获取当前槽位的原始配置
+				Cell<?> slotCell = cells.get(slotIndex);
+
+				// 复制当前槽位的排版约束（pad, size, fill等），实现无缝紧凑补位
+				newCell.set(slotCell);
+
+				// 如果当前槽位原本是行末，则换行！
+				if (slotCell.isEndRow()) {
+					super.row();
+				}
+				slotIndex++;
+			} else {
+				// 超出槽位数时的保底：使用自身样式
+				newCell.set(c);
+				if (c.isEndRow()) {
+					super.row();
+				}
+			}
+		}
 		layout();
 		invalidateHierarchy();
 	}

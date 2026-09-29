@@ -19,20 +19,26 @@ public final class BindCell implements Poolable {
 	public  Cell<?> cell;
 	private Cell<?> cpy;
 	public  Element el;
+	private boolean pooled = true;
 
 	private BindCell() { }
 	private BindCell init(Cell<?> cell) {
 		if (cell == null) throw new NullPointerException("cell is null");
+		// if (!cell.hasElement()) throw new IllegalArgumentException("element is null");
 		this.cell = cell;
 		require();
 		return this;
 	}
 
 	public static BindCell of(Cell<?> cell) {
-		return bindCellPool.obtain().init(cell);
+		BindCell b = bindCellPool.obtain().init(cell);
+		b.pooled = true;
+		return b;
 	}
 	public static BindCell ofConst(Cell<?> cell) {
-		return new BindCell().init(cell);
+		BindCell b = new BindCell().init(cell);
+		b.pooled = false;
+		return b;
 	}
 
 
@@ -43,9 +49,11 @@ public final class BindCell implements Poolable {
 		replace(el, false);
 	}
 	public void replace(Element newEl, boolean keepSize) {
-		if (keepSize) cell.size(el.getWidth() / Scl.scl(), el.getHeight() / Scl.scl());
+		float w = (keepSize && el != null) ? el.getWidth() / Scl.scl() : -1;
+		float h = (keepSize && el != null) ? el.getHeight() / Scl.scl() : -1;
 		el = newEl;
 		build();
+		if (w >= 0 && h >= 0) cell.size(w, h);
 	}
 	public void unsetSize() {
 		cell.size(CellTools.unset);
@@ -63,14 +71,15 @@ public final class BindCell implements Poolable {
 	}
 	public void remove() {
 		if (cell.get() == null) return;
+		int origColspan = CellTools.colspan(cell);
 		getCpy();
-		cell.set(UNSET_CELL).clearElement();
+		cell.set(UNSET_CELL).colspan(origColspan).clearElement();
 	}
-	/** clear时会回收自己（不包括cell，cell由table回收）  */
+	/** clear时会回收自己（不包括cell，cell由table回收） */
 	public void clear() {
 		if (el != null) el.clear();
 		if (cell != null) cell.clearElement();
-		bindCellPool.free(this);
+		if (pooled) bindCellPool.free(this);
 	}
 
 	// toggle
@@ -78,8 +87,7 @@ public final class BindCell implements Poolable {
 		toggle(cell.get() != el);
 	}
 	public void toggle(boolean b) {
-		if (b) build();
-		else remove();
+		if (b) { build(); } else remove();
 	}
 	public boolean toggle1(boolean b) {
 		toggle(b);
@@ -95,6 +103,11 @@ public final class BindCell implements Poolable {
 		cell = null;
 	}
 	public void setCell(Cell cell) {
+		if (this.cell == cell) return;
+		if (cpy != null) {
+			cellPool.free(cpy);
+			cpy = null;
+		}
 		this.cell = cell;
 		require();
 	}

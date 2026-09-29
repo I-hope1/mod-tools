@@ -59,8 +59,13 @@ public class FilterTable<E> extends LimitTable {
 	}
 	public void rebind(E lastName, E newName) {
 		if (map == null) map = new HashMap<>();
-		current = lastName == null ? nullGroup() : map.computeIfAbsent(lastName, _ -> new CellGroup());
-		map.remove(lastName);
+		if (lastName == null) {
+			current = nullGroup();
+			nullGroup = null; // 断开旧的 nullGroup 引用
+		} else {
+			current = map.computeIfAbsent(lastName, _ -> new CellGroup());
+			map.remove(lastName);
+		}
 		map.put(newName, current);
 	}
 
@@ -83,6 +88,7 @@ public class FilterTable<E> extends LimitTable {
 		if (name == null) {
 			nullGroup().removeElement();
 			nullGroup = null;
+			return;
 		}
 		if (map == null) map = new HashMap<>();
 		if (map.containsKey(name)) {
@@ -107,7 +113,7 @@ public class FilterTable<E> extends LimitTable {
 		unbind();
 		if (map != null) {
 			map.forEach((key, set) -> {
-				// Cell 会被自动回收
+				// Cell 会被自动回收，不在这里回收
 				if (!(key instanceof Cell) && key instanceof Pool.Poolable p) Pools.free(p);
 				set.dispose();
 			});
@@ -200,7 +206,8 @@ public class FilterTable<E> extends LimitTable {
 	 * @return 如果表为空则返回 true，否则返回 false。
 	 */
 	public boolean isEmpty() {
-		return map == null || map.isEmpty() || map.entrySet().stream().anyMatch(entry -> !entry.getValue().removed);
+		// 没有任何未被移除的组，才叫 empty
+		return map == null || map.isEmpty() || map.values().stream().allMatch(group -> group.removed);
 	}
 
 	public int getMapSize() {
@@ -304,12 +311,14 @@ public class FilterTable<E> extends LimitTable {
 		 * @return 如果元素符合模式则返回 true，否则返回 false。
 		 */
 		public boolean valid(T name) {
+			Pattern pattern = provider.get();
+			this.last = pattern;
 			return switch (name) {
-				case UnlockableContent u -> PatternUtils.test(last = provider.get(), u.localizedName)
-				                            || PatternUtils.test(last, String.valueOf(u.name));
-				case Drawable d -> PatternUtils.test(last = provider.get(), FormatHelper.getUIKeyOrNull(d));
-				case String[] strings -> PatternUtils.test(last = provider.get(), strings[0]);
-				case null, default -> PatternUtils.test(last = provider.get(), String.valueOf(name));
+				case UnlockableContent u -> PatternUtils.test(pattern, u.localizedName)
+				                            || PatternUtils.test(pattern, String.valueOf(u.name));
+				case Drawable d -> PatternUtils.test(pattern, FormatHelper.getUIKeyOrNull(d));
+				case String[] strings -> PatternUtils.test(pattern, strings[0]);
+				case null, default -> PatternUtils.test(pattern, String.valueOf(name));
 			};
 		}
 		public boolean get(T object) {

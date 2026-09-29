@@ -60,9 +60,10 @@ import static modtools.utils.ui.ReflectTools.*;
 
 @SuppressWarnings("CodeBlock2Expr")
 public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor {
-	public static final String            whenExecuting       = "An exception occurred when executing";
-	public static final String            METHOD_COUNT_PREFIX = " [";
-	public static final Pool<ClassMember> CLASS_MEMBER_POOL   = Pools.get(ClassMember.class, ClassMember::new, 500);
+	public static final  String            whenExecuting       = "An exception occurred when executing";
+	public static final  String            METHOD_COUNT_PREFIX = " [";
+	public static final  Pool<ClassMember> CLASS_MEMBER_POOL   = Pools.get(ClassMember.class, ClassMember::new, 500);
+	private static final ClassMember       SEARCH_KEY          = new ClassMember();
 
 
 	/** non-null */
@@ -282,6 +283,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			}));
 			// if (OS.isWindows && hasDecompiler) buildDeCompiler(t);
 			t.button(Icon.refreshSmall, clearNonei, rebuild0);
+			t.button(Icon.refreshSmall, clearNonei, this::forceRebuildReflect).get().setColor(Color.red);
 			if (obj != null) {
 				IntUI.addStoreButton(t, "", () -> obj);
 				/* markDisplay(
@@ -683,12 +685,12 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		Underline.of(table, 6);
 	}
 	private static boolean isNestStatic(Class<?> cls) {
-		if (cls.getConstructors().length == 0) return true;
-		try {
-			return cls.getDeclaredField("$this").isSynthetic();
-		} catch (Throwable _) { }
-		Class<?>[] parameterTypes = cls.getConstructors()[0].getParameterTypes();
-		return parameterTypes.length == 0;
+		if (Modifier.isStatic(cls.getModifiers())) return true;
+		if (!cls.isMemberClass()) return false;
+		for (Field f : cls.getDeclaredFields()) {
+			if (f.isSynthetic() && f.getName().startsWith("this$")) return false;
+		}
+		return true;
 	}
 	static Cell<MyLabel> keyword(Table t, CharSequence text) {
 		return t.add(new MyLabel(text, defaultLabel)).color(tmpColor.set(c_keyword)).padRight(8f).touchable(Touchable.disabled);
@@ -710,7 +712,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		super.hide();
 
 		events.fireIns(Disposable.class);
-		events.removeIns();
+		clearTables(); // 窗口关闭时彻底回收
 		System.gc();
 	}
 
@@ -788,13 +790,14 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			 .colspan(COLSPAN)
 			 .with(l -> l.clicked(() -> IntUI.showSelectListTable(l,
 				Seq.with(arr).retainAll(m -> switch (m) {
-					case Class<?> c -> findBind(CLASS_MEMBER_POOL.obtain().init(c));
+					case Class<?> c -> findBind(SEARCH_KEY.init(c));
 					case Member mem -> findBind(mem);
 					default -> null;
-				} instanceof CellGroup group && group.get(1).cell.hasElement()),
+				} instanceof CellGroup group && (group.size > 1 ? group.get(1) : group.first()).cell.hasElement()),
 				() -> null, m -> {
-					CellGroup group = findBind((Member) m);
-					ElementUtils.scrollTo(this, group.get(1).el);
+					Member    member = m instanceof Class<?> c ? SEARCH_KEY.init(c) : (Member) m;
+					CellGroup group  = findBind(member);
+					ElementUtils.scrollTo(this, (group.size > 1 ? group.get(1) : group.first()).el);
 				}, String::valueOf, 400, 42, true, Align.left)))
 			 .row();
 			Underline.of(current, COLSPAN, Color.lightGray).padTop(6);
@@ -804,6 +807,19 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 			labels.each(ValueLabel::clearVal);
 			labels.clear().shrink();
 		}
+	}
+	private void clearTables() {
+		if (fieldsTable != null) fieldsTable.clear();
+		if (methodsTable != null) methodsTable.clear();
+		if (consTable != null) consTable.clear();
+		if (classesTable != null) classesTable.clear(); // 触发 ClassMember 的批量 free 回收！
+		events.removeIns(); // 清理旧事件监听器，防止多次刷新堆积
+	}
+	public void forceRebuildReflect() {
+		clearTables();
+		build.clearChildren();
+		classSet.clear();
+		buildReflect(obj, build, pattern);
 	}
 	/** 仅仅是个标识 */
 	static class CopyLabel extends MyLabel {
@@ -826,7 +842,7 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 		Core.app.post(() -> {
 			int size = table.map.get(member.getName()).getSecond(Seq::new).size;
 			if (size == 1) return;
-			label.setText(label.getText() + METHOD_COUNT_PREFIX + "[" + size + "]");
+			label.setText(label.getText() + METHOD_COUNT_PREFIX + size + "]");
 		});
 
 		EventHelper.doubleClick(label, () -> {
@@ -876,10 +892,11 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 				dealInvokeResult(handle.invokeWithArguments(o), cell, l);
 				return;
 			}
-			if (!l.isStatic) handle.bindTo(o);
+			if (!l.isStatic) handle = handle.bindTo(o);
+			MethodHandle finalHandle = handle;
 			JSRequest.<NativeArray>requestForMethod(handle, o, arr -> {
 				dealInvokeResult(invokeForMethod(o, m, l, arr,
-				 handle::invokeWithArguments
+				 finalHandle::invokeWithArguments
 				), cell, l);
 			});
 		}, l);

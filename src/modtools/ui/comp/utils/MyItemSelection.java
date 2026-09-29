@@ -22,8 +22,8 @@ import modtools.utils.ui.LerpFun.DrawExecutor;
 import java.util.regex.Pattern;
 
 public class MyItemSelection {
-	public static final int SIZE = 40;
-	private static TextField search;
+	public static final int       SIZE = 40;
+	private static      TextField search;
 
 	public static <T extends UnlockableContent> void buildTable(Table table, Seq<T> items, Prov<T> holder,
 	                                                            Cons<T> consumer) {
@@ -64,7 +64,9 @@ public class MyItemSelection {
 			if (item == null) continue;
 			try {
 				cont.bind(item);
-				ImageButton button = cont.button(Tex.whiteui, /*Styles.clearNoneTogglei*/HopeStyles.clearNoneTogglei, 24, IntVars.EMPTY_RUN).group(group).get();
+				ImageButton button = cont.button(Tex.whiteui,
+					/*Styles.clearNoneTogglei*/HopeStyles.clearNoneTogglei, 24, IntVars.EMPTY_RUN)
+				 .group(group).get();
 				button.changed(() -> consumer.get(button.isChecked() ? item : null));
 				button.getStyle().imageUp = drawableFunc.get(item);
 				if (item == holder.get()) {

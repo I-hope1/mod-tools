@@ -170,7 +170,7 @@ public class LambdaRef {
 	 * 当某个类被 HotSwap 重载时调用。
 	 * 清除所有 UpdateRef 中来自该类的 lambda，避免 NoSuchMethodError。
 	 * @param slashClassName 被重载的类名，如 com/example/MyView
-	 * @param newBytecode 新的类字节码
+	 * @param newBytecode    新的类字节码
 	 */
 	public static void beforeClassRedefined(String slashClassName, byte[] newBytecode) {
 		/* int cleared = 0;
@@ -180,12 +180,14 @@ public class LambdaRef {
 				cleared++;
 			}
 		} */
-		int cleared = UpdateRef.clearLambda();
-
-		if (cleared > 0) {
-			info("[LambdaRef] Cleared " + cleared + " UpdateRef lambda(s) from " + slashClassName);
+		String dotClassName = slashClassName.replace('/', '.');
+		int    cleared      = 0;
+		for (UpdateRef ref : UpdateRef.snapshot()) {
+			if (ref.clearIfFromClass(dotClassName)) cleared++;
 		}
-
+		if (cleared > 0) {
+			info("[LambdaRef] Cleared " + cleared + " UpdateRef lambda(s) from " + dotClassName);
+		}
 		// if (Core.app != null && Core.scene != null) {
 		// 	Core.app.post(() -> reloadAffectedTables(Collections.singleton(dotClassName)));
 		// }

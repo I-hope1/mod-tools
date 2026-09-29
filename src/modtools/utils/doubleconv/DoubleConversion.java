@@ -70,6 +70,10 @@ public final class DoubleConversion {
 	private static final ThreadLocal<char[]> LOCAL_CHARS  =
 	 ThreadLocal.withInitial(() -> new char[24]);
 
+	/**
+	 * 用于UI显示，而非内部 JS 兼容
+	 * Infinity and NaN are represented as "+∞", "-∞" and "NaN" respectively, instead of "Infinity", "-Infinity" and "NaN".
+	 */
 	public static void appendTo(StringBuilder sb, final float value) {
 		if (Float.isNaN(value)) {
 			sb.append("NaN");
@@ -86,6 +90,10 @@ public final class DoubleConversion {
 		internalAppendTo(sb, value);
 		// sb.append('F');
 	}
+	/**
+	 * 用于UI显示，而非内部 JS 兼容
+	 * Infinity and NaN are represented as "+∞", "-∞" and "NaN" respectively, instead of "Infinity", "-Infinity" and "NaN".
+	 */
 	public static void appendTo(StringBuilder sb, final double value) {
 		if (Double.isNaN(value)) {
 			sb.append("NaN");
@@ -103,7 +111,7 @@ public final class DoubleConversion {
 		// sb.append('D');
 	}
 
-	public static void internalAppendTo(StringBuilder sb, float value) {
+	private static void internalAppendTo(StringBuilder sb, float value) {
 		if (value == 0.0f) {
 			sb.append('0');
 			return;
@@ -114,7 +122,7 @@ public final class DoubleConversion {
 		}
 
 		final char[] digits = LOCAL_CHARS.get();
-		long packed = Schubfach.toDecimal(value, digits);
+		final long   packed = Schubfach.toDecimal(value, digits);
 		if (packed == -1L) {
 			sb.append(value);
 			return;
@@ -136,7 +144,7 @@ public final class DoubleConversion {
 		}
 
 		final char[] digits = LOCAL_CHARS.get();
-		long packed = Schubfach.toDecimal(value, digits);
+		final long   packed = Schubfach.toDecimal(value, digits);
 		if (packed == -1L) {
 			sb.append(value);
 			return;

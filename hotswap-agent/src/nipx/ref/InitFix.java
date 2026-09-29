@@ -16,7 +16,8 @@ import static nipx.HotSwapAgent.log;
 /**
  * Hotswap时初始化修复器
  * <p>新增字段的初始化表达式如果依赖构造器参数、局部变量、含分支/内联，存量实例不会被初始化</p>
- * <p>注意：会去除final字段，可能会改变语义</p>
+ * <p>不再摘除final修饰符：补丁方法不是该类的&lt;init&gt;/&lt;clinit&gt;，
+ * 直接PUTFIELD/PUTSTATIC写final字段会抛IllegalAccessError，改为经{@link FinalFieldWriter}用Unsafe写入</p>
  */
 public class InitFix {
 	private static final String PATCH_METHOD        = "$hotswap$initNewFields$";
@@ -47,11 +48,12 @@ public class InitFix {
 		ClassNode newClass = new ClassNode();
 		new ClassReader(newBytes).accept(newClass, 0);
 
-		Set<String> added = new HashSet<>(addedInstanceFields);
-		added.addAll(addedStaticFields);
+		// 补丁方法不是该类的 <init>/<clinit>，直接 PUTFIELD/PUTSTATIC 写 final 字段会抛 IllegalAccessError/静默跳过。
+		// 因此保留 final 修饰符，把补丁片段里对这些字段的写入改写成 Unsafe 调用：name -> desc
+		Map<String, String> unsafeFields = new HashMap<>();
 		for (FieldNode fn : newClass.fields) {
-			if (added.contains(fn.name) && (fn.access & Opcodes.ACC_FINAL) != 0) {
-				fn.access &= ~Opcodes.ACC_FINAL;
+			if ((fn.access & Opcodes.ACC_FINAL) != 0) {
+				unsafeFields.put(fn.name, fn.desc);
 			}
 		}
 
@@ -114,6 +116,10 @@ public class InitFix {
 			}
 		}
 
+		// final 字段的写入改走 FinalFieldWriter（Unsafe）
+		initInsns = rewriteFinalPuts(className, initInsns, unsafeFields);
+		clinitInsns = rewriteFinalPuts(className, clinitInsns, unsafeFields);
+
 		if (initInsns.isEmpty() && clinitInsns.isEmpty()) return newBytes;
 
 		if (!initInsns.isEmpty()) {
@@ -143,6 +149,64 @@ public class InitFix {
 		ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
 		newClass.accept(cw);
 		return cw.toByteArray();
+	}
+
+	// ==================== final 字段 -> Unsafe 写入 ====================
+
+	/**
+	 * 把补丁片段里对本类 final 字段的直接写入改写为 {@link FinalFieldWriter} 调用。
+	 * <p>指令形态：实例字段原本是 {@code [obj, value] + PUTFIELD}，把 PUTFIELD 换成
+	 * {@code ldc class; ldc name; invokestatic} 后，栈自底向上恰好是
+	 * {@code (obj, value, class, name)}，与 {@code putXxx(Object, X, Class, String)} 的实参顺序一致；
+	 * 静态字段原本是 {@code [value] + PUTSTATIC}，同理对应 {@code putStaticXxx(X, Class, String)}。</p>
+	 * <p>改写前后净栈增量一致（实例 -2，静态 -1），不影响{@link #isStackBalanced}的判定。</p>
+	 */
+	private static List<AbstractInsnNode> rewriteFinalPuts(
+	 String className, List<AbstractInsnNode> insns, Map<String, String> unsafeFields) {
+		if (insns.isEmpty() || unsafeFields.isEmpty()) return insns;
+
+		List<AbstractInsnNode> rewritten = new ArrayList<>(insns.size() + 8);
+		for (AbstractInsnNode insn : insns) {
+			if (!(insn instanceof FieldInsnNode f)
+			    || !f.owner.equals(className)
+			    || !unsafeFields.containsKey(f.name)
+			    || (f.getOpcode() != Opcodes.PUTFIELD && f.getOpcode() != Opcodes.PUTSTATIC)) {
+				rewritten.add(insn);
+				continue;
+			}
+
+			boolean isStatic = f.getOpcode() == Opcodes.PUTSTATIC;
+			String  method   = (isStatic ? "putStatic" : "put") + typeSuffix(f.desc);
+
+			// 引用类型和数组统一规约为 Ljava/lang/Object;
+			String valDesc = (f.desc.charAt(0) == 'L' || f.desc.charAt(0) == '[')
+			 ? "Ljava/lang/Object;" : f.desc;
+
+			String desc = (isStatic ? "(" : "(Ljava/lang/Object;")
+			              + valDesc + "Ljava/lang/Class;Ljava/lang/String;)V";
+
+			rewritten.add(new LdcInsnNode(Type.getObjectType(className)));
+			rewritten.add(new LdcInsnNode(f.name));
+			rewritten.add(new MethodInsnNode(
+			 Opcodes.INVOKESTATIC, Type.getInternalName(FinalFieldWriter.class), method, desc, false));
+			log("Rewriting final field write to Unsafe: " + className + "." + f.name + " " + f.desc);
+		}
+		return rewritten;
+	}
+
+	/** 字段描述符 -> {@link FinalFieldWriter} 方法名后缀 */
+	private static String typeSuffix(String desc) {
+		return switch (desc.charAt(0)) {
+			case 'Z' -> "Boolean";
+			case 'B' -> "Byte";
+			case 'C' -> "Char";
+			case 'S' -> "Short";
+			case 'I' -> "Int";
+			case 'J' -> "Long";
+			case 'F' -> "Float";
+			case 'D' -> "Double";
+			default -> "Object"; // L...; 与 [...
+		};
 	}
 
 	public static void afterRedefined(Class<?> clazz, byte[] newBytes) {
@@ -229,14 +293,30 @@ public class InitFix {
 
 				// 纯栈重排指令：不能套用通用 pop-N/push-N 模型
 				switch (opcode) {
+					case Opcodes.DUP -> {
+						if (stack.isEmpty()) throw new IllegalStateException("stack underflow: DUP");
+						ExprNode v   = stack.peek();
+						ExprNode dup = new ExprNode(insn);
+						dup.children.add(v);
+						v.attached.add(dup);
+						stack.push(v); // 压入相同引用（Alias），不新建包装节点
+						continue;
+					}
 					case Opcodes.DUP_X1 -> {
 						if (stack.size() < 2) throw new IllegalStateException("stack underflow: DUP_X1");
-						ExprNode v1 = stack.pop(), v2 = stack.pop(); // v1=栈顶, v2=次顶
+						ExprNode v1  = stack.pop(), v2 = stack.pop(); // v1=栈顶, v2=次顶
 						ExprNode dup = new ExprNode(insn); // 代表这条 DUP_X1 指令本身
 						dup.children.add(v2);
 						dup.children.add(v1);
-						v1.attached.add(dup);  // 谁被收集到，就把 DUP_X1 这条指令带上
+
+						// 【依赖语义说明】
+						// 物理栈执行流是 push v2 -> push v1 -> DUP_X1 -> [v1, v2, v1]。
+						// 若下游提取了最底部的 v1，物理上必须依赖 v2 的执行才能把栈垫起来。
+						// 因此通过 attached 把 dup 与 v1/v2 双向关联：只要收集了 v1，就会经由 dup 顺带将 v2 收集进来。
+						// 这会在 ExprNode 图上形成环 (v1 -> dup -> v1)，依靠 ExprNode.collect(Set) 的 Set 去重保证终止。
+						v1.attached.add(dup);
 						v2.attached.add(dup);
+
 						stack.push(v1);
 						stack.push(v2);
 						stack.push(v1); // [v1, v2, v1]
@@ -245,6 +325,7 @@ public class InitFix {
 					case Opcodes.SWAP -> {
 						if (stack.size() < 2) throw new IllegalStateException("stack underflow: SWAP");
 						ExprNode v1 = stack.pop(), v2 = stack.pop();
+						// SWAP 不需要产生 attached 节点，因为栈上的 v1 和 v2 如果后续被使用，自然会被收集
 						stack.push(v1);
 						stack.push(v2);
 						continue;
@@ -257,7 +338,7 @@ public class InitFix {
 					// DUP_X2、DUP2、DUP2_X1、DUP2_X2、POP2 仍然抛异常——它们依赖操作数是否为
 					// category-2（long/double），当前模型不区分类别宽度，硬做容易出错
 					case Opcodes.DUP_X2, Opcodes.DUP2, Opcodes.DUP2_X1, Opcodes.DUP2_X2, Opcodes.POP2 ->
-						throw new IllegalStateException("unsupported " + opcode);
+					 throw new IllegalStateException("unsupported " + opcode);
 				}
 
 				int popCount  = getPopCount(insn);
@@ -337,7 +418,7 @@ public class InitFix {
 			 + ", reason: " + e.getMessage()
 			 + " -- fields already resolved before this point are kept: "
 			 + safeCollected.stream().filter(n -> n instanceof FieldInsnNode)
-			 .map(n -> ((FieldInsnNode) n).name).collect(Collectors.joining(", ")));
+				.map(n -> ((FieldInsnNode) n).name).collect(Collectors.joining(", ")));
 			// 不要 return emptyList，用已收集的结果继续走后面的流程
 		}
 
@@ -523,7 +604,7 @@ public class InitFix {
 			case Opcodes.SWAP -> 2;
 			case Opcodes.POP -> 0;
 			case Opcodes.DUP_X2, Opcodes.DUP2, Opcodes.DUP2_X1, Opcodes.DUP2_X2, Opcodes.POP2 ->
-				throw new IllegalStateException("unsupported " + opcode);
+			 throw new IllegalStateException("unsupported " + opcode);
 			case Opcodes.IADD, Opcodes.LADD, Opcodes.FADD, Opcodes.DADD, Opcodes.ISUB, Opcodes.LSUB, Opcodes.FSUB,
 			     Opcodes.DSUB, Opcodes.IMUL, Opcodes.LMUL, Opcodes.FMUL, Opcodes.DMUL, Opcodes.IDIV, Opcodes.LDIV,
 			     Opcodes.FDIV, Opcodes.DDIV, Opcodes.IREM, Opcodes.LREM, Opcodes.FREM, Opcodes.DREM, Opcodes.INEG,

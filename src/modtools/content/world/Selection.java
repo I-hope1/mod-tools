@@ -73,7 +73,7 @@ public class Selection extends Content {
 		WFunction.init(this);
 	}
 
-	interface WDINSTANCE {
+	interface WD_INSTANCE {
 		WorldDraw
 		 unit   = new WorldDraw(Layer.weather, "unit"),
 		 tile   = new WorldDraw(Layer.darkness + 1, "tile"),
@@ -344,14 +344,9 @@ public class Selection extends Content {
 		mr1.set(t.worldx(), t.worldy(), 32, 32);
 	}
 
-	public abstract class BaseEntityFunction<T> extends WFunction<T> {
-		public BaseEntityFunction(String name, WorldDraw draw) {
-			super(name, draw);
-		}
-	}
-	public class EntityFunction<T extends Entityc> extends BaseEntityFunction<T> {
+	public class EntityFunction<T extends Entityc> extends WFunction<T> {
 		public EntityFunction(String name) {
-			super(name, WDINSTANCE.other);
+			super(name, WD_INSTANCE.other);
 		}
 
 		public void buildTable(T t, Table table) {
@@ -440,7 +435,7 @@ public class Selection extends Content {
 	}
 	public class BulletFunction<T extends Bullet> extends WFunction<T> {
 		public BulletFunction(String name) {
-			super(name, WDINSTANCE.bullet);
+			super(name, WD_INSTANCE.bullet);
 		}
 
 		public void buildTable(T bullet, Table table) {
@@ -487,7 +482,7 @@ public class Selection extends Content {
 	}
 	public class UnitFunction<T extends Unit> extends WFunction<T> {
 		public UnitFunction(String name) {
-			super(name, WDINSTANCE.unit);
+			super(name, WD_INSTANCE.unit);
 		}
 
 		public void buildTable(T unit, Table table) {
@@ -528,7 +523,7 @@ public class Selection extends Content {
 	}
 	public class BuildFunction<T extends Building> extends WFunction<T> {
 		public BuildFunction(String name) {
-			super(name, WDINSTANCE.build);
+			super(name, WD_INSTANCE.build);
 		}
 
 		public TextureRegion getRegion(T building) {
@@ -625,7 +620,7 @@ public class Selection extends Content {
 	}
 	public class TileFunction<T extends Tile> extends WFunction<T> {
 		public TileFunction(String name) {
-			super(name, WDINSTANCE.tile);
+			super(name, WD_INSTANCE.tile);
 		}
 		public float rotation(T item) {
 			return 30;

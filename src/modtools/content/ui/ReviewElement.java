@@ -723,7 +723,7 @@ public class ReviewElement extends Content {
 			table1.left().defaults().left().growX();
 			boolean expandChildren = maxDepthForAutoExpand.getInt() >= getDepth() &&
 			                         (children.size < 20
-			                          || group.parent.getChildren().size == 1
+			                          || (group.parent != null && group.parent.getChildren().size == 1)
 			                          || window.element == group);
 			button.fireCheck(expandChildren);
 			if (expandChildren) rebuild.get(table1);

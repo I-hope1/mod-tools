@@ -8,7 +8,6 @@ import arc.backend.sdl.SdlGraphics.SdlCursor;
 import arc.backend.sdl.jni.SDL;
 import arc.func.*;
 import arc.graphics.Color;
-import arc.graphics.g2d.Draw;
 import arc.input.KeyCode;
 import arc.math.Interp;
 import arc.math.geom.Vec2;
@@ -53,7 +52,7 @@ import static mindustry.Vars.*;
 import static modtools.IntVars.mouseVec;
 import static modtools.utils.ElementUtils.getAbsolutePos;
 
-@SuppressWarnings("UnusedReturnValue")
+@SuppressWarnings({"UnusedReturnValue", "unchecked"})
 public class IntUI {
 	public static final boolean               DEBUG   = false;
 	public static final TextureRegionDrawable whiteui = (TextureRegionDrawable) Tex.whiteui;
@@ -119,8 +118,8 @@ public class IntUI {
 		}
 	}
 	public static void disposeAll() {
-		topGroup.dispose();
-		frag.clear();
+		if (topGroup != null) topGroup.dispose();
+		if (frag != null) frag.clear();
 		Background.dispose();
 	}
 
@@ -182,9 +181,9 @@ public class IntUI {
 		return buttons.button(Icon.eyeSmall, HopeStyles.clearNonei, IntVars.EMPTY_RUN).with(b -> b.clicked(() -> {
 			SR.of((!WatchWindow.isMultiWatch() &&
 			       ArrayUtils.findInverse(topGroup.acquireShownWindows(), e -> e instanceof WatchWindow) instanceof WatchWindow w
-				? w : JSFunc.watch())
-				.watch(info.get(), value))
-			 .cons(WatchWindow::isEmpty, t -> t.setPosition(getAbsolutePos(b)));
+				? w : JSFunc.watch()))
+			 .cons(WatchWindow::isEmpty, t -> t.setPosition(getAbsolutePos(b)))
+			 .ifPresent(w -> w.watch(info.get(), value));
 		})).size(FUNCTION_BUTTON_SIZE).with(makeTipListener("watch.multi"));
 	}
 
@@ -309,7 +308,7 @@ public class IntUI {
 		return align;
 	}
 	public static SelectTable basicSelectTable(Vec2 vec2, boolean searchable, Builder builder) {
-		return basicSelectTable(mouseVec.equals(vec2) ? HopeInput.mouseHit() : null, searchable, builder);
+		return basicSelectTable(mouseVec == vec2/* 引用判断，判断是否传的是mouseVec */ ? HopeInput.mouseHit() : null, searchable, builder);
 	}
 	public static SelectTable basicSelectTable(Element button, boolean searchable, Builder builder) {
 		Table p = new Table();
@@ -324,7 +323,7 @@ public class IntUI {
 		Runnable hide0 = mergeHide(t, hide);
 		if (searchable) {
 			if (button instanceof TextField field) {
-				new NavigatorSearch<>(field, (cont, text) -> builder.get(cont, hide, text))
+				new NavigatorSearch<>(field, (cont, text) -> builder.get(cont, hide0, text))
 				 .build(t, p);
 			} else {
 				new Search<>((cont, text) -> builder.get(cont, hide0, text))
@@ -438,33 +437,56 @@ public class IntUI {
 	private static <T1> Builder builderWithIcons(
 	 Seq<T1> items, Seq<? extends Drawable> icons,
 	 Prov<T1> holder, Cons<T1> cons, float size, float imageSize, int cols) {
+		boolean[] notHideAuto = {false};
+		// 每个 Builder 只服务一个 SelectTable，状态放在闭包里
+		Object[] state = {null};   // 存 TemplateTable + 按钮数组
+
 		return (p, hide, pattern) -> {
-			boolean[] notHideAuto = {false};
+			if (state[0] != null) {           // 后续输入：只换 pattern，不创建元素
+				var s = (IconState<T1>) state[0];
+
+				s.pattern = pattern;
+				s.table.updateNow();
+				return;
+			}
+			var s = new IconState<T1>();
+			state[0] = s;
+			s.pattern = pattern;
+
 			Runnable wrapperHide = () -> {
 				if (!notHideAuto[0]) hide.run();
 			};
 			p.clearChildren();
 			p.left();
+
+			var tt = new TemplateTable<T1>(null, item -> PatternUtils.testAny(s.pattern, item));
+			tt.left().top().defaults().size(size);
+			s.table = tt;
+
 			ButtonGroup<ImageButton> group = new ButtonGroup<>();
 			group.setMinCheckCount(0);
-			p.defaults().size(size);
 
-			int c = 0;
+			ImageButton[] btns = new ImageButton[items.size];
+			int           c    = 0;
 			for (int i = 0; i < items.size; i++) {
 				T1 item = items.get(i);
-				if (!PatternUtils.testAny(pattern, item)) continue;
-
-				ImageButton btn = Hover.buildImageButton(cons, size, imageSize, p, wrapperHide, item, icons.get(i));
-				btn.update(() -> btn.setChecked(holder.get() == item));
+				tt.bind(item);
+				ImageButton btn = Hover.buildImageButton(cons, size, imageSize, tt, wrapperHide, item, icons.get(i));
+				tt.unbind();
+				btns[i] = btn;
 				group.add(btn);
-
-				if (++c % cols == 0) {
-					p.row();
-				}
+				if (++c % cols == 0) tt.newLine();
 			}
+
+			// 整个表只挂一个 update，代替每个按钮一个
+			tt.update(() -> {
+				T1 cur = holder.get();
+				for (int i = 0; i < btns.length; i++) btns[i].setChecked(items.get(i) == cur);
+			});
+
+			p.add(tt).grow().row();
 			SettingsBuilder.build(p);
 			p.row().defaults().colspan(cols).size(CellTools.unset);
-			// see JSRequest
 			SettingsBuilder.check("@jsrequest.nothideauto", b -> notHideAuto[0] = b, () -> notHideAuto[0]);
 			p.row().defaults().colspan(1);
 			SettingsBuilder.clearBuild();
@@ -472,9 +494,10 @@ public class IntUI {
 	}
 
 	public static SelectTable
-	showSelectTable(Vec2 vec2, Builder f,
+	showSelectTable(Vec2 vec, Builder f,
 	                boolean searchable) {
-		SelectTable t = basicSelectTable(vec2, searchable, f);
+		Vec2        vec2 = vec == mouseVec ? new Vec2(mouseVec) : vec;
+		SelectTable t    = basicSelectTable(vec2, searchable, f);
 		t.background(Tex.pane);
 		t.update(() -> {
 			t.setPosition(vec2.x, vec2.y, 1);
@@ -484,11 +507,11 @@ public class IntUI {
 	}
 	public static void checkBound(SelectTable t) {
 		if (t.getWidth() > Core.scene.getWidth()) {
-			t.setWidth((float) graphics.getWidth());
+			t.setWidth(Core.scene.getWidth());
 		}
 
 		if (t.getHeight() > Core.scene.getHeight()) {
-			t.setHeight((float) graphics.getHeight());
+			t.setHeight(Core.scene.getHeight());
 		}
 
 		t.keepInStage();
@@ -559,7 +582,7 @@ public class IntUI {
 	public static Window showInfoFade(String info, Vec2 pos, int align) {
 		return new InfoFadePopup("Info", 120, 64) {{
 			cont.add(info);
-			// 1.2s
+			// 1.4s
 			Time.runTask(60 * 1.4f, this::hide);
 		}}.show().setPosition(pos, align);
 	}
@@ -613,6 +636,7 @@ public class IntUI {
 		window.cont.add(text).width(Vars.mobile ? 400f : 500f).wrap().pad(4).get().setAlignment(Align.center, Align.center);
 		window.buttons.defaults().size(200f, 54f).pad(2);
 		window.setFillParent(false);
+		window.requestKeyboard();
 		window.buttons.button(no, () -> {
 			window.hide();
 			if (denied != null) denied.run();
@@ -641,20 +665,14 @@ public class IntUI {
 		public ColorContainer(Color color) {
 			super(Core.atlas.white(), 2f);
 
+			drawAlpha = true;
+			borderColor = new Color();
 			changeColor(colorValue = color);
 			update(() -> changeColor(colorValue));
 		}
 		private void changeColor(Color color) {
 			setColor(color);
-			border(Tmp.c1.set(color).inv());
-		}
-		public void draw() {
-			Draw.color();
-			float alpha = Draw.getColor().a;
-			Draw.alpha(parentAlpha);
-			Tex.alphaBg.draw(x, y, width, height);
-			Draw.alpha(alpha);
-			super.draw();
+			border(borderColor.set(color).inv().a(1f));
 		}
 		/**
 		 * Sets color value.
@@ -666,6 +684,7 @@ public class IntUI {
 	}
 
 
+	/** 这会修改style，所以创建元素时需要新建一个style，防止干扰 */
 	public static void addCheck(Cell<? extends ImageButton> cell, Boolp boolp,
 	                            String valid, String invalid) {
 		cell.get().addListener(new ITooltip(() -> boolp.get() ? valid : invalid));
@@ -741,7 +760,7 @@ public class IntUI {
 		/** {@inheritDoc} */
 		public final void enter(InputEvent event, float x, float y, int pointer, Element fromActor) {
 			// 如果inElement为true，判断fromActor是否是绑定元素的 子元素（Descendant）
-			if (ignoreInsideElement && (fromActor == null || !fromActor.isDescendantOf(event.listenerActor))) return;
+			if (ignoreInsideElement && fromActor != null && fromActor.isDescendantOf(event.listenerActor)) return;
 			// touchDown也会触发
 			if (Core.input.isTouched() == (pointer != -1)) enter0(event, x, y, pointer, fromActor);
 		}
@@ -750,7 +769,7 @@ public class IntUI {
 		/** {@inheritDoc} */
 		public final void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
 			// 如果inElement为true，判断fromActor是否是绑定元素的 子元素（Descendant）
-			if (ignoreInsideElement && (toActor == null || !toActor.isDescendantOf(event.listenerActor))) return;
+			if (ignoreInsideElement && toActor != null && toActor.isDescendantOf(event.listenerActor)) return;
 			// touchUp也会触发
 			if (Core.input.isTouched() == (pointer != -1)) exit0(event, x, y, pointer, toActor);
 		}
@@ -784,6 +803,7 @@ public class IntUI {
 			});
 			super.show(element, x, y);
 		}
+		// 字段初始化，早于构造体执行
 		Task hideTask = TaskManager.newTask(super::hide);
 		public void hide() {
 			shown.remove(this);
@@ -944,9 +964,12 @@ public class IntUI {
 			ScrollPane pane = new ScrollPane(table, Styles.smallPane);
 			cell = top().add(pane).grow().pad(0f).top();
 			ElementUtils.hideBarIfValid(pane);
+			hiding = false;
 		}
 		Hitter hitter = new Hitter(this::hideInternal);
 		final void hideInternal() {
+			if (hiding) return;
+			hiding = true;
 			actions(Actions.fadeOut(DEF_DURATION, Interp.fade),
 			 Actions.run(() -> fire(new VisibilityEvent(true))),
 			 Actions.remove());
@@ -960,6 +983,7 @@ public class IntUI {
 		 * <p>仅用于builder参数的hide，内部依然是直接隐藏（即默认值）</p>
 		 */
 		public @Nullable Runnable hide;
+		public           boolean  hiding;
 		/**
 		 * Adds a hide() listener.
 		 */
@@ -1011,5 +1035,11 @@ public class IntUI {
 			setBottomHeight(pad);
 			setRightWidth(pad);
 		}
+	}
+
+
+	private static class IconState<T1> {
+		TemplateTable<T1> table;
+		Pattern           pattern;
 	}
 }

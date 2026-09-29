@@ -1,7 +1,7 @@
 package nipx.ref;
 
-import nipx.ClassDiffUtil.ClassDiff;
 import nipx.*;
+import nipx.ClassDiffUtil.ClassDiff;
 import nipx.jvmti.LibTool;
 import org.objectweb.asm.*;
 import org.objectweb.asm.Type;
@@ -9,6 +9,7 @@ import org.objectweb.asm.tree.*;
 
 import java.lang.reflect.*;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static nipx.HotSwapAgent.log;
 
@@ -39,6 +40,7 @@ public class InitFix {
 		// extractFieldInits(diff.newClass, addedFields);
 		return injectFieldInitPatch(newBytes, diff.newClass.name, addedStaticFields, addedInstanceFields);
 	}
+
 	public static byte[] injectFieldInitPatch(
 	 byte[] newBytes, String className, Set<String> addedStaticFields, Set<String> addedInstanceFields) {
 
@@ -142,6 +144,7 @@ public class InitFix {
 		newClass.accept(cw);
 		return cw.toByteArray();
 	}
+
 	public static void afterRedefined(Class<?> clazz, byte[] newBytes) {
 		if (!HotSwapAgent.HOTSWAP_PLUS) return;
 
@@ -183,6 +186,7 @@ public class InitFix {
 			HotSwapAgent.error("Field init patch failed: " + e.getMessage());
 		}
 	}
+
 	public static boolean hasStaticMethodAsm(byte[] classBytes, String methodName, String desc) {
 		ClassReader cr = new ClassReader(classBytes);
 		// 使用 ClassVisitor 只访问方法，轻量扫描
@@ -200,6 +204,7 @@ public class InitFix {
 		}, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG); // 跳过方法体，更快
 		return found[0];
 	}
+
 	/**
 	 * 基于操作数栈模拟（微型 AST）的高健壮性指令提取算法
 	 * 自动识别并排除任何依赖局部变量（除了 ALOAD 0）的危险赋值
@@ -221,6 +226,39 @@ public class InitFix {
 				AbstractInsnNode insn   = insns.get(i);
 				int              opcode = insn.getOpcode();
 				if (opcode == -1) continue; // 跳过虚节点 (Labels, Frames, LineNumber等)
+
+				// 纯栈重排指令：不能套用通用 pop-N/push-N 模型
+				switch (opcode) {
+					case Opcodes.DUP_X1 -> {
+						if (stack.size() < 2) throw new IllegalStateException("stack underflow: DUP_X1");
+						ExprNode v1 = stack.pop(), v2 = stack.pop(); // v1=栈顶, v2=次顶
+						ExprNode dup = new ExprNode(insn); // 代表这条 DUP_X1 指令本身
+						dup.children.add(v2);
+						dup.children.add(v1);
+						v1.attached.add(dup);  // 谁被收集到，就把 DUP_X1 这条指令带上
+						v2.attached.add(dup);
+						stack.push(v1);
+						stack.push(v2);
+						stack.push(v1); // [v1, v2, v1]
+						continue;
+					}
+					case Opcodes.SWAP -> {
+						if (stack.size() < 2) throw new IllegalStateException("stack underflow: SWAP");
+						ExprNode v1 = stack.pop(), v2 = stack.pop();
+						stack.push(v1);
+						stack.push(v2);
+						continue;
+					}
+					case Opcodes.POP -> {
+						if (stack.isEmpty()) throw new IllegalStateException("stack underflow: POP");
+						stack.pop(); // 丢弃的值不再参与后续
+						continue;
+					}
+					// DUP_X2、DUP2、DUP2_X1、DUP2_X2、POP2 仍然抛异常——它们依赖操作数是否为
+					// category-2（long/double），当前模型不区分类别宽度，硬做容易出错
+					case Opcodes.DUP_X2, Opcodes.DUP2, Opcodes.DUP2_X1, Opcodes.DUP2_X2, Opcodes.POP2 ->
+						throw new IllegalStateException("unsupported " + opcode);
+				}
 
 				int popCount  = getPopCount(insn);
 				int pushCount = getPushCount(insn);
@@ -251,14 +289,6 @@ public class InitFix {
 					}
 				}
 
-				if (opcode == Opcodes.POP && !node.children.isEmpty()
-				    && node.children.get(0).insn instanceof MethodInsnNode m
-				    && isNullCheck(m)
-				    && !node.children.get(0).children.isEmpty()) {
-					node.children.get(0).children.get(0).attached.add(node);
-				}
-
-
 				// 判定是否是目标字段的写入
 				boolean isTargetPut = false;
 				if (isStatic && opcode == Opcodes.PUTSTATIC) {
@@ -278,6 +308,18 @@ public class InitFix {
 
 					// 安全性检查：仅针对当前字段进行判定，不满足则跳过该字段，而不中断整个方法
 					String unsafeReason = checkSafe(method, insns, jumpTargets, node, tempCollected, i, isStatic);
+
+					// 栈平衡兜底：像 update(rebuild = lambda) 这种“赋值当参数用”的写法，
+					// 提取出的片段可能在操作数栈上留下残余值。
+					if (unsafeReason == null) {
+						List<AbstractInsnNode> ordered = tempCollected.stream()
+						 .sorted(Comparator.comparingInt(insns::indexOf))
+						 .collect(Collectors.toList());
+						if (!isStackBalanced(ordered)) {
+							unsafeReason = "unbalanced stack after extraction";
+						}
+					}
+
 					if (unsafeReason == null) {
 						safeCollected.addAll(tempCollected);
 					} else {
@@ -290,9 +332,13 @@ public class InitFix {
 				}
 			}
 		} catch (Throwable e) {
-			// 发生任意回溯分析异常，退回到安全状态，防止热重载机制本身崩溃
-			HotSwapAgent.error("Analysis stack failed, fallback to empty: " + e.getMessage() + " (" + className + "." + method.name + method.desc + ")");
-			return Collections.emptyList();
+			HotSwapAgent.error(
+			 "Analysis stopped early at " + method.name + method.desc
+			 + ", reason: " + e.getMessage()
+			 + " -- fields already resolved before this point are kept: "
+			 + safeCollected.stream().filter(n -> n instanceof FieldInsnNode)
+			 .map(n -> ((FieldInsnNode) n).name).collect(Collectors.joining(", ")));
+			// 不要 return emptyList，用已收集的结果继续走后面的流程
 		}
 
 		// 保持原指令在代码中的自然物理顺序输出
@@ -305,6 +351,7 @@ public class InitFix {
 		}
 		return result;
 	}
+
 	private static String checkSafe(MethodNode m, InsnList insns, Set<LabelNode> jumpTargets,
 	                                ExprNode put, Set<AbstractInsnNode> collected, int putIdx, boolean isStatic) {
 		if (!isStatic) {
@@ -342,9 +389,17 @@ public class InitFix {
 		return null;
 	}
 
-	/**
-	 * 内部辅助类：微型表达式树节点（用于追踪数据流向）
-	 */
+	/** 栈平衡校验：生成指令列表后，先自己算一遍净栈增量，不平衡就直接放弃这个字段。 */
+	private static boolean isStackBalanced(List<AbstractInsnNode> insns) {
+		int depth = 0;
+		for (AbstractInsnNode insn : insns) {
+			if (insn.getOpcode() == -1) continue;
+			depth += getPushCount(insn) - getPopCount(insn);
+		}
+		return depth == 0;
+	}
+
+	/** 内部辅助类：微型表达式树节点（用于追踪数据流向） */
 	private static class ExprNode {
 		final AbstractInsnNode insn;
 		final List<ExprNode>   children = new ArrayList<>();
@@ -464,8 +519,11 @@ public class InitFix {
 			case Opcodes.IALOAD, Opcodes.LALOAD, Opcodes.FALOAD, Opcodes.DALOAD, Opcodes.AALOAD, Opcodes.BALOAD,
 			     Opcodes.CALOAD, Opcodes.SALOAD -> 1;
 			case Opcodes.DUP -> 2;
-			case Opcodes.DUP_X1, Opcodes.DUP_X2, Opcodes.DUP2, Opcodes.DUP2_X1, Opcodes.DUP2_X2,
-			     Opcodes.SWAP, Opcodes.POP2 -> throw new IllegalStateException("unsupported " + opcode);
+			case Opcodes.DUP_X1 -> 3;
+			case Opcodes.SWAP -> 2;
+			case Opcodes.POP -> 0;
+			case Opcodes.DUP_X2, Opcodes.DUP2, Opcodes.DUP2_X1, Opcodes.DUP2_X2, Opcodes.POP2 ->
+				throw new IllegalStateException("unsupported " + opcode);
 			case Opcodes.IADD, Opcodes.LADD, Opcodes.FADD, Opcodes.DADD, Opcodes.ISUB, Opcodes.LSUB, Opcodes.FSUB,
 			     Opcodes.DSUB, Opcodes.IMUL, Opcodes.LMUL, Opcodes.FMUL, Opcodes.DMUL, Opcodes.IDIV, Opcodes.LDIV,
 			     Opcodes.FDIV, Opcodes.DDIV, Opcodes.IREM, Opcodes.LREM, Opcodes.FREM, Opcodes.DREM, Opcodes.INEG,

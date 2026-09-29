@@ -25,19 +25,21 @@ public class NoMarkupLabel extends Label {
 	}
 
 	public float getPrefWidth() {
+		boolean had = prefSizeLayout.ignoreMarkup;
 		try {
 			prefSizeLayout.ignoreMarkup = true;
 			return super.getPrefWidth();
 		} finally {
-			prefSizeLayout.ignoreMarkup = false;
+			prefSizeLayout.ignoreMarkup = had;
 		}
 	}
 	public float getPrefHeight() {
+		boolean had = prefSizeLayout.ignoreMarkup;
 		try {
 			prefSizeLayout.ignoreMarkup = true;
 			return super.getPrefHeight();
 		} finally {
-			prefSizeLayout.ignoreMarkup = false;
+			prefSizeLayout.ignoreMarkup = had;
 		}
 	}
 }

@@ -59,27 +59,30 @@ public class MyItemSelection {
 		cont.left().top().defaults().left().top().size(SIZE);
 		int i = 0;
 
-		for (Object item0 : items) {
-			T item = (T) item0;
+		T current = holder.get();
+		for (T item : items) {
 			if (item == null) continue;
+			cont.bind(item);
 			try {
-				cont.bind(item);
 				ImageButton button = cont.button(Tex.whiteui,
 					/*Styles.clearNoneTogglei*/HopeStyles.clearNoneTogglei, 24, IntVars.EMPTY_RUN)
 				 .group(group).get();
 				button.changed(() -> consumer.get(button.isChecked() ? item : null));
 				button.getStyle().imageUp = drawableFunc.get(item);
-				if (item == holder.get()) {
+				if (item == current) {
 					Time.runTask(5, () -> {
+						if (cont.parent == null) return;
 						ElementUtils.scrollTo(cont, button);
 						cont.parent.act(100);
 					});
 					button.setChecked(true);
 				}
+			} catch (Exception ignored) {
+			} finally {
 				cont.unbind();
-			} catch (Exception ignored) { }
-			if (++i % cols == 0) {
-				cont.newLine();
+				if (++i % cols == 0) {
+					cont.newLine();
+				}
 			}
 		}
 

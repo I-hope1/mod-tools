@@ -1,14 +1,12 @@
 package modtools.ui.comp.input;
 
 import arc.Core;
-import arc.func.*;
+import arc.func.Prov;
 import arc.util.*;
-import modtools.jsfunc.type.CAST;
 import modtools.ui.comp.limit.LimitLabel;
 import modtools.utils.JSFunc.MyProv;
 
 import java.io.*;
-import java.util.Objects;
 
 
 /**
@@ -41,19 +39,21 @@ public class MyLabel extends LimitLabel {
 	}
 
 	public float getPrefWidth() {
+		boolean had = prefSizeLayout.ignoreMarkup;
 		try {
 			prefSizeLayout.ignoreMarkup = true;
 			return super.getPrefWidth();
 		} finally {
-			prefSizeLayout.ignoreMarkup = false;
+			prefSizeLayout.ignoreMarkup = had;
 		}
 	}
 	public float getPrefHeight() {
+		boolean had = prefSizeLayout.ignoreMarkup;
 		try {
 			prefSizeLayout.ignoreMarkup = true;
 			return super.getPrefHeight();
 		} finally {
-			prefSizeLayout.ignoreMarkup = false;
+			prefSizeLayout.ignoreMarkup = had;
 		}
 	}
 

@@ -4,6 +4,7 @@ import arc.files.Fi;
 import arc.func.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.TextureRegion;
+import arc.math.*;
 import arc.math.geom.*;
 import arc.scene.Element;
 import arc.struct.*;
@@ -870,6 +871,48 @@ public class Viewers {
 				text.append('(').append(point2.x);
 				text.append(", "/* 微小差异，不是bug，就是有一个空格 */);
 				text.append(point2.y).append(')');
+			}
+
+			case Mat mat -> {
+				/* return "[" + val[M00] + "|" + val[M01] + "|" + val[M02] + "]\n" //
+        + "[" + val[M10] + "|" + val[M11] + "|" + val[M12] + "]\n" //
+        + "[" + val[M20] + "|" + val[M21] + "|" + val[M22] + "]"; */
+				text.append('[');
+				DoubleConversion.appendTo(text, mat.val[Mat.M00]);
+				text.append('|');
+				DoubleConversion.appendTo(text, mat.val[Mat.M01]);
+				text.append('|');
+				DoubleConversion.appendTo(text, mat.val[Mat.M02]);
+				text.append("]\n[");
+				DoubleConversion.appendTo(text, mat.val[Mat.M10]);
+				text.append('|');
+				DoubleConversion.appendTo(text, mat.val[Mat.M11]);
+				text.append('|');
+				DoubleConversion.appendTo(text, mat.val[Mat.M12]);
+				text.append("]\n[");
+				DoubleConversion.appendTo(text, mat.val[Mat.M20]);
+				text.append('|');
+				DoubleConversion.appendTo(text, mat.val[Mat.M21]);
+				text.append('|');
+				DoubleConversion.appendTo(text, mat.val[Mat.M22]);
+				text.append(']');
+			}
+
+			case Affine2 affine2 -> {
+				// return "[" + m00 + "|" + m01 + "|" + m02 + "]\n[" + m10 + "|" + m11 + "|" + m12 + "]\n[0|0|0.1]";
+				text.append('[');
+				DoubleConversion.appendTo(text, affine2.m00);
+				text.append('|');
+				DoubleConversion.appendTo(text, affine2.m01);
+				text.append('|');
+				DoubleConversion.appendTo(text, affine2.m02);
+				text.append("]\n[");
+				DoubleConversion.appendTo(text, affine2.m10);
+				text.append('|');
+				DoubleConversion.appendTo(text, affine2.m11);
+				text.append('|');
+				DoubleConversion.appendTo(text, affine2.m12);
+				text.append("]\n[0|0|0.1]");
 			}
 
 			default -> text.append(toString(val));

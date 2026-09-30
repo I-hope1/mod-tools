@@ -290,7 +290,7 @@ public class HotSwapAgent {
 								log("[DCEVM] Structure change detected, proceeding with enhanced redefinition.");
 							}
 						}
-						newBytecode = InitFix.transform(newBytecode, diff);
+						InitFix.transform(targetClass, newBytecode, diff);
 					} else {
 						log("[WARN] Cannot diff " + className + " (missing old bytecode). Proceeding with redefine.");
 					}
@@ -520,11 +520,14 @@ public class HotSwapAgent {
 		} catch (Throwable t) {
 			error("Bulk Redefine failed, switching to individual mode...", t);
 			for (ClassDefinition def : definitions) {
+				// 批量删除缓存
+				InitFix.afterRedefineFailed(def.getDefinitionClass());
 				try {
 					inst.redefineClasses(def);
 					if (DEBUG) log("[OK] " + def.getDefinitionClass().getName());
 				} catch (Throwable e) {
 					error("[FAIL] " + def.getDefinitionClass().getName(), e);
+					InitFix.afterRedefineFailed(def.getDefinitionClass());
 				}
 			}
 		}

@@ -81,7 +81,8 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			if (CellPropertyRef.isEnabled()) {
 				Core.app.post(() -> CellPropertyRef.afterRedefined(className, finalClassfileBuffer));
 			}
-			Core.app.post(() -> InitFix.afterRedefined(classBeingRedefined, finalClassfileBuffer));
+			InitFix.beforeRedefine(classBeingRedefined);
+			Core.app.post(() -> InitFix.afterRedefined(classBeingRedefined));
 		}
 
 		try {

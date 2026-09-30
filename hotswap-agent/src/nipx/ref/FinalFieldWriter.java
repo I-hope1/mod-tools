@@ -3,10 +3,14 @@ package nipx.ref;
 import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Final field writer
- * <p>用于处理final字段的写入操作：实例字段用 {@code putXxx}，静态字段用 {@code putStaticXxx}</p>
+ * <p>用于处理 final 字段的写入操作：实例字段用 {@code putXxx}，静态字段用 {@code putStaticXxx}。</p>
+ * <p>写入走 {@code Unsafe.putXxxVolatile}，是 volatile 写（强于 release）。</p>
+ * <p>偏移/基址按 (Class, name) 缓存到 {@link ClassValue}：类卸载时自动失效；
+ * redefine 改变了类布局时，框架应调用 {@link #clearCache(Class)} 主动失效。</p>
  */
 @SuppressWarnings("removal")
 public final class FinalFieldWriter {
@@ -22,6 +26,38 @@ public final class FinalFieldWriter {
 		}
 	}
 
+	/** 实例字段偏移缓存：Class -> (fieldName -> offset)。 */
+	private static final ClassValue<ConcurrentHashMap<String, Long>> OFFSET_CACHE =
+	 new ClassValue<>() {
+		 @Override
+		 protected ConcurrentHashMap<String, Long> computeValue(Class<?> type) {
+			 return new ConcurrentHashMap<>();
+		 }
+	 };
+
+	/** 静态字段槽位缓存：Class -> (fieldName -> (base, offset))。 */
+	private static final ClassValue<ConcurrentHashMap<String, StaticSlot>> STATIC_CACHE =
+	 new ClassValue<>() {
+		 @Override
+		 protected ConcurrentHashMap<String, StaticSlot> computeValue(Class<?> type) {
+			 return new ConcurrentHashMap<>();
+		 }
+	 };
+
+	private record StaticSlot(Object base, long offset) { }
+
+	/**
+	 * 失效指定类的偏移缓存，框架在 redefine 改变类布局后调用。
+	 * <p>幂等且 null 安全：可重复调用，也可对同一类前后各调用一次
+	 * （前清保证补丁用新偏移，后清覆盖补丁期间新填充的条目）。</p>
+	 */
+	public static void clearCache(Class<?> clazz) {
+		if (clazz == null) return;
+		OFFSET_CACHE.remove(clazz);
+		STATIC_CACHE.remove(clazz);
+	}
+
+	// ==================== 实例字段 ====================
 
 	public static void putObject(Object o, Object v, Class<?> c, String name) {
 		U.putObjectVolatile(o, offset(c, name), v);
@@ -54,48 +90,56 @@ public final class FinalFieldWriter {
 	// ==================== 静态字段 ====================
 	// 静态字段没有 receiver，故参数顺序为 (值, 声明类, 字段名)：
 	// 字节码里 [value] + ldc class + ldc name 恰好构成 invokestatic 的实参顺序。
-	// 基址直接传声明类本身，等价于 Unsafe.staticFieldBase(field)。
+	// 基址经 Unsafe.staticFieldBase(field) 取（对静态字段等价于声明类本身）。
 
 	public static void putStaticObject(Object v, Class<?> c, String name) {
-		Field f = field(c, name);
-		U.putObjectVolatile(U.staticFieldBase(f), U.staticFieldOffset(f), v);
+		StaticSlot s = staticSlot(c, name);
+		U.putObjectVolatile(s.base(), s.offset(), v);
 	}
 	public static void putStaticInt(int v, Class<?> c, String name) {
-		Field f = field(c, name);
-		U.putIntVolatile(U.staticFieldBase(f), U.staticFieldOffset(f), v);
+		StaticSlot s = staticSlot(c, name);
+		U.putIntVolatile(s.base(), s.offset(), v);
 	}
 	public static void putStaticLong(long v, Class<?> c, String name) {
-		Field f = field(c, name);
-		U.putLongVolatile(U.staticFieldBase(f), U.staticFieldOffset(f), v);
+		StaticSlot s = staticSlot(c, name);
+		U.putLongVolatile(s.base(), s.offset(), v);
 	}
 	public static void putStaticFloat(float v, Class<?> c, String name) {
-		Field f = field(c, name);
-		U.putFloatVolatile(U.staticFieldBase(f), U.staticFieldOffset(f), v);
+		StaticSlot s = staticSlot(c, name);
+		U.putFloatVolatile(s.base(), s.offset(), v);
 	}
 	public static void putStaticDouble(double v, Class<?> c, String name) {
-		Field f = field(c, name);
-		U.putDoubleVolatile(U.staticFieldBase(f), U.staticFieldOffset(f), v);
+		StaticSlot s = staticSlot(c, name);
+		U.putDoubleVolatile(s.base(), s.offset(), v);
 	}
 	public static void putStaticBoolean(boolean v, Class<?> c, String name) {
-		Field f = field(c, name);
-		U.putBooleanVolatile(U.staticFieldBase(f), U.staticFieldOffset(f), v);
+		StaticSlot s = staticSlot(c, name);
+		U.putBooleanVolatile(s.base(), s.offset(), v);
 	}
 	public static void putStaticByte(byte v, Class<?> c, String name) {
-		Field f = field(c, name);
-		U.putByteVolatile(U.staticFieldBase(f), U.staticFieldOffset(f), v);
+		StaticSlot s = staticSlot(c, name);
+		U.putByteVolatile(s.base(), s.offset(), v);
 	}
 	public static void putStaticChar(char v, Class<?> c, String name) {
-		Field f = field(c, name);
-		U.putCharVolatile(U.staticFieldBase(f), U.staticFieldOffset(f), v);
+		StaticSlot s = staticSlot(c, name);
+		U.putCharVolatile(s.base(), s.offset(), v);
 	}
 	public static void putStaticShort(short v, Class<?> c, String name) {
-		Field f = field(c, name);
-		U.putShortVolatile(U.staticFieldBase(f), U.staticFieldOffset(f), v);
+		StaticSlot s = staticSlot(c, name);
+		U.putShortVolatile(s.base(), s.offset(), v);
 	}
 
-	/** 实例字段偏移 */
+	/** 实例字段偏移（带缓存）。 */
 	public static long offset(Class<?> c, String name) {
-		return U.objectFieldOffset(field(c, name));
+		return OFFSET_CACHE.get(c)
+		 .computeIfAbsent(name, n -> U.objectFieldOffset(field(c, n)));
+	}
+
+	private static StaticSlot staticSlot(Class<?> c, String name) {
+		return STATIC_CACHE.get(c).computeIfAbsent(name, n -> {
+			Field f = field(c, n);
+			return new StaticSlot(U.staticFieldBase(f), U.staticFieldOffset(f));
+		});
 	}
 
 	private static Field field(Class<?> c, String name) {

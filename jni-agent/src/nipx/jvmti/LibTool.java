@@ -68,7 +68,7 @@ public class LibTool {
 	 * @return 该类的实例数组
 	 */
 	@SuppressWarnings("unchecked")
-	public static <T> T[] getInstances(Class<T> clazz) {
+	public synchronized static <T> T[] getInstances(Class<T> clazz) {
 		JVMTIEnv jvmtiEnv = JVMTIEnv.getInstance();
 
 		try (Arena arena = Arena.ofConfined()) {
@@ -101,7 +101,7 @@ public class LibTool {
 		}
 	}
 	/** 获取指定对象在 JVM 中的所有引用对象 */
-	public static Object[] getReferrers(Object targetObject) {
+	public synchronized static Object[] getReferrers(Object targetObject) {
 		JVMTIEnv jvmtiEnv = JVMTIEnv.getInstance();
 		try (Arena arena = Arena.ofConfined()) {
 			JNIEnv jniEnv = JNIEnv.getInstance(arena);
@@ -109,7 +109,11 @@ public class LibTool {
 				MemorySegment resultArrayRef = (MemorySegment) Lib.MH_GetReferrers.invokeExact(
 				 jvmtiEnv.jvmtiEnvPtr, jniEnv.getJniEnvPointer(), targetObjectRef.ref());
 
-				return (Object[]) jniEnv.jObjectToJavaObject(resultArrayRef);
+				try {
+					return (Object[]) jniEnv.jObjectToJavaObject(resultArrayRef);
+				} finally {
+					jniEnv.DeleteGlobalRef(resultArrayRef); // 释放全局引用
+				}
 			}
 		} catch (Throwable e) {
 			throw new RuntimeException(e);

@@ -6,5 +6,6 @@ public class TestAccess {
 	public static int addOne(int x){
 		return x + 1;
 	}
+
 }
 

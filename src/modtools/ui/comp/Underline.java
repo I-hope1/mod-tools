@@ -17,7 +17,10 @@ public class Underline extends LimitImage implements Poolable {
 	public static Cell<Underline> of(Table table, int colspan) {
 		return of(table, colspan, Tmp.c1.set(JColor.c_underline));
 	}
-	/** @see IDisposable#clearAll()   */
+	/**
+	 * IDisposable会实现hide时clearAll()，所以可以使用池化
+	 * @see IDisposable#clearAll()
+	 */
 	public static final Pool<Underline> pool = Pools.get(Underline.class, Underline::new);
 	public static Cell<Underline> of(Table table, int colspan, Color color) {
 		Underline underline = pool.obtain();

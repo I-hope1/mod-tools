@@ -41,6 +41,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 		nextLabelId = 0;
 		anonClassIds.clear();
 		nextAnonId = 0;
+		currentClassName = null;
 	}
 	//endregion
 
@@ -383,7 +384,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 		updateInt(getLabelId(start));
 		updateInt(getLabelId(end));
 		updateInt(getLabelId(handler));
-		updateString(type);
+		updateString(maskAnonymousClass(type));
 	}
 
 	@Override

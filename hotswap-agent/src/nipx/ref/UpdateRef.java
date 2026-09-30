@@ -18,7 +18,7 @@ public class UpdateRef {
 	 * snapshot() 和 clearIfFromClass()，wrap 就变成零登记开销。
 	 */
 	private static final Set<UpdateRef> ALL =
-	 Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<UpdateRef, Boolean>()));
+	 Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
 
 	/** 仅用于热重载时的少量遍历，返回快照 */
 	public static List<UpdateRef> snapshot() {

@@ -6,14 +6,22 @@ import org.objectweb.asm.*;
 import java.util.*;
 
 /**
- * <pre>方法指纹生成器
- * 用于为Java方法生成唯一的哈希指纹，主要用于热重载时的方法匹配
+ * 方法指纹生成器。
  *
- * 工作原理：
- * 1. 继承ASM的MethodVisitor，遍历方法的所有字节码指令
- * 2. 将每条指令的特征信息通过CRC64算法累积计算哈希值
- * 3. 忽略调试信息（行号、局部变量等），只关注实际执行逻辑
- * 4. 相同逻辑的方法会产生相同的哈希值，用于精确匹配
+ * <p>用于为 Java 方法生成唯一的哈希指纹，主要用于热重载时的方法匹配。</p>
+ *
+ * <p>工作原理：</p>
+ * <ol>
+ *   <li>继承 ASM 的 {@link MethodVisitor}，遍历方法的所有字节码指令。</li>
+ *   <li>将每条指令的特征信息通过 CRC64 算法累积计算哈希值。</li>
+ *   <li>忽略调试信息（行号、局部变量等），只关注实际执行逻辑。</li>
+ *   <li>相同逻辑的方法会产生相同的哈希值，用于精确匹配。</li>
+ * </ol>
+ *
+ * <p>关于稳定性：对匿名类编号（如 {@code Outer$1}）做归一化；对本类的 <i>lambda
+ * 系列</i> 合成方法名用 {@code #SYNTHETIC_METHOD#} 占位，避免内层 lambda 改名影响
+ * 外层 hash。<b>但 {@code access$} 例外</b>：它在本对齐器中保名不改名，其名字是
+ * 稳定信息，抹掉只会让“调用不同 accessor 的两个 lambda”撞 hash。</p>
  */
 @SuppressWarnings("unused")
 public final class MethodFingerprinter extends MethodVisitor {
@@ -26,7 +34,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 		this.currentClassName = className;
 	}
 
-	/** 重置指纹生成器状态，为下一个方法做准备 */
+	/** 重置指纹生成器状态，为下一个方法做准备。 */
 	public void reset() {
 		crc = CRC64.init();
 		labelIds.clear();
@@ -36,42 +44,31 @@ public final class MethodFingerprinter extends MethodVisitor {
 	}
 	//endregion
 
-	//region  标记常量
-	/** LDC指令标记 */
+	//region 标记常量
 	private static final int MARK_LDC             = 0x7F000010;
-	/** IINC指令标记 */
 	private static final int MARK_IINC            = 0x7F000011;
-	/** TABLESWITCH指令标记 */
 	private static final int MARK_TABLESWITCH     = 0x7F000012;
-	/** LOOKUPSWITCH指令标记 */
 	private static final int MARK_LOOKUPSWITCH    = 0x7F000013;
-	/** TRY_CATCH块标记 */
 	private static final int MARK_TRY_CATCH       = 0x7F000014;
-	/** INVOKEDYNAMIC指令标记 */
 	private static final int MARK_INVOKEDYNAMIC   = 0x7F000015;
-	/** MULTIANEWARRAY指令标记 */
 	private static final int MARK_MULTIANEWARRAY  = 0x7F000016;
-	/** LABEL标记 */
 	private static final int MARK_LABEL           = 0x7F000017;
-	/** JUMP指令标记 */
 	private static final int MARK_JUMP            = 0x7F000018;
-	/** 参数注解计数标记 */
 	private static final int MARK_PARAM_ANNOT_CNT = 0x7F000019;
-	/** 注解默认值标记 */
 	private static final int MARK_ANNOT_DEFAULT   = 0x7F00001A;
-
 	//endregion
 
-	// region ID管理
-	/** 标签到ID的映射，用于统一标识跳转目标 */
+	//region ID 管理
+	/** 标签到 ID 的映射，用于统一标识跳转目标。 */
 	private final Map<Label, Integer> labelIds    = new IdentityHashMap<>();
-	/** 下一个可用的标签ID */
+	/** 下一个可用的标签 ID。 */
 	private       int                 nextLabelId = 0;
 
 	/**
-	 * 获取标签的唯一ID，如果不存在则分配新的ID
+	 * 获取标签的唯一 ID，如果不存在则分配新的 ID。
+	 *
 	 * @param l 标签对象
-	 * @return 标签的整数ID
+	 * @return 标签的整数 ID
 	 */
 	private int getLabelId(Label l) {
 		return labelIds.computeIfAbsent(l, k -> nextLabelId++);
@@ -79,8 +76,14 @@ public final class MethodFingerprinter extends MethodVisitor {
 
 	private final Map<String, Integer> anonClassIds = new HashMap<>();
 	private       int                  nextAnonId   = 0;
+
 	/**
-	 * 核心统一拦截器：处理所有出现的内部类名称
+	 * 核心统一拦截器：处理所有出现的内部类名称。
+	 *
+	 * <p>仅对“后缀以数字开头”的不稳定嵌套类做归一化，例如
+	 * {@code Outer$1}、{@code Outer$1$2}、{@code Outer$bar$1}、{@code Outer$1Local}。
+	 * 具名嵌套类（如 {@code Outer$Builder}）保持不变。</p>
+	 *
 	 * @return 屏蔽编号后的安全描述符
 	 */
 	private String maskAnonymousClass(String owner) {
@@ -103,14 +106,18 @@ public final class MethodFingerprinter extends MethodVisitor {
 		int relId = anonClassIds.computeIfAbsent(owner, k -> nextAnonId++);
 		return "#ANON_" + relId + "#";
 	}
+
 	/**
-	 * 判断嵌套类后缀是否「可能随编译顺序位移」：
-	 * 取最后一段（以 $ 分隔），如果它以数字开头，就视为不稳定。
-	 * 1      -> 不稳定（匿名类）
-	 * 1$2    -> 不稳定
-	 * bar$1  -> 不稳定（Kotlin 的 Foo$bar$1）
-	 * 1Local -> 不稳定（javac 具名局部类，编号仍可能位移）
-	 * Builder-> 具名，稳定
+	 * 判断嵌套类后缀是否「可能随编译顺序位移」。
+	 *
+	 * <p>取最后一段（以 {@code $} 分隔），如果它以数字开头，就视为不稳定：</p>
+	 * <ul>
+	 *   <li>{@code 1}      → 不稳定（匿名类）</li>
+	 *   <li>{@code 1$2}    → 不稳定</li>
+	 *   <li>{@code bar$1}  → 不稳定（Kotlin 的 {@code Foo$bar$1}）</li>
+	 *   <li>{@code 1Local} → 不稳定（javac 具名局部类）</li>
+	 *   <li>{@code Builder}→ 具名，稳定</li>
+	 * </ul>
 	 */
 	private static boolean isUnstableNestedSuffix(String suffix) {
 		int lastSep = suffix.lastIndexOf('$');
@@ -120,7 +127,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 	}
 
 	/**
-	 * 屏蔽描述符中的匿名类引用，例如 (LOuter$1;)V -> (L#ANON_0#;)V
+	 * 屏蔽描述符中的匿名类引用，例如 {@code (LOuter$1;)V -> (L#ANON_0#;)V}，
 	 * 保证匿名类编号位移不会影响指纹。
 	 */
 	private String maskDescriptor(String desc) {
@@ -146,57 +153,55 @@ public final class MethodFingerprinter extends MethodVisitor {
 	}
 	//endregion
 
-	//region  CRC64哈希值计算
-	/** 当前累积的CRC64哈希值 */
+	//region CRC64 哈希值计算
+	/** 当前累积的 CRC64 哈希值。 */
 	private long crc = CRC64.init();
 
-	/** 构造函数，初始化ASM访问器 */
 	public MethodFingerprinter() {
 		super(Opcodes.ASM9);
 	}
 
-
 	/**
-	 * 获取最终计算出的哈希值
-	 * @return 64位CRC哈希值
+	 * 获取最终计算出的哈希值。
+	 *
+	 * @return 64 位 CRC 哈希值
 	 */
 	public long getHash() {
 		return CRC64.finish(crc);
 	}
 	//endregion
 
-	//region CRC64更新方法
-	/**
-	 * 更新CRC值与整数
-	 * @param v 要更新的整数值
-	 */
+	//region CRC64 更新方法
 	private void updateInt(int v) {
 		crc = CRC64.updateInt(crc, v);
 	}
 
-	/**
-	 * 更新CRC值与长整数
-	 * @param v 要更新的长整数值
-	 */
 	private void updateLong(long v) {
 		crc = CRC64.updateLong(crc, v);
 	}
 
 	/**
-	 * 更新CRC值与字符串
-	 * @param s 要更新的字符串，null会被视为0
+	 * 更新 CRC 值与字符串。
+	 *
+	 * <p>写入长度前缀，避免 {@code (owner="a/B", name="cd")} 与
+	 * {@code (owner="a/Bc", name="d")} 这类拼接歧义。{@code null} 用 {@code -1}
+	 * 与空串区分。</p>
 	 */
 	private void updateString(String s) {
 		if (s == null) {
-			updateInt(0);
-		} else {
-			crc = CRC64.updateStringUTF16(crc, s);
+			updateInt(-1);
+			return;
 		}
+		updateInt(s.length());
+		crc = CRC64.updateStringUTF16(crc, s);
 	}
 
 	/**
-	 * 更新CRC值与方法句柄
-	 * @param h 要更新的句柄对象
+	 * 更新 CRC 值与方法句柄。
+	 *
+	 * <p>对本类 <i>lambda 系列</i> 合成方法的名字用占位符替代，避免内层 lambda 改名
+	 * 连带影响外层 hash。{@code access$} 例外 —— 它在本对齐器中保名不改名，名字是
+	 * 稳定信息，保留它才能区分“调用不同 accessor 的两个 lambda”。</p>
 	 */
 	private void updateHandle(Handle h) {
 		updateInt(h.getTag());
@@ -205,8 +210,6 @@ public final class MethodFingerprinter extends MethodVisitor {
 
 		updateString(isSelf ? "#THIS#" : maskAnonymousClass(owner));
 
-		// 如果调用的是本类的合成方法（Lambda），不要哈希它的名字
-		// 因为名字是我们要对齐的对象，它是变量，不是常量。
 		String name = h.getName();
 		if (isSelfSynthetic(owner, name)) {
 			updateString("#SYNTHETIC_METHOD#");
@@ -214,75 +217,87 @@ public final class MethodFingerprinter extends MethodVisitor {
 			updateString(name);
 		}
 
-		updateString(maskDescriptor(h.getDesc())); // 描述符通常是稳定的，或者由对齐器另行处理
+		updateString(maskDescriptor(h.getDesc()));
 		updateInt(h.isInterface() ? 1 : 0);
 	}
-	/** 共享的判定：owner 是本类 + name 是合成名 */
+
+	/**
+	 * 共享判定：owner 是本类 且 name 是 <i>lambda 系列</i> 合成名。
+	 *
+	 * <p>{@code access$} 显式排除：它在本对齐器中保名不改名，其名字作为稳定信息
+	 * 参与 hash，抹掉只会让“调用不同 accessor 的两个 lambda”撞 hash。</p>
+	 */
 	private boolean isSelfSynthetic(String owner, String name) {
 		return owner.equals(currentClassName)
-		       && isSyntheticName(name);
+		       && isSyntheticName(name)
+		       && !name.startsWith("access$");
 	}
+
+	/**
+	 * 判断方法名是否是随机 / 递增序号的合成名，逻辑上可能发生偏移。
+	 */
 	static boolean isSyntheticName(String name) {
-		// 仅针对名称具有随机/递增序号、且逻辑上可能发生偏移的方法
-		return name.contains("lambda$")    // Java / Kotlin Indy
-		       || name.contains("$lambda")    // Kotlin
-		       || name.contains("$anonfun$")  // Scala
-		       || name.contains("access$");   // Accessors (内部类访问桩)
+		return name.contains("lambda$")     // Java / Kotlin Indy
+		       || name.contains("$lambda")  // Kotlin
+		       || name.contains("$anonfun$")// Scala
+		       || name.contains("access$"); // Accessors（内部类访问桩）
+	}
+
+	/**
+	 * 不参与匹配、重命名、复活的合成方法。
+	 *
+	 * <p>包内可见，供 {@code LambdaAligner.scan} 调用。</p>
+	 */
+	static boolean isExcluded(String name) {
+		return name.equals("$deserializeLambda$")
+		       || name.equals("$values")             // enum 的 synthetic 工厂
+		       || name.equals("$jacocoInit")         // 覆盖率插桩
+		       || name.startsWith("$SWITCH_TABLE$"); // Eclipse 编译器生成
 	}
 	//endregion
 
-	//region  字节码指令处理
-	/** 处理无操作数指令（如NOP, ACONST_NULL等） */
+	//region 字节码指令处理
 	@Override
 	public void visitInsn(int opcode) {
 		updateInt(opcode);
 	}
 
-	/** 处理单操作数整数指令（如BIPUSH, SIPUSH, NEWARRAY） */
 	@Override
 	public void visitIntInsn(int opcode, int operand) {
 		updateInt(opcode);
 		updateInt(operand);
 	}
 
-	/** 处理局部变量指令（如ILOAD, ISTORE等） */
 	@Override
 	public void visitVarInsn(int opcode, int var) {
 		updateInt(opcode);
 		updateInt(var);
 	}
 
-	/** 处理类型指令（如NEW, ANEWARRAY, CHECKCAST, INSTANCEOF） */
 	@Override
 	public void visitTypeInsn(int opcode, String type) {
 		updateInt(opcode);
-		updateString(maskAnonymousClass(type)); // 拦截 NEW, CHECKCAST 等
+		updateString(maskAnonymousClass(type));
 	}
 
-	/** 处理字段访问指令（GETFIELD, PUTFIELD, GETSTATIC, PUTSTATIC） */
 	@Override
 	public void visitFieldInsn(int opcode, String owner, String name, String desc) {
 		updateInt(opcode);
-		updateString(maskAnonymousClass(owner)); // 拦截字段所属的匿名类
-		updateString(name);   // 字段名
-		updateString(maskDescriptor(desc));   // 字段描述符
+		updateString(maskAnonymousClass(owner));
+		updateString(name);
+		updateString(maskDescriptor(desc));
 	}
 
-	/** 处理方法调用指令（INVOKEVIRTUAL, INVOKESPECIAL, INVOKESTATIC, INVOKEINTERFACE） */
 	@Override
 	public void visitMethodInsn(int opcode, String owner, String name,
 	                            String desc, boolean isInterface) {
 		updateInt(opcode);
-		updateString(maskAnonymousClass(owner)); // 拦截 INVOKESPECIAL (构造函数调用) 等
-		updateString(isSelfSynthetic(owner, name) ? "#SYNTHETIC_METHOD#" : name);       // 方法名
-		updateString(maskDescriptor(desc));       // 方法描述符
-		updateInt(isInterface ? 1 : 0); // 是否接口方法
+		updateString(maskAnonymousClass(owner));
+		updateString(isSelfSynthetic(owner, name) ? "#SYNTHETIC_METHOD#" : name);
+		updateString(maskDescriptor(desc));
+		updateInt(isInterface ? 1 : 0);
 	}
 
-	/**
-	 * 处理动态调用指令（invokedynamic）
-	 * 这是Lambda表达式和方法引用的核心实现机制
-	 */
 	@Override
 	public void visitInvokeDynamicInsn(String name,
 	                                   String desc,
@@ -291,11 +306,10 @@ public final class MethodFingerprinter extends MethodVisitor {
 
 		updateInt(MARK_INVOKEDYNAMIC);
 
-		updateString(name);    // 动态调用的方法名
-		updateString(maskDescriptor(desc));    // 方法描述符
-		updateHandle(bsm);     // 引导方法句柄
+		updateString(name);
+		updateString(maskDescriptor(desc));
+		updateHandle(bsm);
 
-		// 处理引导方法参数
 		if (bsmArgs == null) {
 			updateInt(0);
 		} else {
@@ -306,14 +320,12 @@ public final class MethodFingerprinter extends MethodVisitor {
 		}
 	}
 
-	/** 处理常量加载指令（LDC） */
 	@Override
 	public void visitLdcInsn(Object value) {
 		updateInt(MARK_LDC);
 		updateConstant(value);
 	}
 
-	/** 处理局部变量自增指令（IINC） */
 	@Override
 	public void visitIincInsn(int var, int increment) {
 		updateInt(MARK_IINC);
@@ -321,53 +333,46 @@ public final class MethodFingerprinter extends MethodVisitor {
 		updateInt(increment);
 	}
 
-	/** 处理表查找switch指令 */
 	@Override
 	public void visitTableSwitchInsn(int min, int max,
 	                                 Label dflt, Label... labels) {
 		updateInt(MARK_TABLESWITCH);
-		updateInt(min);          // 最小值
-		updateInt(max);          // 最大值
-		updateInt(getLabelId(dflt)); // 默认分支标签
+		updateInt(min);
+		updateInt(max);
+		updateInt(getLabelId(dflt));
 
-		// 处理所有case标签
 		for (Label l : labels) {
 			updateInt(getLabelId(l));
 		}
 	}
 
-	/** 处理查找表switch指令 */
 	@Override
 	public void visitLookupSwitchInsn(Label dflt,
 	                                  int[] keys,
 	                                  Label... labels) {
 
 		updateInt(MARK_LOOKUPSWITCH);
-		updateInt(getLabelId(dflt)); // 默认分支标签
+		updateInt(getLabelId(dflt));
 
-		// 处理键值对
 		for (int i = 0; i < keys.length; i++) {
-			updateInt(keys[i]);              // 键
-			updateInt(getLabelId(labels[i])); // 对应的标签
+			updateInt(keys[i]);
+			updateInt(getLabelId(labels[i]));
 		}
 	}
 
-	/** 处理跳转指令（IFEQ, IFNULL等） */
 	@Override
 	public void visitJumpInsn(int opcode, Label label) {
 		updateInt(opcode);
 		updateInt(MARK_JUMP);
-		updateInt(getLabelId(label)); // 跳转目标标签
+		updateInt(getLabelId(label));
 	}
 
-	/** 处理标签（代码位置标记） */
 	@Override
 	public void visitLabel(Label label) {
 		updateInt(MARK_LABEL);
 		updateInt(getLabelId(label));
 	}
 
-	/** 处理异常处理块 */
 	@Override
 	public void visitTryCatchBlock(Label start,
 	                               Label end,
@@ -375,33 +380,27 @@ public final class MethodFingerprinter extends MethodVisitor {
 	                               String type) {
 
 		updateInt(MARK_TRY_CATCH);
-		updateInt(getLabelId(start));   // try块开始
-		updateInt(getLabelId(end));     // try块结束
-		updateInt(getLabelId(handler)); // catch处理程序
-		updateString(type);             // 异常类型
+		updateInt(getLabelId(start));
+		updateInt(getLabelId(end));
+		updateInt(getLabelId(handler));
+		updateString(type);
 	}
 
-	/**
-	 * 处理多维数组创建指令
-	 */
 	@Override
 	public void visitMultiANewArrayInsn(String desc, int dims) {
 		updateInt(MARK_MULTIANEWARRAY);
-		updateString(maskDescriptor(desc)); // 数组类型描述符
-		updateInt(dims);    // 维度数量
+		updateString(maskDescriptor(desc));
+		updateInt(dims);
 	}
 	//endregion
 
 	//region 注解处理
-
-	/** 处理注解默认值 */
 	@Override
 	public AnnotationVisitor visitAnnotationDefault() {
 		updateInt(MARK_ANNOT_DEFAULT);
 		return new FingerprintAnnotationVisitor();
 	}
 
-	/** 处理可注解参数计数 */
 	@Override
 	public void visitAnnotableParameterCount(int parameterCount,
 	                                         boolean visible) {
@@ -413,63 +412,69 @@ public final class MethodFingerprinter extends MethodVisitor {
 
 	//region 常量处理
 	/**
-	 * 处理各种类型的常量值
-	 * @param cst 常量对象
+	 * 处理各种类型的常量值。
+	 *
+	 * <p>未知类型降级为字符串处理，不再抛异常，与“优先不崩溃”的目标保持一致。
+	 * {@code Boolean}/{@code Byte}/{@code Short}/{@code Character} 等虽然不会出现
+	 * 在 {@code ldc} 中，但注解值里可能有。</p>
 	 */
 	private void updateConstant(Object cst) {
 		switch (cst) {
 			case null -> updateInt(0);
 			case Integer i -> {
-				updateInt(1);      // 类型标记
-				updateInt(i);      // 整数值
+				updateInt(1);
+				updateInt(i);
 			}
 			case Long l -> {
-				updateInt(2);      // 类型标记
-				updateLong(l);     // 长整数值
+				updateInt(2);
+				updateLong(l);
 			}
 			case Float f -> {
-				updateInt(3);      // 类型标记
-				updateInt(Float.floatToRawIntBits(f)); // 浮点数位表示
+				updateInt(3);
+				updateInt(Float.floatToRawIntBits(f));
 			}
 			case Double d -> {
-				updateInt(4);      // 类型标记
-				updateLong(Double.doubleToRawLongBits(d)); // 双精度位表示
+				updateInt(4);
+				updateLong(Double.doubleToRawLongBits(d));
 			}
 			case String s -> {
-				updateInt(5);      // 类型标记
-				updateString(s);   // 字符串值
+				updateInt(5);
+				updateString(s);
 			}
 			case Type t -> {
-				updateInt(6);      // 类型标记
-				updateString(maskDescriptor(t.getDescriptor())); // 类型描述符
+				updateInt(6);
+				updateString(maskDescriptor(t.getDescriptor()));
 			}
 			case Handle h -> {
-				updateInt(7);      // 类型标记
-				updateHandle(h);   // 句柄对象
+				updateInt(7);
+				updateHandle(h);
 			}
 			case ConstantDynamic cd -> {
-				updateInt(8);                          // 类型标记
-				updateString(cd.getName());            // 名称
-				updateString(maskDescriptor(cd.getDescriptor()));      // 描述符
-				updateHandle(cd.getBootstrapMethod()); // 引导方法
+				updateInt(8);
+				updateString(cd.getName());
+				updateString(maskDescriptor(cd.getDescriptor()));
+				updateHandle(cd.getBootstrapMethod());
 
-				// 处理引导方法参数
 				int count = cd.getBootstrapMethodArgumentCount();
 				updateInt(count);
 				for (int i = 0; i < count; i++) {
 					updateConstant(cd.getBootstrapMethodArgument(i));
 				}
 			}
-			default -> throw new IllegalStateException("Unhandled constant type: " + cst.getClass());
+			default -> {
+				updateInt(99);
+				updateString(String.valueOf(cst));
+			}
 		}
 	}
 	//endregion
 
 	//region 注解访问器
-
 	/**
-	 * 指纹注解访问器
-	 * 用于处理注解信息并将其纳入指纹计算
+	 * 指纹注解访问器，用于把注解信息纳入指纹计算。
+	 *
+	 * <p>当前只覆盖 {@code visitAnnotationDefault} 相关的路径；普通注解
+	 * （{@code visitAnnotation}）不会主动进入这里。</p>
 	 */
 	public final class FingerprintAnnotationVisitor extends AnnotationVisitor {
 
@@ -477,47 +482,42 @@ public final class MethodFingerprinter extends MethodVisitor {
 			super(Opcodes.ASM9);
 		}
 
-		/** 处理普通注解值 */
 		@Override
 		public void visit(String name, Object value) {
 			updateString(name);
 			updateConstant(value);
 		}
 
-		/** 处理枚举注解值 */
 		@Override
 		public void visitEnum(String name, String desc, String value) {
 			updateString(name);
 			updateString("enum");
-			updateString(maskDescriptor(desc));  // 枚举类型描述符
-			updateString(value); // 枚举值名称
+			updateString(maskDescriptor(desc));
+			updateString(value);
 		}
 
-		/** 处理嵌套注解 */
 		@Override
 		public AnnotationVisitor visitAnnotation(String name, String desc) {
 			updateString(name);
 			updateString(maskDescriptor(desc));
-			return this; // 返回自身继续处理嵌套内容
+			return this;
 		}
 
-		/** 处理注解数组值 */
 		@Override
 		public AnnotationVisitor visitArray(String name) {
 			updateString(name);
 			updateString("array");
-			return this; // 返回自身继续处理数组元素
+			return this;
 		}
 	}
-
 	//endregion
 
 	//region 忽略信息
-	/** 忽略行号信息（不影响程序逻辑） */
+	/** 忽略行号信息（不影响程序逻辑）。 */
 	@Override
 	public void visitLineNumber(int line, Label start) { }
 
-	/** 忽略局部变量信息（不影响程序逻辑） */
+	/** 忽略局部变量信息（不影响程序逻辑）。 */
 	@Override
 	public void visitLocalVariable(String name, String desc,
 	                               String sig, Label start,

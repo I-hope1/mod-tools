@@ -1,6 +1,5 @@
 package nipx.ref;
 
-import nipx.Reflect;
 import org.objectweb.asm.Opcodes;
 
 import java.lang.invoke.*;
@@ -46,7 +45,7 @@ public final class ProtectedBridge {
 
 		// host 是真正的目标类（可能是嵌套类），而不是 getNestHost() 返回的最外层类。
 		// hidden class 与 host 在同一 nest，privateLookupIn 可以成功。
-		MethodHandles.Lookup hostLookup = MethodHandles.privateLookupIn(host, Reflect.IMPL_LOOKUP);
+		MethodHandles.Lookup hostLookup = MethodHandles.privateLookupIn(host, patchLookup);
 
 		MethodHandle target = switch (opcode) {
 			case Opcodes.GETFIELD -> {

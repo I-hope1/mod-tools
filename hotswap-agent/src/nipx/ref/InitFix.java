@@ -6,10 +6,11 @@ import nipx.jvmti.LibTool;
 import org.objectweb.asm.*;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.*;
+import org.objectweb.asm.tree.analysis.*;
+import org.objectweb.asm.tree.analysis.Frame;
 
 import java.lang.reflect.*;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static nipx.HotSwapAgent.log;
 
@@ -38,7 +39,6 @@ public class InitFix {
 		if (addedStaticFields.isEmpty() && addedInstanceFields.isEmpty()) {
 			return newBytes;
 		}
-		// extractFieldInits(diff.newClass, addedFields);
 		return injectFieldInitPatch(newBytes, diff.newClass.name, addedStaticFields, addedInstanceFields);
 	}
 
@@ -62,7 +62,6 @@ public class InitFix {
 		{
 			Set<String> remainingFields = new HashSet<>(addedInstanceFields);
 
-			// 筛选出所有的构造函数（包括带参数的）
 			List<MethodNode> initMethods = newClass.methods.stream()
 			 .filter(m -> "<init>".equals(m.name))
 			 .toList();
@@ -72,11 +71,10 @@ public class InitFix {
 					break;
 				}
 				log("Extracting field init for " + className + "." + init.name + "()");
-				// 针对当前构造函数，尝试提取剩余未解析字段的初始化指令
-				List<AbstractInsnNode> extracted = extractFieldInits(className, init, remainingFields, false);
+				List<AbstractInsnNode> extracted =
+				 extractFieldInits(className, init, remainingFields, false);
 				if (!extracted.isEmpty()) {
 					initInsns.addAll(extracted);
-					// 遍历已提取的指令，将成功解析的 PUTFIELD 字段从 remainingFields 中移除，防止后续构造函数重复提取
 					for (AbstractInsnNode insn : extracted) {
 						if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.PUTFIELD) {
 							remainingFields.remove(f.name);
@@ -85,6 +83,7 @@ public class InitFix {
 				}
 			}
 		}
+
 		// 提取静态字段<clinit>指令
 		List<AbstractInsnNode> clinitInsns = new ArrayList<>();
 		{
@@ -94,7 +93,8 @@ public class InitFix {
 			 .filter(m -> "<clinit>".equals(m.name) && "()V".equals(m.desc))
 			 .findFirst().orElse(null);
 			if (clinit != null) {
-				List<AbstractInsnNode> extracted = extractFieldInits(className, clinit, remainingStaticFields, true);
+				List<AbstractInsnNode> extracted =
+				 extractFieldInits(className, clinit, remainingStaticFields, true);
 				clinitInsns.addAll(extracted);
 				for (AbstractInsnNode insn : extracted) {
 					if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.PUTSTATIC) {
@@ -104,12 +104,15 @@ public class InitFix {
 			}
 			if (!remainingStaticFields.isEmpty()) {
 				for (FieldNode field : newClass.fields) {
-					if ((field.access & Opcodes.ACC_STATIC) != 0 && remainingStaticFields.contains(field.name)) {
+					if ((field.access & Opcodes.ACC_STATIC) != 0
+					    && remainingStaticFields.contains(field.name)) {
 						if (field.value != null) {
 							clinitInsns.add(new LdcInsnNode(field.value));
-							clinitInsns.add(new FieldInsnNode(Opcodes.PUTSTATIC, className, field.name, field.desc));
+							clinitInsns.add(new FieldInsnNode(
+							 Opcodes.PUTSTATIC, className, field.name, field.desc));
 							remainingStaticFields.remove(field.name);
-							log("Extracted constant field init from ConstantValue: " + className + "." + field.name);
+							log("Extracted constant field init from ConstantValue: "
+							    + className + "." + field.name);
 						}
 					}
 				}
@@ -117,7 +120,7 @@ public class InitFix {
 		}
 
 		// final 字段的写入改走 FinalFieldWriter（Unsafe）
-		initInsns = rewriteFinalPuts(className, initInsns, unsafeFields);
+		initInsns   = rewriteFinalPuts(className, initInsns,   unsafeFields);
 		clinitInsns = rewriteFinalPuts(className, clinitInsns, unsafeFields);
 
 		if (initInsns.isEmpty() && clinitInsns.isEmpty()) return newBytes;
@@ -159,7 +162,8 @@ public class InitFix {
 	 * {@code ldc class; ldc name; invokestatic} 后，栈自底向上恰好是
 	 * {@code (obj, value, class, name)}，与 {@code putXxx(Object, X, Class, String)} 的实参顺序一致；
 	 * 静态字段原本是 {@code [value] + PUTSTATIC}，同理对应 {@code putStaticXxx(X, Class, String)}。</p>
-	 * <p>改写前后净栈增量一致（实例 -2，静态 -1），不影响{@link #isStackBalanced}的判定。</p>
+	 * <p>栈平衡校验作用在提取阶段的原始 {@code Frame} 上，与本次改写无关，
+	 * 改写前后净栈增量一致（实例 -2，静态 -1）。</p>
 	 */
 	private static List<AbstractInsnNode> rewriteFinalPuts(
 	 String className, List<AbstractInsnNode> insns, Map<String, String> unsafeFields) {
@@ -178,7 +182,6 @@ public class InitFix {
 			boolean isStatic = f.getOpcode() == Opcodes.PUTSTATIC;
 			String  method   = (isStatic ? "putStatic" : "put") + typeSuffix(f.desc);
 
-			// 引用类型和数组统一规约为 Ljava/lang/Object;
 			String valDesc = (f.desc.charAt(0) == 'L' || f.desc.charAt(0) == '[')
 			 ? "Ljava/lang/Object;" : f.desc;
 
@@ -219,7 +222,7 @@ public class InitFix {
 			staticPatch.setAccessible(true);
 			HotSwapAgent.info("Applying static field init patch to " + clazz.getName());
 			staticPatch.invoke(null);
-		} catch (NoSuchMethodException _) {
+		} catch (NoSuchMethodException ignored) {
 			// 无新增静态字段
 		} catch (Throwable e) {
 			e.printStackTrace();
@@ -228,12 +231,15 @@ public class InitFix {
 
 		l:
 		try {
-			if (!hasStaticMethodAsm(newBytes, PATCH_METHOD, "(" + AnnotationTransformer.typeToNative(clazz) + ")V")) break l;
-			Object[] instances = LibTool.initialized() ? LibTool.getInstances(clazz) : InstanceTracker.getInstances(clazz).toArray();
-			int      length    = instances.length;
+			if (!hasStaticMethodAsm(newBytes, PATCH_METHOD,
+			                        "(" + AnnotationTransformer.typeToNative(clazz) + ")V")) break l;
+			Object[] instances = LibTool.initialized()
+			 ? LibTool.getInstances(clazz)
+			 : InstanceTracker.getInstances(clazz).toArray();
+			int length = instances.length;
 			if (length == 0) break l;
-			HotSwapAgent.info("Applying instance field init patch to " + clazz.getName() + ", count=" + length);
-			// String desc  = "(L" + clazz.getName().replace('.', '/') + ";)V";
+			HotSwapAgent.info("Applying instance field init patch to " + clazz.getName()
+			                  + ", count=" + length);
 			Method patch = clazz.getDeclaredMethod(PATCH_METHOD, clazz);
 			patch.setAccessible(true);
 			for (Object ins : instances) {
@@ -253,7 +259,6 @@ public class InitFix {
 
 	public static boolean hasStaticMethodAsm(byte[] classBytes, String methodName, String desc) {
 		ClassReader cr = new ClassReader(classBytes);
-		// 使用 ClassVisitor 只访问方法，轻量扫描
 		boolean[] found = {false};
 		cr.accept(new ClassVisitor(Opcodes.ASM9) {
 			@Override
@@ -263,204 +268,357 @@ public class InitFix {
 				if (name.equals(methodName) && descriptor.equals(desc)) {
 					found[0] = true;
 				}
-				return null; // 不深入方法体
+				return null;
 			}
-		}, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG); // 跳过方法体，更快
+		}, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG);
 		return found[0];
 	}
 
+	// ==================== 基于 ASM Analyzer 的字段初始化提取 ====================
+
 	/**
-	 * 基于操作数栈模拟（微型 AST）的高健壮性指令提取算法
-	 * 自动识别并排除任何依赖局部变量（除了 ALOAD 0）的危险赋值
+	 * 让 {@link SourceValue#insns} 成为完整的数据依赖闭包（不只是直接生产者）。
+	 * <p>ASM 默认的 {@link SourceInterpreter} 在 {@code unaryOperation/binaryOperation/naryOperation}
+	 * 里只返回 {@code new SourceValue(size, insn)}，集合里只有这条指令自身，操作数来源不在其中。
+	 * 旧版靠 {@code ExprNode.collect} 递归子节点，这里用覆写等效实现：把操作数的 {@code insns}
+	 * 一并并入返回值，形成传递闭包。</p>
+	 * <p>{@code copyOperation} 对 DUP* / SWAP 保持别名（返回源值），使副本与源共享同一
+	 * {@code SourceValue}；其它 copy（ILOAD/ALOAD 等）走 {@code super}，只含指令自身——这正是
+	 * 局部变量读取被登记为"来源"的关键。</p>
+	 * <p>闭包化之后，{@link #expandAssociatedCalls} 只需处理"没有产出值的副作用消费者"
+	 * （{@code <init>}、Intrinsics、数组 store、POP、DUP），职责比之前清晰得多。</p>
+	 */
+	private static class AliasInterpreter extends SourceInterpreter {
+		AliasInterpreter() { super(Opcodes.ASM9); }
+
+		@Override
+		public SourceValue copyOperation(AbstractInsnNode insn, SourceValue v) {
+			int op = insn.getOpcode();
+			if (op >= Opcodes.DUP && op <= Opcodes.SWAP) return v;
+			return super.copyOperation(insn, v);
+		}
+
+		@Override
+		public SourceValue unaryOperation(AbstractInsnNode insn, SourceValue v) {
+			return withOperands(super.unaryOperation(insn, v), List.of(v));
+		}
+
+		@Override
+		public SourceValue binaryOperation(AbstractInsnNode insn, SourceValue a, SourceValue b) {
+			return withOperands(super.binaryOperation(insn, a, b), List.of(a, b));
+		}
+
+		@Override
+		public SourceValue naryOperation(AbstractInsnNode insn, List<? extends SourceValue> vs) {
+			return withOperands(super.naryOperation(insn, vs), vs);
+		}
+
+		private static SourceValue withOperands(SourceValue base,
+		                                        List<? extends SourceValue> ops) {
+			if (ops.isEmpty()) return base;
+			Set<AbstractInsnNode> s = new HashSet<>(base.insns);
+			for (SourceValue o : ops) s.addAll(o.insns);
+			return new SourceValue(base.size, s);
+		}
+	}
+
+	/**
+	 * 基于 ASM {@link Analyzer} + {@link AliasInterpreter} 的字段初始化提取。
+	 * <p>{@code frames[i]} 是第 i 条指令 <b>执行前</b> 的状态；对 PUTFIELD/PUTSTATIC 而言，
+	 * 栈顶即要写入的值，栈顶下一格即接收者。</p>
 	 */
 	private static List<AbstractInsnNode> extractFieldInits(
 	 String className, MethodNode method, Set<String> targetFields, boolean isStatic) {
+
 		if (method == null || targetFields.isEmpty()) return Collections.emptyList();
 
-		InsnList        insns = method.instructions;
-		Stack<ExprNode> stack = new Stack<>();
-
-		// 记录最终需要保留的、安全的指令
-		Set<AbstractInsnNode> safeCollected = new LinkedHashSet<>();
-
+		Frame<SourceValue>[] frames;
 		try {
-			final Set<LabelNode> jumpTargets = collectJumpTargets(method); // 预先收集跳转目标
-
-			for (int i = 0; i < insns.size(); i++) {
-				AbstractInsnNode insn   = insns.get(i);
-				int              opcode = insn.getOpcode();
-				if (opcode == -1) continue; // 跳过虚节点 (Labels, Frames, LineNumber等)
-
-				// 纯栈重排指令：不能套用通用 pop-N/push-N 模型
-				switch (opcode) {
-					case Opcodes.DUP -> {
-						if (stack.isEmpty()) throw new IllegalStateException("stack underflow: DUP");
-						ExprNode v   = stack.peek();
-						ExprNode dup = new ExprNode(insn);
-						dup.children.add(v);
-						v.attached.add(dup);
-						stack.push(v); // 压入相同引用（Alias），不新建包装节点
-						continue;
-					}
-					case Opcodes.DUP_X1 -> {
-						if (stack.size() < 2) throw new IllegalStateException("stack underflow: DUP_X1");
-						ExprNode v1  = stack.pop(), v2 = stack.pop(); // v1=栈顶, v2=次顶
-						ExprNode dup = new ExprNode(insn); // 代表这条 DUP_X1 指令本身
-						dup.children.add(v2);
-						dup.children.add(v1);
-
-						// 【依赖语义说明】
-						// 物理栈执行流是 push v2 -> push v1 -> DUP_X1 -> [v1, v2, v1]。
-						// 若下游提取了最底部的 v1，物理上必须依赖 v2 的执行才能把栈垫起来。
-						// 因此通过 attached 把 dup 与 v1/v2 双向关联：只要收集了 v1，就会经由 dup 顺带将 v2 收集进来。
-						// 这会在 ExprNode 图上形成环 (v1 -> dup -> v1)，依靠 ExprNode.collect(Set) 的 Set 去重保证终止。
-						v1.attached.add(dup);
-						v2.attached.add(dup);
-
-						stack.push(v1);
-						stack.push(v2);
-						stack.push(v1); // [v1, v2, v1]
-						continue;
-					}
-					case Opcodes.SWAP -> {
-						if (stack.size() < 2) throw new IllegalStateException("stack underflow: SWAP");
-						ExprNode v1 = stack.pop(), v2 = stack.pop();
-						// SWAP 不需要产生 attached 节点，因为栈上的 v1 和 v2 如果后续被使用，自然会被收集
-						stack.push(v1);
-						stack.push(v2);
-						continue;
-					}
-					case Opcodes.POP -> {
-						if (stack.isEmpty()) throw new IllegalStateException("stack underflow: POP");
-						stack.pop(); // 丢弃的值不再参与后续
-						continue;
-					}
-					// DUP_X2、DUP2、DUP2_X1、DUP2_X2、POP2 仍然抛异常——它们依赖操作数是否为
-					// category-2（long/double），当前模型不区分类别宽度，硬做容易出错
-					case Opcodes.DUP_X2, Opcodes.DUP2, Opcodes.DUP2_X1, Opcodes.DUP2_X2, Opcodes.POP2 ->
-					 throw new IllegalStateException("unsupported " + opcode);
+			Analyzer<SourceValue> analyzer = new Analyzer<>(new AliasInterpreter()) {
+				@Override
+				protected boolean newControlFlowExceptionEdge(int insnIndex, TryCatchBlockNode tcb) {
+					// 不追踪异常边：补丁片段不会把 tryCatchBlocks 搬过去，异常边只会污染来源闭包
+					return false;
 				}
-
-				int popCount  = getPopCount(insn);
-				int pushCount = getPushCount(insn);
-
-				ExprNode node = new ExprNode(insn);
-				for (int j = 0; j < popCount; j++) {
-					if (stack.isEmpty()) throw new IllegalStateException("Stack underflow");
-					node.children.add(0, stack.pop()); // 逆序挂载子表达式
-				}
-
-				// 构造器调用
-				if (opcode == Opcodes.INVOKESPECIAL
-				    && "<init>".equals(((MethodInsnNode) insn).name)
-				    && !node.children.isEmpty()) {
-					node.children.get(0).attached.add(node); // 接收者与栈上剩余的那份是同一个对象
-				}
-
-				// 数组赋值：IASTORE ~ SASTORE 挂载到数组引用上（children[0] 为 arrayref）
-				if (opcode >= Opcodes.IASTORE && opcode <= Opcodes.SASTORE && !node.children.isEmpty()) {
-					node.children.get(0).attached.add(node);
-				}
-
-				// Kotlin Intrinsics 运行时非空校验调用：挂载到被校验的目标对象引用上（children[0] 为 target
-				if (opcode == Opcodes.INVOKESTATIC && !node.children.isEmpty()) {
-					MethodInsnNode m = (MethodInsnNode) insn;
-					if ("kotlin/jvm/internal/Intrinsics".equals(m.owner) && m.desc.endsWith(")V")) {
-						node.children.get(0).attached.add(node);
-					}
-				}
-
-				// 判定是否是目标字段的写入
-				boolean isTargetPut = false;
-				if (isStatic && opcode == Opcodes.PUTSTATIC) {
-					FieldInsnNode f = (FieldInsnNode) insn;
-					isTargetPut = targetFields.contains(f.name) && f.owner.equals(className);
-				} else if (!isStatic && opcode == Opcodes.PUTFIELD) {
-					FieldInsnNode f = (FieldInsnNode) insn;
-					isTargetPut = targetFields.contains(f.name) && f.owner.equals(className);
-				}
-
-				if (isTargetPut) {
-					FieldInsnNode f = (FieldInsnNode) insn;
-
-					// 临时收集当前字段赋值所关联的所有前置指令
-					Set<AbstractInsnNode> tempCollected = new HashSet<>();
-					node.collect(tempCollected);
-
-					// 安全性检查：仅针对当前字段进行判定，不满足则跳过该字段，而不中断整个方法
-					String unsafeReason = checkSafe(method, insns, jumpTargets, node, tempCollected, i, isStatic);
-
-					// 栈平衡兜底：像 update(rebuild = lambda) 这种“赋值当参数用”的写法，
-					// 提取出的片段可能在操作数栈上留下残余值。
-					if (unsafeReason == null) {
-						List<AbstractInsnNode> ordered = tempCollected.stream()
-						 .sorted(Comparator.comparingInt(insns::indexOf))
-						 .collect(Collectors.toList());
-						if (!isStackBalanced(ordered)) {
-							unsafeReason = "unbalanced stack after extraction";
-						}
-					}
-
-					if (unsafeReason == null) {
-						safeCollected.addAll(tempCollected);
-					} else {
-						HotSwapAgent.warn("Field '" + f.name + "' initialization skipped: " + unsafeReason);
-					}
-				}
-
-				for (int j = 0; j < pushCount; j++) {
-					stack.push(node);
-				}
-			}
-		} catch (Throwable e) {
-			HotSwapAgent.error(
-			 "Analysis stopped early at " + method.name + method.desc
-			 + ", reason: " + e.getMessage()
-			 + " -- fields already resolved before this point are kept: "
-			 + safeCollected.stream().filter(n -> n instanceof FieldInsnNode)
-				.map(n -> ((FieldInsnNode) n).name).collect(Collectors.joining(", ")));
-			// 不要 return emptyList，用已收集的结果继续走后面的流程
+			};
+			frames = analyzer.analyze(className, method);
+		} catch (AnalyzerException e) {
+			HotSwapAgent.warn("Analysis failed for " + method.name + method.desc
+			                  + ": " + e.getMessage());
+			return Collections.emptyList();
 		}
 
-		// 保持原指令在代码中的自然物理顺序输出
+		InsnList insns = method.instructions;
+		Set<LabelNode> jumpTargets = collectJumpTargets(method);
+		Set<AbstractInsnNode> safeCollected = new LinkedHashSet<>();
+
+		for (int i = 0; i < insns.size(); i++) {
+			AbstractInsnNode insn = insns.get(i);
+			if (!(insn instanceof FieldInsnNode f)) continue;
+
+			int op = f.getOpcode();
+			if (isStatic ? op != Opcodes.PUTSTATIC : op != Opcodes.PUTFIELD) continue;
+			if (!f.owner.equals(className) || !targetFields.contains(f.name)) continue;
+
+			Frame<SourceValue> frame = frames[i];
+			if (frame == null) continue; // 死代码
+
+			int stackSize = frame.getStackSize();
+			if (isStatic ? stackSize < 1 : stackSize < 2) continue;
+
+			SourceValue value    = frame.getStack(stackSize - 1);
+			SourceValue receiver = isStatic ? null : frame.getStack(stackSize - 2);
+
+			Set<AbstractInsnNode> collected = new HashSet<>(value.insns);
+			if (receiver != null) collected.addAll(receiver.insns);
+			collected.add(insn); // put 指令自身算在表达式树区间内
+
+			String unsafeReason;
+			try {
+				// 只扫 [0, i)：避免把 put 之后的指令收进来，也省时间
+				expandAssociatedCalls(collected, insns, frames, i);
+
+				int minIdx = Integer.MAX_VALUE, maxIdx = -1;
+				for (AbstractInsnNode n : collected) {
+					int idx = insns.indexOf(n);
+					if (idx < 0) continue;
+					if (idx < minIdx) minIdx = idx;
+					if (idx > maxIdx) maxIdx = idx;
+				}
+
+				if (minIdx == Integer.MAX_VALUE) {
+					unsafeReason = "empty collection";
+				} else if (maxIdx > i) {
+					unsafeReason = "collected instructions after the put";
+				} else {
+					unsafeReason = checkSafe(insns, jumpTargets, receiver, collected, minIdx, i, isStatic);
+					if (unsafeReason == null && !isStackBalanced(frames, minIdx, i, isStatic)) {
+						unsafeReason = "unbalanced stack after extraction";
+					}
+				}
+			} catch (RuntimeException e) {
+				unsafeReason = "extraction threw " + e.getClass().getSimpleName()
+				               + ": " + e.getMessage();
+			}
+
+			if (unsafeReason == null) {
+				safeCollected.addAll(collected);
+			} else {
+				HotSwapAgent.warn("Field '" + f.name + "' initialization skipped: " + unsafeReason);
+			}
+		}
+
+		// 共享 labelMap，保持克隆后指令间的跳转标签拓扑一致
+		Map<LabelNode, LabelNode> labelMap = new HashMap<>();
 		List<AbstractInsnNode> result = new ArrayList<>();
 		for (int i = 0; i < insns.size(); i++) {
 			AbstractInsnNode insn = insns.get(i);
 			if (safeCollected.contains(insn)) {
-				result.add(insn.clone(new HashMap<>()));
+				result.add(insn.clone(labelMap));
 			}
 		}
 		return result;
 	}
 
-	private static String checkSafe(MethodNode m, InsnList insns, Set<LabelNode> jumpTargets,
-	                                ExprNode put, Set<AbstractInsnNode> collected, int putIdx, boolean isStatic) {
+	/**
+	 * 把没有产出值的"副作用消费者"按数据流依赖补进 {@code collected}：
+	 * {@code <init>}、Intrinsics 检查、空检查、结果被 {@code POP/POP2} 丢弃的调用、
+	 * DUP* / SWAP 别名指令、数组 store。
+	 * <p>普通指令（常量、算术、字段访问、方法调用等）通过 {@link AliasInterpreter}
+	 * 的操作数闭包已经进入 {@code collected}，这里只需管这几类。</p>
+	 * <p>反复迭代直到不动点：加入某条指令时，同步把它的输入来源（{@code SourceValue.insns}）
+	 * 并入 {@code collected}，从而覆盖链式 {@code new A(new B(new C()))} 与
+	 * {@code outer.new Inner()} 里的空检查前缀。</p>
+	 *
+	 * @param putIdx 当前 PUTFIELD/PUTSTATIC 的指令下标，扫描范围限定为 {@code [0, putIdx)}
+	 */
+	private static void expandAssociatedCalls(Set<AbstractInsnNode> collected,
+	                                          InsnList insns,
+	                                          Frame<SourceValue>[] frames,
+	                                          int putIdx) {
+		boolean changed = true;
+		while (changed) {
+			changed = false;
+			for (int i = 0; i < putIdx; i++) {
+				AbstractInsnNode insn = insns.get(i);
+				if (collected.contains(insn)) continue;
+
+				Frame<SourceValue> frame = frames[i];
+				if (frame == null) continue;
+
+				int op = insn.getOpcode();
+				int ss = frame.getStackSize();
+
+				if (op == Opcodes.INVOKESPECIAL
+				    && insn instanceof MethodInsnNode m
+				    && "<init>".equals(m.name)) {
+					// 只按接收者匹配，避免参数命中扩大误收范围；
+					// 但把参数的来源并入 collected，这样链式 new A(new B()) 能在下一轮收敛
+					int argCount = Type.getArgumentTypes(m.desc).length;
+					int recvIdx  = ss - 1 - argCount;
+					if (recvIdx >= 0 && intersects(frame.getStack(recvIdx), collected)) {
+						collected.add(insn);
+						collected.addAll(frame.getStack(recvIdx).insns);
+						for (int k = 0; k < argCount; k++) {
+							int idx = recvIdx + 1 + k;
+							if (idx < ss) collected.addAll(frame.getStack(idx).insns);
+						}
+						changed = true;
+					}
+
+				} else if (op == Opcodes.INVOKESTATIC
+				           && insn instanceof MethodInsnNode m
+				           && "kotlin/jvm/internal/Intrinsics".equals(m.owner)
+				           && m.desc.endsWith(")V")) {
+					// 全部参数的来源都要并入，否则 checkNotNullExpressionValue(x, "expr")
+					// 的 LDC "expr" 会成为区间外的指令
+					int argCount = Type.getArgumentTypes(m.desc).length;
+					int base     = ss - argCount;
+					if (argCount > 0 && base >= 0 && intersects(frame.getStack(base), collected)) {
+						collected.add(insn);
+						for (int k = 0; k < argCount; k++) {
+							collected.addAll(frame.getStack(base + k).insns);
+						}
+						changed = true;
+					}
+
+				} else if (insn instanceof MethodInsnNode m && isNullCheck(m)) {
+					// Objects.requireNonNull / Object.getClass：结果常被 POP 丢弃，
+					// 但只要它的参数/接收者来自 collected，这条空检查就是初始化表达式的一部分
+					int args  = Type.getArgumentTypes(m.desc).length;
+					int total = args + (op == Opcodes.INVOKESTATIC ? 0 : 1);
+					int base  = ss - total;
+					if (base < 0) continue;
+
+					boolean matched = false;
+					for (int k = 0; k < total; k++) {
+						if (intersects(frame.getStack(base + k), collected)) {
+							matched = true;
+							break;
+						}
+					}
+					if (matched) {
+						collected.add(insn);
+						for (int k = 0; k < total; k++) {
+							collected.addAll(frame.getStack(base + k).insns);
+						}
+						changed = true;
+					}
+
+				} else if (op == Opcodes.POP || op == Opcodes.POP2) {
+					// 结果被丢弃：若被丢弃的值来自已收集指令（如 requireNonNull），
+					// 则这条 POP 也在表达式树内，否则 checkSafe 会因它落在区间内而误报
+					int n = entriesFor(frame, wordsOf(op));
+					if (n <= 0) continue;
+					boolean matched = false;
+					for (int k = 0; k < n && k < ss; k++) {
+						if (intersects(frame.getStack(ss - 1 - k), collected)) {
+							matched = true;
+							break;
+						}
+					}
+					if (matched) {
+						collected.add(insn);
+						changed = true;
+					}
+
+				} else if (op >= Opcodes.DUP && op <= Opcodes.SWAP) {
+					// DUP* / SWAP：Frame.execute 会调用 copyOperation，但指令自身不在
+					// SourceValue.insns 中，需要按"输入是否已收集"补回
+					int n = entriesFor(frame, wordsOf(op));
+					if (n <= 0 || ss < n) continue;
+
+					boolean matched = false;
+					for (int k = 0; k < n; k++) {
+						if (intersects(frame.getStack(ss - 1 - k), collected)) {
+							matched = true;
+							break;
+						}
+					}
+					if (matched) {
+						collected.add(insn);
+						for (int k = 0; k < n; k++) {
+							collected.addAll(frame.getStack(ss - 1 - k).insns);
+						}
+						changed = true;
+					}
+
+				} else if (op >= Opcodes.IASTORE && op <= Opcodes.SASTORE) {
+					// 数组 store：把 arrayref、index、value 三者的来源都并入
+					int base = ss - 3;
+					if (base < 0) continue;
+					if (intersects(frame.getStack(base), collected)) {
+						collected.add(insn);
+						for (int k = 0; k < 3; k++) {
+							collected.addAll(frame.getStack(base + k).insns);
+						}
+						changed = true;
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * DUP* / SWAP / POP* 涉及的字数（JVM words，long/double = 2，其余 = 1）。
+	 * 用于按栈上值的实际宽度决定需要参考几项，而不是硬编码项数。
+	 */
+	private static int wordsOf(int op) {
+		return switch (op) {
+			case Opcodes.DUP, Opcodes.POP -> 1;
+			case Opcodes.DUP_X1, Opcodes.SWAP, Opcodes.DUP2, Opcodes.POP2 -> 2;
+			case Opcodes.DUP_X2, Opcodes.DUP2_X1 -> 3;
+			case Opcodes.DUP2_X2 -> 4;
+			default -> 0;
+		};
+	}
+
+	/** 自栈顶向下凑够 {@code words} 个字所需的栈项数（long/double 一项占两个字）。 */
+	private static int entriesFor(Frame<SourceValue> f, int words) {
+		int n = 0, w = 0, ss = f.getStackSize();
+		while (w < words && n < ss) {
+			w += f.getStack(ss - 1 - n++).getSize();
+		}
+		return n;
+	}
+
+	private static boolean intersects(SourceValue sv, Set<AbstractInsnNode> collected) {
+		if (sv == null) return false;
+		for (AbstractInsnNode n : sv.insns) {
+			if (collected.contains(n)) return true;
+		}
+		return false;
+	}
+
+	/**
+	 * 语义安全检查。{@code minIdx} 为 {@code collected} 中指令的最小下标（已由调用方算好）。
+	 */
+	private static String checkSafe(InsnList insns, Set<LabelNode> jumpTargets,
+	                                SourceValue receiver, Set<AbstractInsnNode> collected,
+	                                int minIdx, int putIdx, boolean isStatic) {
 		if (!isStatic) {
-			if (put.children.isEmpty()) return "missing receiver";
-			AbstractInsnNode recv = put.children.get(0).insn;
-			if (!(recv instanceof VarInsnNode v && v.getOpcode() == Opcodes.ALOAD && v.var == 0)) {
+			if (receiver == null || receiver.insns.size() != 1) return "unexpected receiver";
+			AbstractInsnNode recv = receiver.insns.iterator().next();
+			if (!(recv instanceof VarInsnNode v
+			      && v.getOpcode() == Opcodes.ALOAD && v.var == 0)) {
 				return "unexpected receiver";
 			}
 		}
 
-		int min = Integer.MAX_VALUE;
-		for (AbstractInsnNode n : collected) {
-			min = Math.min(min, insns.indexOf(n));
-		}
-		for (int k = min; k <= putIdx; k++) {
+		for (int k = minIdx; k <= putIdx; k++) {
 			AbstractInsnNode n = insns.get(k);
 			if (n.getOpcode() != -1 && !collected.contains(n)) {
 				return "contains instructions outside the expression tree";
 			}
 		}
-		for (int k = min + 1; k <= putIdx; k++) {
+		for (int k = minIdx + 1; k <= putIdx; k++) {
 			if (insns.get(k) instanceof LabelNode l && jumpTargets.contains(l)) {
 				return "contains branch";
 			}
 		}
-
 		for (AbstractInsnNode n : collected) {
-			if (n instanceof VarInsnNode v && (isStatic || v.getOpcode() != Opcodes.ALOAD || v.var != 0)) {
+			if (n instanceof VarInsnNode v
+			    && (isStatic || v.getOpcode() != Opcodes.ALOAD || v.var != 0)) {
 				return "depends on local variables";
 			}
 			if (n.getOpcode() == Opcodes.IINC) {
@@ -470,109 +628,26 @@ public class InitFix {
 		return null;
 	}
 
-	/** 栈平衡校验：生成指令列表后，先自己算一遍净栈增量，不平衡就直接放弃这个字段。 */
-	private static boolean isStackBalanced(List<AbstractInsnNode> insns) {
-		int depth = 0;
-		for (AbstractInsnNode insn : insns) {
-			if (insn.getOpcode() == -1) continue;
-			depth += getPushCount(insn) - getPopCount(insn);
-		}
-		return depth == 0;
-	}
-
-	/** 内部辅助类：微型表达式树节点（用于追踪数据流向） */
-	private static class ExprNode {
-		final AbstractInsnNode insn;
-		final List<ExprNode>   children = new ArrayList<>();
-		final List<ExprNode>   attached = new ArrayList<>();
-
-		ExprNode(AbstractInsnNode insn) {
-			this.insn = insn;
-		}
-
-		void collect(Set<AbstractInsnNode> out) {
-			if (!out.add(insn)) return;
-			for (ExprNode c : children) c.collect(out);
-			for (ExprNode a : attached) a.collect(out);
-		}
-	}
-
-	// ==================== JVM 栈计算映射表 ====================
-	@SuppressWarnings("DuplicateBranchesInSwitch")
-	private static int getPopCount(AbstractInsnNode insn) {
-		int opcode = insn.getOpcode();
-		return switch (opcode) {
-			case Opcodes.NOP -> 0;
-			case Opcodes.ACONST_NULL, Opcodes.ICONST_M1, Opcodes.ICONST_0, Opcodes.ICONST_1, Opcodes.ICONST_2,
-			     Opcodes.ICONST_3,
-			     Opcodes.ICONST_4, Opcodes.ICONST_5, Opcodes.LCONST_0, Opcodes.LCONST_1, Opcodes.FCONST_0, Opcodes.FCONST_1,
-			     Opcodes.FCONST_2, Opcodes.DCONST_0, Opcodes.DCONST_1, Opcodes.BIPUSH, Opcodes.SIPUSH, Opcodes.LDC -> 0;
-			case Opcodes.ILOAD, Opcodes.LLOAD, Opcodes.FLOAD, Opcodes.DLOAD, Opcodes.ALOAD -> 0;
-			case Opcodes.IALOAD, Opcodes.LALOAD, Opcodes.FALOAD, Opcodes.DALOAD, Opcodes.AALOAD, Opcodes.BALOAD,
-			     Opcodes.CALOAD,
-			     Opcodes.SALOAD -> 2;
-			case Opcodes.ISTORE, Opcodes.LSTORE, Opcodes.FSTORE, Opcodes.DSTORE, Opcodes.ASTORE -> 1;
-			case Opcodes.IASTORE, Opcodes.LASTORE, Opcodes.FASTORE, Opcodes.DASTORE, Opcodes.AASTORE, Opcodes.BASTORE,
-			     Opcodes.CASTORE, Opcodes.SASTORE -> 3;
-			case Opcodes.POP -> 1;
-			case Opcodes.POP2 -> 2;
-			case Opcodes.DUP -> 1;
-			case Opcodes.DUP_X1 -> 2;
-			case Opcodes.DUP_X2 -> 3;
-			case Opcodes.DUP2 -> 2;
-			case Opcodes.DUP2_X1 -> 3;
-			case Opcodes.DUP2_X2 -> 4;
-			case Opcodes.SWAP -> 2;
-			case Opcodes.IADD, Opcodes.LADD, Opcodes.FADD, Opcodes.DADD, Opcodes.ISUB, Opcodes.LSUB, Opcodes.FSUB,
-			     Opcodes.DSUB,
-			     Opcodes.IMUL, Opcodes.LMUL, Opcodes.FMUL, Opcodes.DMUL, Opcodes.IDIV, Opcodes.LDIV, Opcodes.FDIV,
-			     Opcodes.DDIV,
-			     Opcodes.IREM, Opcodes.LREM, Opcodes.FREM, Opcodes.DREM -> 2;
-			case Opcodes.INEG, Opcodes.LNEG, Opcodes.FNEG, Opcodes.DNEG -> 1;
-			case Opcodes.ISHL, Opcodes.LSHL, Opcodes.ISHR, Opcodes.LSHR, Opcodes.IUSHR, Opcodes.LUSHR, Opcodes.IAND,
-			     Opcodes.LAND, Opcodes.IOR, Opcodes.LOR, Opcodes.IXOR, Opcodes.LXOR -> 2;
-			case Opcodes.IINC -> 0;
-			case Opcodes.I2L, Opcodes.I2F, Opcodes.I2D, Opcodes.L2I, Opcodes.L2F, Opcodes.L2D, Opcodes.F2I, Opcodes.F2L,
-			     Opcodes.F2D, Opcodes.D2I, Opcodes.D2L, Opcodes.D2F, Opcodes.I2B, Opcodes.I2C, Opcodes.I2S -> 1;
-			case Opcodes.LCMP, Opcodes.FCMPL, Opcodes.FCMPG, Opcodes.DCMPL, Opcodes.DCMPG -> 2;
-			case Opcodes.IFEQ, Opcodes.IFNE, Opcodes.IFLT, Opcodes.IFGE, Opcodes.IFGT, Opcodes.IFLE -> 1;
-			case Opcodes.IF_ICMPEQ, Opcodes.IF_ICMPNE, Opcodes.IF_ICMPLT, Opcodes.IF_ICMPGE, Opcodes.IF_ICMPGT,
-			     Opcodes.IF_ICMPLE, Opcodes.IF_ACMPEQ, Opcodes.IF_ACMPNE -> 2;
-			case Opcodes.GOTO, Opcodes.JSR -> 0;
-			case Opcodes.RET -> 0;
-			case Opcodes.TABLESWITCH, Opcodes.LOOKUPSWITCH -> 1;
-			case Opcodes.IRETURN, Opcodes.LRETURN, Opcodes.FRETURN, Opcodes.DRETURN, Opcodes.ARETURN -> 1;
-			case Opcodes.RETURN -> 0;
-			case Opcodes.GETSTATIC -> 0;
-			case Opcodes.PUTSTATIC -> 1;
-			case Opcodes.GETFIELD -> 1;
-			case Opcodes.PUTFIELD -> 2;
-			case Opcodes.INVOKEVIRTUAL, Opcodes.INVOKESPECIAL, Opcodes.INVOKESTATIC, Opcodes.INVOKEINTERFACE -> {
-				MethodInsnNode minsn = (MethodInsnNode) insn;
-				int            args  = Type.getArgumentTypes(minsn.desc).length;
-				int            extra = (opcode == Opcodes.INVOKESTATIC) ? 0 : 1;
-				yield args + extra;
-			}
-			case Opcodes.INVOKEDYNAMIC -> {
-				InvokeDynamicInsnNode idinsn = (InvokeDynamicInsnNode) insn;
-				yield Type.getArgumentTypes(idinsn.desc).length;
-			}
-			case Opcodes.NEW -> 0;
-			case Opcodes.NEWARRAY, Opcodes.ANEWARRAY -> 1;
-			case Opcodes.ARRAYLENGTH -> 1;
-			case Opcodes.ATHROW -> 1;
-			case Opcodes.CHECKCAST, Opcodes.INSTANCEOF -> 1;
-			case Opcodes.MONITORENTER, Opcodes.MONITOREXIT -> 1;
-			case Opcodes.MULTIANEWARRAY -> ((MultiANewArrayInsnNode) insn).dims;
-			case Opcodes.IFNULL, Opcodes.IFNONNULL -> 1;
-			default -> 0;
-		};
+	/**
+	 * 栈平衡校验（基于 {@link Frame}，天然支持 long/double 与任意 DUP/POP 组合）。
+	 * <p>已知 checkSafe 通过后 {@code [first, putIdx]} 区间内全部是 collected 指令；
+	 * 因此只需比较 {@code frames[putIdx]} 与 {@code frames[first]} 的栈项数差，
+	 * 应恰好等于 put 消费的项数（实例 2、静态 1）。</p>
+	 */
+	private static boolean isStackBalanced(Frame<SourceValue>[] frames,
+	                                       int first, int putIdx, boolean isStatic) {
+		Frame<SourceValue> a = frames[first];
+		Frame<SourceValue> b = frames[putIdx];
+		if (a == null || b == null) return false;
+		return b.getStackSize() - a.getStackSize() == (isStatic ? 1 : 2);
 	}
 
 	private static Set<LabelNode> collectJumpTargets(MethodNode m) {
 		Set<LabelNode> t = new HashSet<>();
 		for (AbstractInsnNode n : m.instructions) {
-			if (n instanceof JumpInsnNode j) { t.add(j.label); } else if (n instanceof TableSwitchInsnNode s) {
+			if (n instanceof JumpInsnNode j) {
+				t.add(j.label);
+			} else if (n instanceof TableSwitchInsnNode s) {
 				t.add(s.dflt);
 				t.addAll(s.labels);
 			} else if (n instanceof LookupSwitchInsnNode s) {
@@ -586,50 +661,6 @@ public class InitFix {
 			t.add(tc.handler);
 		}
 		return t;
-	}
-
-	@SuppressWarnings("DuplicateBranchesInSwitch")
-	private static int getPushCount(AbstractInsnNode insn) {
-		int opcode = insn.getOpcode();
-		return switch (opcode) {
-			case Opcodes.ACONST_NULL, Opcodes.ICONST_M1, Opcodes.ICONST_0, Opcodes.ICONST_1, Opcodes.ICONST_2,
-			     Opcodes.ICONST_3, Opcodes.ICONST_4, Opcodes.ICONST_5, Opcodes.LCONST_0, Opcodes.LCONST_1, Opcodes.FCONST_0,
-			     Opcodes.FCONST_1, Opcodes.FCONST_2, Opcodes.DCONST_0, Opcodes.DCONST_1, Opcodes.BIPUSH, Opcodes.SIPUSH,
-			     Opcodes.LDC -> 1;
-			case Opcodes.ILOAD, Opcodes.LLOAD, Opcodes.FLOAD, Opcodes.DLOAD, Opcodes.ALOAD -> 1;
-			case Opcodes.IALOAD, Opcodes.LALOAD, Opcodes.FALOAD, Opcodes.DALOAD, Opcodes.AALOAD, Opcodes.BALOAD,
-			     Opcodes.CALOAD, Opcodes.SALOAD -> 1;
-			case Opcodes.DUP -> 2;
-			case Opcodes.DUP_X1 -> 3;
-			case Opcodes.SWAP -> 2;
-			case Opcodes.POP -> 0;
-			case Opcodes.DUP_X2, Opcodes.DUP2, Opcodes.DUP2_X1, Opcodes.DUP2_X2, Opcodes.POP2 ->
-			 throw new IllegalStateException("unsupported " + opcode);
-			case Opcodes.IADD, Opcodes.LADD, Opcodes.FADD, Opcodes.DADD, Opcodes.ISUB, Opcodes.LSUB, Opcodes.FSUB,
-			     Opcodes.DSUB, Opcodes.IMUL, Opcodes.LMUL, Opcodes.FMUL, Opcodes.DMUL, Opcodes.IDIV, Opcodes.LDIV,
-			     Opcodes.FDIV, Opcodes.DDIV, Opcodes.IREM, Opcodes.LREM, Opcodes.FREM, Opcodes.DREM, Opcodes.INEG,
-			     Opcodes.LNEG, Opcodes.FNEG, Opcodes.DNEG, Opcodes.ISHL, Opcodes.LSHL, Opcodes.ISHR, Opcodes.LSHR,
-			     Opcodes.IUSHR, Opcodes.LUSHR, Opcodes.IAND, Opcodes.LAND, Opcodes.IOR, Opcodes.LOR, Opcodes.IXOR,
-			     Opcodes.LXOR -> 1;
-			case Opcodes.MULTIANEWARRAY -> 1;
-			case Opcodes.I2L, Opcodes.I2F, Opcodes.I2D, Opcodes.L2I, Opcodes.L2F, Opcodes.L2D, Opcodes.F2I, Opcodes.F2L,
-			     Opcodes.F2D, Opcodes.D2I, Opcodes.D2L, Opcodes.D2F, Opcodes.I2B, Opcodes.I2C, Opcodes.I2S, Opcodes.LCMP,
-			     Opcodes.FCMPL, Opcodes.FCMPG, Opcodes.DCMPL, Opcodes.DCMPG -> 1;
-			case Opcodes.GETSTATIC -> 1;
-			case Opcodes.GETFIELD -> 1;
-			case Opcodes.INVOKEVIRTUAL, Opcodes.INVOKESPECIAL, Opcodes.INVOKESTATIC, Opcodes.INVOKEINTERFACE -> {
-				MethodInsnNode minsn = (MethodInsnNode) insn;
-				yield Type.getReturnType(minsn.desc) == Type.VOID_TYPE ? 0 : 1;
-			}
-			case Opcodes.INVOKEDYNAMIC -> {
-				InvokeDynamicInsnNode idinsn = (InvokeDynamicInsnNode) insn;
-				yield Type.getReturnType(idinsn.desc) == Type.VOID_TYPE ? 0 : 1;
-			}
-			case Opcodes.NEW -> 1;
-			case Opcodes.NEWARRAY, Opcodes.ANEWARRAY, Opcodes.ARRAYLENGTH -> 1;
-			case Opcodes.CHECKCAST, Opcodes.INSTANCEOF -> 1;
-			default -> 0;
-		};
 	}
 
 	/**

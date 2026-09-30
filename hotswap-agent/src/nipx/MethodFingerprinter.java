@@ -18,29 +18,70 @@ import java.util.*;
  *   <li>相同逻辑的方法会产生相同的哈希值，用于精确匹配。</li>
  * </ol>
  *
- * <p>关于稳定性：对匿名类编号（如 {@code Outer$1}）做归一化；对本类的 <i>lambda
- * 系列</i> 合成方法名用 {@code #SYNTHETIC_METHOD#} 占位，避免内层 lambda 改名影响
- * 外层 hash。<b>但 {@code access$} 例外</b>：它在本对齐器中保名不改名，其名字是
- * 稳定信息，抹掉只会让“调用不同 accessor 的两个 lambda”撞 hash。</p>
+ * <p><b>关于 Label 的稳定性</b>：本类只对“逻辑相关”的 Label 参与指纹，即被
+ * 跳转指令、switch 分派、异常表引用的 Label。纯调试用途的 Label（行号锚点、
+ * 局部变量作用域边界）会被 {@link #visitLabel} 显式忽略，从而保证
+ * {@code javac -g} / {@code -g:lines} / {@code -g:none} 编译出的相同逻辑方法
+ * 得到相同 hash。有效 Label 集合由调用方通过 {@link #setValidLabels} 传入。</p>
+ *
+ * <p><b>关于合成方法名</b>：对本类的 <i>lambda 系列</i> 合成方法名用
+ * {@code #SYNTHETIC_METHOD#} 占位，避免内层 lambda 改名影响外层 hash；
+ * {@code access$} 例外 —— 它在本对齐器中保名不改名，其名字是稳定信息，
+ * 保留它才能区分“调用不同 accessor 的两个 lambda”。</p>
+ *
+ * <p><b>关于匿名嵌套类归一化</b>：所有可能引用类名/描述符的入口 —— 指令操作数、
+ * 字段/方法 owner、方法描述符、异常表 type、LDC 常量等 —— 都必须经过
+ * {@link #maskAnonymousClass} 或 {@link #maskDescriptor}，否则“插入匿名
+ * object : XXX 导致编号位移”会连带污染指纹。</p>
  */
 @SuppressWarnings("unused")
 public final class MethodFingerprinter extends MethodVisitor {
-	public static final ThreadLocal<MethodFingerprinter> CONTEXT = ThreadLocal.withInitial(MethodFingerprinter::new);
+	public static final ThreadLocal<MethodFingerprinter> CONTEXT =
+		ThreadLocal.withInitial(MethodFingerprinter::new);
 
 	//region 上下文
+	/** 当前方法的所属类名（内部名），由 {@link #setContext} 设置。 */
 	private String currentClassName;
+
+	/**
+	 * 有效 Label 集合；为 {@code null} 时不过滤（兼容旧行为 / 便于单测）。
+	 * <p>只对逻辑相关的 Label 记账，过滤掉纯调试标签。</p>
+	 */
+	private Set<Label> validLabels;
 
 	public void setContext(String className) {
 		this.currentClassName = className;
 	}
 
-	/** 重置指纹生成器状态，为下一个方法做准备。 */
+	/**
+	 * 设置有效 Label 集合。
+	 *
+	 * <p>由 {@code LambdaAligner.scan} 在 {@link #reset()} 之后调用。集合中的
+	 * Label 与 {@code MethodNode.accept(MethodVisitor)} 回放指令流时传入的
+	 * Label 是同一实例（{@code LabelNode.getLabel()} 惰性创建并缓存），
+	 * 因此可以用 {@code Set} 直接比较身份。</p>
+	 *
+	 * <p>本类不做“未设置即报错”的强制检查：{@code null} 表示不过滤，仅用于
+	 * 单测或明确知晓 {@code SKIP_DEBUG} 已生效的场景。</p>
+	 */
+	public void setValidLabels(Set<Label> validLabels) {
+		this.validLabels = validLabels;
+	}
+
+	/**
+	 * 重置指纹生成器状态，为下一个方法做准备。
+	 *
+	 * <p>同时清空 {@code currentClassName} 与 {@code validLabels}，强制下一次
+	 * 使用前重新设置，避免因为调用方忘记设置而沿用上一方法的上下文，
+	 * 造成 <b>静默错配</b>（比抛异常更危险）。</p>
+	 */
 	public void reset() {
 		crc = CRC64.init();
 		labelIds.clear();
 		nextLabelId = 0;
 		anonClassIds.clear();
 		nextAnonId = 0;
+		validLabels = null;
 		currentClassName = null;
 	}
 	//endregion
@@ -85,9 +126,13 @@ public final class MethodFingerprinter extends MethodVisitor {
 	 * {@code Outer$1}、{@code Outer$1$2}、{@code Outer$bar$1}、{@code Outer$1Local}。
 	 * 具名嵌套类（如 {@code Outer$Builder}）保持不变。</p>
 	 *
+	 * <p>允许 {@code owner} 为 {@code null}（例如 catch-any/finally 的
+	 * 异常类型），与 {@link #maskDescriptor} 保持一致：{@code null} 原样返回。</p>
+	 *
 	 * @return 屏蔽编号后的安全描述符
 	 */
 	private String maskAnonymousClass(String owner) {
+		if (owner == null) return null;
 		if (currentClassName == null) return owner;
 		if (owner.startsWith("[")) {
 			int dims = 0;
@@ -200,9 +245,9 @@ public final class MethodFingerprinter extends MethodVisitor {
 	/**
 	 * 更新 CRC 值与方法句柄。
 	 *
-	 * <p>对本类 <i>lambda 系列</i> 合成方法的名字用占位符替代，避免内层 lambda 改名
-	 * 连带影响外层 hash。{@code access$} 例外 —— 它在本对齐器中保名不改名，名字是
-	 * 稳定信息，保留它才能区分“调用不同 accessor 的两个 lambda”。</p>
+	 * <p>对本类 <i>lambda 系列</i> 合成方法的名字用占位符替代，避免内层 lambda
+	 * 改名连带影响外层 hash。{@code access$} 例外 —— 它在本对齐器中保名不改名，
+	 * 名字是稳定信息，保留它才能区分“调用不同 accessor 的两个 lambda”。</p>
 	 */
 	private void updateHandle(Handle h) {
 		updateInt(h.getTag());
@@ -368,12 +413,31 @@ public final class MethodFingerprinter extends MethodVisitor {
 		updateInt(getLabelId(label));
 	}
 
+	/**
+	 * 记录 Label。
+	 *
+	 * <p>只对 {@link #validLabels} 中的 Label 记账 —— 也就是被跳转指令、
+	 * switch 分派、异常表引用的 Label。纯调试用途的 Label（行号锚点、局部变量
+	 * 作用域边界）会被跳过，从而保证不同 {@code -g} 设置下产生相同 hash。</p>
+	 *
+	 * <p>{@code validLabels == null} 表示不过滤，兼容单测和明确不带调试信息的
+	 * 场景。</p>
+	 */
 	@Override
 	public void visitLabel(Label label) {
+		if (validLabels != null && !validLabels.contains(label)) return;
 		updateInt(MARK_LABEL);
 		updateInt(getLabelId(label));
 	}
 
+	/**
+	 * 处理异常处理块。
+	 *
+	 * <p>{@code type} 是异常类的内部名，{@code null} 表示 catch-any / finally。
+	 * 它可能引用本类的匿名嵌套类（如 Kotlin 的 {@code SomeSealed$1}），
+	 * 因此必须经过 {@link #maskAnonymousClass}，否则“插入匿名 object 导致
+	 * 编号位移”会连带污染指纹。</p>
+	 */
 	@Override
 	public void visitTryCatchBlock(Label start,
 	                               Label end,

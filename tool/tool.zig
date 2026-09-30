@@ -4,38 +4,81 @@ const jvm = @cImport({
     @cInclude("jvmti.h");
 });
 
-/// 轻量级自旋互斥锁
-///
-/// 在 Zig 0.16 中，系统级阻塞锁被迁移至 std.Io.Mutex。
-/// 此处使用原子变量实现无依赖的自旋锁，适用于无 std.Io 环境的底层 JNI/JVMTI 动态库场景。
-const SpinLock = struct {
-    state: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+/// 全局 Raw Monitor 句柄
+var global_raw_monitor: jvm.jrawMonitorID = null;
 
-    /// 获取锁，若已被占用则通过 CPU 提示进行忙等待自旋
-    pub fn lock(self: *SpinLock) void {
-        while (self.state.cmpxchgWeak(false, true, .acquire, .monotonic) != null) {
-            std.atomic.spinLoopHint();
+/// Raw Monitor 初始化状态标志
+///
+/// 状态定义：
+/// - 0: 未初始化
+/// - 1: 初始化竞争中
+/// - 2: 已成功初始化
+var monitor_state = std.atomic.Value(u8).init(0);
+
+/// 获取或创建全局 JVMTI Raw Monitor
+///
+/// 利用原子 CAS 状态机实现线程安全的单例懒加载，
+/// 避免在没有 Agent_OnLoad 引导期的独立 JNI 库中发生初始化竞争。
+fn getOrCreateRawMonitor(jvmti_ptr: *jvm.jvmtiEnv) ?jvm.jrawMonitorID {
+    // 快速路径：已初始化完毕直接返回
+    if (monitor_state.load(.acquire) == 2) {
+        return global_raw_monitor;
+    }
+
+    // 慢速路径：竞争初始化
+    while (true) {
+        const state = monitor_state.load(.acquire);
+        if (state == 2) {
+            return global_raw_monitor;
         }
+
+        if (state == 0) {
+            if (monitor_state.cmpxchgWeak(0, 1, .acquire, .monotonic) == null) {
+                // 竞争成功的单一线程负责调用 JVMTI 创建 Monitor
+                const jvmti_env = jvmti_ptr.*;
+                var monitor: jvm.jrawMonitorID = null;
+                const err = jvmti_env.*.CreateRawMonitor.?(
+                    jvmti_ptr,
+                    "ToolGlobalHeapMonitor",
+                    &monitor,
+                );
+
+                if (err == jvm.JVMTI_ERROR_NONE) {
+                    global_raw_monitor = monitor;
+                    monitor_state.store(2, .release);
+                    return monitor;
+                } else {
+                    std.log.err("Failed to create JVMTI RawMonitor: {d}", .{err});
+                    monitor_state.store(0, .release);
+                    return null;
+                }
+            }
+        }
+
+        // 短暂提示 CPU 让步，等待负责初始化的线程发布完成状态
+        std.atomic.spinLoopHint();
     }
+}
 
-    /// 释放锁
-    pub fn unlock(self: *SpinLock) void {
-        self.state.store(false, .release);
-    }
-};
-
-/// 全局堆操作互斥锁
-///
-/// 由于 JVM 堆对象的 JVMTI Tag 槽位为全局唯一且跨线程共享，
-/// 必须通过互斥锁保证任何时刻只有一个线程在执行堆打标与遍历。
-var heap_lock: SpinLock = .{};
-
-/// 全局递增 Tag 序列号，用于生成全局唯一的动态标签
+/// 全局递增 Tag 序列号，用于生成唯一的动态标签
 var tag_sequence = std.atomic.Value(jvm.jlong).init(100000);
 
-/// 动态分配唯一的 JVMTI 标签值
-fn allocateTag() jvm.jlong {
-    return tag_sequence.fetchAdd(1, .monotonic);
+/// 成对 Tag 数据结构
+const TagPair = struct {
+    first: jvm.jlong,
+    second: jvm.jlong,
+};
+
+/// 原子分配成对的唯一 JVMTI 标签
+///
+/// 通过单次原子加法一次性划定两个独占 Tag，
+/// 将原子操作开销减少一半，同时保证成对标签在数值上连续且全局不重复。
+fn allocateTagPair() TagPair {
+    const base = tag_sequence.fetchAdd(2, .monotonic);
+    return .{
+        .first = base,
+        .second = base + 1,
+    };
 }
 
 /// 清理堆中被打上特定 Tag 的对象标记，并释放底层分配的局部引用与缓冲区
@@ -128,36 +171,44 @@ fn ReachableFilterCallback(
 
 /// 获取指定类及其子类在堆中所有存活且可达的实例
 ///
-/// - 通过原生自旋互斥锁与动态 Tag 保证并发安全。
-/// - 通过结合全量类遍历与 GC Roots 引用图扫描，过滤掉等待 GC 回收的不可达垃圾对象。
+/// - 入口进行环境指针及目标类对象的严格判空，防止非法参数访问。
+/// - 通过 JVMTI 原生阻塞 Raw Monitor 保证并发互斥，避免空耗 CPU。
+/// - 成对分配唯一定位标签，降低原子竞争开销。
+/// - 通过全量类遍历与 GC Roots 引用图扫描，过滤掉不可达垃圾对象。
 /// - 支持接口与抽象类多态查找。
-/// - 返回一个包含所有实例对象的 Java 数组全局引用（JNI GlobalRef）。
+/// - 返回包含所有实例对象的 Java 数组全局引用（JNI GlobalRef）。
 /// - 若不存在任何实例，返回长度为 0 的对象数组而非 null。
 export fn GetInstances(
     jvmti: ?*jvm.jvmtiEnv,
     env: ?*jvm.JNIEnv,
     klass: jvm.jclass,
 ) callconv(.c) jvm.jobjectArray {
+    // 入口参数判空，避免空指针进入同步代码块
     const jvmti_ptr = jvmti orelse return null;
     const env_ptr = env orelse return null;
-
-    // 获取互斥锁，确保同一时刻只有一个线程操作堆 Tag
-    heap_lock.lock();
-    defer heap_lock.unlock();
+    const target_klass = klass orelse return null;
 
     const jvmti_env = jvmti_ptr.*;
     const jni_env = env_ptr.*;
 
-    // 动态生成本轮操作专用的全局唯一 Tag，防止跨周期污染
-    const tag_candidate = allocateTag();
-    const tag_reachable = allocateTag();
+    // 获取原生阻塞 Raw Monitor
+    const monitor = getOrCreateRawMonitor(jvmti_ptr) orelse return null;
+    if (jvmti_env.*.RawMonitorEnter.?(jvmti_ptr, monitor) != jvm.JVMTI_ERROR_NONE) {
+        return null;
+    }
+    defer _ = jvmti_env.*.RawMonitorExit.?(jvmti_ptr, monitor);
+
+    // 单次原子操作成对获取候选标签与可达标签
+    const tags = allocateTagPair();
+    const tag_candidate = tags.first;
+    const tag_reachable = tags.second;
 
     var candidate_tag = tag_candidate;
 
     // 全量标记该类及其子类的实例（包含不可达对象）
     const err1 = jvmti_env.*.IterateOverInstancesOfClass.?(
         jvmti_ptr,
-        klass,
+        target_klass,
         jvm.JVMTI_HEAP_OBJECT_EITHER,
         HeapObjectCallback,
         &candidate_tag,
@@ -167,7 +218,7 @@ export fn GetInstances(
         return null;
     }
 
-    // 从 GC Roots 开始进行存活遍历，仅将可达候选对象晋升为 tag_reachable
+    // 从 GC Roots 开始存活遍历，仅将可达候选对象晋升为 tag_reachable
     var callbacks = std.mem.zeroes(jvm.jvmtiHeapCallbacks);
     callbacks.heap_reference_callback = ReachableFilterCallback;
 
@@ -217,7 +268,7 @@ export fn GetInstances(
     const result_array = jni_env.*.NewObjectArray.?(
         env_ptr,
         count,
-        klass,
+        target_klass,
         null,
     ) orelse {
         if (instances != null) _ = jvmti_env.*.Deallocate.?(jvmti_ptr, @ptrCast(instances));
@@ -304,30 +355,37 @@ fn ReferrerCallback(
 
 /// 获取指定 Java 对象在堆中的所有直接引用者（Referrers）
 ///
-/// - 通过原生自旋互斥锁与动态 Tag 保证并发安全。
+/// - 入口进行环境指针及目标 Java 对象的严格判空。
+/// - 通过 JVMTI 原生阻塞 Raw Monitor 保证并发互斥，避免空耗 CPU。
+/// - 成对分配唯一定位标签，降低原子竞争开销。
 /// - 全堆扫描引用关系，查找所有指向目标对象的直接引用发起者。
 /// - 支持检测并包含持有自身引用的自引用对象。
-/// - 返回一个 java.lang.Object[] 类型的全局引用（JNI GlobalRef）。
+/// - 返回 java.lang.Object[] 类型的全局引用（JNI GlobalRef）。
 /// - 若目标对象无任何引用者，返回长度为 0 的数组而非 null。
 export fn GetReferrers(
     jvmti: ?*jvm.jvmtiEnv,
     env: ?*jvm.JNIEnv,
     target_object: jvm.jobject,
 ) callconv(.c) jvm.jobjectArray {
+    // 入口参数判空
     const jvmti_ptr = jvmti orelse return null;
     const env_ptr = env orelse return null;
     const target = target_object orelse return null;
 
-    // 获取互斥锁，确保同一时刻只有一个线程操作堆 Tag
-    heap_lock.lock();
-    defer heap_lock.unlock();
-
     const jvmti_env = jvmti_ptr.*;
     const jni_env = env_ptr.*;
 
-    // 动态生成本轮操作专用的全局唯一 Tag
-    const target_tag = allocateTag();
-    const referrer_tag = allocateTag();
+    // 获取原生阻塞 Raw Monitor
+    const monitor = getOrCreateRawMonitor(jvmti_ptr) orelse return null;
+    if (jvmti_env.*.RawMonitorEnter.?(jvmti_ptr, monitor) != jvm.JVMTI_ERROR_NONE) {
+        return null;
+    }
+    defer _ = jvmti_env.*.RawMonitorExit.?(jvmti_ptr, monitor);
+
+    // 单次原子操作成对获取目标标签与引用者标签
+    const tags = allocateTagPair();
+    const target_tag = tags.first;
+    const referrer_tag = tags.second;
 
     // 给目标对象打上临时 Tag
     const err_tag = jvmti_env.*.SetTag.?(jvmti_ptr, target, target_tag);

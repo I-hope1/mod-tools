@@ -49,7 +49,6 @@ public class ArcReflectionAdapter {
 			return null;
 		}
 	}
-
 	@FunctionalInterface
 	private interface NLSupplier<T> {
 		T get() throws Throwable;
@@ -57,6 +56,9 @@ public class ArcReflectionAdapter {
 
 	public static boolean isEndRow(Cell<?> cell) {
 		if (cell == null) return false;
+		try {
+			return cell.isEndRow();
+		} catch (NoSuchFieldError | IllegalAccessError _) { }
 		if (f_endRow != null) {
 			try {
 				return f_endRow.getBoolean(cell);

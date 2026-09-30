@@ -10,19 +10,18 @@ import arc.struct.Seq;
 import arc.util.pooling.Pools;
 import mindustry.Vars;
 import nipx.Injector;
-import nipx.jvmti.JVMTIEnv;
 import org.objectweb.asm.*;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.commons.AdviceAdapter;
 import org.objectweb.asm.tree.*;
+import org.objectweb.asm.tree.analysis.*;
 
-import java.lang.foreign.MemorySegment;
 import java.lang.invoke.*;
-import java.lang.ref.WeakReference;
 import java.lang.reflect.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.Map.Entry;
-import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static nipx.AnnotationTransformer.internalName;
 import static nipx.HotSwapAgent.*;
@@ -30,1914 +29,1884 @@ import static nipx.uihook.ArcReflectionAdapter.*;
 import static org.objectweb.asm.Opcodes.*;
 
 /** Cell 属性及子元素追踪器 */
-@SuppressWarnings({"rawtypes"})
+@SuppressWarnings({"rawtypes", "unchecked"})
 public class CellPropertyRef {
 
-	public static final String CL_TABLE = "arc/scene/ui/layout/Table";
-	public static final String CL_CELL  = "arc/scene/ui/layout/Cell";
-
-	//region 数据结构
-	public record PropertyCall(String method, String desc, Object[] args, int line) { }
-
-	public record CellIdentity(String hostClass, String hostMethod, String hostDesc, int sequence) { }
-	public record LambdaInfo(String ownerClass, String methodName, String methodDesc, Object[] captures) {
-		@Override
-		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (!(o instanceof LambdaInfo that)) return false;
-			return ownerClass.equals(that.ownerClass) &&
-			       methodName.equals(that.methodName) &&
-			       methodDesc.equals(that.methodDesc) &&
-			       Arrays.equals(captures, that.captures);
-		}
-
-		@Override
-		public int hashCode() {
-			int result = Objects.hash(ownerClass, methodName, methodDesc);
-			result = 31 * result + Arrays.hashCode(captures);
-			return result;
-		}
-
-		@Override
-		public String toString() {
-			return "Lambda[" + methodName + "]";
-		}
-	}
-	//endregion
-
-	//region 全局状态
-	/** Cell → 唯一标识（使用 WeakHashMap，防止 Cell 内存泄漏） */
-	private static final Map<Cell<?>, CellIdentity> cellToId = new WeakHashMap<>();
-
-	/** 唯一标识 → Cell 弱引用 */
-	private static final Map<CellIdentity, WeakReference<Cell<?>>> idToCell = new ConcurrentHashMap<>();
-
-	/** 标识 → 当前方法调用链列表 (首个元素为 CreatorCall) */
-	private static final Map<CellIdentity, List<PropertyCall>> records = new ConcurrentHashMap<>();
-
-	/** 宿主类 → 该类的所有 Cell 标识 */
-	private static final Map<String, List<CellIdentity>> classToCells = new ConcurrentHashMap<>();
-
-	/**
-	 * 每个 (宿主类, 方法, 描述符) 的序号计数器 —— ThreadLocal 保证：
-	 *  1. 线程安全，无需额外同步
-	 *  2. 每次方法调用的序列从 0 开始，循环中多次创建的 Cell 序号稳定可重现
-	 *     （当 liveCountPerKey 归零后，下次进入同 key 时计数器自动 reset）
-	 */
-	private static final ThreadLocal<Map<String, int[]>> methodCounters =
-			ThreadLocal.withInitial(HashMap::new);
-
-	/**
-	 * 每个 (宿主类, 方法, 描述符) 当前存活的 Cell 数量 —— ThreadLocal。
-	 * 当某 key 的存活数从 >0 降为 0（所有 Cell 被 free），下次再请求该 key 时
-	 * 序列计数器归零，正确对应新的一次方法调用。
-	 */
-	private static final ThreadLocal<Map<String, int[]>> liveCountPerKey =
-			ThreadLocal.withInitial(HashMap::new);
-
-	/** 是否启用 */
-	private static volatile boolean enabled = false;
-
-	/** 线程上下文宿主信息：[hostClass, hostMethod, hostDesc] */
-	public static final ThreadLocal<String[]> currentHostContext = new ThreadLocal<>();
-	//endregion
-
-	//region 运行时记录与生命周期
-	/** 当 Cell 被回收归还至 Pools 时调用，清除残留的状态映射 */
-	public static void onCellFreed(Cell<?> cell) {
-		if (cell == null) return;
-		removeCell(cell);
-	}
-
-	/** 运行时：在 Cell 实例构造结束时自动捕获注册 */
-	public static void registerCellAtCreation(Cell<?> cell) {
-		if (!enabled || cell == null) return;
-
-		// 若该 Cell 曾存在于池中并被重用，首先移除旧的身份绑定
-		removeCell(cell);
-
-		String hostClass = null;
-		String hostMethod = null;
-		String hostDesc = null;
-
-		String[] ctx = currentHostContext.get();
-		if (ctx != null && ctx.length >= 3 && ctx[0] != null) {
-			hostClass = ctx[0];
-			hostMethod = ctx[1];
-			hostDesc = ctx[2];
-		} else {
-			String[] callbackFrame = {null, null, null};
-			int[]    x             = {-1};
-			try {
-				JVMTIEnv.getInstance().walkThreadFrames(MemorySegment.NULL, 12, 1, (className, methodName, methodDesc, thisAddr) -> {
-					if (x[0] >= 0 && ++x[0] == 2) {
-						callbackFrame[0] = className;
-						callbackFrame[1] = methodName;
-						callbackFrame[2] = methodDesc;
-						return false;
-					}
-					if (CL_CELL.equals(className) && "<init>".equals(methodName)) {
-						x[0] = 0;
-					}
-					return true;
-				});
-			} catch (Throwable t) {
-				if (DEBUG) log("[CellProperty] walkThreadFrames failed: " + t.getMessage());
-			}
-			hostClass = callbackFrame[0];
-			hostMethod = callbackFrame[1];
-			hostDesc = callbackFrame[2];
-		}
-
-		// 如果创建该单元格的直接源头是底层库，则属于隐式嵌套，不予追踪
-		if (hostClass == null || hostClass.startsWith("arc/") || hostClass.startsWith("java/") || hostClass.startsWith("nipx/")) {
-			return;
-		}
-
-		String key = hostClass + "#" + hostMethod + ":" + hostDesc;
-
-		Map<String, int[]> counters = methodCounters.get();
-		Map<String, int[]> liveCounts = liveCountPerKey.get();
-
-		// 若该 key 的存活数为 0，说明上一次方法调用已全部结束，序列归零（循环/热重载都正确）
-		int[] live = liveCounts.computeIfAbsent(key, _ -> new int[]{0});
-		if (live[0] == 0) {
-			counters.put(key, new int[]{0});
-		}
-
-		int[] counter = counters.computeIfAbsent(key, _ -> new int[]{0});
-		int seq = counter[0]++;
-		live[0]++;
-
-		CellIdentity id = new CellIdentity(hostClass, hostMethod, hostDesc, seq);
-
-		synchronized (cellToId) {
-			cellToId.put(cell, id);
-		}
-		idToCell.put(id, new WeakReference<>(cell));
-		classToCells.computeIfAbsent(hostClass, _ -> new CopyOnWriteArrayList<>()).add(id);
-
-		if (DEBUG) {
-			log("[CellProperty] Registered at creation: " + id.hostClass + "#"
-			    + id.hostMethod + "[" + id.sequence + "]");
-		}
-	}
-
-	public static void registerCell(Cell<?> cell, String hostClass, String hostMethod, String hostDesc) {
-		if (!enabled || cell == null) return;
-
-		// 避免因构造阶段已被成功捕捉后的重复注册
-		synchronized (cellToId) {
-			if (cellToId.containsKey(cell)) return;
-		}
-
-		String key = hostClass + "#" + hostMethod + ":" + hostDesc;
-		Map<String, int[]> counters = methodCounters.get();
-		Map<String, int[]> liveCounts = liveCountPerKey.get();
-		int[] live = liveCounts.computeIfAbsent(key, _ -> new int[]{0});
-		if (live[0] == 0) {
-			counters.put(key, new int[]{0});
-		}
-		int[] counter = counters.computeIfAbsent(key, _ -> new int[]{0});
-		int seq = counter[0]++;
-		live[0]++;
-
-		CellIdentity id = new CellIdentity(hostClass, hostMethod, hostDesc, seq);
-
-		synchronized (cellToId) {
-			cellToId.put(cell, id);
-		}
-		idToCell.put(id, new WeakReference<>(cell));
-		classToCells.computeIfAbsent(hostClass, _ -> new CopyOnWriteArrayList<>()).add(id);
-	}
-
-	public static void recordPropertyCall(Cell<?> cell, String method, String desc, Object[] args) {
-		if (!enabled || cell == null) return;
-
-		CellIdentity id;
-		synchronized (cellToId) {
-			id = cellToId.get(cell);
-		}
-
-		// 校验已绑定的 id 是否与当前宿主上下文匹配（防止 Cell 从对象池取出后残存上一次使用的身份）
-		if (id != null) {
-			String[] currentCtx = currentHostContext.get();
-			if (currentCtx != null && currentCtx.length >= 2 && currentCtx[0] != null) {
-				if (!id.hostClass.equals(currentCtx[0]) || !id.hostMethod.equals(currentCtx[1])) {
-					removeCell(cell);
-					id = null;
-				}
-			}
-		}
-
-		if (id == null) {
-			id = inferCellIdentity(cell);
-			if (id == null) return;
-
-			synchronized (cellToId) {
-				cellToId.put(cell, id);
-			}
-			idToCell.put(id, new WeakReference<>(cell));
-			classToCells.computeIfAbsent(id.hostClass, _ -> new CopyOnWriteArrayList<>()).add(id);
-		}
-
-		if (!records.containsKey(id)) {
-			try {
-				byte[] currentBytecode = fetchCurrentBytecode(loadClass(id.hostClass.replace('/', '.')));
-				if (currentBytecode != null) {
-					Map<String, List<List<PropertyCall>>> currentChains = extractCellChains(currentBytecode);
-					String                                methodKey     = id.hostMethod + ":" + id.hostDesc;
-					List<List<PropertyCall>>              chains        = currentChains.get(methodKey);
-					if (chains == null) {
-						for (Entry<String, List<List<PropertyCall>>> entry : currentChains.entrySet()) {
-							if (entry.getKey().startsWith(id.hostMethod + ":")) {
-								chains = entry.getValue();
-								break;
-							}
-						}
-					}
-					if (chains != null && id.sequence < chains.size()) {
-						records.put(id, new CopyOnWriteArrayList<>(chains.get(id.sequence)));
-					}
-				}
-			} catch (Throwable t) {
-				error("[CellProperty] Failed to extract cell chains for " + id.hostClass + "#" + id.hostMethod, t);
-			}
-			records.putIfAbsent(id, new CopyOnWriteArrayList<>());
-		}
-
-		int line = -1;
-		if (DEBUG) {
-			line = inferLineNumber();
-		}
-
-		List<PropertyCall> chain = records.get(id);
-		if (chain != null) {
-			boolean exists = false;
-			for (PropertyCall pc : chain) {
-				if (pc.method.equals(method) && argsEqual(pc.args, args)) {
-					exists = true;
-					break;
-				}
-			}
-			if (!exists) {
-				chain.add(new PropertyCall(method, desc, args, line));
-			}
-		}
-
-		if (DEBUG) {
-			log("[CellProperty] " + id.hostClass + "#" + id.hostMethod + "[" + id.sequence
-			    + "] → " + method + "(" + argsString(args) + ")");
-		}
-	}
-	//endregion
-
-	//region 热替换回调
-	public static void afterRedefined(String slashName, byte[] newBytecode) {
-		if (!enabled) return;
-
-		info("[CellProperty] Class redefined: " + slashName);
-
-		List<CellIdentity> cellIds = classToCells.get(slashName);
-		if (cellIds == null || cellIds.isEmpty()) {
-			if (DEBUG) log("[CellProperty] ; No tracked Cells for " + slashName);
-			return;
-		}
-
-		Map<String, List<List<PropertyCall>>> newChainsByMethod = extractCellChains(newBytecode);
-
-		int totalUpdated = 0;
-		int totalSkipped = 0;
-		int totalRemoved = 0;
-		int totalAdded   = 0;
-
-		List<CellIdentity>         idsSnapshot       = new ArrayList<>(cellIds);
-		Map<CellIdentity, Integer> newChainIndexes   = mapCellsToNewChains(idsSnapshot, newChainsByMethod);
-		Map<String, List<Integer>> newChainAdditions = findNewChainAdditions(idsSnapshot, newChainsByMethod, newChainIndexes);
-
-		for (CellIdentity id : idsSnapshot) {
-			Cell<?> cell = findCellById(id);
-			if (cell == null) {
-				totalSkipped++;
-				// 顺便清理cell
-				idToCell.remove(id);
-				records.remove(id);
-				cellIds.remove(id);
-				continue;
-			}
-
-			List<List<PropertyCall>> newChains = findChainsForId(newChainsByMethod, id);
-			Integer                  newIndex  = newChainIndexes.get(id);
-
-			// 如果新的调用链不再包含该 Cell (注释/删除)
-			if (newChains == null || newIndex == null || newIndex >= newChains.size()) {
-				Table table = cell.getTable();
-				if (table != null) {
-					BindCell bind = BindCell.of(cell);
-					bind.remove();
-					Pools.free(bind);
-					try {
-						table.getCells().remove(cell, true);
-					} catch (Throwable t) {
-						error("[CellProperty] Failed to remove cell " + cell, t);
-					}
-					Core.app.post(table::invalidateHierarchy);
-				}
-				removeCell(cell);
-				totalRemoved++;
-				continue;
-			}
-
-			List<PropertyCall> newCalls = newChains.get(newIndex);
-			List<PropertyCall> oldCalls = records.get(id);
-
-			if (DEBUG) {
-				log("[CellProperty] " + id.hostClass + "#" + id.hostMethod + "[" + id.sequence
-				    + "]: " + oldCalls + " → " + newCalls);
-			}
-			if (oldCalls != null && !oldCalls.isEmpty() && newCalls != null && newCalls.size() == oldCalls.size()) {
-				List<PropertyCall> mergedCalls = new ArrayList<>(newCalls);
-				boolean            changed     = false;
-				for (int i = 0; i < mergedCalls.size(); i++) {
-					PropertyCall staticCall  = mergedCalls.get(i);
-					PropertyCall runtimeCall = oldCalls.get(i);
-					Object[]     staticArgs  = staticCall.args;
-					Object[]     runArgs     = runtimeCall.args;
-					Object[]     mergedArgs  = null;
-
-					if (staticArgs != null) {
-						mergedArgs = staticArgs.clone();
-						if (runArgs != null && mergedArgs.length == runArgs.length) {
-							for (int j = 0; j < mergedArgs.length; j++) {
-								if (mergedArgs[j] == null && runArgs[j] != null) {
-									mergedArgs[j] = runArgs[j];
-								}
-							}
-						}
-					} else if (runArgs != null) {
-						mergedArgs = runArgs.clone();
-					}
-
-					if (!Arrays.equals(staticArgs, mergedArgs)) {
-						mergedCalls.set(i, new PropertyCall(staticCall.method, staticCall.desc, mergedArgs, staticCall.line));
-						changed = true;
-					}
-				}
-				if (changed) {
-					newCalls = mergedCalls; // 使用合并后的调用链作为应用基准
-				}
-			}
-
-			if (oldCalls == null || oldCalls.isEmpty()) {
-				if (!newCalls.isEmpty() && isTableCellCreator(CL_TABLE, newCalls.get(0).method)) {
-					updateChildElement(cell, newCalls.get(0));
-				}
-				List<PropertyCall> properties = newCalls.subList(newCalls.isEmpty() ? 0 : 1, newCalls.size());
-				applyAllCalls(cell, properties);
-				totalUpdated++;
-			} else {
-				boolean applied = applyDiff(cell, oldCalls, newCalls);
-				if (applied) totalUpdated++;
-			}
-
-			records.put(id, newCalls);
-		}
-
-		// 按宿主方法分别追加无法匹配到旧 Cell 的新调用链。
-		for (Map.Entry<String, List<Integer>> additionEntry : newChainAdditions.entrySet()) {
-			String                   methodKey = additionEntry.getKey();
-			List<List<PropertyCall>> newChains = newChainsByMethod.get(methodKey);
-			if (newChains == null) continue;
-
-			for (int seq : additionEntry.getValue()) {
-				List<PropertyCall> newCalls = newChains.get(seq);
-				if (newCalls == null || newCalls.isEmpty()) continue;
-
-				Table targetTable     = null;
-				int   insertCellIndex = -1;
-
-				// 寻找前后最近的存活 Cell，以此来定位该新 Cell 应该插入的目标 Table 以及相对位置
-				int     closestNewSeq = -1;
-				Cell<?> closestCell   = null;
-
-				for (CellIdentity id : idsSnapshot) {
-					if (!methodKeyMatches(id, methodKey)) continue;
-					Integer newSeq = newChainIndexes.get(id);
-					// 找在这个新元素“之前”的最近一个存活元素
-					if (newSeq != null && newSeq < seq && newSeq > closestNewSeq) {
-						Cell<?> cell = findCellById(id);
-						if (cell != null && cell.getTable() != null) {
-							closestNewSeq = newSeq;
-							closestCell = cell;
-						}
-					}
-				}
-
-				if (closestCell != null) {
-					targetTable = closestCell.getTable();
-					insertCellIndex = targetTable.getCells().indexOf(closestCell, true) + 1;
-				} else {
-					int closestAfterSeq = Integer.MAX_VALUE;
-					for (CellIdentity id : idsSnapshot) {
-						if (!methodKeyMatches(id, methodKey)) continue;
-						Integer newSeq = newChainIndexes.get(id);
-						// 找不到前面的，就找在它“之后”的最近存活元素
-						if (newSeq != null && newSeq > seq && newSeq < closestAfterSeq) {
-							Cell<?> cell = findCellById(id);
-							if (cell != null && cell.getTable() != null) {
-								closestAfterSeq = newSeq;
-								closestCell = cell;
-							}
-						}
-					}
-					if (closestCell != null) {
-						targetTable = closestCell.getTable();
-						insertCellIndex = targetTable.getCells().indexOf(closestCell, true);
-					}
-				}
-
-				// 如果这个方法目前没有任何存活的 Cell（比如一上来全被删光了），那就回退到随便找个目标 Table 追加
-				if (targetTable == null) {
-					for (CellIdentity id : idsSnapshot) {
-						if (methodKeyMatches(id, methodKey)) {
-							Cell<?> existingCell = findCellById(id);
-							if (existingCell != null && existingCell.getTable() != null) {
-								targetTable = existingCell.getTable();
-								insertCellIndex = targetTable.getCells().size;
-								break;
-							}
-						}
-					}
-				}
-
-				l1:
-				if (targetTable != null) {
-					PropertyCall creator = newCalls.get(0);
-					try {
-						MethodType   methodType   = MethodType.fromMethodDescriptorString(creator.desc, Vars.mods.mainLoader());
-						MethodHandle methodHandle = findTableMethod(creator.method, methodType);
-						if (methodHandle == null) break l1;
-
-						Object[] converted = creator.args == null ? null : convertArgs(methodType, creator.args);
-
-						// 清除 implicitEndRow：上次 computeSize() 可能把它置为 true，
-						// 导致 applyAllCalls 内 cell.row() → table.row() 里 endRow() 被跳过，
-						// table.rows 不递增，新 Cell 的 cell.row 越界
-						ArcReflectionAdapter.clearImplicitEndRow(targetTable);
-
-						// 反射调用（这步默认会把它添加到 Table 的最后面）
-						Cell<?> newCell = invoke(methodHandle, targetTable, converted);
-						if (newCell == null) break l1;
-
-						CellIdentity newId = new CellIdentity(slashName, methodNameFromKey(methodKey), methodDescFromKey(methodKey), seq);
-						synchronized (cellToId) { cellToId.put(newCell, newId); }
-						idToCell.put(newId, new WeakReference<>(newCell));
-						classToCells.computeIfAbsent(slashName, _ -> new CopyOnWriteArrayList<>()).add(newId);
-
-						idsSnapshot.add(newId);
-						newChainIndexes.put(newId, seq);
-						records.put(newId, newCalls);
-						List<PropertyCall> properties = new ArrayList<>(newCalls.subList(1, newCalls.size()));
-						applyAllCalls(newCell, properties);
-
-						// 保底防护：确保 table.rows 不小于新 Cell 所在行 + 1
-						ArcReflectionAdapter.ensureTableRows(targetTable, ArcReflectionAdapter.getCellRow(newCell) + 1);
-						targetTable.invalidate();
-
-						// 逻辑和渲染层级的顺序校正
-						if (insertCellIndex < 0) break l1;
-
-						Seq<Cell> cells      = targetTable.getCells();
-						int       currentIdx = cells.indexOf(newCell, true);
-						// 如果当前本来就没在最后（说明是插队），就需要调整位置
-						l2:
-						if (currentIdx != -1 && insertCellIndex < cells.size - 1) {
-							cells.remove(newCell, true);
-							cells.insert(insertCellIndex, newCell);
-
-							Element element = newCell.get();
-							if (element == null) break l2;
-
-							Seq<Element> children = targetTable.getChildren();
-							children.remove(element, true);
-
-							int elementInsertIndex = children.size;
-							// 寻找下一个包含真实 Element 的 Cell 作为插入锚点
-							for (int i = insertCellIndex + 1; i < cells.size; i++) {
-								Cell<?> nextCell = cells.get(i);
-								if (!nextCell.hasElement()) continue;
-
-								int idx = children.indexOf(nextCell.get(), true);
-								if (idx != -1) {
-									elementInsertIndex = idx;
-									break;
-								}
-							}
-							children.insert(elementInsertIndex, element);
-						}
-						repairTableGrid(targetTable);
-						totalAdded++;
-						Core.app.post(targetTable::invalidateHierarchy);
-					} catch (Throwable e) {
-						error("[CellProperty] Failed to dynamically append new cell for creator: " + creator.method, e);
-					}
-				}
-			}
-		}
-
-		info("[CellProperty] Updated: " + totalUpdated + ", Removed: " + totalRemoved
-		     + ", Added: " + totalAdded + ", Skipped: " + totalSkipped + " for " + slashName);
-	}
-	//endregion
-
-	private static Map<CellIdentity, Integer> mapCellsToNewChains(List<CellIdentity> idsSnapshot,
-	                                                              Map<String, List<List<PropertyCall>>> newChainsByMethod) {
-		Map<CellIdentity, Integer>      result      = new HashMap<>();
-		Map<String, List<CellIdentity>> idsByMethod = new LinkedHashMap<>();
-		for (CellIdentity id : idsSnapshot) {
-			String methodKey = findMethodKeyForId(newChainsByMethod, id);
-			if (methodKey != null) {
-				idsByMethod.computeIfAbsent(methodKey, _ -> new ArrayList<>()).add(id);
-			}
-		}
-
-		for (Entry<String, List<CellIdentity>> entry : idsByMethod.entrySet()) {
-			List<List<PropertyCall>> newChains = newChainsByMethod.get(entry.getKey());
-			if (newChains == null || newChains.isEmpty()) continue;
-
-			List<CellIdentity> sortedIds = new ArrayList<>(entry.getValue());
-			sortedIds.sort(Comparator.comparingInt(id -> id.sequence));
-
-			if (newChains.size() == 1) {
-				PropertyCall newCreator = newChains.get(0).get(0);
-				for (CellIdentity id : sortedIds) {
-					List<PropertyCall> oldCalls = records.get(id);
-					if (oldCalls != null && !oldCalls.isEmpty() && oldCalls.get(0).method.equals(newCreator.method)) {
-						result.put(id, 0);
-					}
-				}
-				continue;
-			}
-
-			Set<Integer> usedNewIndexes = new HashSet<>();
-
-			// 先用旧记录与新链内容做相似匹配，避免中间插入/删除时按序号整体错位。
-			for (CellIdentity id : entry.getValue()) {
-				List<PropertyCall> oldCalls = records.get(id);
-				if (oldCalls == null || oldCalls.isEmpty()) continue;
-
-				// 优先尝试原序号：只要 creator 方法名没变就直接复用，避免误配
-				if (id.sequence < newChains.size() && !usedNewIndexes.contains(id.sequence)) {
-					PropertyCall oc = oldCalls.get(0);
-					PropertyCall nc = newChains.get(id.sequence).get(0);
-					if (oc.method.equals(nc.method)) {
-						result.put(id, id.sequence);
-						usedNewIndexes.add(id.sequence);
-						continue;
-					}
-				}
-
-				int bestIndex = findBestChainIndex(newChains, oldCalls, usedNewIndexes);
-				if (bestIndex >= 0) {
-					result.put(id, bestIndex);
-					usedNewIndexes.add(bestIndex);
-				}
-			}
-
-			// 旧运行时没有记录时，才退回到原 sequence，但避免覆盖已经精确匹配的链。
-			for (CellIdentity id : entry.getValue()) {
-				if (result.containsKey(id)) continue;
-				if (id.sequence < newChains.size() && !usedNewIndexes.contains(id.sequence)) {
-					result.put(id, id.sequence);
-					usedNewIndexes.add(id.sequence);
-				}
-			}
-		}
-
-		return result;
-	}
-
-	private static Map<String, List<Integer>> findNewChainAdditions(List<CellIdentity> idsSnapshot,
-	                                                                Map<String, List<List<PropertyCall>>> newChainsByMethod,
-	                                                                Map<CellIdentity, Integer> mappedIndexes) {
-		Map<String, List<Integer>> additions = new LinkedHashMap<>();
-		for (String methodKey : newChainsByMethod.keySet()) {
-			List<List<PropertyCall>> newChains = newChainsByMethod.get(methodKey);
-			if (newChains == null || newChains.isEmpty()) continue;
-
-			boolean      hasTrackedCells = false;
-			Set<Integer> usedIndexes     = new HashSet<>();
-			for (CellIdentity id : idsSnapshot) {
-				if (!methodKeyMatches(id, methodKey)) continue;
-				hasTrackedCells = true;
-				Integer index = mappedIndexes.get(id);
-				if (index != null) usedIndexes.add(index);
-			}
-			if (!hasTrackedCells) continue;
-
-			for (int i = 0; i < newChains.size(); i++) {
-				if (!usedIndexes.contains(i)) {
-					additions.computeIfAbsent(methodKey, _ -> new ArrayList<>()).add(i);
-				}
-			}
-		}
-		return additions;
-	}
-
-	private static int findBestChainIndex(List<List<PropertyCall>> newChains, List<PropertyCall> oldCalls,
-	                                      Set<Integer> usedNewIndexes) {
-		int bestIndex = -1;
-		int bestScore = 3;
-		for (int i = 0; i < newChains.size(); i++) {
-			if (usedNewIndexes.contains(i)) continue;
-
-			int score = chainSimilarity(oldCalls, newChains.get(i));
-			if (score > bestScore) {
-				bestScore = score;
-				bestIndex = i;
-			}
-		}
-		return bestIndex;
-	}
-
-	private static int chainSimilarity(List<PropertyCall> oldCalls, List<PropertyCall> newCalls) {
-		if (callsEqual(oldCalls, newCalls)) return Integer.MAX_VALUE;
-		if (oldCalls == null || newCalls == null || oldCalls.isEmpty() || newCalls.isEmpty()) return 0;
-
-		PropertyCall oldCreator = oldCalls.get(0);
-		PropertyCall newCreator = newCalls.get(0);
-
-		// 方法名不一致直接判定不相似
-		if (!oldCreator.method.equals(newCreator.method)) return 0;
-
-		int score = 4; // 方法名一致的基础分
-		if (oldCreator.desc.equals(newCreator.desc)) score += 1;
-		if (argsEqual(oldCreator.args, newCreator.args)) score += 6;
-
-		int max = Math.min(oldCalls.size(), newCalls.size());
-		for (int i = 1; i < max; i++) {
-			PropertyCall oldCall = oldCalls.get(i);
-			PropertyCall newCall = newCalls.get(i);
-			if (!oldCall.method.equals(newCall.method)) continue; // 方法名都不同就不计分
-			score += 2;
-			if (argsEqual(oldCall.args, newCall.args)) score += 2;
-		}
-		return score;
-	}
-
-	private static List<List<PropertyCall>> findChainsForId(Map<String, List<List<PropertyCall>>> chainsByMethod,
-	                                                        CellIdentity id) {
-		String methodKey = findMethodKeyForId(chainsByMethod, id);
-		return methodKey == null ? null : chainsByMethod.get(methodKey);
-	}
-
-	private static String findMethodKeyForId(Map<String, List<List<PropertyCall>>> chainsByMethod, CellIdentity id) {
-		String exactKey = id.hostMethod + ":" + id.hostDesc;
-		if (chainsByMethod.containsKey(exactKey)) {
-			return exactKey;
-		}
-		for (String key : chainsByMethod.keySet()) {
-			if (methodKeyMatches(id, key)) {
-				return key;
-			}
-		}
-		return null;
-	}
-
-	private static boolean methodKeyMatches(CellIdentity id, String methodKey) {
-		if (methodKey.equals(id.hostMethod + ":" + id.hostDesc)) return true;
-		return methodKey.startsWith(id.hostMethod + ":");
-	}
-
-	private static String methodNameFromKey(String methodKey) {
-		int colon = methodKey.indexOf(':');
-		return colon < 0 ? methodKey : methodKey.substring(0, colon);
-	}
-
-	private static String methodDescFromKey(String methodKey) {
-		int colon = methodKey.indexOf(':');
-		return colon < 0 ? "()V" : methodKey.substring(colon + 1);
-	}
-
-	//region 属性与子元素更新
-	private static void applyAllCalls(Cell<?> cell, List<PropertyCall> calls) {
-		for (PropertyCall call : calls) {
-			if (hasUsableArgs(call)) {
-				invokeCellMethod(cell, call.method, call.desc, call.args);
-			}
-		}
-	}
-
-	private static boolean applyDiff(Cell<?> cell, List<PropertyCall> oldCalls,
-	                                 List<PropertyCall> newCalls) {
-		PropertyCall oldCreator = oldCalls.isEmpty() ? null : oldCalls.get(0);
-		PropertyCall newCreator = newCalls.isEmpty() ? null : newCalls.get(0);
-
-		boolean elementUpdated = false;
-		if (newCreator != null && isTableCellCreator(CL_TABLE, newCreator.method)) {
-			if (oldCreator == null || !oldCreator.method.equals(newCreator.method) || !argsEqual(oldCreator.args, newCreator.args)) {
-				updateChildElement(cell, newCreator);
-				elementUpdated = true;
-			}
-		}
-
-		List<PropertyCall> oldProperties = new ArrayList<>(oldCalls.subList(oldCalls.isEmpty() ? 0 : 1, oldCalls.size()));
-		List<PropertyCall> newProperties = new ArrayList<>(newCalls.subList(newCalls.isEmpty() ? 0 : 1, newCalls.size()));
-
-		boolean propertiesChanged = !callsEqual(oldProperties, newProperties);
-
-		if (elementUpdated || propertiesChanged) {
-			if (propertiesChanged) {
-				resetCell(cell);
-				applyAllCalls(cell, newProperties);
-			}
-			if (DEBUG) {
-				log("[CellProperty] Reapplied property chain due to changes (Element updated: " + elementUpdated + ").");
-			}
-			return true;
-		}
-		return false;
-	}
-
-
-	private static void resetCell(Cell<?> cell) {
-		cell.set(Cell.defaults()); // 不会设置table，element为null
-		resetCellEndRow(cell);
-	}
-	private static void resetCellEndRow(Cell<?> cell) {
-		ArcReflectionAdapter.setEndRow(cell, false);
-	}
-
-	private static void updateChildElement(Cell<?> cell, PropertyCall creator) {
-		Element oldElement = cell.get();
-
-		if (oldElement != null) {
-			// 如果旧元素已经是 Table 且新创建的也是 table，直接跳过替换过程
-			// 这样内部的 Lambda 渲染的子元素就不会被干掉
-			if (("table".equals(creator.method) && oldElement instanceof Table) ||
-			    ("pane".equals(creator.method) && oldElement instanceof ScrollPane) ||
-			    ("stack".equals(creator.method) && oldElement instanceof Stack)) {
-				if (DEBUG) log("[CellProperty] Skipping replacement for container: " + creator.method);
-				return;
-			}
-		}
-
-		// 针对文本类元素的优化更新（无需销毁重建）
-		if (oldElement != null && creator.args != null && creator.args.length > 0 && creator.args[0] instanceof String newText) {
-			if (oldElement instanceof Label label) {
-				label.setText(newText);
-				return;
-			}
-			if (oldElement instanceof TextButton button) {
-				button.setText(newText);
-				return;
-			}
-		}
-
-		Table table = cell.getTable();
-		if (table == null) return;
-
-		try {
-			MethodType   methodType   = MethodType.fromMethodDescriptorString(creator.desc, Vars.mods.mainLoader());
-			MethodHandle methodHandle = findTableMethod(creator.method, methodType);
-			if (methodHandle == null) return;
-
-			Table    dummyTable = new Table();
-			Object[] converted  = creator.args == null ? null : convertArgs(methodType, creator.args);
-
-			// 如果 creator 是 table(cons)，这里会调用我们提供的空 Cons
-			Cell<?> dummyCell = invoke(methodHandle, dummyTable, converted);
-			if (dummyCell == null || dummyCell.get() == null) return;
-
-			Element newElement = dummyCell.get();
-
-			// 优化：使用 BindCell 替换子元素并恢复约束
-			BindCell bind = BindCell.of(cell);
-			bind.replace(newElement, false);
-			Pools.free(bind);
-		} catch (Throwable e) {
-			error("[CellProperty] Failed to update child element for creator: " + creator.method, e);
-		}
-	}
-
-	private static MethodHandle findTableMethod(String name, MethodType methodType) {
-		try {
-			return lookup().findVirtual(Table.class, name, methodType);
-		} catch (Throwable ignored) { }
-		return null;
-	}
-
-	private static boolean callsEqual(List<PropertyCall> a, List<PropertyCall> b) {
-		if (a == b) return true;
-		if (a == null || b == null) return false;
-		if (a.size() != b.size()) return false;
-		for (int i = 0; i < a.size(); i++) {
-			PropertyCall ca = a.get(i);
-			PropertyCall cb = b.get(i);
-			if (!ca.method.equals(cb.method)) return false;
-			if (!ca.desc.equals(cb.desc)) return false;
-			if (!argsEqual(ca.args, cb.args)) return false;
-		}
-		return true;
-	}
-
-	private static boolean argsEqual(Object[] a, Object[] b) {
-		if (a == b) return true;
-		if (a == null || b == null) return false;
-		if (a.length != b.length) return false;
-		for (int i = 0; i < a.length; i++) {
-			if (!Objects.equals(a[i], b[i])) return false;
-		}
-		return true;
-	}
-
-	private static boolean hasUsableArgs(PropertyCall call) {
-		if (call.args == null) return true;
-		for (Object arg : call.args) {
-			if (arg == null) return false;
-		}
-		return true;
-	}
-
-	private static void invokeCellMethod(Cell<?> cell, String methodName, String methodDesc, Object[] args) {
-		try {
-			int len = args == null ? 0 : args.length;
-			if ("row".equals(methodName) && len == 0) {
-				ArcReflectionAdapter.setEndRow(cell, true);
-				return;
-			}
-			MethodType   methodType   = MethodType.fromMethodDescriptorString(methodDesc, Vars.mods.mainLoader());
-			MethodHandle methodHandle = findMatchingMethod(methodName, methodType);
-			if (methodHandle == null) {
-				error("[CellProperty] No matching methodHandle: " + methodName
-				      + "(" + len + " args)");
-				return;
-			}
-
-			Object[] converted    = convertArgs(methodType, args);
-			Class<?> receiverType = methodHandle.type().parameterType(0);
-			if (receiverType.isAssignableFrom(Cell.class)) {
-				invoke(methodHandle, cell, converted);
-			} else if (receiverType.isAssignableFrom(Table.class)) {
-				invoke(methodHandle, cell.getTable(), converted);
-			} else {
-				error("[CellProperty] Unexpected receiver type: " + receiverType);
-				return;
-			}
-
-			// 更新列数
-			if ("colspan".equals(methodName)) {
-				Table table = cell.getTable();
-				if (table == null) return;
-				ArcReflectionAdapter.recalculateColumns(table);
-				if (cell.hasElement()) cell.get().invalidateHierarchy();
-				table.invalidate();
-				table.layout();
-				if (DEBUG) log("[CellProperty] Recalculated columns for colspan changed.");
-			}
-		} catch (Throwable e) {
-			error("[CellProperty] Failed to invoke " + methodName, e);
-		}
-	}
-
-	private static MethodHandle findMatchingMethod(String name, MethodType methodType) {
-		try {
-			return lookup().findVirtual(Cell.class, name, methodType);
-		} catch (Throwable ignored) { }
-		try {
-			return lookup().findVirtual(Table.class, name, methodType);
-		} catch (Throwable ignored) { }
-		return null;
-	}
-
-	private static Object[] convertArgs(MethodType methodType, Object[] args) {
-		if (args == null) return null;
-		Object[] result = new Object[args.length];
-		for (int i = 0; i < args.length; i++) {
-			Object arg = args[i];
-			if (i >= methodType.parameterCount()) {
-				result[i] = arg;
-				continue;
-			}
-			Class<?> target = methodType.parameterType(i);
-			if (arg == null) {
-				result[i] = !target.isInterface() ? null :
-				 Proxy.newProxyInstance(target.getClassLoader(), new Class<?>[]{target}, (proxy, method, methodArgs) -> {
-					 if (method.getDeclaringClass() == Object.class) {
-						 return switch (method.getName()) {
-							 case "toString" -> "DummyProxy[" + target.getSimpleName() + "]";
-							 case "hashCode" -> System.identityHashCode(proxy);
-							 case "equals" -> proxy == methodArgs[0];
-							 default -> null;
-						 };
-					 }
-					 return null;
-				 });
-				continue;
-			}
-			if (arg instanceof LambdaInfo li) {
-				result[i] = makeLambda(li, target);
-				continue;
-			}
-			result[i] = switch (target.getTypeName()) {
-				case "void" -> arg;
-				case "boolean" -> arg instanceof Number n ? n.intValue() != 0 : arg;
-				case "byte" -> ((Number) arg).byteValue();
-				case "char" -> (char) arg;
-				case "short" -> ((Number) arg).shortValue();
-				case "int" -> ((Number) arg).intValue();
-				case "long" -> ((Number) arg).longValue();
-				case "float" -> ((Number) arg).floatValue();
-				case "double" -> ((Number) arg).doubleValue();
-				default -> CharSequence.class.isAssignableFrom(target) ? String.valueOf(arg) : arg;
-			};
-		}
-		return result;
-	}
-
-	private static Object makeLambda(LambdaInfo li, Class<?> target) {
-		return Proxy.newProxyInstance(target.getClassLoader(), new Class<?>[]{target}, (proxy, method, methodArgs) -> {
-			if (method.getDeclaringClass() == Object.class) {
-				return switch (method.getName()) {
-					case "toString" -> "LambdaProxy[" + li.methodName() + "]";
-					case "hashCode" -> System.identityHashCode(proxy);
-					case "equals" -> proxy == methodArgs[0];
-					default -> null;
-				};
-			}
-
-			try {
-				// 寻找宿主类
-				Class<?>     owner = loadClass(li.ownerClass().replace('/', '.'));
-				boolean      isStatic;
-				MethodHandle handle;
-
-				String     methodDesc = li.methodDesc();
-				MethodType type       = MethodType.fromMethodDescriptorString(methodDesc, owner.getClassLoader());
-				try {
-					handle = lookup().findStatic(owner, li.methodName(), type);
-					isStatic = true;
-				} catch (Throwable e) {
-					handle = lookup().findSpecial(owner, li.methodName(), type, owner);
-					isStatic = false;
-				}
-
-				if (handle == null) {
-					error("[CellProperty] Cannot find method " + li.methodName() + li.methodDesc(), new NoSuchMethodException(li.methodName() + li.methodDesc));
-					return null;
-				}
-				// 合并捕获变量与实际参数
-				Object[] allArgs = new Object[li.captures().length + (methodArgs == null ? 0 : methodArgs.length)];
-				System.arraycopy(li.captures(), 0, allArgs, 0, li.captures().length);
-				if (methodArgs != null) {
-					System.arraycopy(methodArgs, 0, allArgs, li.captures().length, methodArgs.length);
-				}
-
-				// 反射执行真正的 Lambda
-				if (isStatic) {
-					return invoke(handle, allArgs);
-				} else {
-					Object instance = allArgs.length > 0 ? allArgs[0] : null;
-					if (instance == null) {
-						error("[CellProperty] Lambda missing instance (this) for: " + li.methodName(), new NullPointerException());
-						return null;
-					}
-					Object[] actualArgs = new Object[Math.max(0, allArgs.length - 1)];
-					if (actualArgs.length > 0) {
-						System.arraycopy(allArgs, 1, actualArgs, 0, actualArgs.length);
-					}
-					return invoke(handle, instance, actualArgs);
-				}
-			} catch (Throwable t) {
-				error("[CellProperty] Fatal Error: Failed to run lambda " + li.methodName() + li.methodDesc(), t);
-			}
-			return null;
-		});
-	}
-	//endregion
-
-	//region ASM 字节码分析
-	private static final Set<String> CELL_PROPERTY_METHODS = new HashSet<>(Arrays.asList(
-	 "size", "width", "height",
-	 "minSize", "minWidth", "minHeight",
-	 "maxSize", "maxWidth", "maxHeight",
-	 "pad", "padTop", "padLeft", "padBottom", "padRight",
-	 "fill", "fillX", "fillY",
-	 "align", "center", "top", "left", "bottom", "right",
-	 "grow", "growX", "growY",
-	 "row",
-	 "expand", "expandX", "expandY",
-	 "colspan",
-	 "uniform", "uniformX", "uniformY",
-	 "color",
-	 "margin", "marginTop", "marginLeft", "marginBottom", "marginRight",
-	 "name", "disabled", "touchable", "visible", "scaling",
-	 "wrap", "ellipsis", "labelAlign", "fontScale",
-	 "scrollX", "scrollY", "maxTextLength", "valid",
-	 "tooltip", "style", "checked"
-	));
-
-	private static final Set<String> TABLE_CELL_CREATORS = new HashSet<>(Arrays.asList(
-	 "add", "button", "image", "label", "textButton",
-	 "imageButton", "area", "table", "pane", "stack",
-	 "toggleButton", "imageTextButton", "checkBox", "slider",
-	 "textField", "selectBox", "list", "tree"
-	));
-
-	public static Map<String, List<List<PropertyCall>>> extractCellChains(byte[] bytecode) {
-		Map<String, List<List<PropertyCall>>> result = new HashMap<>();
-		if (bytecode == null) return result;
-
-		try {
-			ClassReader cr = new ClassReader(bytecode);
-			ClassNode   cn = new ClassNode();
-			cr.accept(cn, ClassReader.EXPAND_FRAMES);
-
-			for (MethodNode mn : cn.methods) {
-				List<List<PropertyCall>> chains = extractFromMethod(cn, mn);
-				if (!chains.isEmpty()) {
-					result.put(mn.name + ":" + mn.desc, chains);
-				}
-			}
-		} catch (Exception e) {
-			error("[CellProperty] Failed to extract chains from bytecode", e);
-		}
-
-		return result;
-	}
-
-	private static boolean isTableClass(ClassNode cn, String owner) {
-		if (CL_TABLE.equals(owner)) return true;
-		if (cn != null && owner.equals(cn.name)) {
-			if (cn.superName != null && (cn.superName.equals(CL_TABLE) || cn.superName.contains("Table"))) {
-				return true;
-			}
-		}
-		return owner.endsWith("Table") || owner.contains("/Table");
-	}
-
-	private static boolean isCellClass(String owner) {
-		if (CL_CELL.equals(owner)) return true;
-		return owner.endsWith("Cell") || owner.contains("/Cell");
-	}
-
-	private static boolean isTableCellCreator(ClassNode cn, String owner, String name) {
-		return isTableClass(cn, owner) && TABLE_CELL_CREATORS.contains(name);
-	}
-
-	private static boolean isTableCellCreator(String owner, String name) {
-		return isTableCellCreator(null, owner, name);
-	}
-
-	private static boolean isCellProperty(ClassNode cn, String owner, String name, String desc) {
-		if (isCellClass(owner) && CELL_PROPERTY_METHODS.contains(name) && (desc.endsWith(")L" + CL_CELL + ";") || "()V".equals(desc) && "row".equals(name))) {
-			return true;
-		}
-		if (isTableClass(cn, owner) && CELL_PROPERTY_METHODS.contains(name)) {
-			return true;
-		}
-		return false;
-	}
-
-	private static List<List<PropertyCall>> extractFromMethod(ClassNode cn, MethodNode mn) {
-		List<List<PropertyCall>> chains = new ArrayList<>();
-		if (mn.instructions == null) return chains;
-
-		List<PropertyCall> currentChain = null;
-		boolean            inCell       = false;
-
-		if (DEBUG) {
-			log("[CellProperty] Scanning method: " + mn.name + mn.desc);
-		}
-
-		for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn instanceof MethodInsnNode mi) {
-				if (DEBUG) {
-					log("  [Insn] " + mi.owner + " # " + mi.name + " " + mi.desc + " (inCell: " + inCell + ")");
-				}
-
-				if (isTableCellCreator(cn, mi.owner, mi.name)) {
-					if (currentChain != null && !currentChain.isEmpty()) {
-						chains.add(currentChain);
-					}
-					currentChain = new ArrayList<>();
-					Object[] args = extractArgs(cn, mn, mi);
-					currentChain.add(new PropertyCall(mi.name, mi.desc, args, -1));
-					inCell = true;
-					if (DEBUG) {
-						log("    -> Matched Creator: " + mi.name);
-					}
-				} else if (inCell && isCellProperty(cn, mi.owner, mi.name, mi.desc)) {
-					Object[] args = extractArgs(cn, mn, mi);
-					currentChain.add(new PropertyCall(mi.name, mi.desc, args, -1));
-					if (DEBUG) {
-						log("    -> Matched Property: " + mi.name);
-					}
-				} else {
-					if (inCell && !currentChain.isEmpty()) {
-						chains.add(currentChain);
-					}
-					currentChain = null;
-					inCell = false;
-					if (DEBUG) {
-						log("    -> Chain broken / not matched");
-					}
-				}
-			}
-		}
-
-		if (currentChain != null && !currentChain.isEmpty()) {
-			chains.add(currentChain);
-		}
-
-		return chains;
-	}
-
-	private static int getPushes(AbstractInsnNode insn) {
-		int opcode = insn.getOpcode();
-		if (opcode == ACONST_NULL) return 1;
-		if (opcode >= ICONST_M1 && opcode <= DCONST_1) return 1;
-		if (opcode == BIPUSH || opcode == SIPUSH || opcode == LDC) return 1;
-		if (opcode >= ILOAD && opcode <= ALOAD) return 1;
-		if (opcode >= IADD && opcode <= DREM) return 1;
-		if (opcode >= ISHL && opcode <= LXOR) return 1;
-		if (opcode >= INEG && opcode <= DNEG) return 1;
-		if (opcode >= I2L && opcode <= I2S) return 1;
-		if (opcode >= LCMP && opcode <= DCMPG) return 1;
-		if (opcode == GETSTATIC) return 1;
-		if (opcode == GETFIELD) return 1;
-		if (opcode == NEW) return 1;
-		if (opcode == DUP) return 1;
-		if (opcode == ARRAYLENGTH || opcode == INSTANCEOF) return 1;
-		if (opcode >= IALOAD && opcode <= SALOAD) return 1;
-		if (insn instanceof MethodInsnNode mi) {
-			Type retType = Type.getReturnType(mi.desc);
-			return retType.getSort() == Type.VOID ? 0 : 1;
-		}
-		if (insn instanceof InvokeDynamicInsnNode indy) {
-			Type retType = Type.getReturnType(indy.desc);
-			return retType.getSort() == Type.VOID ? 0 : 1;
-		}
-		return 0;
-	}
-
-	private static int getPops(AbstractInsnNode insn) {
-		int opcode = insn.getOpcode();
-		if (opcode >= ISTORE && opcode <= ASTORE) return 1;
-		if (opcode >= IADD && opcode <= DREM) return 2;
-		if (opcode >= ISHL && opcode <= LXOR) return 2;
-		if (opcode >= INEG && opcode <= DNEG) return 1;
-		if (opcode >= I2L && opcode <= I2S) return 1;
-		if (opcode >= LCMP && opcode <= DCMPG) return 2;
-		if (opcode == GETFIELD) return 1;
-		if (opcode == PUTFIELD) return 2;
-		if (opcode == PUTSTATIC) return 1;
-		if (opcode == DUP) return 1;
-		if (opcode == ARRAYLENGTH || opcode == INSTANCEOF || opcode == ATHROW || opcode == MONITORENTER || opcode == MONITOREXIT) {
-			return 1;
-		}
-		if (opcode >= IFEQ && opcode <= IFLE) return 1;
-		if (opcode >= IF_ICMPEQ && opcode <= IF_ACMPNE) return 2;
-		if (opcode == IFNULL || opcode == IFNONNULL) return 1;
-		if (opcode >= IALOAD && opcode <= SALOAD) return 2;
-		if (opcode >= IASTORE && opcode <= SASTORE) return 3;
-		if (insn instanceof MethodInsnNode mi) {
-			int pops = Type.getArgumentTypes(mi.desc).length;
-			if (opcode != INVOKESTATIC) {
-				pops += 1;
-			}
-			return pops;
-		}
-		if (insn instanceof InvokeDynamicInsnNode indy) {
-			return Type.getArgumentTypes(indy.desc).length;
-		}
-		return 0;
-	}
-	/**
-	 * 跳过伪指令节点，向前查找第一个非伪指令节点。
-	 * <p>
-	 * 伪指令节点包括 {@link AbstractInsnNode#LABEL}, {@link AbstractInsnNode#LINE} 和 {@link AbstractInsnNode#FRAME} 类型，这些节点不包含实际可执行指令。
-	 * 该方法从给定节点开始向前（即向指令列表头部方向）遍历，跳过所有伪指令节点，
-	 * 返回遇到的第一个真正指令节点。
-	 * </p>
-	 * @param insn 起始指令节点
-	 * @return 第一个非伪指令节点；若向前遍历至列表头部仍未找到，则返回 null
-	 */
-	private static AbstractInsnNode skipPseudo(AbstractInsnNode insn) {
-		while (insn != null && (insn.getType() == AbstractInsnNode.LABEL ||
-		                        insn.getType() == AbstractInsnNode.LINE ||
-		                        insn.getType() == AbstractInsnNode.FRAME)) {
-			insn = insn.getPrevious();
-		}
-		return insn;
-	}
-	private static AbstractInsnNode skipExpression(AbstractInsnNode insn) {
-		if (insn == null) return null;
-		int              needed = 1;
-		AbstractInsnNode curr   = skipPseudo(insn);
-		while (curr != null) {
-			int pops   = getPops(curr);
-			int pushes = getPushes(curr);
-			needed -= pushes;
-			needed += pops;
-			if (needed <= 0) {
-				return skipPseudo(curr.getPrevious());
-			}
-			curr = skipPseudo(curr.getPrevious());
-		}
-		return null;
-	}
-
-	private static AbstractInsnNode getPrevArgInsn(AbstractInsnNode start, Type[] argTypes, int targetIdx) {
-		AbstractInsnNode prev = skipPseudo(start);
-		for (int i = argTypes.length - 1; i >= 0 && prev != null; i--) {
-			if (i == targetIdx) {
-				return prev;
-			}
-			prev = skipExpression(prev);
-		}
-		return null;
-	}
-
-	private static Object[] extractArgs(ClassNode cn, MethodNode mn, MethodInsnNode target) {
-		Type[] argTypes = Type.getArgumentTypes(target.desc);
-		if (argTypes.length == 0) return null;
-
-		Object[]    args            = new Object[argTypes.length];
-		Set<String> visitingMethods = new HashSet<>();
-		for (int i = 0; i < argTypes.length; i++) {
-			AbstractInsnNode argInsn = getPrevArgInsn(target.getPrevious(), argTypes, i);
-			args[i] = resolveConstant(cn, mn, argInsn, visitingMethods);
-		}
-
-		return args;
-	}
-
-	private static Object evaluateBinaryOp(int opcode, Object left, Object right) {
-		if (left == null || right == null) return null;
-		if (!(left instanceof Number l) || !(right instanceof Number r)) return null;
-
-		return switch (opcode) {
-			case IADD -> l.intValue() + r.intValue();
-			case ISUB -> l.intValue() - r.intValue();
-			case IMUL -> l.intValue() * r.intValue();
-			case IDIV -> r.intValue() == 0 ? null : l.intValue() / r.intValue();
-			case LADD -> l.longValue() + r.longValue();
-			case LSUB -> l.longValue() - r.longValue();
-			case LMUL -> l.longValue() * r.longValue();
-			case LDIV -> r.longValue() == 0L ? null : l.longValue() / r.longValue();
-			case FADD -> l.floatValue() + r.floatValue();
-			case FSUB -> l.floatValue() - r.floatValue();
-			case FMUL -> l.floatValue() * r.floatValue();
-			case FDIV -> r.floatValue() == 0.0f ? null : l.floatValue() / r.floatValue();
-			case DADD -> l.doubleValue() + r.doubleValue();
-			case DSUB -> l.doubleValue() - r.doubleValue();
-			case DMUL -> l.doubleValue() * r.doubleValue();
-			case DDIV -> r.doubleValue() == 0.0d ? null : l.doubleValue() / r.doubleValue();
-			default -> null;
-		};
-	}
-
-	private static Object evaluateUnaryOp(int opcode, Object val) {
-		if (val == null) return null;
-		if (!(val instanceof Number n)) return null;
-		return switch (opcode) {
-			case INEG -> -n.intValue();
-			case LNEG -> -n.longValue();
-			case FNEG -> -n.floatValue();
-			case DNEG -> -n.doubleValue();
-			default -> null;
-		};
-	}
-
-	private static Object resolveConstant(ClassNode cn, MethodNode mn, AbstractInsnNode insn,
-	                                      Set<String> visitingMethods) {
-		if (insn == null) return null;
-
-		if (insn instanceof FieldInsnNode fin && insn.getOpcode() == GETSTATIC) {
-			try {
-				String   className = fin.owner.replace('/', '.');
-				Class<?> clazz     = loadClass(className);
-				Field    field     = clazz.getDeclaredField(fin.name);
-				if (!Modifier.isStatic(field.getModifiers())) return null;
-
-				field.setAccessible(true);
-				return field.get(null);
-			} catch (Throwable t) {
-				// error("[CellProperty] Failed to resolve constant " + fin.owner + "." + fin.name + ":" + fin.desc, t);
-			}
-		}
-
-		if (insn instanceof LdcInsnNode) {
-			return ((LdcInsnNode) insn).cst;
-		} else if (insn instanceof InsnNode) {
-			int opcode = insn.getOpcode();
-			switch (opcode) {
-				case ICONST_M1:
-					return -1;
-				case ICONST_0:
-					return 0;
-				case ICONST_1:
-					return 1;
-				case ICONST_2:
-					return 2;
-				case ICONST_3:
-					return 3;
-				case ICONST_4:
-					return 4;
-				case ICONST_5:
-					return 5;
-				case FCONST_0:
-					return 0.0f;
-				case FCONST_1:
-					return 1.0f;
-				case FCONST_2:
-					return 2.0f;
-				case DCONST_0:
-					return 0.0d;
-				case DCONST_1:
-					return 1.0d;
-				case LCONST_0:
-					return 0L;
-				case LCONST_1:
-					return 1L;
-
-				case I2L:
-				case I2F:
-				case I2D:
-				case L2I:
-				case L2F:
-				case L2D:
-				case F2I:
-				case F2L:
-				case F2D:
-				case D2I:
-				case D2L:
-				case D2F:
-				case I2B:
-				case I2C:
-				case I2S: {
-					AbstractInsnNode prev = insn.getPrevious();
-					if (prev == null) break;
-
-					Object val = resolveConstant(cn, mn, prev, visitingMethods);
-					if (val instanceof Number num) {
-						switch (opcode) {
-							case I2L:
-							case F2L:
-							case D2L:
-								return num.longValue();
-							case I2F:
-							case L2F:
-							case D2F:
-								return num.floatValue();
-							case I2D:
-							case L2D:
-							case F2D:
-								return num.doubleValue();
-							case L2I:
-							case F2I:
-							case D2I:
-								return num.intValue();
-							case I2B:
-								return num.byteValue();
-							case I2C:
-								return (char) num.intValue();
-							case I2S:
-								return num.shortValue();
-						}
-					}
-					break;
-				}
-				case IADD:
-				case ISUB:
-				case IMUL:
-				case IDIV:
-				case LADD:
-				case LSUB:
-				case LMUL:
-				case LDIV:
-				case FADD:
-				case FSUB:
-				case FMUL:
-				case FDIV:
-				case DADD:
-				case DSUB:
-				case DMUL:
-				case DDIV: {
-					AbstractInsnNode rightInsn = insn.getPrevious();
-					if (rightInsn != null) {
-						AbstractInsnNode leftInsn = skipExpression(rightInsn);
-						Object           rightVal = resolveConstant(cn, mn, rightInsn, visitingMethods);
-						Object           leftVal  = resolveConstant(cn, mn, leftInsn, visitingMethods);
-						return evaluateBinaryOp(opcode, leftVal, rightVal);
-					}
-					break;
-				}
-				case INEG:
-				case LNEG:
-				case FNEG:
-				case DNEG: {
-					AbstractInsnNode prev = insn.getPrevious();
-					if (prev != null) {
-						Object val = resolveConstant(cn, mn, prev, visitingMethods);
-						return evaluateUnaryOp(opcode, val);
-					}
-					break;
-				}
-			}
-		}
-		if (insn instanceof IntInsnNode iin && (insn.getOpcode() == BIPUSH || insn.getOpcode() == SIPUSH)) {
-			return iin.operand;
-		}
-		if (insn instanceof VarInsnNode vin) {
-			int opcode = vin.getOpcode();
-			if (opcode == ILOAD || opcode == FLOAD || opcode == LLOAD || opcode == DLOAD || opcode == ALOAD) {
-				return resolveVar(cn, mn, vin.var, visitingMethods);
-			}
-		}
-		if (insn instanceof InvokeDynamicInsnNode indy && indy.bsm != null && "java/lang/invoke/LambdaMetafactory".equals(indy.bsm.getOwner())
-		    && indy.bsmArgs != null && indy.bsmArgs.length >= 2 && indy.bsmArgs[1] instanceof Handle handle) {
-			Type[]   captureTypes = Type.getArgumentTypes(indy.desc);
-			Object[] captures     = new Object[captureTypes.length];
-			// 倒推栈上推送的闭包捕获变量
-			for (int i = 0; i < captureTypes.length; i++) {
-				AbstractInsnNode argInsn = getPrevArgInsn(indy.getPrevious(), captureTypes, i);
-				captures[i] = resolveConstant(cn, mn, argInsn, visitingMethods);
-			}
-			// info("[CellProperty] Resolved lambda: " + indy.name + " " + indy.desc + " " + indy.bsm);
-			return new LambdaInfo(handle.getOwner(), handle.getName(), handle.getDesc(), captures);
-		}
-		return null;
-	}
-	private static boolean isConstantType(Object val) {
-		return val instanceof String || val instanceof Number || val instanceof Boolean || val instanceof Character;
-	}
-
-	private static Object resolveVar(ClassNode cn, MethodNode mn, int varIndex, Set<String> visitingMethods) {
-		String visitKey = mn.name + ":" + mn.desc + "#" + varIndex;
-		if (visitingMethods.contains(visitKey)) {
-			return null;
-		}
-		visitingMethods.add(visitKey);
-		tryLabel:
-		try {
-			int              writes      = 0;
-			AbstractInsnNode singleStore = null;
-			for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (insn instanceof VarInsnNode vin) {
-					int opcode = vin.getOpcode();
-					if (opcode == ISTORE || opcode == LSTORE || opcode == FSTORE || opcode == DSTORE || opcode == ASTORE) {
-						if (vin.var == varIndex) {
-							writes++;
-							singleStore = insn;
-						}
-					}
-				} else if (insn instanceof IincInsnNode iin) {
-					if (iin.var == varIndex) {
-						writes++;
-					}
-				}
-			}
-
-			if (writes == 1 && singleStore != null) {
-				AbstractInsnNode prev = skipPseudo(singleStore.getPrevious());
-				if (prev != null) {
-					Object val = resolveConstant(cn, mn, prev, visitingMethods);
-					if (isConstantType(val)) {
-						return val;
-					}
-				}
-				break tryLabel;
-			}
-			if (writes != 0) break tryLabel;
-
-			int    localIndex = ((mn.access & ACC_STATIC) != 0) ? 0 : 1;
-			Type[] args       = Type.getArgumentTypes(mn.desc);
-			int    argIdx     = -1;
-			for (int i = 0; i < args.length; i++) {
-				if (localIndex == varIndex) {
-					argIdx = i;
-					break;
-				}
-				localIndex += args[i].getSize();
-			}
-
-			if (argIdx < 0 || (!mn.name.startsWith("lambda$") && !mn.name.contains("$lambda"))) break tryLabel;
-
-			for (MethodNode parentMn : cn.methods) {
-				for (AbstractInsnNode insn = parentMn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-					if (!(insn instanceof InvokeDynamicInsnNode indy) || indy.bsmArgs == null || indy.bsmArgs.length <= 1) {
-						continue;
-					}
-					for (Object bsmArg : indy.bsmArgs) {
-						if (!(bsmArg instanceof Handle h) || !h.getName().equals(mn.name) || !h.getOwner().equals(cn.name)) {
-							continue;
-						}
-						Type[] indyArgs = Type.getArgumentTypes(indy.desc);
-						if (argIdx >= indyArgs.length) continue;
-
-						Object val = extractIndyArg(cn, parentMn, indy, argIdx, visitingMethods);
-						if (isConstantType(val)) {
-							return val;
-						}
-					}
-				}
-			}
-		} finally {
-			visitingMethods.remove(visitKey);
-		}
-		return null;
-	}
-
-	private static Object extractIndyArg(ClassNode cn, MethodNode mn, InvokeDynamicInsnNode indy, int argIdx,
-	                                     Set<String> visitingMethods) {
-		Type[]           argTypes = Type.getArgumentTypes(indy.desc);
-		AbstractInsnNode argInsn  = getPrevArgInsn(indy.getPrevious(), argTypes, argIdx);
-		return resolveConstant(cn, mn, argInsn, visitingMethods);
-	}
-	//endregion
-
-	//region ASM 注入
-	public static void redefineCellProperties() {
-		Class<?> cellClass = Cell.class;
-		byte[]   bytes     = fetchCurrentBytecode(cellClass);
-		if (bytes == null) {
-			error("[CellProperty] Cannot fetch Cell bytecode");
-			return;
-		}
-
-		bytes = CellPropertyRef.injectCell(bytes);
-		if (bytes == null) return;
-
-		Injector.redefineOneClass(cellClass, bytes);
-		info("[CellProperty] Cell class redefined with property tracking");
-	}
-
-	public static byte[] injectCell(byte[] bytes) {
-		ClassReader cr = new ClassReader(bytes);
-		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
-
-		ClassVisitor cv = new ClassVisitor(ASM9, cw) {
-			@Override
-			public MethodVisitor visitMethod(int access, String name, String descriptor,
-			                                 String signature, String[] exceptions) {
-				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
-
-				// 核心突破：注入构造函数以确保任何隐式或无链式的 Cell 绝对捕获并生成对应的运行时 Sequence
-				if (name.equals("<init>")) {
-					return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
-						@Override
-						protected void onMethodExit(int opcode) {
-							if (opcode == ATHROW) return;
-
-							mv.visitVarInsn(ALOAD, 0);
-							mv.visitMethodInsn(
-							 INVOKESTATIC,
-							 internalName(CellPropertyRef.class),
-							 "registerCellAtCreation",
-							 "(Larc/scene/ui/layout/Cell;)V",
-							 false
-							);
-						}
-					};
-				}
-
-				// 注入 setLayout：Table.obtainCell() 在 cellPool.obtain() 之后立刻调用 cell.setLayout(this)
-				// 因此这是感知 Cell 被从对象池取出并重新分配的最可靠时机
-				// 在方法入口清除旧的 CellIdentity 绑定，使下次 recordPropertyCall 能通过 JVMTI 重新推断正确的宿主方法
-				if (name.equals("setLayout")) {
-					return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
-						@Override
-						protected void onMethodEnter() {
-							mv.visitVarInsn(ALOAD, 0);
-							mv.visitMethodInsn(
-							 INVOKESTATIC,
-							 internalName(CellPropertyRef.class),
-							 "onCellFreed",
-							 "(Larc/scene/ui/layout/Cell;)V",
-							 false
-							);
-						}
-					};
-				}
-
-				if (name.startsWith("<")) return mv;
-				if (!CELL_PROPERTY_METHODS.contains(name)) return mv;
-				if (!(descriptor.endsWith(")Larc/scene/ui/layout/Cell;") || ("row".equals(name) && "()V".equals(descriptor)))) {
-					return mv;
-				}
-
-				return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
-					@Override
-					protected void onMethodExit(int opcode) {
-						if (opcode == ATHROW) return;
-
-						mv.visitVarInsn(ALOAD, 0);
-						mv.visitLdcInsn(name);
-						mv.visitLdcInsn(descriptor);
-
-						Type[] argTypes = Type.getArgumentTypes(descriptor);
-						pushArgsArray(mv, argTypes);
-
-						mv.visitMethodInsn(
-						 INVOKESTATIC,
-						 internalName(CellPropertyRef.class),
-						 "recordPropertyCall",
-						 "(Larc/scene/ui/layout/Cell;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/Object;)V",
-						 false
-						);
-					}
-				};
-			}
-		};
-
-		try {
-			cr.accept(cv, ClassReader.EXPAND_FRAMES);
-			return cw.toByteArray();
-		} catch (Exception e) {
-			error("[CellProperty] Failed to inject Cell class", e);
-			return bytes;
-		}
-	}
-
-	private static void pushArgsArray(MethodVisitor mv, Type[] argTypes) {
-		pushInt(mv, argTypes.length);
-		mv.visitTypeInsn(ANEWARRAY, "java/lang/Object");
-
-		int localIdx = 1;
-		for (int i = 0; i < argTypes.length; i++) {
-			mv.visitInsn(DUP);
-			pushInt(mv, i);
-
-			Type t = argTypes[i];
-			switch (t.getSort()) {
-				case Type.INT:
-					mv.visitVarInsn(ILOAD, localIdx);
-					mv.visitMethodInsn(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
-					localIdx++;
-					break;
-				case Type.FLOAT:
-					mv.visitVarInsn(FLOAD, localIdx);
-					mv.visitMethodInsn(INVOKESTATIC, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false);
-					localIdx++;
-					break;
-				case Type.BOOLEAN:
-					mv.visitVarInsn(ILOAD, localIdx);
-					mv.visitMethodInsn(INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false);
-					localIdx++;
-					break;
-				case Type.LONG:
-					mv.visitVarInsn(LLOAD, localIdx);
-					mv.visitMethodInsn(INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
-					localIdx += 2;
-					break;
-				case Type.DOUBLE:
-					mv.visitVarInsn(DLOAD, localIdx);
-					mv.visitMethodInsn(INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
-					localIdx += 2;
-					break;
-				default:
-					mv.visitVarInsn(ALOAD, localIdx);
-					localIdx++;
-					break;
-			}
-
-			mv.visitInsn(AASTORE);
-		}
-	}
-
-	private static void pushInt(MethodVisitor mv, int value) {
-		if (value >= -1 && value <= 5) {
-			mv.visitInsn(ICONST_0 + value);
-		} else if (value >= Byte.MIN_VALUE && value <= Byte.MAX_VALUE) {
-			mv.visitIntInsn(BIPUSH, value);
-		} else if (value >= Short.MIN_VALUE && value <= Short.MAX_VALUE) {
-			mv.visitIntInsn(SIPUSH, value);
-		} else {
-			mv.visitLdcInsn(value);
-		}
-	}
-	//endregion
-
-	//region 辅助方法
-	private static Class<?> loadClass(String className) throws ClassNotFoundException {
-		return Class.forName(className, true, Vars.mods.mainLoader());
-	}
-
-	private static Cell<?> findCellById(CellIdentity target) {
-		WeakReference<Cell<?>> ref = idToCell.get(target);
-		return ref != null ? ref.get() : null;
-	}
-
-	private static CellIdentity inferCellIdentity(Cell<?> cell) {
-		String callerClass = null;
-		String hostMethod = null;
-		String hostDesc = null;
-
-		String[] ctx = currentHostContext.get();
-		if (ctx != null && ctx.length >= 3 && ctx[0] != null) {
-			callerClass = ctx[0];
-			hostMethod = ctx[1];
-			hostDesc = ctx[2];
-		} else {
-			String[] callbackFrame = {null, null, null};
-			int[]    x             = {-1};
-			try {
-				JVMTIEnv.getInstance().walkThreadFrames(MemorySegment.NULL, 12, 1, (className, methodName, methodDesc, thisAddr) -> {
-					if (x[0] >= 0 && ++x[0] == 1) {
-						callbackFrame[0] = className;
-						callbackFrame[1] = methodName;
-						callbackFrame[2] = methodDesc;
-						return false;
-					}
-					if (CL_CELL.equals(className)) {
-						x[0] = 0;
-					}
-					return true;
-				});
-			} catch (Throwable t) {
-				if (DEBUG) log("[CellProperty] walkThreadFrames failed in inferCellIdentity: " + t.getMessage());
-			}
-			callerClass = callbackFrame[0];
-			hostMethod = callbackFrame[1];
-			hostDesc = callbackFrame[2];
-		}
-
-		// 如果直接调用者是库类，说明是内部嵌套调用，不作为外部宿主方法 Cell 追踪
-		if (callerClass == null || callerClass.startsWith("arc/") || callerClass.startsWith("java/") || callerClass.startsWith("nipx/")) {
-			return null;
-		}
-
-		int seq = -1;
-		try {
-			Table table = cell.getTable();
-			if (table != null) {
-				var cells = table.getCells();
-				if (cells != null) {
-					seq = cells.indexOf(cell, true);
-				}
-			}
-		} catch (Throwable t) {
-			error("[CellProperty] Failed to infer cell identity", t);
-		}
-
-		if (seq < 0) {
-			String key = callerClass + "#" + hostMethod + ":" + hostDesc;
-			Map<String, int[]> counters   = methodCounters.get();
-			Map<String, int[]> liveCounts = liveCountPerKey.get();
-			int[] live = liveCounts.computeIfAbsent(key, _ -> new int[]{0});
-			if (live[0] == 0) {
-				counters.put(key, new int[]{0});
-			}
-			int[] counter = counters.computeIfAbsent(key, _ -> new int[]{0});
-			seq = counter[0]++;
-			live[0]++;
-		}
-
-		return new CellIdentity(callerClass, hostMethod, hostDesc, seq);
-	}
-
-	private static int inferLineNumber() {
-		StackTraceElement[] stack = Thread.currentThread().getStackTrace();
-		for (StackTraceElement ste : stack) {
-			String cn = ste.getClassName();
-			if (!cn.startsWith("nipx.") && !cn.startsWith("arc.") && !cn.startsWith("java.")) {
-				return ste.getLineNumber();
-			}
-		}
-		return -1;
-	}
-
-	private static String argsString(Object[] args) {
-		if (args == null) return "null";
-		StringBuilder sb = new StringBuilder("[");
-		for (int i = 0; i < args.length; i++) {
-			if (i > 0) sb.append(", ");
-			sb.append(args[i]);
-		}
-		return sb.append("]").toString();
-	}
-	//endregion
-
-	//region 生命周期管理
-	public static void enable() {
-		enabled = true;
-		info("[CellProperty] Enabled");
-	}
-
-	public static void disable() {
-		enabled = false;
-		info("[CellProperty] Disabled");
-	}
-
-	public static boolean isEnabled() {
-		return enabled;
-	}
-
-	/**
-	 * 局部清理：仅清除指定宿主类的追踪记录与关联 Cell 映射
-	 * 适合在循环/动态布局类的热重载后，进行局部的状态重置
-	 * @param hostSlashName hostClass的slashName
-	 */
-	public static void clearClassRecords(String hostSlashName) {
-		if (hostSlashName == null) return;
-
-		List<CellIdentity> cellIds = classToCells.remove(hostSlashName);
-		if (cellIds != null && !cellIds.isEmpty()) {
-			Set<CellIdentity> idSet = new HashSet<>(cellIds);
-
-			for (CellIdentity id : cellIds) {
-				WeakReference<Cell<?>> ref = idToCell.remove(id);
-				records.remove(id);
-
-				if (ref != null) {
-					Cell<?> cell = ref.get();
-					if (cell != null && cell.getTable() != null) {
-						BindCell bind = BindCell.of(cell);
-						bind.remove();
-						Pools.free(bind);
-						cell.getTable().getCells().remove(cell, true);
-					}
-				}
-			}
-
-			synchronized (cellToId) {
-				cellToId.entrySet().removeIf(entry -> idSet.contains(entry.getValue()));
-			}
-		}
-
-		methodCounters.get().keySet().removeIf(key -> key.startsWith(hostSlashName + "#"));
-		liveCountPerKey.get().keySet().removeIf(key -> key.startsWith(hostSlashName + "#"));
-	}
-	public static void clearAll() {
-		synchronized (cellToId) {
-			cellToId.clear();
-		}
-		idToCell.clear();
-		records.clear();
-		classToCells.clear();
-		methodCounters.get().clear();
-		liveCountPerKey.get().clear();
-		info("[CellProperty] 🗑 Cleared all records");
-	}
-
-	public static void removeCell(Cell<?> cell) {
-		CellIdentity id;
-		synchronized (cellToId) {
-			id = cellToId.remove(cell);
-		}
-		if (id != null) {
-			idToCell.remove(id);
-			records.remove(id);
-			List<CellIdentity> list = classToCells.get(id.hostClass);
-			if (list != null) list.remove(id);
-
-			// 减少存活计数；降为 0 时下次同 key 进入会重置序列计数器
-			String key = id.hostClass + "#" + id.hostMethod + ":" + id.hostDesc;
-			Map<String, int[]> liveCounts = liveCountPerKey.get();
-			int[] live = liveCounts.get(key);
-			if (live != null && live[0] > 0) {
-				live[0]--;
-			}
-		}
-	}
-
-	public static String getStats() {
-		int cellToIdSize;
-		synchronized (cellToId) {
-			cellToIdSize = cellToId.size();
-		}
-		return "CellPropertyRef:\n"
-		       + "  Enabled: " + enabled + "\n"
-		       + "  Tracked Cells: " + cellToIdSize + "\n"
-		       + "  Records: " + records.size() + "\n"
-		       + "  Host Classes: " + classToCells.size();
-	}
-	//endregion
-
-	//region Reflect
-	@SuppressWarnings("unchecked")
-	private static <T> T invoke(MethodHandle handle, Object instance, Object[] args) throws Throwable {
-		return (T) switch (args == null ? 0 : args.length) {
-			case 0 -> handle.invoke(instance);
-			case 1 -> handle.invoke(instance, args[0]);
-			case 2 -> handle.invoke(instance, args[0], args[1]);
-			case 3 -> handle.invoke(instance, args[0], args[1], args[2]);
-			case 4 -> handle.invoke(instance, args[0], args[1], args[2], args[3]);
-			default -> handle.bindTo(instance).asSpreader(Object.class, args.length).invoke(args);
-		};
-	}
-	@SuppressWarnings("unchecked")
-	private static <T> T invoke(MethodHandle handle, Object[] args) throws Throwable {
-		return (T) switch (args == null ? 0 : args.length) {
-			case 0 -> handle.invoke();
-			case 1 -> handle.invoke(args[0]);
-			case 2 -> handle.invoke(args[0], args[1]);
-			case 3 -> handle.invoke(args[0], args[1], args[2]);
-			case 4 -> handle.invoke(args[0], args[1], args[2], args[3]);
-			default -> handle.asSpreader(Object.class, args.length).invoke(args);
-		};
-	}
-	//endregion
+    public static final String CL_TABLE = "arc/scene/ui/layout/Table";
+    public static final String CL_CELL  = "arc/scene/ui/layout/Cell";
+
+    //region 数据结构
+    public record PropertyCall(String method, String desc, Object[] args, int line) { }
+
+    public record CellIdentity(String hostClass, String hostMethod, String hostDesc,
+                               int line, String creatorName) {
+        @Override
+        public String toString() {
+            return hostClass + "#" + hostMethod + "@" + line + "(" + creatorName + ")";
+        }
+    }
+
+    public record LambdaInfo(String ownerClass, String methodName, String methodDesc, Object[] captures) {
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof LambdaInfo that)) return false;
+            return ownerClass.equals(that.ownerClass)
+                && methodName.equals(that.methodName)
+                && methodDesc.equals(that.methodDesc)
+                && Arrays.equals(captures, that.captures);
+        }
+        @Override
+        public int hashCode() {
+            int result = Objects.hash(ownerClass, methodName, methodDesc);
+            result = 31 * result + Arrays.hashCode(captures);
+            return result;
+        }
+        @Override
+        public String toString() { return "Lambda[" + methodName + "]"; }
+    }
+
+    private record HostFrame(String hostClass, String hostMethod, String hostDesc,
+                             int line, String creatorName) { }
+
+    private record CellEntry(Cell<?> cell, CellIdentity id, int chainIdx, List<PropertyCall> chain) { }
+
+    private record MethodExtraction(boolean analyzed, List<List<PropertyCall>> chains) { }
+
+    private record ChainMatch(int index, List<PropertyCall> chain) { }
+
+    private static final ChainMatch NO_CHAIN = new ChainMatch(-1, null);
+
+    private static final class CellState {
+        CellIdentity id;
+        int chainIdx;
+        List<PropertyCall> chain;
+        final Map<String, Integer> slotCursor = new HashMap<>();
+        CellState(CellIdentity id, int chainIdx, List<PropertyCall> chain) {
+            this.id = id;
+            this.chainIdx = chainIdx;
+            this.chain = chain;
+        }
+    }
+
+    private static final CellState IGNORED_STATE = new CellState(
+        new CellIdentity("", "", "", -1, null), -1, new ArrayList<>());
+    //endregion
+
+    //region 全局状态
+    private static final ThreadLocal<boolean[]> BUSY = ThreadLocal.withInitial(() -> new boolean[1]);
+    private static final AtomicInteger FAILURES = new AtomicInteger();
+    private static final int MAX_FAILURES = 20;
+    private static volatile Thread uiThread;
+
+    private static final Map<Cell<?>, CellState> cellState = new WeakHashMap<>();
+    private static final Map<CellIdentity, Set<Cell<?>>> idToCells = new HashMap<>();
+    private static final Map<String, LinkedHashSet<CellIdentity>> classToCells = new HashMap<>();
+    private static final Map<String, Map<String, List<List<PropertyCall>>>> chainCache = new HashMap<>();
+    private static final Map<CellIdentity, ChainMatch> templateCache = new HashMap<>();
+
+    private static volatile boolean enabled = false;
+    private static volatile byte[] originalCellBytes;
+
+    private static final StackWalker WALKER = StackWalker.getInstance();
+
+    private static <T> Set<T> newWeakSet() {
+        return Collections.newSetFromMap(new WeakHashMap<>());
+    }
+
+    private static boolean offUiThread() {
+        return uiThread != null && Thread.currentThread() != uiThread;
+    }
+    //endregion
+
+    //region 钩子入口
+
+    public static void onCellBound(Cell<?> cell) {
+        if (!enabled || cell == null) return;
+        if (Thread.currentThread() != uiThread) return;
+
+        boolean[] busy = BUSY.get();
+        if (busy[0]) return;
+        busy[0] = true;
+        try {
+            onCellBoundImpl(cell);
+        } catch (Throwable t) {
+            if (FAILURES.incrementAndGet() > MAX_FAILURES) {
+                error("[CellProperty] Circuit breaker tripped in onCellBound", t);
+                disable();
+            } else if (DEBUG) {
+                error("[CellProperty] onCellBound failed", t);
+            }
+        } finally {
+            busy[0] = false;
+        }
+    }
+
+    private static void onCellBoundImpl(Cell<?> cell) {
+        removeCell(cell);
+
+        HostFrame hf = findHostContext();
+        if (hf == null) {
+            synchronized (cellState) {
+                cellState.put(cell, IGNORED_STATE);
+            }
+            return;
+        }
+
+        CellIdentity id = new CellIdentity(hf.hostClass, hf.hostMethod, hf.hostDesc,
+                                           hf.line, hf.creatorName);
+        ChainMatch match = findChainMatch(id);
+        int chainIdx = match == null ? -1 : match.index();
+        List<PropertyCall> chain = (match == null || match.chain() == null)
+            ? new ArrayList<>() : new ArrayList<>(match.chain());
+
+        synchronized (cellState) {
+            cellState.put(cell, new CellState(id, chainIdx, chain));
+            registerCellLocked(id, cell);
+        }
+
+        if (DEBUG) log("[CellProperty] Bound: " + id + " idx=" + chainIdx);
+    }
+
+    private static void registerCellLocked(CellIdentity id, Cell<?> cell) {
+        if (id == IGNORED_STATE.id) return;
+        idToCells.computeIfAbsent(id, k -> newWeakSet()).add(cell);
+        classToCells.computeIfAbsent(id.hostClass, k -> new LinkedHashSet<>()).add(id);
+    }
+
+    private static void unregisterCellLocked(CellIdentity id, Cell<?> cell) {
+        if (id == IGNORED_STATE.id) return;
+        Set<Cell<?>> s = idToCells.get(id);
+        if (s != null) {
+            s.remove(cell);
+            if (s.isEmpty()) {
+                idToCells.remove(id);
+                LinkedHashSet<CellIdentity> set = classToCells.get(id.hostClass);
+                if (set != null) set.remove(id);
+            }
+        }
+    }
+
+    public static void onCellFreed(Cell<?> cell) {
+        if (!enabled || cell == null) return;
+        if (Thread.currentThread() != uiThread) return;
+
+        boolean[] busy = BUSY.get();
+        if (busy[0]) return;
+        busy[0] = true;
+        try {
+            removeCell(cell);
+        } catch (Throwable t) {
+            if (DEBUG) log("[CellProperty] onCellFreed failed: " + t.getMessage());
+        } finally {
+            busy[0] = false;
+        }
+    }
+
+    public static void recordPropertyCall(Cell<?> cell, String method, String desc, Object[] args) {
+        if (!enabled || cell == null) return;
+        if (Thread.currentThread() != uiThread) return;
+
+        boolean[] busy = BUSY.get();
+        if (busy[0]) return;
+        busy[0] = true;
+        try {
+            recordPropertyCallImpl(cell, method, desc, args);
+        } catch (Throwable t) {
+            if (FAILURES.incrementAndGet() > MAX_FAILURES) {
+                error("[CellProperty] Circuit breaker tripped, disabling", t);
+                disable();
+            } else if (DEBUG) {
+                error("[CellProperty] recordPropertyCall failed (" + method + ")", t);
+            }
+        } finally {
+            busy[0] = false;
+        }
+    }
+
+    /** 同名同 desc 出现多次时按调用顺序填槽，不依赖"参数是否已填"。 */
+    private static void recordPropertyCallImpl(Cell<?> cell, String method, String desc, Object[] args) {
+        CellState state;
+        synchronized (cellState) { state = cellState.get(cell); }
+        if (state == null || state == IGNORED_STATE) return;
+
+        List<PropertyCall> chain = state.chain;
+        if (chain.isEmpty()) return;
+
+        Object[] sanitized = sanitizeArgs(args);
+        String key = method + desc;
+        int cursor = state.slotCursor.getOrDefault(key, 0);
+        int slot = findNthSlotByMethodDesc(chain, method, desc, cursor);
+        if (slot < 0) {
+            if (DEBUG) log("[CellProperty] Slot #" + cursor + " not found: " + method + desc);
+            return;
+        }
+        state.slotCursor.put(key, cursor + 1);
+
+        PropertyCall existing = chain.get(slot);
+        Object[] merged = mergeArgs(existing.args, sanitized);
+        if (!argsEqual(existing.args, merged)) {
+            chain.set(slot, new PropertyCall(method, desc, merged, existing.line));
+        }
+    }
+    //endregion
+
+    //region 身份与链
+
+    private static boolean isLibraryClass(String slashName) {
+        return slashName.startsWith("arc/")
+            || slashName.startsWith("java/")
+            || slashName.startsWith("javax/")
+            || slashName.startsWith("jdk/")
+            || slashName.startsWith("sun/")
+            || slashName.startsWith("kotlin/")
+            || slashName.startsWith("mindustry/")
+            || slashName.startsWith("rhino/")
+            || slashName.startsWith("org/mozilla/")
+            || slashName.startsWith("org/objectweb/");
+    }
+
+    private static HostFrame findHostContext() {
+        return WALKER.walk(s -> {
+            String creatorName = null;
+            for (StackWalker.StackFrame f : (Iterable<StackWalker.StackFrame>) s::iterator) {
+                String cls  = f.getClassName().replace('.', '/');
+                String name = f.getMethodName();
+
+                if (cls.equals(CL_CELL)
+                    || cls.startsWith("arc/util/pooling/")
+                    || cls.startsWith("nipx/")) continue;
+
+                if (cls.equals(CL_TABLE)) {
+                    if (TABLE_CELL_CREATORS.contains(name)) creatorName = name;
+                    continue;
+                }
+
+                if (isLibraryClass(cls)) return null;
+
+                return new HostFrame(cls, name, f.getDescriptor(), f.getLineNumber(), creatorName);
+            }
+            return null;
+        });
+    }
+
+    /**
+     * 找 id 对应的静态链。候选不唯一（同一行同一 creator、行号取不到时命中多条）
+     * 视为"不确定"，返回 NO_CHAIN。负缓存。
+     */
+    private static ChainMatch findChainMatch(CellIdentity id) {
+        ChainMatch cached = templateCache.get(id);
+        if (cached != null) return cached == NO_CHAIN ? null : cached;
+
+        Map<String, List<List<PropertyCall>>> chains =
+            chainCache.computeIfAbsent(id.hostClass, CellPropertyRef::buildChainModel);
+
+        List<List<PropertyCall>> methodChains = chains.get(methodKeyOf(id));
+        if (methodChains == null) {
+            templateCache.put(id, NO_CHAIN);
+            return null;
+        }
+
+        ChainMatch found = null;
+        int hits = 0;
+        for (int i = 0; i < methodChains.size(); i++) {
+            List<PropertyCall> chain = methodChains.get(i);
+            if (chain.isEmpty()) continue;
+            PropertyCall creator = chain.get(0);
+            if (id.creatorName != null && !id.creatorName.equals(creator.method)) continue;
+            if (id.line >= 0 && creator.line >= 0 && id.line != creator.line) continue;
+            if (found == null) found = new ChainMatch(i, chain);
+            hits++;
+        }
+        ChainMatch r = (hits == 1) ? found : NO_CHAIN;
+        templateCache.put(id, r);
+        return r == NO_CHAIN ? null : r;
+    }
+
+    private static Map<String, List<List<PropertyCall>>> buildChainModel(String slashName) {
+        try {
+            Class<?> hostClass = Class.forName(slashName.replace('/', '.'), false, Vars.mods.mainLoader());
+            byte[] bytes = fetchCurrentBytecode(hostClass);
+            return bytes == null ? Map.of() : extractCellChains(bytes);
+        } catch (Throwable t) {
+            error("[CellProperty] chain model build failed for " + slashName, t);
+            return Map.of();
+        }
+    }
+
+    private static String methodKeyOf(CellIdentity id) { return id.hostMethod + ":" + id.hostDesc; }
+
+    private static String methodNameFromKey(String methodKey) {
+        int colon = methodKey.indexOf(':');
+        return colon < 0 ? methodKey : methodKey.substring(0, colon);
+    }
+
+    private static String methodDescFromKey(String methodKey) {
+        int colon = methodKey.indexOf(':');
+        return colon < 0 ? "()V" : methodKey.substring(colon + 1);
+    }
+
+    private static boolean isLambdaKey(String k) {
+        return methodNameFromKey(k).startsWith("lambda$");
+    }
+
+    /** lambda$build$3 → "build"。 */
+    private static String lambdaOwner(String k) {
+        String n = methodNameFromKey(k);
+        int a = n.indexOf('$');
+        int b = n.lastIndexOf('$');
+        return a >= 0 && a < b ? n.substring(a + 1, b) : "";
+    }
+
+    private static int lambdaOrdinal(String k) {
+        String n = methodNameFromKey(k);
+        try { return Integer.parseInt(n.substring(n.lastIndexOf('$') + 1)); }
+        catch (Exception e) { return 0; }
+    }
+
+    private static int findNthSlotByMethodDesc(List<PropertyCall> chain, String method, String desc, int nth) {
+        int count = 0;
+        for (int i = 0; i < chain.size(); i++) {
+            PropertyCall pc = chain.get(i);
+            if (pc.method.equals(method) && pc.desc.equals(desc)) {
+                if (count == nth) return i;
+                count++;
+            }
+        }
+        return -1;
+    }
+
+    private static Object[] mergeArgs(Object[] template, Object[] runtimeKnown) {
+        int lt = template == null ? 0 : template.length;
+        int lr = runtimeKnown == null ? 0 : runtimeKnown.length;
+        if (lt == 0) return runtimeKnown;
+        if (lr == 0) return template;
+        if (lt != lr) return runtimeKnown;
+        Object[] out = template.clone();
+        for (int j = 0; j < out.length; j++) {
+            if (out[j] == null && runtimeKnown[j] != null) out[j] = runtimeKnown[j];
+        }
+        return out;
+    }
+
+    private static List<PropertyCall> mergeTemplate(List<PropertyCall> template,
+                                                    List<PropertyCall> runtimeKnown) {
+        if (runtimeKnown == null || runtimeKnown.isEmpty()) return new ArrayList<>(template);
+
+        Map<String, List<PropertyCall>> runtimeByKey = new HashMap<>();
+        for (PropertyCall r : runtimeKnown) {
+            runtimeByKey.computeIfAbsent(r.method + r.desc, k -> new ArrayList<>()).add(r);
+        }
+
+        Map<String, Integer> seen = new HashMap<>();
+        List<PropertyCall> out = new ArrayList<>(template.size());
+        for (PropertyCall t : template) {
+            String key = t.method + t.desc;
+            int nth = seen.merge(key, 1, Integer::sum) - 1;
+            List<PropertyCall> list = runtimeByKey.get(key);
+            PropertyCall r = (list != null && nth < list.size()) ? list.get(nth) : null;
+            Object[] merged = r == null ? t.args : mergeArgs(t.args, r.args);
+            out.add(new PropertyCall(t.method, t.desc, merged, t.line));
+        }
+        return out;
+    }
+    //endregion
+
+    //region 热替换回调
+
+    public static void afterRedefined(String slashName, byte[] newBytecode) {
+        if (!enabled) return;
+        Runnable work = () -> {
+            boolean[] busy = BUSY.get();
+            if (busy[0]) return;
+            busy[0] = true;
+            try {
+                afterRedefinedImpl(slashName, newBytecode);
+            } catch (Throwable t) {
+                error("[CellProperty] afterRedefined failed for " + slashName, t);
+            } finally {
+                busy[0] = false;
+            }
+        };
+        if (Thread.currentThread() == uiThread) work.run();
+        else if (Core.app != null) Core.app.post(work);
+        else work.run();
+    }
+
+    private static void afterRedefinedImpl(String slashName, byte[] newBytecode) {
+        info("[CellProperty] Class redefined: " + slashName);
+
+        Map<String, List<List<PropertyCall>>> oldModel = chainCache.get(slashName);
+        if (oldModel == null) {
+            if (DEBUG) log("[CellProperty] No old model for " + slashName);
+            return;
+        }
+
+        Map<String, List<List<PropertyCall>>> newModel = extractCellChains(newBytecode);
+
+        Map<String, String> methodPairs = matchMethods(oldModel, newModel);
+
+        Map<String, Map<Integer, Integer>> chainAligns = new HashMap<>();
+        Map<String, String> oldMkToNewMk = new HashMap<>();
+        Set<String> matchedNew = new HashSet<>();
+
+        for (Entry<String, List<List<PropertyCall>>> oe : oldModel.entrySet()) {
+            String oldMk = oe.getKey();
+            String newMk = methodPairs.get(oldMk);
+            if (newMk == null) continue;
+            List<List<PropertyCall>> newChains = newModel.get(newMk);
+            if (newChains == null) continue;
+            Map<Integer, Integer> align = alignChains(oe.getValue(), newChains);
+            chainAligns.put(oldMk, align);
+            oldMkToNewMk.put(oldMk, newMk);
+            for (Entry<Integer, Integer> me : align.entrySet()) {
+                matchedNew.add(newMk + "#" + me.getValue());
+            }
+        }
+
+        List<CellEntry> entries = new ArrayList<>();
+        synchronized (cellState) {
+            for (Entry<Cell<?>, CellState> e : cellState.entrySet()) {
+                Cell<?> c = e.getKey();
+                if (c == null) continue;
+                CellState st = e.getValue();
+                if (st == IGNORED_STATE) continue;
+                if (!st.id.hostClass.equals(slashName)) continue;
+                entries.add(new CellEntry(c, st.id, st.chainIdx, st.chain));
+            }
+        }
+
+        int updated = 0, removed = 0, added = 0, skipped = 0;
+        Map<Cell<?>, CellIdentity> newIdOf = new IdentityHashMap<>();
+        Map<Cell<?>, Integer> newIdxOf = new IdentityHashMap<>();
+        Map<Cell<?>, List<PropertyCall>> newChainOf = new IdentityHashMap<>();
+
+        for (CellEntry ce : entries) {
+            Cell<?> cell = ce.cell;
+            if (cell.getTable() == null) continue;
+
+            String oldMk = methodKeyOf(ce.id);
+            String newMk = oldMkToNewMk.get(oldMk);
+
+            if (newMk == null) {
+                // 方法未配对（lambda 名字漂移且相似度不足，或方法被删）→ 保持不动，坐标作废
+                skipped++;
+                continue;
+            }
+
+            List<List<PropertyCall>> newChains = newModel.get(newMk);
+            if (newChains == null || newChains.isEmpty()) {
+                // 方法存在但站点被删光 → 移除
+                removeCellFromTable(cell);
+                removed++;
+                continue;
+            }
+
+            if (ce.chainIdx < 0) {
+                // 绑定时就没链（不确定的站点），保持不动，坐标作废
+                skipped++;
+                continue;
+            }
+
+            Map<Integer, Integer> align = chainAligns.get(oldMk);
+            Integer newIdx = align == null ? null : align.get(ce.chainIdx);
+
+            if (newIdx == null) {
+                // 站点在新模型里没有对应 → 移除
+                removeCellFromTable(cell);
+                removed++;
+                continue;
+            }
+
+            List<PropertyCall> newTemplate = newChains.get(newIdx);
+            List<PropertyCall> mergedNew = mergeTemplate(newTemplate, ce.chain);
+
+            PropertyCall newCreator = mergedNew.get(0);
+            CellIdentity newId = new CellIdentity(
+                slashName,
+                methodNameFromKey(newMk),
+                methodDescFromKey(newMk),
+                newCreator.line,
+                newCreator.method);
+
+            try {
+                List<PropertyCall> effective = applyChainUpdate(cell, ce.chain, mergedNew);
+                newIdOf.put(cell, newId);
+                newIdxOf.put(cell, newIdx);
+                newChainOf.put(cell, effective);
+                if (effective == mergedNew) {
+                    if (!callsEqual(ce.chain, mergedNew)) updated++;
+                } else {
+                    skipped++;
+                }
+            } catch (Throwable t) {
+                error("[CellProperty] applyChainUpdate failed for " + ce.id, t);
+                newIdOf.put(cell, newId);
+                newIdxOf.put(cell, newIdx);
+                newChainOf.put(cell, ce.chain);
+                skipped++;
+            }
+        }
+
+        chainCache.put(slashName, newModel);
+        templateCache.keySet().removeIf(id -> id.hostClass.equals(slashName));
+
+        synchronized (cellState) {
+            idToCells.keySet().removeIf(id -> id.hostClass.equals(slashName));
+            classToCells.remove(slashName);
+
+            for (Entry<Cell<?>, CellState> e : cellState.entrySet()) {
+                Cell<?> c = e.getKey();
+                if (c == null) continue;
+                CellState st = e.getValue();
+                if (st == IGNORED_STATE) continue;
+                if (!st.id.hostClass.equals(slashName)) continue;
+
+                CellIdentity nid = newIdOf.get(c);
+                if (nid != null) {
+                    st.id = nid;
+                    Integer ni = newIdxOf.get(c);
+                    st.chainIdx = ni != null ? ni : -1;
+                    List<PropertyCall> nc = newChainOf.get(c);
+                    if (nc != null) st.chain = new ArrayList<>(nc);
+                } else {
+                    // 没有跟上新模型：坐标作废，只登记
+                    st.chainIdx = -1;
+                }
+                registerCellLocked(st.id, c);
+            }
+        }
+
+        List<CellIdentity> idsAfter = new ArrayList<>();
+        synchronized (cellState) {
+            LinkedHashSet<CellIdentity> set = classToCells.get(slashName);
+            if (set != null) idsAfter.addAll(set);
+        }
+
+        for (Entry<String, List<List<PropertyCall>>> e : newModel.entrySet()) {
+            String mk = e.getKey();
+            List<List<PropertyCall>> chains = e.getValue();
+            for (int j = 0; j < chains.size(); j++) {
+                if (matchedNew.contains(mk + "#" + j)) continue;
+                List<PropertyCall> chain = chains.get(j);
+                if (chain.isEmpty()) continue;
+                PropertyCall creator = chain.get(0);
+                if (!isTableCellCreator(CL_TABLE, creator.method)) continue;
+                try {
+                    if (appendNewCell(slashName, mk, chain, idsAfter)) added++;
+                } catch (Throwable t) {
+                    error("[CellProperty] appendNewCell failed for " + mk, t);
+                }
+            }
+        }
+
+        info("[CellProperty] Updated: " + updated + ", Removed: " + removed
+             + ", Added: " + added + ", Skipped: " + skipped + " for " + slashName);
+    }
+
+    /**
+     * 方法级配对。LambdaAligner 已经跑过、lambda 名大概率已对齐；
+     * 这里作为兜底：非 lambda 同 key 直接配；lambda 按相似度配对，空方法不参与。
+     */
+    private static Map<String, String> matchMethods(Map<String, List<List<PropertyCall>>> oldM,
+                                                    Map<String, List<List<PropertyCall>>> newM) {
+        record Pair(String o, String n, double s, int dist) { }
+
+        Map<String, String> out = new HashMap<>();
+
+        for (String k : oldM.keySet()) {
+            if (!isLambdaKey(k) && newM.containsKey(k)) out.put(k, k);
+        }
+
+        List<Pair> pairs = new ArrayList<>();
+        for (Entry<String, List<List<PropertyCall>>> oe : oldM.entrySet()) {
+            String ok = oe.getKey();
+            if (!isLambdaKey(ok) || oe.getValue().isEmpty()) continue;
+            for (Entry<String, List<List<PropertyCall>>> ne : newM.entrySet()) {
+                String nk = ne.getKey();
+                if (!isLambdaKey(nk) || ne.getValue().isEmpty()) continue;
+                if (!lambdaOwner(ok).equals(lambdaOwner(nk))) continue;
+                if (!methodDescFromKey(ok).equals(methodDescFromKey(nk))) continue;
+                double s = methodScore(oe.getValue(), ne.getValue());
+                if (s >= 0.6) {
+                    pairs.add(new Pair(ok, nk, s, Math.abs(lambdaOrdinal(ok) - lambdaOrdinal(nk))));
+                }
+            }
+        }
+
+        pairs.sort(Comparator
+            .<Pair>comparingDouble(p -> -p.s())
+            .thenComparingInt(Pair::dist)
+            .thenComparing(Pair::o)
+            .thenComparing(Pair::n));
+
+        Set<String> used = new HashSet<>(out.values());
+        for (Pair p : pairs) {
+            if (!out.containsKey(p.o()) && used.add(p.n())) out.put(p.o(), p.n());
+        }
+        return out;
+    }
+
+    /** 链级相似度总和 / 两侧自身总和的最大值，范围 [0, 1]。 */
+    private static double methodScore(List<List<PropertyCall>> olds, List<List<PropertyCall>> news) {
+        double got = 0;
+        for (Entry<Integer, Integer> e : alignChains(olds, news).entrySet()) {
+            got += chainSimilarityStatic(olds.get(e.getKey()), news.get(e.getValue()));
+        }
+        return got / Math.max(selfScore(olds), selfScore(news));
+    }
+
+    private static int selfScore(List<List<PropertyCall>> cs) {
+        int s = 0;
+        for (List<PropertyCall> c : cs) s += chainSimilarityStatic(c, c);
+        return Math.max(s, 1);
+    }
+
+    private static Map<Integer, Integer> alignChains(List<List<PropertyCall>> olds,
+                                                     List<List<PropertyCall>> news) {
+        int n = olds.size(), m = news.size();
+        Map<Integer, Integer> out = new HashMap<>();
+        if (n == 0 || m == 0) return out;
+
+        int[][] score = new int[n][m];
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < m; j++) {
+                score[i][j] = chainSimilarityStatic(olds.get(i), news.get(j));
+            }
+        }
+
+        int[][] dp = new int[n + 1][m + 1];
+        for (int i = n - 1; i >= 0; i--) {
+            for (int j = m - 1; j >= 0; j--) {
+                int best = Math.max(dp[i + 1][j], dp[i][j + 1]);
+                if (score[i][j] > 0) best = Math.max(best, dp[i + 1][j + 1] + score[i][j]);
+                dp[i][j] = best;
+            }
+        }
+        for (int i = 0, j = 0; i < n && j < m; ) {
+            if (score[i][j] > 0 && dp[i][j] == dp[i + 1][j + 1] + score[i][j]) {
+                out.put(i, j); i++; j++;
+            } else if (dp[i][j] == dp[i + 1][j]) {
+                i++;
+            } else {
+                j++;
+            }
+        }
+        return out;
+    }
+
+    private static int chainSimilarityStatic(List<PropertyCall> oldChain, List<PropertyCall> newChain) {
+        if (oldChain == null || oldChain.isEmpty() || newChain == null || newChain.isEmpty()) return 0;
+        PropertyCall oc = oldChain.get(0);
+        PropertyCall nc = newChain.get(0);
+        if (!oc.method.equals(nc.method)) return 0;
+
+        int s = 1;
+        if (argsEqual(oc.args, nc.args)) s += 4;
+        int min = Math.min(oldChain.size(), newChain.size());
+        for (int k = 1; k < min; k++) {
+            if (oldChain.get(k).method.equals(newChain.get(k).method)) s += 1;
+        }
+        return s;
+    }
+
+    private static boolean appendNewCell(String slashName, String methodKey,
+                                         List<PropertyCall> newChain, List<CellIdentity> existingIds) throws Throwable {
+        PropertyCall creator = newChain.get(0);
+
+        if (!hasUsableArgs(creator)) {
+            if (DEBUG) log("[CellProperty] Skipping append with unknown creator args: " + creator.method);
+            return false;
+        }
+
+        CellIdentity beforeId = null, afterId = null;
+        int beforeLine = Integer.MIN_VALUE, afterLine = Integer.MAX_VALUE;
+        for (CellIdentity id : existingIds) {
+            if (!methodKeyOf(id).equals(methodKey)) continue;
+            if (id.line < 0) continue;
+            if (id.line < creator.line && id.line > beforeLine) { beforeId = id; beforeLine = id.line; }
+            if (id.line > creator.line && id.line < afterLine)  { afterId = id;  afterLine = id.line; }
+        }
+
+        Table targetTable = null;
+        int insertCellIndex = -1;
+
+        Cell<?> anchor = beforeId != null ? firstAliveCell(beforeId) : null;
+        if (anchor != null && anchor.getTable() != null) {
+            targetTable = anchor.getTable();
+            insertCellIndex = targetTable.getCells().indexOf(anchor, true) + 1;
+        } else {
+            anchor = afterId != null ? firstAliveCell(afterId) : null;
+            if (anchor != null && anchor.getTable() != null) {
+                targetTable = anchor.getTable();
+                insertCellIndex = targetTable.getCells().indexOf(anchor, true);
+            }
+        }
+
+        if (targetTable == null) {
+            for (CellIdentity id : existingIds) {
+                if (!methodKeyOf(id).equals(methodKey)) continue;
+                Cell<?> c = firstAliveCell(id);
+                if (c != null && c.getTable() != null) {
+                    targetTable = c.getTable();
+                    insertCellIndex = targetTable.getCells().size;
+                    break;
+                }
+            }
+        }
+        if (targetTable == null) return false;
+
+        MethodType type = MethodType.fromMethodDescriptorString(creator.desc, Vars.mods.mainLoader());
+        MethodHandle mh = findTableMethod(creator.method, type);
+        if (mh == null) return false;
+
+        Object[] converted = creator.args == null ? null : convertArgs(type, creator.args);
+        ArcReflectionAdapter.clearImplicitEndRow(targetTable);
+
+        Cell<?> newCell = invoke(mh, targetTable, converted);
+        if (newCell == null) return false;
+
+        CellIdentity newId = new CellIdentity(slashName,
+            methodNameFromKey(methodKey), methodDescFromKey(methodKey),
+            creator.line, creator.method);
+
+        int newIdx = -1;
+        Map<String, List<List<PropertyCall>>> chains = chainCache.get(slashName);
+        if (chains != null) {
+            List<List<PropertyCall>> methodChains = chains.get(methodKey);
+            if (methodChains != null) {
+                for (int i = 0; i < methodChains.size(); i++) {
+                    if (methodChains.get(i) == newChain || callsEqual(methodChains.get(i), newChain)) {
+                        newIdx = i; break;
+                    }
+                }
+            }
+        }
+
+        synchronized (cellState) {
+            cellState.put(newCell, new CellState(newId, newIdx, new ArrayList<>(newChain)));
+            registerCellLocked(newId, newCell);
+        }
+        existingIds.add(newId);
+
+        List<PropertyCall> props = new ArrayList<>(newChain.subList(1, newChain.size()));
+        applyAllCalls(newCell, props);
+
+        ArcReflectionAdapter.ensureTableRows(targetTable,
+            ArcReflectionAdapter.getCellRow(newCell) + 1);
+        targetTable.invalidate();
+
+        if (insertCellIndex >= 0) {
+            Seq<Cell> cells = targetTable.getCells();
+            int currentIdx = cells.indexOf(newCell, true);
+            if (currentIdx != -1 && insertCellIndex < cells.size - 1) {
+                cells.remove(newCell, true);
+                cells.insert(insertCellIndex, newCell);
+
+                Element element = newCell.get();
+                if (element != null) {
+                    Seq<Element> children = targetTable.getChildren();
+                    children.remove(element, true);
+                    int elementInsertIndex = children.size;
+                    for (int i = insertCellIndex + 1; i < cells.size; i++) {
+                        Cell<?> nextCell = cells.get(i);
+                        if (!nextCell.hasElement()) continue;
+                        int idx = children.indexOf(nextCell.get(), true);
+                        if (idx != -1) { elementInsertIndex = idx; break; }
+                    }
+                    children.insert(elementInsertIndex, element);
+                }
+            }
+        }
+
+        repairTableGrid(targetTable);
+        Core.app.post(targetTable::invalidateHierarchy);
+        return true;
+    }
+
+    private static Cell<?> firstAliveCell(CellIdentity id) {
+        if (id == IGNORED_STATE.id) return null;
+        synchronized (cellState) {
+            Set<Cell<?>> s = idToCells.get(id);
+            if (s == null) return null;
+            for (Cell<?> c : s) {
+                if (c != null) return c;
+            }
+        }
+        return null;
+    }
+    //endregion
+
+    //region 属性与子元素更新
+
+    /**
+     * 应用新链。
+     * @return 该 Cell 现在实际对应的链（作为下一次热重载的旧基线）。
+     *         - 全部应用成功：返回 newChain。
+     *         - 部分应用（有未知参数）或 dryRun 失败：返回 baseline（creator 新 + 属性旧），
+     *           下一次热重载会重新尝试。
+     */
+    private static List<PropertyCall> applyChainUpdate(Cell<?> cell, List<PropertyCall> oldChain,
+                                                       List<PropertyCall> newChain) {
+        if (oldChain == null || oldChain.isEmpty()) {
+            if (!newChain.isEmpty() && isTableCellCreator(CL_TABLE, newChain.get(0).method)) {
+                updateChildElement(cell, newChain.get(0));
+            }
+            List<PropertyCall> props = newChain.subList(newChain.isEmpty() ? 0 : 1, newChain.size());
+            applyAllCalls(cell, props);
+            return newChain;
+        }
+
+        PropertyCall oldCreator = oldChain.get(0);
+        PropertyCall newCreator = newChain.get(0);
+
+        boolean elementUpdated = false;
+        if (isTableCellCreator(CL_TABLE, newCreator.method)) {
+            if (!oldCreator.method.equals(newCreator.method)
+                || !argsEqual(oldCreator.args, newCreator.args)) {
+                updateChildElement(cell, newCreator);
+                elementUpdated = true;
+            }
+        }
+
+        List<PropertyCall> oldProps = new ArrayList<>(oldChain.subList(1, oldChain.size()));
+        List<PropertyCall> newProps = new ArrayList<>(newChain.subList(1, newChain.size()));
+        boolean propsChanged = !callsEqual(oldProps, newProps);
+
+        if (!elementUpdated && !propsChanged) return newChain;
+
+        List<PropertyCall> baseline = new ArrayList<>();
+        baseline.add(newCreator);
+        baseline.addAll(oldProps);
+
+        boolean allUsable = true;
+        for (PropertyCall p : newProps) {
+            if (!hasUsableArgs(p)) { allUsable = false; break; }
+        }
+
+        if (!allUsable) {
+            // 部分应用：只补"新增或改变且参数已知"的调用，不动旧属性
+            for (PropertyCall p : newProps) {
+                if (hasUsableArgs(p) && !containsCall(oldProps, p)) {
+                    invokeCellMethod(cell, p.method, p.desc, p.args);
+                }
+            }
+            return baseline;
+        }
+
+        if (!dryRunProperties(newProps)) return baseline;
+
+        boolean touchesRow = chainTouchesRow(oldProps) || chainTouchesRow(newProps);
+        boolean savedEndRow = !touchesRow && ArcReflectionAdapter.isEndRow(cell);
+
+        resetCell(cell);
+        applyAllCalls(cell, newProps);
+
+        if (!touchesRow) ArcReflectionAdapter.setEndRow(cell, savedEndRow);
+        return newChain;
+    }
+
+    private static boolean containsCall(List<PropertyCall> l, PropertyCall p) {
+        for (PropertyCall c : l) {
+            if (c.method.equals(p.method) && c.desc.equals(p.desc) && argsEqual(c.args, p.args)) return true;
+        }
+        return false;
+    }
+
+    private static boolean chainTouchesRow(List<PropertyCall> calls) {
+        for (PropertyCall c : calls) {
+            if ("row".equals(c.method)) return true;
+        }
+        return false;
+    }
+
+    private static void applyAllCalls(Cell<?> cell, List<PropertyCall> calls) {
+        for (PropertyCall call : calls) {
+            if (hasUsableArgs(call)) invokeCellMethod(cell, call.method, call.desc, call.args);
+        }
+    }
+
+    private static boolean dryRunProperties(List<PropertyCall> calls) {
+        Table dummyTable = new Table();
+        Cell<?> dummyCell = dummyTable.add();
+        try {
+            for (PropertyCall call : calls) {
+                if (!hasUsableArgs(call)) continue;
+                invokeCellMethodOrThrow(dummyCell, call.method, call.desc, call.args);
+            }
+            return true;
+        } catch (Throwable t) {
+            if (DEBUG) log("[CellProperty] dry-run exception: " + t.getMessage());
+            return false;
+        }
+    }
+
+    private static void resetCell(Cell<?> cell) {
+        cell.set(Cell.defaults());
+        ArcReflectionAdapter.setEndRow(cell, false);
+    }
+
+    private static void updateChildElement(Cell<?> cell, PropertyCall creator) {
+        Element oldElement = cell.get();
+
+        if (oldElement != null) {
+            if (("table".equals(creator.method) && oldElement instanceof Table)
+                || ("pane".equals(creator.method) && oldElement instanceof ScrollPane)
+                || ("stack".equals(creator.method) && oldElement instanceof Stack)) {
+                if (DEBUG) log("[CellProperty] Skipping container replacement: " + creator.method);
+                return;
+            }
+        }
+
+        if (oldElement != null && creator.args != null && creator.args.length > 0
+            && creator.args[0] instanceof String newText) {
+            if (("label".equals(creator.method) || "add".equals(creator.method))
+                && oldElement instanceof Label label) {
+                label.setText(newText);
+                return;
+            }
+            if (("button".equals(creator.method) || "textButton".equals(creator.method))
+                && oldElement instanceof TextButton button) {
+                button.setText(newText);
+                return;
+            }
+        }
+
+        if (!hasUsableArgs(creator)) {
+            if (DEBUG) log("[CellProperty] Skipping rebuild with unknown args: " + creator.method);
+            return;
+        }
+
+        Table table = cell.getTable();
+        if (table == null) return;
+
+        try {
+            MethodType type = MethodType.fromMethodDescriptorString(creator.desc, Vars.mods.mainLoader());
+            MethodHandle mh = findTableMethod(creator.method, type);
+            if (mh == null) return;
+
+            Table    dummyTable = new Table();
+            Object[] converted  = creator.args == null ? null : convertArgs(type, creator.args);
+            Cell<?> dummyCell = invoke(mh, dummyTable, converted);
+            if (dummyCell == null || dummyCell.get() == null) return;
+
+            Element newElement = dummyCell.get();
+            BindCell bind = BindCell.of(cell);
+            bind.replace(newElement, false);
+            Pools.free(bind);
+        } catch (Throwable e) {
+            error("[CellProperty] Failed to update child element: " + creator.method, e);
+        }
+    }
+
+    private static MethodHandle findTableMethod(String name, MethodType methodType) {
+        try { return lookup().findVirtual(Table.class, name, methodType); }
+        catch (Throwable ignored) { return null; }
+    }
+
+    private static boolean callsEqual(List<PropertyCall> a, List<PropertyCall> b) {
+        if (a == b) return true;
+        if (a == null || b == null) return false;
+        if (a.size() != b.size()) return false;
+        for (int i = 0; i < a.size(); i++) {
+            PropertyCall ca = a.get(i), cb = b.get(i);
+            if (!ca.method.equals(cb.method)) return false;
+            if (!ca.desc.equals(cb.desc)) return false;
+            if (!argsEqual(ca.args, cb.args)) return false;
+        }
+        return true;
+    }
+
+    private static boolean argsEqual(Object[] a, Object[] b) {
+        int la = a == null ? 0 : a.length;
+        int lb = b == null ? 0 : b.length;
+        if (la != lb) return false;
+        for (int i = 0; i < la; i++) {
+            if (!Objects.equals(a[i], b[i])) return false;
+        }
+        return true;
+    }
+
+    private static boolean hasUsableArgs(PropertyCall call) {
+        return hasUsableValue(call.args);
+    }
+
+    private static boolean hasUsableValue(Object[] arr) {
+        if (arr == null) return true;
+        for (Object a : arr) {
+            if (a == null) return false;
+            if (a instanceof LambdaInfo li && !hasUsableValue(li.captures())) return false;
+        }
+        return true;
+    }
+
+    private static void invokeCellMethod(Cell<?> cell, String methodName, String methodDesc, Object[] args) {
+        try { invokeCellMethodOrThrow(cell, methodName, methodDesc, args); }
+        catch (Throwable e) { error("[CellProperty] Failed to invoke " + methodName, e); }
+    }
+
+    private static void invokeCellMethodOrThrow(Cell<?> cell, String methodName,
+                                                String methodDesc, Object[] args) throws Throwable {
+        int len = args == null ? 0 : args.length;
+        if ("row".equals(methodName) && len == 0) {
+            ArcReflectionAdapter.setEndRow(cell, true);
+            return;
+        }
+        MethodType type = MethodType.fromMethodDescriptorString(methodDesc, Vars.mods.mainLoader());
+        MethodHandle mh = findMatchingMethod(methodName, type);
+        if (mh == null) throw new NoSuchMethodException(methodName + "(" + len + " args)");
+
+        Object[] converted = convertArgs(type, args);
+        Class<?> receiverType = mh.type().parameterType(0);
+        if (receiverType.isAssignableFrom(Cell.class)) {
+            invoke(mh, cell, converted);
+        } else if (receiverType.isAssignableFrom(Table.class)) {
+            invoke(mh, cell.getTable(), converted);
+        } else {
+            throw new IllegalStateException("Unexpected receiver type: " + receiverType);
+        }
+
+        if ("colspan".equals(methodName)) {
+            Table table = cell.getTable();
+            if (table == null) return;
+            ArcReflectionAdapter.recalculateColumns(table);
+            if (cell.hasElement()) cell.get().invalidateHierarchy();
+            table.invalidate();
+            table.layout();
+        }
+    }
+
+    private static MethodHandle findMatchingMethod(String name, MethodType methodType) {
+        try { return lookup().findVirtual(Cell.class, name, methodType); }
+        catch (Throwable ignored) { }
+        try { return lookup().findVirtual(Table.class, name, methodType); }
+        catch (Throwable ignored) { }
+        return null;
+    }
+
+    private static Object[] convertArgs(MethodType methodType, Object[] args) {
+        if (args == null) return null;
+        Object[] result = new Object[args.length];
+        for (int i = 0; i < args.length; i++) {
+            Object arg = args[i];
+            if (i >= methodType.parameterCount()) { result[i] = arg; continue; }
+            Class<?> target = methodType.parameterType(i);
+            if (arg == null) {
+                result[i] = target.isInterface() ? makeDummyProxy(target) : null;
+                continue;
+            }
+            if (arg instanceof LambdaInfo li) {
+                result[i] = makeLambda(li, target);
+                continue;
+            }
+            result[i] = switch (target.getTypeName()) {
+                case "void" -> arg;
+                case "boolean" -> arg instanceof Number n ? n.intValue() != 0 : arg;
+                case "byte" -> ((Number) arg).byteValue();
+                case "char" -> arg instanceof Number n ? (char) n.intValue() : (char) arg;
+                case "short" -> ((Number) arg).shortValue();
+                case "int" -> ((Number) arg).intValue();
+                case "long" -> ((Number) arg).longValue();
+                case "float" -> ((Number) arg).floatValue();
+                case "double" -> ((Number) arg).doubleValue();
+                default -> CharSequence.class.isAssignableFrom(target) ? String.valueOf(arg) : arg;
+            };
+        }
+        return result;
+    }
+
+    private static Object makeDummyProxy(Class<?> target) {
+        return Proxy.newProxyInstance(target.getClassLoader(), new Class<?>[]{target},
+            (proxy, method, methodArgs) -> {
+                if (method.getDeclaringClass() == Object.class) {
+                    return switch (method.getName()) {
+                        case "toString" -> "DummyProxy[" + target.getSimpleName() + "]";
+                        case "hashCode" -> System.identityHashCode(proxy);
+                        case "equals" -> proxy == methodArgs[0];
+                        default -> null;
+                    };
+                }
+                return null;
+            });
+    }
+
+    private static Object makeLambda(LambdaInfo li, Class<?> target) {
+        if (!hasUsableValue(li.captures())) return makeDummyProxy(target);
+
+        return Proxy.newProxyInstance(target.getClassLoader(), new Class<?>[]{target},
+            (proxy, method, methodArgs) -> {
+                if (method.getDeclaringClass() == Object.class) {
+                    return switch (method.getName()) {
+                        case "toString" -> "LambdaProxy[" + li.methodName() + "]";
+                        case "hashCode" -> System.identityHashCode(proxy);
+                        case "equals" -> proxy == methodArgs[0];
+                        default -> null;
+                    };
+                }
+                try {
+                    Class<?> owner = loadClass(li.ownerClass().replace('/', '.'));
+                    MethodType type = MethodType.fromMethodDescriptorString(
+                        li.methodDesc(), owner.getClassLoader());
+                    boolean isStatic;
+                    MethodHandle handle;
+                    try {
+                        handle = lookup().findStatic(owner, li.methodName(), type);
+                        isStatic = true;
+                    } catch (Throwable e) {
+                        handle = lookup().findSpecial(owner, li.methodName(), type, owner);
+                        isStatic = false;
+                    }
+                    if (handle == null) return null;
+
+                    Object[] allArgs = new Object[li.captures().length
+                        + (methodArgs == null ? 0 : methodArgs.length)];
+                    System.arraycopy(li.captures(), 0, allArgs, 0, li.captures().length);
+                    if (methodArgs != null)
+                        System.arraycopy(methodArgs, 0, allArgs, li.captures().length, methodArgs.length);
+
+                    if (isStatic) return invoke(handle, allArgs);
+
+                    Object instance = allArgs.length > 0 ? allArgs[0] : null;
+                    if (instance == null) return null;
+                    Object[] actual = new Object[Math.max(0, allArgs.length - 1)];
+                    if (actual.length > 0)
+                        System.arraycopy(allArgs, 1, actual, 0, actual.length);
+                    return invoke(handle, instance, actual);
+                } catch (Throwable t) {
+                    error("[CellProperty] Lambda invocation failed", t);
+                    return null;
+                }
+            });
+    }
+    //endregion
+
+    //region 链移除
+
+    private static void removeCellFromTable(Cell<?> cell) {
+        Table table = cell.getTable();
+        if (table != null) {
+            try {
+                BindCell bind = BindCell.of(cell);
+                bind.remove();
+                Pools.free(bind);
+                table.getCells().remove(cell, true);
+                Core.app.post(table::invalidateHierarchy);
+            } catch (Throwable t) {
+                error("[CellProperty] Failed to remove cell " + cell, t);
+            }
+        }
+        removeCell(cell);
+    }
+
+    public static void removeCell(Cell<?> cell) {
+        synchronized (cellState) {
+            CellState st = cellState.remove(cell);
+            if (st == null || st == IGNORED_STATE) return;
+            unregisterCellLocked(st.id, cell);
+        }
+    }
+    //endregion
+
+    //region ASM 字节码分析
+
+    private static final Set<String> CELL_PROPERTY_METHODS = new HashSet<>(Arrays.asList(
+        "size", "width", "height",
+        "minSize", "minWidth", "minHeight",
+        "maxSize", "maxWidth", "maxHeight",
+        "pad", "padTop", "padLeft", "padBottom", "padRight",
+        "fill", "fillX", "fillY",
+        "align", "center", "top", "left", "bottom", "right",
+        "grow", "growX", "growY",
+        "row",
+        "expand", "expandX", "expandY",
+        "colspan",
+        "uniform", "uniformX", "uniformY",
+        "color",
+        "margin", "marginTop", "marginLeft", "marginBottom", "marginRight",
+        "name", "disabled", "touchable", "visible", "scaling",
+        "wrap", "ellipsis", "labelAlign", "fontScale",
+        "scrollX", "scrollY", "maxTextLength", "valid",
+        "tooltip", "style", "checked"
+    ));
+
+    private static final Set<String> TABLE_CELL_CREATORS = new HashSet<>(Arrays.asList(
+        "add", "button", "image", "label", "textButton",
+        "imageButton", "area", "table", "pane", "stack",
+        "toggleButton", "imageTextButton", "checkBox", "slider",
+        "textField", "selectBox", "list", "tree"
+    ));
+
+    public static Map<String, List<List<PropertyCall>>> extractCellChains(byte[] bytecode) {
+        Map<String, List<List<PropertyCall>>> result = new HashMap<>();
+        if (bytecode == null) return result;
+        try {
+            ClassReader cr = new ClassReader(bytecode);
+            ClassNode   cn = new ClassNode();
+            cr.accept(cn, ClassReader.SKIP_FRAMES);
+            for (MethodNode mn : cn.methods) {
+                MethodExtraction ex = extractFromMethod(cn, mn);
+                if (ex.analyzed()) {
+                    result.put(mn.name + ":" + mn.desc, ex.chains());
+                }
+            }
+        } catch (Exception e) {
+            error("[CellProperty] Failed to extract chains", e);
+        }
+        return result;
+    }
+
+    private static boolean isTableClass(ClassNode cn, String owner) {
+        if (CL_TABLE.equals(owner)) return true;
+        if (cn != null && owner.equals(cn.name)) {
+            if (cn.superName != null && (cn.superName.equals(CL_TABLE) || cn.superName.contains("Table"))) return true;
+        }
+        return owner.endsWith("Table") || owner.contains("/Table");
+    }
+
+    private static boolean isCellClass(String owner) {
+        if (CL_CELL.equals(owner)) return true;
+        return owner.endsWith("Cell") || owner.contains("/Cell");
+    }
+
+    private static boolean isTableCellCreator(ClassNode cn, String owner, String name) {
+        return isTableClass(cn, owner) && TABLE_CELL_CREATORS.contains(name);
+    }
+
+    private static boolean isTableCellCreator(String owner, String name) {
+        return isTableCellCreator(null, owner, name);
+    }
+
+    private static boolean isCellProperty(ClassNode cn, String owner, String name, String desc) {
+        if (isCellClass(owner) && CELL_PROPERTY_METHODS.contains(name)
+            && (desc.endsWith(")L" + CL_CELL + ";") || "()V".equals(desc) && "row".equals(name))) {
+            return true;
+        }
+        return isTableClass(cn, owner) && CELL_PROPERTY_METHODS.contains(name);
+    }
+
+    /** 先扫站点，扫不到就不 analyze（大多数方法没有 Cell 调用，这一步省掉 Analyzer 开销）。 */
+    private static MethodExtraction extractFromMethod(ClassNode cn, MethodNode mn) {
+        List<List<PropertyCall>> chains = new ArrayList<>();
+        if (mn.instructions == null || mn.instructions.size() == 0)
+            return new MethodExtraction(true, chains);
+
+        List<MethodInsnNode> cellCallSites = new ArrayList<>();
+        for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (!(insn instanceof MethodInsnNode mi)) continue;
+            if (!returnsCell(mi)) continue;
+            if (!isTableCellCreator(cn, mi.owner, mi.name)
+                && !isCellProperty(cn, mi.owner, mi.name, mi.desc)) continue;
+            cellCallSites.add(mi);
+        }
+        if (cellCallSites.isEmpty()) return new MethodExtraction(true, chains);
+
+        Frame<SourceValue>[] frames;
+        try {
+            Analyzer<SourceValue> analyzer = new Analyzer<>(new SourceInterpreter());
+            frames = analyzer.analyze(cn.name, mn);
+        } catch (Throwable t) {
+            if (DEBUG) log("[CellProperty] Analyzer failed for " + cn.name + "#" + mn.name + mn.desc);
+            return new MethodExtraction(false, chains);
+        }
+
+        Map<MethodInsnNode, MethodInsnNode> creatorOf = new HashMap<>();
+        for (MethodInsnNode site : cellCallSites) creatorOf.put(site, findChainHead(cn, mn, frames, site));
+
+        Map<MethodInsnNode, List<MethodInsnNode>> byCreator = new LinkedHashMap<>();
+        for (MethodInsnNode site : cellCallSites) {
+            MethodInsnNode head = creatorOf.get(site);
+            if (head == null) continue;
+            if (!isTableCellCreator(cn, head.owner, head.name)) continue;
+            byCreator.computeIfAbsent(head, k -> new ArrayList<>()).add(site);
+        }
+
+        for (Entry<MethodInsnNode, List<MethodInsnNode>> e : byCreator.entrySet()) {
+            List<PropertyCall> chain = new ArrayList<>();
+            for (MethodInsnNode site : e.getValue()) {
+                Object[] args = extractArgsDataflow(cn, mn, frames, site);
+                chain.add(new PropertyCall(site.name, site.desc, args, lineOf(mn, site)));
+            }
+            if (!chain.isEmpty()) chains.add(chain);
+        }
+        return new MethodExtraction(true, chains);
+    }
+
+    private static boolean returnsCell(MethodInsnNode mi) {
+        if ("row".equals(mi.name) && "()V".equals(mi.desc)) return true;
+        return mi.desc.endsWith(")L" + CL_CELL + ";");
+    }
+
+    private static MethodInsnNode findChainHead(ClassNode cn, MethodNode mn,
+                                                Frame<SourceValue>[] frames, MethodInsnNode site) {
+        Set<AbstractInsnNode> visited = new HashSet<>();
+        MethodInsnNode curr = site;
+        while (true) {
+            if (!visited.add(curr)) return curr;
+            SourceValue recv = receiverSource(frames, mn, curr);
+            if (recv == null || recv.insns.size() != 1) return curr;
+            AbstractInsnNode prev = recv.insns.iterator().next();
+            if (!(prev instanceof MethodInsnNode prevCall)) return curr;
+            if (!returnsCell(prevCall)) return curr;
+            if (!isTableCellCreator(cn, prevCall.owner, prevCall.name)
+                && !isCellProperty(cn, prevCall.owner, prevCall.name, prevCall.desc)) return curr;
+            curr = prevCall;
+        }
+    }
+
+    private static SourceValue receiverSource(Frame<SourceValue>[] frames, MethodNode mn,
+                                              MethodInsnNode site) {
+        int idx = mn.instructions.indexOf(site);
+        if (idx < 0) return null;
+        Frame<SourceValue> f = frames[idx];
+        if (f == null) return null;
+        int op = site.getOpcode();
+        if (op == INVOKESTATIC || op == INVOKEDYNAMIC) return null;
+        int argCount = Type.getArgumentTypes(site.desc).length;
+        int base = f.getStackSize() - argCount - 1;
+        if (base < 0) return null;
+        return f.getStack(base);
+    }
+
+    private static Object[] extractArgsDataflow(ClassNode cn, MethodNode mn,
+                                                 Frame<SourceValue>[] frames, MethodInsnNode site) {
+        Type[] argTypes = Type.getArgumentTypes(site.desc);
+        if (argTypes.length == 0) return null;
+
+        int idx = mn.instructions.indexOf(site);
+        if (idx < 0) return null;
+        Frame<SourceValue> f = frames[idx];
+        if (f == null) return null;
+
+        int base = f.getStackSize() - argTypes.length;
+        if (base < 0) return null;
+
+        Object[] args = new Object[argTypes.length];
+        Set<String> visiting = new HashSet<>();
+        for (int i = 0; i < argTypes.length; i++) {
+            Object v = resolveSourceValue(cn, mn, frames, f.getStack(base + i), visiting);
+            args[i] = coerce(argTypes[i], sanitizeValue(v));
+        }
+        return args;
+    }
+
+    private static Object coerce(Type t, Object v) {
+        if (!(v instanceof Number n)) return v;
+        return switch (t.getSort()) {
+            case Type.BOOLEAN -> n.intValue() != 0;
+            case Type.CHAR    -> (char) n.intValue();
+            case Type.BYTE    -> n.byteValue();
+            case Type.SHORT   -> n.shortValue();
+            case Type.INT     -> n.intValue();
+            case Type.LONG    -> n.longValue();
+            case Type.FLOAT   -> n.floatValue();
+            case Type.DOUBLE  -> n.doubleValue();
+            default -> v;
+        };
+    }
+
+    private static Object resolveSourceValue(ClassNode cn, MethodNode mn,
+                                              Frame<SourceValue>[] frames, SourceValue sv,
+                                              Set<String> visiting) {
+        if (sv == null || sv.insns.size() != 1) return null;
+        return resolveInsnConstant(cn, mn, frames, sv.insns.iterator().next(), visiting);
+    }
+
+    private static Object operand(ClassNode cn, MethodNode mn,
+                                  Frame<SourceValue>[] frames, AbstractInsnNode insn,
+                                  int fromTop, Set<String> visiting) {
+        int idx = mn.instructions.indexOf(insn);
+        if (idx < 0) return null;
+        Frame<SourceValue> f = frames[idx];
+        if (f == null) return null;
+        int pos = f.getStackSize() - 1 - fromTop;
+        if (pos < 0) return null;
+        return resolveSourceValue(cn, mn, frames, f.getStack(pos), visiting);
+    }
+
+    private static Object resolveInsnConstant(ClassNode cn, MethodNode mn,
+                                              Frame<SourceValue>[] frames, AbstractInsnNode insn,
+                                              Set<String> visiting) {
+        if (insn == null) return null;
+
+        if (insn instanceof FieldInsnNode fin && insn.getOpcode() == GETSTATIC) {
+            try {
+                if (!fin.owner.equals(cn.name)) return null;
+                Class<?> clazz = Class.forName(fin.owner.replace('/', '.'), false, Vars.mods.mainLoader());
+                Field field = clazz.getDeclaredField(fin.name);
+                int m = field.getModifiers();
+                if (!Modifier.isStatic(m) || !Modifier.isFinal(m)) return null;
+                field.setAccessible(true);
+                Object v = field.get(null);
+                return isConstantType(v) ? v : null;
+            } catch (Throwable ignored) { }
+            return null;
+        }
+
+        if (insn instanceof LdcInsnNode ldc) return ldc.cst;
+
+        if (insn instanceof InsnNode in) {
+            int op = in.getOpcode();
+            switch (op) {
+                case ICONST_M1: return -1;
+                case ICONST_0:  return 0;
+                case ICONST_1:  return 1;
+                case ICONST_2:  return 2;
+                case ICONST_3:  return 3;
+                case ICONST_4:  return 4;
+                case ICONST_5:  return 5;
+                case FCONST_0:  return 0.0f;
+                case FCONST_1:  return 1.0f;
+                case FCONST_2:  return 2.0f;
+                case DCONST_0:  return 0.0d;
+                case DCONST_1:  return 1.0d;
+                case LCONST_0:  return 0L;
+                case LCONST_1:  return 1L;
+                case I2L: case I2F: case I2D:
+                case L2I: case L2F: case L2D:
+                case F2I: case F2L: case F2D:
+                case D2I: case D2L: case D2F:
+                case I2B: case I2C: case I2S:
+                    return convertNumeric(op, operand(cn, mn, frames, insn, 0, visiting));
+                case IADD: case ISUB: case IMUL: case IDIV:
+                case LADD: case LSUB: case LMUL: case LDIV:
+                case FADD: case FSUB: case FMUL: case FDIV:
+                case DADD: case DSUB: case DMUL: case DDIV: {
+                    Object right = operand(cn, mn, frames, insn, 0, visiting);
+                    Object left  = operand(cn, mn, frames, insn, 1, visiting);
+                    return evaluateBinaryOp(op, left, right);
+                }
+                case INEG: case LNEG: case FNEG: case DNEG:
+                    return evaluateUnaryOp(op, operand(cn, mn, frames, insn, 0, visiting));
+            }
+        }
+
+        if (insn instanceof IntInsnNode iin
+            && (iin.getOpcode() == BIPUSH || iin.getOpcode() == SIPUSH)) return iin.operand;
+
+        if (insn instanceof VarInsnNode vin) {
+            int op = vin.getOpcode();
+            if (op == ILOAD || op == FLOAD || op == LLOAD || op == DLOAD || op == ALOAD) {
+                return resolveVar(cn, mn, frames, vin.var, visiting);
+            }
+        }
+
+        if (insn instanceof InvokeDynamicInsnNode indy
+            && indy.bsm != null
+            && "java/lang/invoke/LambdaMetafactory".equals(indy.bsm.getOwner())
+            && indy.bsmArgs != null && indy.bsmArgs.length >= 2
+            && indy.bsmArgs[1] instanceof Handle handle) {
+
+            Type[] captureTypes = Type.getArgumentTypes(indy.desc);
+            Object[] captures = new Object[captureTypes.length];
+            int idx = mn.instructions.indexOf(indy);
+            Frame<SourceValue> f = idx >= 0 ? frames[idx] : null;
+            if (f != null) {
+                int base = f.getStackSize() - captureTypes.length;
+                if (base >= 0) {
+                    for (int i = 0; i < captureTypes.length; i++) {
+                        Object v = resolveSourceValue(cn, mn, frames, f.getStack(base + i), visiting);
+                        captures[i] = sanitizeValue(v);
+                    }
+                }
+            }
+            return new LambdaInfo(handle.getOwner(), handle.getName(), handle.getDesc(), captures);
+        }
+
+        return null;
+    }
+
+    private static Object convertNumeric(int op, Object v) {
+        if (!(v instanceof Number n)) return null;
+        return switch (op) {
+            case I2L, F2L, D2L -> n.longValue();
+            case I2F, L2F, D2F -> n.floatValue();
+            case I2D, L2D, F2D -> n.doubleValue();
+            case L2I, F2I, D2I -> n.intValue();
+            case I2B -> n.byteValue();
+            case I2C -> (char) n.intValue();
+            case I2S -> n.shortValue();
+            default -> null;
+        };
+    }
+
+    private static Object resolveVar(ClassNode cn, MethodNode mn,
+                                     Frame<SourceValue>[] frames, int varIndex,
+                                     Set<String> visiting) {
+        String visitKey = mn.name + ":" + mn.desc + "#" + varIndex;
+        if (!visiting.add(visitKey)) return null;
+        try {
+            int writes = 0;
+            AbstractInsnNode singleStore = null;
+            for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+                if (insn instanceof VarInsnNode vin) {
+                    int op = vin.getOpcode();
+                    if ((op == ISTORE || op == LSTORE || op == FSTORE || op == DSTORE || op == ASTORE)
+                        && vin.var == varIndex) { writes++; singleStore = insn; }
+                } else if (insn instanceof IincInsnNode iin && iin.var == varIndex) writes++;
+            }
+            if (writes == 1 && singleStore != null) {
+                int idx = mn.instructions.indexOf(singleStore);
+                if (idx >= 0) {
+                    Frame<SourceValue> f = frames[idx];
+                    if (f != null && f.getStackSize() > 0) {
+                        Object v = resolveSourceValue(cn, mn, frames,
+                            f.getStack(f.getStackSize() - 1), visiting);
+                        if (isConstantType(v)) return v;
+                    }
+                }
+            }
+            return null;
+        } finally {
+            visiting.remove(visitKey);
+        }
+    }
+
+    private static Object evaluateBinaryOp(int opcode, Object left, Object right) {
+        if (left == null || right == null) return null;
+        if (!(left instanceof Number l) || !(right instanceof Number r)) return null;
+        return switch (opcode) {
+            case IADD -> l.intValue() + r.intValue();
+            case ISUB -> l.intValue() - r.intValue();
+            case IMUL -> l.intValue() * r.intValue();
+            case IDIV -> r.intValue() == 0 ? null : l.intValue() / r.intValue();
+            case LADD -> l.longValue() + r.longValue();
+            case LSUB -> l.longValue() - r.longValue();
+            case LMUL -> l.longValue() * r.longValue();
+            case LDIV -> r.longValue() == 0L ? null : l.longValue() / r.longValue();
+            case FADD -> l.floatValue() + r.floatValue();
+            case FSUB -> l.floatValue() - r.floatValue();
+            case FMUL -> l.floatValue() * r.floatValue();
+            case FDIV -> r.floatValue() == 0.0f ? null : l.floatValue() / r.floatValue();
+            case DADD -> l.doubleValue() + r.doubleValue();
+            case DSUB -> l.doubleValue() - r.doubleValue();
+            case DMUL -> l.doubleValue() * r.doubleValue();
+            case DDIV -> r.doubleValue() == 0.0d ? null : l.doubleValue() / r.doubleValue();
+            default -> null;
+        };
+    }
+
+    private static Object evaluateUnaryOp(int opcode, Object val) {
+        if (!(val instanceof Number n)) return null;
+        return switch (opcode) {
+            case INEG -> -n.intValue();
+            case LNEG -> -n.longValue();
+            case FNEG -> -n.floatValue();
+            case DNEG -> -n.doubleValue();
+            default -> null;
+        };
+    }
+
+    private static boolean isConstantType(Object val) {
+        return val instanceof String || val instanceof Number
+            || val instanceof Boolean || val instanceof Character;
+    }
+
+    private static Object sanitizeValue(Object v) {
+        if (v == null) return null;
+        if (isConstantType(v)) return v;
+        if (v instanceof LambdaInfo li) {
+            Object[] caps = li.captures();
+            Object[] newCaps = caps == null ? null : sanitizeArgs(caps);
+            return new LambdaInfo(li.ownerClass(), li.methodName(), li.methodDesc(), newCaps);
+        }
+        return null;
+    }
+
+    private static Object[] sanitizeArgs(Object[] args) {
+        if (args == null) return null;
+        Object[] out = new Object[args.length];
+        for (int i = 0; i < args.length; i++) out[i] = sanitizeValue(args[i]);
+        return out;
+    }
+
+    private static int lineOf(MethodNode mn, AbstractInsnNode insn) {
+        for (AbstractInsnNode n = insn; n != null; n = n.getPrevious()) {
+            if (n instanceof LineNumberNode lnn) return lnn.line;
+        }
+        return -1;
+    }
+    //endregion
+
+    //region ASM 注入
+
+    public static void redefineCellProperties() {
+        Class<?> cellClass = Cell.class;
+        byte[] bytes = fetchCurrentBytecode(cellClass);
+        if (bytes == null) { error("[CellProperty] Cannot fetch Cell bytecode"); return; }
+
+        if (originalCellBytes == null) {
+            if (containsHook(bytes)) {
+                error("[CellProperty] Cell already injected but no original bytes; aborting");
+                return;
+            }
+            originalCellBytes = bytes;
+        }
+
+        byte[] injected = injectCell(originalCellBytes);
+        if (injected == null) return;
+        if (!verifyBytecode(injected)) {
+            error("[CellProperty] Injected bytecode failed verification, aborting redefine");
+            return;
+        }
+
+        Injector.redefineOneClass(cellClass, injected);
+        info("[CellProperty] Cell class redefined with property tracking");
+    }
+
+    private static boolean containsHook(byte[] bytes) {
+        return new String(bytes, StandardCharsets.ISO_8859_1).contains("onCellBound");
+    }
+
+    private static boolean verifyBytecode(byte[] bytes) {
+        try {
+            ClassLoader parent = Cell.class.getClassLoader();
+            ClassLoader verifier = new ClassLoader(parent) {
+                Class<?> define(byte[] b) { return defineClass(null, b, 0, b.length); }
+            };
+            Method m = verifier.getClass().getDeclaredMethod("define", byte[].class);
+            m.setAccessible(true);
+            Class<?> c = (Class<?>) m.invoke(verifier, (Object) bytes);
+            c.getDeclaredMethods();
+            return true;
+        } catch (Throwable t) {
+            error("[CellProperty] Bytecode verify failed", t);
+            return false;
+        }
+    }
+
+    public static byte[] injectCell(byte[] bytes) {
+        ClassReader cr = new ClassReader(bytes);
+        ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
+
+        ClassVisitor cv = new ClassVisitor(ASM9, cw) {
+            @Override
+            public MethodVisitor visitMethod(int access, String name, String descriptor,
+                                             String signature, String[] exceptions) {
+                MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
+
+                if (name.equals("setLayout")) {
+                    return new AdviceAdapter(ASM9, mv, access, name, descriptor) {
+                        @Override protected void onMethodExit(int opcode) {
+                            if (opcode == ATHROW) return;
+                            mv.visitVarInsn(ALOAD, 0);
+                            mv.visitMethodInsn(INVOKESTATIC,
+                                internalName(CellPropertyRef.class),
+                                "onCellBound", "(Larc/scene/ui/layout/Cell;)V", false);
+                        }
+                    };
+                }
+
+                if (name.equals("reset") && "()V".equals(descriptor)) {
+                    return new AdviceAdapter(ASM9, mv, access, name, descriptor) {
+                        @Override protected void onMethodExit(int opcode) {
+                            if (opcode == ATHROW) return;
+                            mv.visitVarInsn(ALOAD, 0);
+                            mv.visitMethodInsn(INVOKESTATIC,
+                                internalName(CellPropertyRef.class),
+                                "onCellFreed", "(Larc/scene/ui/layout/Cell;)V", false);
+                        }
+                    };
+                }
+
+                if (name.startsWith("<")) return mv;
+                if (!CELL_PROPERTY_METHODS.contains(name)) return mv;
+                if (!(descriptor.endsWith(")Larc/scene/ui/layout/Cell;")
+                    || ("row".equals(name) && "()V".equals(descriptor)))) return mv;
+
+                return new AdviceAdapter(ASM9, mv, access, name, descriptor) {
+                    @Override protected void onMethodExit(int opcode) {
+                        if (opcode == ATHROW) return;
+                        mv.visitVarInsn(ALOAD, 0);
+                        mv.visitLdcInsn(name);
+                        mv.visitLdcInsn(descriptor);
+                        pushArgsArray(mv, Type.getArgumentTypes(descriptor));
+                        mv.visitMethodInsn(INVOKESTATIC,
+                            internalName(CellPropertyRef.class),
+                            "recordPropertyCall",
+                            "(Larc/scene/ui/layout/Cell;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/Object;)V",
+                            false);
+                    }
+                };
+            }
+        };
+
+        try {
+            cr.accept(cv, ClassReader.EXPAND_FRAMES);
+            return cw.toByteArray();
+        } catch (Exception e) {
+            error("[CellProperty] Failed to inject Cell class", e);
+            return null;
+        }
+    }
+
+    private static void pushArgsArray(MethodVisitor mv, Type[] argTypes) {
+        pushInt(mv, argTypes.length);
+        mv.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+        int localIdx = 1;
+        for (int i = 0; i < argTypes.length; i++) {
+            mv.visitInsn(DUP);
+            pushInt(mv, i);
+            Type t = argTypes[i];
+            mv.visitVarInsn(t.getOpcode(ILOAD), localIdx);
+            box(mv, t);
+            localIdx += t.getSize();
+            mv.visitInsn(AASTORE);
+        }
+    }
+
+    private static void box(MethodVisitor mv, Type t) {
+        switch (t.getSort()) {
+            case Type.BOOLEAN -> mv.visitMethodInsn(INVOKESTATIC, "java/lang/Boolean",
+                "valueOf", "(Z)Ljava/lang/Boolean;", false);
+            case Type.CHAR    -> mv.visitMethodInsn(INVOKESTATIC, "java/lang/Character",
+                "valueOf", "(C)Ljava/lang/Character;", false);
+            case Type.BYTE    -> mv.visitMethodInsn(INVOKESTATIC, "java/lang/Byte",
+                "valueOf", "(B)Ljava/lang/Byte;", false);
+            case Type.SHORT   -> mv.visitMethodInsn(INVOKESTATIC, "java/lang/Short",
+                "valueOf", "(S)Ljava/lang/Short;", false);
+            case Type.INT     -> mv.visitMethodInsn(INVOKESTATIC, "java/lang/Integer",
+                "valueOf", "(I)Ljava/lang/Integer;", false);
+            case Type.FLOAT   -> mv.visitMethodInsn(INVOKESTATIC, "java/lang/Float",
+                "valueOf", "(F)Ljava/lang/Float;", false);
+            case Type.LONG    -> mv.visitMethodInsn(INVOKESTATIC, "java/lang/Long",
+                "valueOf", "(J)Ljava/lang/Long;", false);
+            case Type.DOUBLE  -> mv.visitMethodInsn(INVOKESTATIC, "java/lang/Double",
+                "valueOf", "(D)Ljava/lang/Double;", false);
+            default -> { }
+        }
+    }
+
+    private static void pushInt(MethodVisitor mv, int value) {
+        if (value >= -1 && value <= 5) mv.visitInsn(ICONST_0 + value);
+        else if (value >= Byte.MIN_VALUE && value <= Byte.MAX_VALUE) mv.visitIntInsn(BIPUSH, value);
+        else if (value >= Short.MIN_VALUE && value <= Short.MAX_VALUE) mv.visitIntInsn(SIPUSH, value);
+        else mv.visitLdcInsn(value);
+    }
+    //endregion
+
+    //region 辅助方法
+
+    private static Class<?> loadClass(String className) throws ClassNotFoundException {
+        return Class.forName(className, true, Vars.mods.mainLoader());
+    }
+    //endregion
+
+    //region 生命周期管理
+
+    public static void enable() {
+        Runnable init = () -> {
+            uiThread = Thread.currentThread();
+            FAILURES.set(0);
+            enabled = true;
+            info("[CellProperty] Enabled, UI thread = " + uiThread.getName());
+        };
+        if (Core.app != null) Core.app.post(init);
+        else init.run();
+    }
+
+    public static void disable() {
+        if (!enabled) return;
+        enabled = false;
+        if (Core.app != null) Core.app.post(CellPropertyRef::performRollback);
+        else clearAll();
+        info("[CellProperty] Disabled (rollback scheduled)");
+    }
+
+    private static void performRollback() {
+        if (enabled) return;
+        byte[] original = originalCellBytes;
+        originalCellBytes = null;
+        if (original != null) {
+            try {
+                Injector.redefineOneClass(Cell.class, original);
+                info("[CellProperty] Cell class rolled back to original bytecode");
+            } catch (Throwable t) {
+                error("[CellProperty] Rollback failed", t);
+            }
+        }
+        clearAll();
+    }
+
+    public static boolean isEnabled() { return enabled; }
+
+    public static void clearClassRecords(String hostSlashName) {
+        if (hostSlashName == null) return;
+        if (offUiThread() && Core.app != null) {
+            Core.app.post(() -> clearClassRecords(hostSlashName));
+            return;
+        }
+
+        List<Cell<?>> targets = new ArrayList<>();
+        synchronized (cellState) {
+            for (Entry<Cell<?>, CellState> e : cellState.entrySet()) {
+                Cell<?> c = e.getKey();
+                if (c == null) continue;
+                CellState st = e.getValue();
+                if (st == IGNORED_STATE) continue;
+                if (st.id.hostClass.equals(hostSlashName)) targets.add(c);
+            }
+        }
+        for (Cell<?> c : targets) removeCellFromTable(c);
+
+        chainCache.remove(hostSlashName);
+        templateCache.keySet().removeIf(id -> id.hostClass.equals(hostSlashName));
+    }
+
+    public static void clearAll() {
+        if (offUiThread() && Core.app != null) {
+            Core.app.post(CellPropertyRef::clearAll);
+            return;
+        }
+        synchronized (cellState) {
+            cellState.clear();
+            idToCells.clear();
+            classToCells.clear();
+            chainCache.clear();
+            templateCache.clear();
+        }
+        info("[CellProperty] 🗑 Cleared all records");
+    }
+
+    public static String getStats() {
+        synchronized (cellState) {
+            int ignored = 0;
+            for (CellState st : cellState.values()) {
+                if (st == IGNORED_STATE) ignored++;
+            }
+            return "CellPropertyRef:\n"
+                 + "  Enabled: " + enabled + "\n"
+                 + "  Failures: " + FAILURES.get() + "\n"
+                 + "  Tracked Cells: " + cellState.size() + " (ignored: " + ignored + ")\n"
+                 + "  Identities: " + idToCells.size() + "\n"
+                 + "  Host Classes: " + classToCells.size() + "\n"
+                 + "  Chain Cache: " + chainCache.size() + "\n"
+                 + "  Template Cache: " + templateCache.size();
+        }
+    }
+    //endregion
+
+    //region Reflect
+
+    private static <T> T invoke(MethodHandle handle, Object instance, Object[] args) throws Throwable {
+        return (T) switch (args == null ? 0 : args.length) {
+            case 0 -> handle.invoke(instance);
+            case 1 -> handle.invoke(instance, args[0]);
+            case 2 -> handle.invoke(instance, args[0], args[1]);
+            case 3 -> handle.invoke(instance, args[0], args[1], args[2]);
+            case 4 -> handle.invoke(instance, args[0], args[1], args[2], args[3]);
+            default -> handle.bindTo(instance).asSpreader(Object.class, args.length).invoke(args);
+        };
+    }
+
+    private static <T> T invoke(MethodHandle handle, Object[] args) throws Throwable {
+        return (T) switch (args == null ? 0 : args.length) {
+            case 0 -> handle.invoke();
+            case 1 -> handle.invoke(args[0]);
+            case 2 -> handle.invoke(args[0], args[1]);
+            case 3 -> handle.invoke(args[0], args[1], args[2]);
+            case 4 -> handle.invoke(args[0], args[1], args[2], args[3]);
+            default -> handle.asSpreader(Object.class, args.length).invoke(args);
+        };
+    }
+    //endregion
 }

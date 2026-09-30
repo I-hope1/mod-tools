@@ -26,6 +26,13 @@ import java.util.*;
  * 产物。若每次热更都拿新版原始 class 作基准，会出现“名字错位”（v2 里跑的是
  * 对齐后的名字，对齐基准却是 v2 编译出的名字），第三次热更会重新触发
  * {@link NoSuchMethodError}；同时上一轮注入的空壳不在原始产物里，也会被漏掉。</p>
+ *
+ * <p><b>已知限制：幽灵方法指纹退化。</b> 幽灵方法（空壳）的字节码与原始方法体
+ * 不同，其指纹在下一轮对齐中已不是原始指纹。若开发者在 V2 删除了某个 lambda，
+ * V3 又把它加回来，V3 的新方法会因指纹失配而走 Step 2 顺序回退——通常仍能
+ * 保住名字，但若同组内有其它新增方法，可能被次优先级抢占，引发不必要的重命名。
+ * 修复需要给幽灵方法打标记（自定义 attribute 或特殊 access 位），代价与收益
+ * 暂不匹配，暂列为已知限制。</p>
  */
 public class LambdaAligner {
 
@@ -64,7 +71,7 @@ public class LambdaAligner {
 		 * {@code name + desc -> 新方法名}。
 		 * <p>以 desc 为键的一部分，避免同名不同描述符（重载）被一起改名。</p>
 		 */
-		final Map<String, String> renameMap = new HashMap<>(64);
+		final Map<String, String> renameMap          = new HashMap<>(64);
 
 		/**
 		 * {@code name -> 新方法名}，供 {@code mapValue} 改写字符串常量时使用。
@@ -78,24 +85,30 @@ public class LambdaAligner {
 		 * <p>与 {@link #renameBySimpleName} 的区别：这里始终登记，即使
 		 * “目标名 == 原名”（保名）。这样“一改一同”的歧义场景才能被识别。</p>
 		 */
-		final Map<String, String> simpleNameWitness = new HashMap<>(64);
+		final Map<String, String> simpleNameWitness  = new HashMap<>(64);
 
 		/**
 		 * 出现歧义的简单名集合。
 		 * <p>这些名字在 {@code mapValue} 中不再改写字符串常量，宁可保持原样。</p>
 		 */
-		final Set<String> ambiguousNames = new HashSet<>(16);
+		final Set<String>         ambiguousNames     = new HashSet<>(16);
 
 		/** 已被占用的旧方法名集合，用于生成 fresh name 时避免碰撞。 */
-		final Set<String> usedOldNames = new HashSet<>(64);
+		final Set<String>         usedOldNames       = new HashSet<>(64);
 
-		/** 新类里实际出现过的所有方法名，作为 fresh name 的避障集。 */
-		final Set<String> existingNewNames = new HashSet<>(64);
+		/**
+		 * 新类里<b>所有</b>方法的名字（含构造函数、静态块、桥接、普通业务方法、
+		 * 合成方法），作为 fresh name 的避障集。由 {@code scan} 无条件填充。</p>
+		 */
+		final Set<String>         existingNewNames   = new HashSet<>(64);
 
-		/** 旧类里所有 {@code name + desc} 的集合，用于冲突检测。 */
-		final Set<String> oldNameDescSet = new HashSet<>(64);
+		/**
+		 * 旧类里<b>所有</b>方法的 {@code name + desc} 集合。既用于冲突检测，
+		 * 也防止 fresh name 撞到上一轮注入的幽灵方法。由 {@code scan} 无条件填充。</p>
+		 */
+		final Set<String>         oldNameDescSet     = new HashSet<>(64);
 
-		final MethodFingerprinter fingerprinter = MethodFingerprinter.CONTEXT.get();
+		final MethodFingerprinter fingerprinter      = MethodFingerprinter.CONTEXT.get();
 
 		/** 当前处理的类名（内部名，形如 {@code com/example/Foo}）。 */
 		String currentClass;
@@ -127,6 +140,7 @@ public class LambdaAligner {
 
 	/**
 	 * 对齐 Lambda 表达式的主入口方法。
+	 *
 	 * @param oldBytes <b>上一轮对齐后 JVM 里实际生效的字节码</b>（见类级 javadoc 的调用约定）
 	 * @param newBytes 本次新编译出的字节码
 	 * @return 对齐后的字节码；若没有任何重命名且无孤儿方法需要复活，返回原始 {@code newBytes}
@@ -140,30 +154,14 @@ public class LambdaAligner {
 			ctx.reset();
 
 			ctx.currentClass = scan(oldBytes, ctx, true);
-			String newClass = scan(newBytes, ctx, false);
+			String newClass  = scan(newBytes, ctx, false);
 			if (!Objects.equals(ctx.currentClass, newClass)) {
 				throw new IllegalArgumentException(
-				 "New class name does not match old class name: " + newClass + " != " + ctx.currentClass);
+					"New class name does not match old class name: " + newClass + " != " + ctx.currentClass);
 			}
 
 			LongObjectMap<List<SyntheticInfo>> oldGroups = ctx.oldGroups;
 			LongObjectMap<List<SyntheticInfo>> newGroups = ctx.newGroups;
-
-			// 收集新类里的所有方法名（fresh name 的避障集）
-			for (Object v : newGroups.values()) {
-				if (!LongObjectMap.isValid(v)) continue;
-				@SuppressWarnings("unchecked")
-				List<SyntheticInfo> g = (List<SyntheticInfo>) v;
-				for (SyntheticInfo ni : g) ctx.existingNewNames.add(ni.name);
-			}
-
-			// 收集旧类所有 name+desc（冲突检测用）
-			for (Object v : oldGroups.values()) {
-				if (!LongObjectMap.isValid(v)) continue;
-				@SuppressWarnings("unchecked")
-				List<SyntheticInfo> g = (List<SyntheticInfo>) v;
-				for (SyntheticInfo oi : g) ctx.oldNameDescSet.add(oi.name + oi.desc);
-			}
 
 			long[]   ks  = newGroups.keys();
 			Object[] vs  = newGroups.values();
@@ -182,16 +180,36 @@ public class LambdaAligner {
 				int newSize = newGroup.size();
 				int oldSize = oldGroup.size();
 
-				// Step 1：精确 hash 指纹匹配（带 desc 二次校验）
+				// Step 1a：hash 相同 && 同名 —— 首选，保持原名，避免“同指纹交叉夺舍”
 				for (int j = 0; j < newSize; j++) {
 					SyntheticInfo ni = newGroup.get(j);
-					if (!ni.renameable) continue;
+					if (!ni.renameable || ni.matched) continue;
 					for (int k = 0; k < oldSize; k++) {
 						SyntheticInfo oi = oldGroup.get(k);
 						if (!oi.matched
-						    && ni.hash == oi.hash
-						    && oi.isStatic() == ni.isStatic()
-						    && oi.desc.equals(ni.desc)) {
+							&& ni.hash == oi.hash
+							&& oi.isStatic() == ni.isStatic()
+							&& oi.desc.equals(ni.desc)
+							&& oi.name.equals(ni.name)) {
+							recordRename(ctx, ni, oi.name);
+							ni.matched = true;
+							oi.matched = true;
+							ctx.usedOldNames.add(oi.name);
+							break;
+						}
+					}
+				}
+
+				// Step 1b：hash 相同（不限名字）—— 次选
+				for (int j = 0; j < newSize; j++) {
+					SyntheticInfo ni = newGroup.get(j);
+					if (!ni.renameable || ni.matched) continue;
+					for (int k = 0; k < oldSize; k++) {
+						SyntheticInfo oi = oldGroup.get(k);
+						if (!oi.matched
+							&& ni.hash == oi.hash
+							&& oi.isStatic() == ni.isStatic()
+							&& oi.desc.equals(ni.desc)) {
 							recordRename(ctx, ni, oi.name);
 							ni.matched = true;
 							oi.matched = true;
@@ -212,10 +230,7 @@ public class LambdaAligner {
 						if (oi.matched) continue;
 						if (oi.isStatic() != ni.isStatic()) continue;
 						if (!oi.desc.equals(ni.desc)) continue;
-						if (oi.name.equals(ni.name)) {
-							bestOld = oi;
-							break;
-						}
+						if (oi.name.equals(ni.name)) { bestOld = oi; break; }
 					}
 
 					// 第二优先级：第一个 static / desc 一致的未匹配旧方法
@@ -250,16 +265,16 @@ public class LambdaAligner {
 				for (SyntheticInfo ni : newGroup) {
 					if (ni.matched || !ni.renameable) continue;
 
-					String key = ni.name + ni.desc;
+					String  key      = ni.name + ni.desc;
 					boolean conflict = ctx.usedOldNames.contains(ni.name)
-					                   || ctx.oldNameDescSet.contains(key);
+					                || ctx.oldNameDescSet.contains(key);
 					if (conflict) {
 						String freshName;
 						do {
 							freshName = ni.logicalName + (freshId++);
 						} while (ctx.usedOldNames.contains(freshName)
-						         || ctx.existingNewNames.contains(freshName)
-						         || ctx.oldNameDescSet.contains(freshName + ni.desc));
+						      || ctx.existingNewNames.contains(freshName)
+						      || ctx.oldNameDescSet.contains(freshName + ni.desc));
 
 						recordRename(ctx, ni, freshName);
 						ctx.usedOldNames.add(freshName);
@@ -272,7 +287,6 @@ public class LambdaAligner {
 			}
 
 			// 【阶段二后】双保险：扫描"见证过的简单名 vs 当前未改名方法"的潜在冲突
-			// （witnessSimpleName 已能覆盖绝大多数场景，这里是额外一道防线）
 			detectResidualAmbiguity(ctx);
 
 			// 应用重命名规则
@@ -426,9 +440,12 @@ public class LambdaAligner {
 	 * <p>重命名器会改写 LDC 字符串，但 int 型 key 是常量，不会被自动更新，
 	 * 因此必须重新计算并按升序重排。</p>
 	 *
-	 * <p><b>失败处理</b>：任何一个 case 块中不恰好出现一个字符串 LDC（含
-	 * hashCode 碰撞、非 case 普通 label 干扰等），或重算后 key 发生碰撞，
-	 * 都会放弃整个 switch 的改写，并往 {@code System.err} 打一条警告。
+	 * <p><b>容错策略</b>：某个 case 块内找不到“符合合成名特征的 implMethodName
+	 * 字面量”时，<b>沿用该 case 的原 key</b>，而不是放弃整个 switch 修复。
+	 * 这保证了“同时包含方法引用（如 {@code "trim"}）和 lambda 的类”也能被
+	 * 正确对齐——方法引用名不会被 Remapper 改写，其原 key 天然正确。</p>
+	 *
+	 * <p>重算后若 key 之间发生碰撞，才放弃整个 switch 的改写，并打一条警告。
 	 * 不抛异常的原因：与其让整次热更失败，不如保留原 switch（对没被改名的
 	 * lambda 仍然可用）。</p>
 	 */
@@ -441,27 +458,25 @@ public class LambdaAligner {
 			Set<LabelNode> boundaries = new HashSet<>(sw.labels);
 			if (sw.dflt != null) boundaries.add(sw.dflt);
 
-			int     size    = sw.labels.size();
-			int[]   newKeys = new int[size];
-			boolean ok      = true;
+			int   size    = sw.labels.size();
+			int[] newKeys = new int[size];
 			for (int i = 0; i < size; i++) {
 				String s = uniqueStringLdcInBlock(sw.labels.get(i), boundaries);
-				if (s == null) {
-					warnSkipSwitch(mn, "case#" + i + " 块内字符串不唯一或找不到");
-					ok = false;
-					break;
+				if (s != null) {
+					newKeys[i] = s.hashCode();
+				} else {
+					// 块内没有可识别的合成方法名 —— 沿用原 key。
+					// 常见于：方法引用（"trim" / "doWork"）或描述符（"()V"）之类
+					// 不会被 Remapper 改写的字符串，其 hash 保持不变，原 key 天然有效。
+					newKeys[i] = sw.keys.get(i);
 				}
-				newKeys[i] = s.hashCode();
 			}
-			if (!ok) continue;
 
 			// 碰撞检测：重算后的 key 不允许重复
 			Set<Integer> seen = new HashSet<>();
+			boolean ok = true;
 			for (int k : newKeys) {
-				if (!seen.add(k)) {
-					ok = false;
-					break;
-				}
+				if (!seen.add(k)) { ok = false; break; }
 			}
 			if (!ok) {
 				warnSkipSwitch(mn, "重算后出现 hashCode 碰撞");
@@ -481,7 +496,7 @@ public class LambdaAligner {
 				newKeyList.add(newKeys[i]);
 			}
 			sw.labels = newLabels;
-			sw.keys = newKeyList;
+			sw.keys   = newKeyList;
 		}
 	}
 
@@ -496,103 +511,194 @@ public class LambdaAligner {
 		}
 		if (!(p instanceof MethodInsnNode mi)) return false;
 		return "java/lang/String".equals(mi.owner)
-		       && "hashCode".equals(mi.name)
-		       && "()I".equals(mi.desc);
+			&& "hashCode".equals(mi.name)
+			&& "()I".equals(mi.desc);
 	}
 
 	/**
-	 * 统计 case 块内的字符串 LDC，要求恰好一个；否则返回 {@code null} 由调用方
-	 * 保守放弃。
+	 * 从 case 块中提取“implMethodName 比较用的”字符串常量。
 	 *
-	 * <p>遍历从 {@code start.getNext()} 开始，遇到 {@code boundaries} 中任一
-	 * 标签即停 —— 这允许 case 块内出现行号 label 或异常表引入的普通 label，
-	 * 而不会误把下一个 case 的内容算进来。</p>
+	 * <p><b>定位规则</b>：扫描块内所有 {@code java/lang/String.equals} 调用，
+	 * 只看它们的<b>直接前驱 LDC 参数</b>，且该字符串必须满足
+	 * {@link MethodFingerprinter#isSyntheticName}。这会过滤掉：</p>
+	 * <ul>
+	 *   <li>ECJ 单 switch 布局下 {@code getFunctionalInterfaceClass} /
+	 *       {@code getImplMethodSignature} 比较用的 {@code "com/foo/Bar"}、
+	 *       {@code "()V"} 等字符串；</li>
+	 *   <li>方法引用名（如 {@code "trim"}）—— 它们不会被 Remapper 改写，
+	 *       原 key 天然正确，无需重算。</li>
+	 * </ul>
+	 *
+	 * <p>块内若出现两个 <b>不同</b> 的合成名字符串（hash 碰撞导致的合并 case），
+	 * 返回 {@code null} 由调用方沿用原 key；只出现一个合成名时返回它。</p>
+	 *
+	 * <p><b>终止条件</b>：</p>
+	 * <ol>
+	 *   <li>遇到 {@code boundaries} 中任一标签（本 switch 的其它 case 或 default）。</li>
+	 *   <li>遇到无条件跳转或返回指令 —— 当前 case 逻辑已终结，后续指令属于其它
+	 *       基本块，不应计入。若缺此截断，“最后一个 case”会一路穿透到
+	 *       {@code $deserializeLambda$} 尾部的 LDC，使统计结果错误。</li>
+	 *   <li>指令流自然结束。</li>
+	 * </ol>
 	 */
 	private static String uniqueStringLdcInBlock(LabelNode start, Set<LabelNode> boundaries) {
-		String first = null;
-		int    cnt   = 0;
+		String found = null;
 		for (AbstractInsnNode n = start.getNext(); n != null; n = n.getNext()) {
 			if (n instanceof LabelNode l && boundaries.contains(l)) break;
-			if (n instanceof LdcInsnNode ldc && ldc.cst instanceof String s) {
-				if (first == null) first = s;
-				cnt++;
+
+			if (n instanceof MethodInsnNode mi
+				&& "java/lang/String".equals(mi.owner)
+				&& "equals".equals(mi.name)
+				&& "(Ljava/lang/Object;)Z".equals(mi.desc)) {
+				AbstractInsnNode prev = previousRealInsn(mi);
+				if (prev instanceof LdcInsnNode ldc
+					&& ldc.cst instanceof String s
+					&& MethodFingerprinter.isSyntheticName(s)) {
+					if (found == null) {
+						found = s;
+					} else if (!found.equals(s)) {
+						// 块内出现两个不同的合成名（hash 碰撞合并 case），
+						// 保守返回 null，由调用方沿用原 key。
+						return null;
+					}
+				}
 			}
-			// 遇到无条件跳转或返回指令：当前 case 的逻辑已终结，
-			// 后续指令属于其它基本块（如公共出口 LEXIT、第二个 switch、抛异常路径等），
-			// 不应计入本 case 的字符串统计
+
+			// 遇到无条件跳转或返回指令：当前 case 逻辑已终结，立即截断
 			int op = n.getOpcode();
 			if (op == Opcodes.GOTO
-			    || op == Opcodes.RETURN
-			    || op == Opcodes.IRETURN || op == Opcodes.LRETURN
-			    || op == Opcodes.FRETURN || op == Opcodes.DRETURN
-			    || op == Opcodes.ARETURN
-			    || op == Opcodes.ATHROW) {
+				|| op == Opcodes.RETURN
+				|| op == Opcodes.IRETURN || op == Opcodes.LRETURN
+				|| op == Opcodes.FRETURN || op == Opcodes.DRETURN
+				|| op == Opcodes.ARETURN
+				|| op == Opcodes.ATHROW) {
 				break;
 			}
 		}
-		return cnt == 1 ? first : null;
+		return found;
 	}
 
-	/** 放弃修复时打一行 stderr，避免“静默失效”。 */
+	/**
+	 * 跳过 {@link FrameNode} / {@link LabelNode} / {@link LineNumberNode}
+	 * 以及插桩工具插入的 {@code NOP}，返回前一条真正的指令节点；
+	 * 没有则返回 {@code null}。
+	 *
+	 * <p>与 {@link #isStringHashSwitch} 内部的过滤保持对称：都同时跳过
+	 * “伪节点（opcode &lt; 0）”和 {@code NOP}。</p>
+	 */
+	private static AbstractInsnNode previousRealInsn(AbstractInsnNode n) {
+		AbstractInsnNode p = n.getPrevious();
+		while (p != null && (p.getOpcode() < 0 || p.getOpcode() == Opcodes.NOP)) {
+			p = p.getPrevious();
+		}
+		return p;
+	}
+
+	/** 放弃修复时留痕，避免“静默失效”。 */
 	private static void warnSkipSwitch(MethodNode mn, String reason) {
-		HotSwapAgent.info("[LambdaAligner] 跳过 " + mn.name + mn.desc
-		                   + " 的 switch 修复：" + reason);
+		HotSwapAgent.info("[LambdaAligner] 跳过 $deserializeLambda$ 的 switch 修复（"
+			+ mn.name + mn.desc + "）：" + reason);
 	}
 
 	/**
 	 * 扫描字节码并收集合成方法信息。
 	 *
-	 * <p>跳过：构造函数、静态初始化块、桥接方法，以及
+	 * <p><b>无条件</b>把所有方法（含构造函数、静态块、桥接、普通业务方法、
+	 * 合成方法）的 {@code name}/{@code name+desc} 分别登记到
+	 * {@link MatchContext#existingNewNames} / {@link MatchContext#oldNameDescSet}，
+	 * 作为 fresh name 的避障集，避免生成的新名与类中已有的普通方法签名碰撞
+	 * （会导致 {@code ClassFormatError: Duplicate method name&signature}）。</p>
+	 *
+	 * <p>随后跳过：构造函数、静态初始化块、桥接方法，以及
 	 * {@link MethodFingerprinter#isExcluded} 列出的方法（如
 	 * {@code $deserializeLambda$}）。</p>
+	 *
+	 * <p>实现上走 {@link ClassNode} 而非流式 {@code ClassVisitor}，原因是需要
+	 * 先为每个方法收集“有效 Label 集合”（被跳转 / switch / 异常表引用的 Label），
+	 * 再交给 {@link MethodFingerprinter}，让它忽略纯调试用途的 Label。
+	 * {@link MethodNode#accept(MethodVisitor)} 会把 {@link LabelNode} 缓存的
+	 * {@link Label} 实例原样回放，因此两个阶段可以共享同一身份比较。</p>
+	 *
 	 * @param bytes 要扫描的字节码
 	 * @param ctx   匹配上下文
 	 * @param isOld 是否为旧版本
 	 * @return 类名（内部名）
 	 */
 	private static String scan(byte[] bytes, MatchContext ctx, boolean isOld) {
-		var visitor = new ClassVisitor(Opcodes.ASM9) {
-			String className;
+		ClassNode cn = new ClassNode();
+		// SKIP_DEBUG：不解析行号 / 局部变量表；SKIP_FRAMES：不解析 StackMapTable。
+		// 二者对逻辑指纹都没有贡献，跳过可减少内存与解析时间。
+		new ClassReader(bytes).accept(cn,
+			ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
 
-			@Override
-			public void visit(int version, int access, String name, String sig, String superName, String[] itfs) {
-				className = name;
+		for (MethodNode mn : cn.methods) {
+			// —— 无条件登记到避障集：让 fresh name 不会撞到类中任何已有方法 ——
+			if (isOld) ctx.oldNameDescSet.add(mn.name + mn.desc);
+			else       ctx.existingNewNames.add(mn.name);
+
+			if (mn.name.startsWith("<")) continue;
+			if ((mn.access & Opcodes.ACC_BRIDGE) != 0) continue;
+			if (MethodFingerprinter.isExcluded(mn.name)) continue;
+
+			boolean isSynthetic    = (mn.access & Opcodes.ACC_SYNTHETIC) != 0;
+			boolean matchesPattern = MethodFingerprinter.isSyntheticName(mn.name);
+			if (!isSynthetic && !matchesPattern) continue;
+
+			MethodFingerprinter fp = ctx.fingerprinter;
+			fp.reset();
+			fp.setContext(cn.name);
+			fp.setValidLabels(collectValidLabels(mn));
+
+			// 回放指令流；传入的 Label 与 collectValidLabels 取出的实例一致
+			mn.accept(fp);
+
+			String  logicalName = extractLogicalName(mn.name);
+			// access$ 是跨类引用，本对齐器只做“保名不改名”
+			boolean renameable  = !mn.name.startsWith("access$");
+			SyntheticInfo info  = new SyntheticInfo(
+				mn.name, mn.desc, mn.access, fp.getHash(), logicalName, renameable);
+			groupByLogic(isOld ? ctx.oldGroups : ctx.newGroups, info);
+		}
+
+		return cn.name;
+	}
+
+	/**
+	 * 收集逻辑相关的 Label：只包含被跳转指令、switch、异常表引用的 Label。
+	 *
+	 * <p>排除纯调试标签（行号锚点、局部变量作用域边界），这些标签在不同
+	 * {@code -g} 设置下数量与位置都会变，不应参与指纹。</p>
+	 *
+	 * <p>返回的 {@link Label} 实例与 {@link MethodNode#accept(MethodVisitor)}
+	 * 回放时传入的是同一对象，可直接用作集合元素。</p>
+	 */
+	private static Set<Label> collectValidLabels(MethodNode mn) {
+		Set<Label> valid = new HashSet<>();
+		for (AbstractInsnNode insn : mn.instructions) {
+			if (insn instanceof JumpInsnNode j) {
+				valid.add(j.label.getLabel());
+			} else if (insn instanceof TableSwitchInsnNode t) {
+				valid.add(t.dflt.getLabel());
+				for (LabelNode l : t.labels) valid.add(l.getLabel());
+			} else if (insn instanceof LookupSwitchInsnNode l) {
+				valid.add(l.dflt.getLabel());
+				for (LabelNode ln : l.labels) valid.add(ln.getLabel());
 			}
-
-			@Override
-			public MethodVisitor visitMethod(int acc, String name, String desc, String sig, String[] exc) {
-				if (name.startsWith("<")) return null;
-				if ((acc & Opcodes.ACC_BRIDGE) != 0) return null;
-				if (MethodFingerprinter.isExcluded(name)) return null;
-
-				boolean isSynthetic    = (acc & Opcodes.ACC_SYNTHETIC) != 0;
-				boolean matchesPattern = MethodFingerprinter.isSyntheticName(name);
-				if (!isSynthetic && !matchesPattern) return null;
-
-				MethodFingerprinter fingerprinter = ctx.fingerprinter;
-				fingerprinter.reset();
-				fingerprinter.setContext(className);
-				return new MethodVisitor(Opcodes.ASM9, fingerprinter) {
-					@Override
-					public void visitEnd() {
-						super.visitEnd();
-						String logicalName = extractLogicalName(name);
-						// access$ 是跨类引用，本对齐器只做“保名不改名”
-						boolean renameable = !name.startsWith("access$");
-						SyntheticInfo info = new SyntheticInfo(
-						 name, desc, acc, fingerprinter.getHash(), logicalName, renameable);
-						groupByLogic(ctx, isOld ? ctx.oldGroups : ctx.newGroups, info);
-					}
-				};
+		}
+		if (mn.tryCatchBlocks != null) {
+			for (TryCatchBlockNode tcb : mn.tryCatchBlocks) {
+				valid.add(tcb.start.getLabel());
+				valid.add(tcb.end.getLabel());
+				valid.add(tcb.handler.getLabel());
 			}
-		};
-		new ClassReader(bytes).accept(visitor, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-		return visitor.className;
+		}
+		return valid;
 	}
 
 	/**
 	 * 将被删除的 lambda 以“空方法体”的形式复活注入到新字节码中，
 	 * 防止被缓存的 {@code CallSite} 抛出 {@link NoSuchMethodError}。
+	 *
 	 * @param oldBytes 上一轮对齐后的旧版本字节码
 	 * @param newBytes 经过重命名处理后的新版本字节码
 	 * @param ctx      当前匹配上下文
@@ -625,7 +731,7 @@ public class LambdaAligner {
 		// 3. 从旧字节码中提取这些遗弃方法的签名信息（只需方法头）
 		ClassNode oldClass = new ClassNode();
 		new ClassReader(oldBytes).accept(oldClass,
-		 ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+			ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
 
 		List<MethodNode> toInject = new ArrayList<>();
 		for (MethodNode mn : oldClass.methods) {
@@ -635,7 +741,7 @@ public class LambdaAligner {
 		// 4. 以空壳形式追加到新类末尾
 		ClassReader cr = new ClassReader(newBytes);
 		// 关键：不用 COMPUTE_FRAMES，避免 getCommonSuperClass 触发目标类加载
-		ClassWriter        cw     = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
+		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
 		final OrphanPolicy policy = orphanPolicy;
 
 		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
@@ -645,8 +751,8 @@ public class LambdaAligner {
 					// 空壳方法必须带 Code 属性，强制清掉 abstract / native
 					int access = mn.access & ~(Opcodes.ACC_ABSTRACT | Opcodes.ACC_NATIVE);
 					MethodVisitor dummy = super.visitMethod(
-					 access, mn.name, mn.desc, mn.signature,
-					 mn.exceptions == null ? null : mn.exceptions.toArray(new String[0]));
+						access, mn.name, mn.desc, mn.signature,
+						mn.exceptions == null ? null : mn.exceptions.toArray(new String[0]));
 					if (dummy != null) {
 						injectDummyBody(dummy, mn.name, mn.desc, policy);
 					}
@@ -676,7 +782,7 @@ public class LambdaAligner {
 			mv.visitInsn(Opcodes.DUP);
 			mv.visitLdcInsn("Lambda removed by hot swap: " + name + desc);
 			mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
-			 "java/lang/IllegalStateException", "<init>", "(Ljava/lang/String;)V", false);
+				"java/lang/IllegalStateException", "<init>", "(Ljava/lang/String;)V", false);
 			mv.visitInsn(Opcodes.ATHROW);
 			mv.visitMaxs(0, 0);
 			mv.visitEnd();
@@ -687,7 +793,7 @@ public class LambdaAligner {
 			mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/System", "err", "Ljava/io/PrintStream;");
 			mv.visitLdcInsn("[LambdaAligner] orphaned lambda invoked: " + name + desc);
 			mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-			 "java/io/PrintStream", "println", "(Ljava/lang/String;)V", false);
+				"java/io/PrintStream", "println", "(Ljava/lang/String;)V", false);
 		}
 
 		switch (returnType.getSort()) {
@@ -772,8 +878,8 @@ public class LambdaAligner {
 	 * 整体位移”不会拆散同一逻辑组。</p>
 	 */
 	private static void groupByLogic(
-	 MatchContext ctx, LongObjectMap<List<SyntheticInfo>> target, SyntheticInfo info) {
-		long                key  = Utils.compositeHash(info.logicalName, info.desc);
+		LongObjectMap<List<SyntheticInfo>> target, SyntheticInfo info) {
+		long key  = Utils.compositeHash(info.logicalName, info.desc);
 		List<SyntheticInfo> list = target.get(key);
 		if (list == null) {
 			list = new ArrayList<>(8);
@@ -806,13 +912,13 @@ public class LambdaAligner {
 		boolean renameable;
 
 		SyntheticInfo(String name, String desc, int access, long hash, String logicalName, boolean renameable) {
-			this.name = name;
-			this.desc = desc;
-			this.access = access;
-			this.hash = hash;
+			this.name        = name;
+			this.desc        = desc;
+			this.access      = access;
+			this.hash        = hash;
 			this.logicalName = logicalName;
-			this.renameable = renameable;
-			this.matched = false;
+			this.renameable  = renameable;
+			this.matched     = false;
 		}
 
 		boolean isStatic() {

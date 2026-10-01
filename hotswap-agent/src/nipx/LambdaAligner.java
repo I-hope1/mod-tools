@@ -27,6 +27,11 @@ import java.util.*;
  * 对齐后的名字，对齐基准却是 v2 编译出的名字），第三次热更会重新触发
  * {@link NoSuchMethodError}；同时上一轮注入的空壳不在原始产物里，也会被漏掉。</p>
  *
+ * <p><b>失败降级：</b>整个 {@link #align} 过程被一层 try/catch 包住。若因输入
+ * 不合法、ASM 内部异常等任何 {@code Exception} 导致对齐失败，会记录一条日志并
+ * 返回原始 {@code newBytes}（降级为“不崩溃”）。这意味着热更成功但老 CallSite
+ * 可能因名字未对齐而失效——这是与“不崩溃”的设计目标一致的取舍。</p>
+ *
  * <p><b>已知限制：幽灵方法指纹退化。</b> 幽灵方法（空壳）的字节码与原始方法体
  * 不同，其指纹在下一轮对齐中已不是原始指纹。若开发者在 V2 删除了某个 lambda，
  * V3 又把它加回来，V3 的新方法会因指纹失配而走 Step 2 顺序回退——通常仍能
@@ -71,7 +76,7 @@ public class LambdaAligner {
 		 * {@code name + desc -> 新方法名}。
 		 * <p>以 desc 为键的一部分，避免同名不同描述符（重载）被一起改名。</p>
 		 */
-		final Map<String, String> renameMap          = new HashMap<>(64);
+		final Map<String, String> renameMap = new HashMap<>(64);
 
 		/**
 		 * {@code name -> 新方法名}，供 {@code mapValue} 改写字符串常量时使用。
@@ -85,30 +90,30 @@ public class LambdaAligner {
 		 * <p>与 {@link #renameBySimpleName} 的区别：这里始终登记，即使
 		 * “目标名 == 原名”（保名）。这样“一改一同”的歧义场景才能被识别。</p>
 		 */
-		final Map<String, String> simpleNameWitness  = new HashMap<>(64);
+		final Map<String, String> simpleNameWitness = new HashMap<>(64);
 
 		/**
 		 * 出现歧义的简单名集合。
 		 * <p>这些名字在 {@code mapValue} 中不再改写字符串常量，宁可保持原样。</p>
 		 */
-		final Set<String>         ambiguousNames     = new HashSet<>(16);
+		final Set<String> ambiguousNames = new HashSet<>(16);
 
 		/** 已被占用的旧方法名集合，用于生成 fresh name 时避免碰撞。 */
-		final Set<String>         usedOldNames       = new HashSet<>(64);
+		final Set<String> usedOldNames = new HashSet<>(64);
 
 		/**
 		 * 新类里<b>所有</b>方法的名字（含构造函数、静态块、桥接、普通业务方法、
 		 * 合成方法），作为 fresh name 的避障集。由 {@code scan} 无条件填充。</p>
 		 */
-		final Set<String>         existingNewNames   = new HashSet<>(64);
+		final Set<String> existingNewNames = new HashSet<>(64);
 
 		/**
 		 * 旧类里<b>所有</b>方法的 {@code name + desc} 集合。既用于冲突检测，
 		 * 也防止 fresh name 撞到上一轮注入的幽灵方法。由 {@code scan} 无条件填充。</p>
 		 */
-		final Set<String>         oldNameDescSet     = new HashSet<>(64);
+		final Set<String> oldNameDescSet = new HashSet<>(64);
 
-		final MethodFingerprinter fingerprinter      = MethodFingerprinter.CONTEXT.get();
+		final MethodFingerprinter fingerprinter = MethodFingerprinter.CONTEXT.get();
 
 		/** 当前处理的类名（内部名，形如 {@code com/example/Foo}）。 */
 		String currentClass;
@@ -143,8 +148,8 @@ public class LambdaAligner {
 	 *
 	 * @param oldBytes <b>上一轮对齐后 JVM 里实际生效的字节码</b>（见类级 javadoc 的调用约定）
 	 * @param newBytes 本次新编译出的字节码
-	 * @return 对齐后的字节码；若没有任何重命名且无孤儿方法需要复活，返回原始 {@code newBytes}
-	 * @throws IllegalArgumentException 若新旧字节码的类名不一致
+	 * @return 对齐后的字节码；若没有任何重命名且无孤儿方法需要复活，返回原始 {@code newBytes}；
+	 *         若整个流程抛异常，也会记录日志后返回原始 {@code newBytes}（降级不崩溃）
 	 */
 	public static byte[] align(byte[] oldBytes, byte[] newBytes) {
 		if (oldBytes == null || oldBytes.length == 0) return newBytes;
@@ -153,28 +158,25 @@ public class LambdaAligner {
 		try {
 			ctx.reset();
 
-			ctx.currentClass = scan(oldBytes, ctx, true);
-			String newClass  = scan(newBytes, ctx, false);
-			if (!Objects.equals(ctx.currentClass, newClass)) {
+			// 一次读取即拿到 ClassNode：oldCn 会被 resurrectOrphanedLambdas 复用，
+			// newCn 会在“无重命名”路径下直接提供 presentKeys。
+			ClassNode oldCn = scan(oldBytes, ctx, true);
+			ClassNode newCn = scan(newBytes, ctx, false);
+			if (!Objects.equals(oldCn.name, newCn.name)) {
 				throw new IllegalArgumentException(
-					"New class name does not match old class name: " + newClass + " != " + ctx.currentClass);
+					"New class name does not match old class name: " + newCn.name + " != " + oldCn.name);
 			}
+			ctx.currentClass = oldCn.name;
 
 			LongObjectMap<List<SyntheticInfo>> oldGroups = ctx.oldGroups;
 			LongObjectMap<List<SyntheticInfo>> newGroups = ctx.newGroups;
 
-			long[]   ks  = newGroups.keys();
-			Object[] vs  = newGroups.values();
-			int      cap = newGroups.capacity();
-
 			// 【阶段一】抢占 / 复用旧名
-			for (int i = 0; i < cap; i++) {
-				Object v = vs[i];
-				if (!LongObjectMap.isValid(v)) continue;
+			for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
+				List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
+				if (newGroup == null) continue;
 
-				@SuppressWarnings("unchecked")
-				List<SyntheticInfo> newGroup = (List<SyntheticInfo>) v;
-				List<SyntheticInfo> oldGroup = oldGroups.get(ks[i]);
+				List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
 				if (oldGroup == null) continue;
 
 				int newSize = newGroup.size();
@@ -255,12 +257,9 @@ public class LambdaAligner {
 
 			// 【阶段二】未匹配的新方法统一处理
 			int freshId = 0;
-			for (int i = 0; i < cap; i++) {
-				Object v = vs[i];
-				if (!LongObjectMap.isValid(v)) continue;
-
-				@SuppressWarnings("unchecked")
-				List<SyntheticInfo> newGroup = (List<SyntheticInfo>) v;
+			for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
+				List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
+				if (newGroup == null) continue;
 
 				for (SyntheticInfo ni : newGroup) {
 					if (ni.matched || !ni.renameable) continue;
@@ -290,10 +289,26 @@ public class LambdaAligner {
 			detectResidualAmbiguity(ctx);
 
 			// 应用重命名规则
-			byte[] alignedBytes = ctx.renameMap.isEmpty() ? newBytes : applyTransform(newBytes, ctx);
+			byte[]    alignedBytes;
+			ClassNode alignedCn;
+			if (ctx.renameMap.isEmpty()) {
+				// 无重命名：直接复用 scan 阶段已经建好的 ClassNode
+				alignedBytes = newBytes;
+				alignedCn    = newCn;
+			} else {
+				alignedCn    = applyTransform(newBytes, ctx);
+				alignedBytes = writeClass(alignedCn);
+			}
 
-			// 无论是否发生重命名，都要检查是否有被遗弃的旧 lambda 并执行复活注入
-			return resurrectOrphanedLambdas(oldBytes, alignedBytes, ctx);
+			// 从 alignedCn 直接收集 presentKeys，避免 resurrectOrphanedLambdas 再读一遍
+			Set<String> presentKeys = collectMethodKeys(alignedCn);
+
+			// 传入 oldCn（已解析过一次）—— 避免 resurrectOrphanedLambdas 二次读 oldBytes
+			return resurrectOrphanedLambdas(oldCn, alignedBytes, presentKeys, ctx);
+		} catch (Exception e) {
+			// 降级：不崩溃，返回原始字节码
+			HotSwapAgent.info("[LambdaAligner] align failed, fallback to newBytes: " + e);
+			return newBytes;
 		} finally {
 			ctx.reset();
 		}
@@ -353,12 +368,31 @@ public class LambdaAligner {
 	 *
 	 * <p>多数场景下 {@link #witnessSimpleName} 已能在写入时捕获；此处作为
 	 * 兜底，防御未来算法调整引入的漏网情况。</p>
+	 *
+	 * <p><b>覆盖范围与边界</b>：本方法只扫描 {@link MatchContext#newGroups} 中的
+	 * 方法——也就是 {@code scan} 阶段被识别为合成方法（{@code ACC_SYNTHETIC}
+	 * 或名字命中 {@link MethodFingerprinter#isSyntheticName}）的那些。以下情形
+	 * <b>不在覆盖范围内</b>：</p>
+	 * <ul>
+	 *   <li>名字只作为字符串常量出现在 {@code $deserializeLambda$} 或业务代码中，
+	 *       但类里并无对应方法——例如被反射调用、或在别处拼接出来的 lambda 名。</li>
+	 *   <li>名字出现在注解值、类常量池等处，但不对应本类的方法定义。</li>
+	 * </ul>
+	 *
+	 * <p>这些边界情况下，{@link MatchContext#renameBySimpleName} 里的别名映射会保留到最后，
+	 * 可能造成 {@code mapValue} 把某个字符串常量改成一个实际上并不存在于本类的
+	 * 方法名。因为对应字符串无法通过常规方式被 {@code SerializedLambda} 反查
+	 * （{@code getImplMethodName} 只会返回真实存在的方法名），触发概率极低；
+	 * 但若此类字符串在业务逻辑里被当作与 lambda 有关的名字使用，需自行评估风险。
+	 * 真要彻底闭合，需要在 {@code mapValue} 里对每个字符串做“本类中是否存在对应
+	 * 名字”的二次校验，代价是额外一遍扫描，与收益不匹配，暂不实现。</p>
 	 */
-	@SuppressWarnings("unchecked")
 	private static void detectResidualAmbiguity(MatchContext ctx) {
-		for (Object v : ctx.newGroups.values()) {
-			if (!LongObjectMap.isValid(v)) continue;
-			List<SyntheticInfo> newGroup = (List<SyntheticInfo>) v;
+		var newGroups = ctx.newGroups;
+		for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
+			List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
+			if (newGroup == null) continue;
+
 			for (SyntheticInfo ni : newGroup) {
 				if (!ni.renameable) continue;
 				if (ctx.renameMap.containsKey(ni.name + ni.desc)) continue; // 已改名
@@ -375,17 +409,24 @@ public class LambdaAligner {
 	//region 字节码转换 + 扫描
 
 	/**
-	 * 应用转换规则到字节码。
+	 * 应用转换规则到字节码，返回 remapped 后的 {@link ClassNode}。
+	 *
+	 * <p>为什么返回 {@code ClassNode} 而不是 {@code byte[]}：让调用方在写出之前
+	 * 有机会直接从同一份节点上收集 {@code name + desc} 集合（供
+	 * {@link #resurrectOrphanedLambdas} 判断孤儿），避免重复解析 newBytes。</p>
+	 *
+	 * <p>本方法使用 {@code ClassReader(bytes).accept(cn, 0)} 完整读取，
+	 * 因为要写出合法的 Class 文件必须保留 StackMapTable 帧数据。</p>
 	 *
 	 * <p>整体流程：</p>
 	 * <ol>
 	 *   <li>读入 {@link ClassNode}。</li>
 	 *   <li>通过 {@link ClassRemapper} 应用方法名与字符串常量的重命名。</li>
 	 *   <li>对 {@code $deserializeLambda$} 做 {@code lookupswitch} 的 key 后处理。</li>
-	 *   <li>写出字节码。</li>
+	 *   <li>返回 remapped 后的节点，由调用方写出。</li>
 	 * </ol>
 	 */
-	private static byte[] applyTransform(byte[] bytes, MatchContext ctx) {
+	private static ClassNode applyTransform(byte[] bytes, MatchContext ctx) {
 		ClassNode cn = new ClassNode();
 		new ClassReader(bytes).accept(cn, 0);
 
@@ -420,10 +461,21 @@ public class LambdaAligner {
 				fixDeserializeSwitch(mn);
 			}
 		}
+		return remapped;
+	}
 
+	/** 把 {@link ClassNode} 序列化为字节码。 */
+	private static byte[] writeClass(ClassNode cn) {
 		ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
-		remapped.accept(cw);
+		cn.accept(cw);
 		return cw.toByteArray();
+	}
+
+	/** 收集一个类里所有方法的 {@code name + desc}。 */
+	private static Set<String> collectMethodKeys(ClassNode cn) {
+		Set<String> keys = new HashSet<>(cn.methods.size() * 2);
+		for (MethodNode mn : cn.methods) keys.add(mn.name + mn.desc);
+		return keys;
 	}
 
 	/**
@@ -474,7 +526,7 @@ public class LambdaAligner {
 
 			// 碰撞检测：重算后的 key 不允许重复
 			Set<Integer> seen = new HashSet<>();
-			boolean ok = true;
+			boolean      ok   = true;
 			for (int k : newKeys) {
 				if (!seen.add(k)) { ok = false; break; }
 			}
@@ -519,7 +571,7 @@ public class LambdaAligner {
 	 * 从 case 块中提取“implMethodName 比较用的”字符串常量。
 	 *
 	 * <p><b>定位规则</b>：扫描块内所有 {@code java/lang/String.equals} 调用，
-	 * 只看它们的<b>直接前驱 LDC 参数</b>，且该字符串必须满足
+	 * 只看与它关联的 LDC 参数（见下），且该字符串必须满足
 	 * {@link MethodFingerprinter#isSyntheticName}。这会过滤掉：</p>
 	 * <ul>
 	 *   <li>ECJ 单 switch 布局下 {@code getFunctionalInterfaceClass} /
@@ -528,6 +580,20 @@ public class LambdaAligner {
 	 *   <li>方法引用名（如 {@code "trim"}）—— 它们不会被 Remapper 改写，
 	 *       原 key 天然正确，无需重算。</li>
 	 * </ul>
+	 *
+	 * <p><b>两种字节码形态</b>都要覆盖：</p>
+	 * <ol>
+	 *   <li><b>标准形式</b>{@code s.equals("const")}：栈序 {@code [ALOAD, LDC]}，
+	 *       则 equals 的直接前驱就是 LDC。</li>
+	 *   <li><b>反向形式</b>{@code "const".equals(s)}：栈序 {@code [LDC, ALOAD]}，
+	 *       则 equals 的前驱是 ALOAD，需要再往前一步才是 LDC。
+	 *       某些字节码优化器或非标准编译产出会出现这种形态。</li>
+	 * </ol>
+	 *
+	 * <p>注意 ASM 在读取时会把 {@code aload_0}~{@code aload_3} 这类无操作数形式
+	 * 归一化为 {@code visitVarInsn(ALOAD, n)}，因此只需判断
+	 * {@code VarInsnNode} 且 {@code getOpcode() == Opcodes.ALOAD} 即可覆盖全部
+	 * 变量加载变体。</p>
 	 *
 	 * <p>块内若出现两个 <b>不同</b> 的合成名字符串（hash 碰撞导致的合并 case），
 	 * 返回 {@code null} 由调用方沿用原 key；只出现一个合成名时返回它。</p>
@@ -550,7 +616,17 @@ public class LambdaAligner {
 				&& "java/lang/String".equals(mi.owner)
 				&& "equals".equals(mi.name)
 				&& "(Ljava/lang/Object;)Z".equals(mi.desc)) {
+
 				AbstractInsnNode prev = previousRealInsn(mi);
+
+				// 反向形式 "const".equals(s)：前一条是 ALOAD，再往前才是 LDC。
+				// 标准形式 s.equals("const")：前一条就是 LDC，不做这一跳。
+				// ASM 会把 aload_0~aload_3 归一化为 VarInsnNode(ALOAD, n)，
+				// 所以只需判断 opcode == ALOAD 就能覆盖全部变体。
+				if (prev instanceof VarInsnNode v && v.getOpcode() == Opcodes.ALOAD) {
+					prev = previousRealInsn(prev);
+				}
+
 				if (prev instanceof LdcInsnNode ldc
 					&& ldc.cst instanceof String s
 					&& MethodFingerprinter.isSyntheticName(s)) {
@@ -601,7 +677,7 @@ public class LambdaAligner {
 	}
 
 	/**
-	 * 扫描字节码并收集合成方法信息。
+	 * 扫描字节码并收集合成方法信息，返回 {@link ClassNode}。
 	 *
 	 * <p><b>无条件</b>把所有方法（含构造函数、静态块、桥接、普通业务方法、
 	 * 合成方法）的 {@code name}/{@code name+desc} 分别登记到
@@ -613,18 +689,19 @@ public class LambdaAligner {
 	 * {@link MethodFingerprinter#isExcluded} 列出的方法（如
 	 * {@code $deserializeLambda$}）。</p>
 	 *
-	 * <p>实现上走 {@link ClassNode} 而非流式 {@code ClassVisitor}，原因是需要
-	 * 先为每个方法收集“有效 Label 集合”（被跳转 / switch / 异常表引用的 Label），
-	 * 再交给 {@link MethodFingerprinter}，让它忽略纯调试用途的 Label。
-	 * {@link MethodNode#accept(MethodVisitor)} 会把 {@link LabelNode} 缓存的
-	 * {@link Label} 实例原样回放，因此两个阶段可以共享同一身份比较。</p>
+	 * <p>返回的 {@link ClassNode} 使用 {@code SKIP_DEBUG | SKIP_FRAMES} 读取，
+	 * 因此<b>不能直接写回字节码</b>——它被用于：
+	 * （a）取 {@code name}；（b）在 {@code renameMap} 为空时供调用方收集
+	 * {@code presentKeys}（只需 {@code name + desc}）；
+	 * （c）供 {@link #resurrectOrphanedLambdas} 提取孤儿方法的签名头，
+	 * 避免再次读取 {@code oldBytes}。</p>
 	 *
 	 * @param bytes 要扫描的字节码
 	 * @param ctx   匹配上下文
 	 * @param isOld 是否为旧版本
-	 * @return 类名（内部名）
+	 * @return 该类的 {@link ClassNode}
 	 */
-	private static String scan(byte[] bytes, MatchContext ctx, boolean isOld) {
+	private static ClassNode scan(byte[] bytes, MatchContext ctx, boolean isOld) {
 		ClassNode cn = new ClassNode();
 		// SKIP_DEBUG：不解析行号 / 局部变量表；SKIP_FRAMES：不解析 StackMapTable。
 		// 二者对逻辑指纹都没有贡献，跳过可减少内存与解析时间。
@@ -660,7 +737,7 @@ public class LambdaAligner {
 			groupByLogic(isOld ? ctx.oldGroups : ctx.newGroups, info);
 		}
 
-		return cn.name;
+		return cn;
 	}
 
 	/**
@@ -699,28 +776,29 @@ public class LambdaAligner {
 	 * 将被删除的 lambda 以“空方法体”的形式复活注入到新字节码中，
 	 * 防止被缓存的 {@code CallSite} 抛出 {@link NoSuchMethodError}。
 	 *
-	 * @param oldBytes 上一轮对齐后的旧版本字节码
-	 * @param newBytes 经过重命名处理后的新版本字节码
-	 * @param ctx      当前匹配上下文
+	 * <p>复用调用方已经解析好的 {@code oldCn} 提取孤儿方法的签名头，
+	 * 避免再次读取 {@code oldBytes}。</p>
+	 *
+	 * <p>{@code oldCn} 是用 {@code SKIP_DEBUG | SKIP_FRAMES} 读入的，
+	 * 但注入空壳只用到 {@code access} / {@code name} / {@code desc} /
+	 * {@code signature} / {@code exceptions} 这些方法头字段——它们不受
+	 * {@code SKIP_*} 影响。方法体（Code 属性）由 {@link #injectDummyBody}
+	 * 重新生成，不会拷贝 {@code oldCn} 中的原始指令。</p>
+	 *
+	 * @param oldCn       已解析的旧类节点（由 {@code align} 中的 {@code scan} 提供）
+	 * @param newBytes    经过重命名处理后的新版本字节码
+	 * @param presentKeys 新版本里实际存在的所有方法键（{@code name + desc}）
+	 * @param ctx         当前匹配上下文
 	 * @return 注入幽灵方法后的最终字节码；若无孤儿则原样返回 {@code newBytes}
 	 */
-	private static byte[] resurrectOrphanedLambdas(byte[] oldBytes, byte[] newBytes, MatchContext ctx) {
-		// 1. 收集对齐后新类里实际存在的所有方法键（只需方法头）
-		Set<String> presentKeys = new HashSet<>();
-		new ClassReader(newBytes).accept(new ClassVisitor(Opcodes.ASM9) {
-			@Override
-			public MethodVisitor visitMethod(int acc, String name, String desc, String sig, String[] exc) {
-				presentKeys.add(name + desc);
-				return null;
-			}
-		}, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-
-		// 2. 旧类里的合成方法键集合，差集就是孤儿
+	private static byte[] resurrectOrphanedLambdas(ClassNode oldCn, byte[] newBytes,
+	                                               Set<String> presentKeys, MatchContext ctx) {
+		// 1. 旧类里的合成方法键集合，差集就是孤儿
 		Set<String> orphanedKeys = new HashSet<>();
-		for (Object v : ctx.oldGroups.values()) {
-			if (!LongObjectMap.isValid(v)) continue;
-			@SuppressWarnings("unchecked")
-			List<SyntheticInfo> oldGroup = (List<SyntheticInfo>) v;
+		var         oldGroups    = ctx.oldGroups;
+		for (int idx = oldGroups.nextEntry(-1); idx != -1; idx = oldGroups.nextEntry(idx)) {
+			List<SyntheticInfo> oldGroup = oldGroups.valueAt(idx);
+			if (oldGroup == null) continue;
 			for (SyntheticInfo oi : oldGroup) {
 				String key = oi.name + oi.desc;
 				if (!presentKeys.contains(key)) orphanedKeys.add(key);
@@ -728,20 +806,16 @@ public class LambdaAligner {
 		}
 		if (orphanedKeys.isEmpty()) return newBytes;
 
-		// 3. 从旧字节码中提取这些遗弃方法的签名信息（只需方法头）
-		ClassNode oldClass = new ClassNode();
-		new ClassReader(oldBytes).accept(oldClass,
-			ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-
+		// 2. 从已解析的 oldCn 中取遗弃方法的签名头（不再二次读 oldBytes）
 		List<MethodNode> toInject = new ArrayList<>();
-		for (MethodNode mn : oldClass.methods) {
+		for (MethodNode mn : oldCn.methods) {
 			if (orphanedKeys.contains(mn.name + mn.desc)) toInject.add(mn);
 		}
 
-		// 4. 以空壳形式追加到新类末尾
+		// 3. 以空壳形式追加到新类末尾
 		ClassReader cr = new ClassReader(newBytes);
 		// 关键：不用 COMPUTE_FRAMES，避免 getCommonSuperClass 触发目标类加载
-		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
+		ClassWriter        cw     = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
 		final OrphanPolicy policy = orphanPolicy;
 
 		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
@@ -879,7 +953,7 @@ public class LambdaAligner {
 	 */
 	private static void groupByLogic(
 		LongObjectMap<List<SyntheticInfo>> target, SyntheticInfo info) {
-		long key  = Utils.compositeHash(info.logicalName, info.desc);
+		long                key  = Utils.compositeHash(info.logicalName, info.desc);
 		List<SyntheticInfo> list = target.get(key);
 		if (list == null) {
 			list = new ArrayList<>(8);

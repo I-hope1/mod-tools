@@ -23,12 +23,12 @@ import java.util.Map;
  * {@code IllegalAccessError}。用宿主特权 Lookup 在此解析出 {@link MethodHandle}，
  * 调用点直接命中。</p>
  *
- * <p><b>用途二（{@link #KIND_FINAL}）</b>：补丁类不是宿主的 &lt;init&gt;/&lt;clinit&gt;，
- * 直接写 final 字段会抛 {@code IllegalAccessError}。用 {@link Unsafe} 的 CAS 做
- * <b>条件写</b>——仅当字段当前等于该类型默认值（引用 {@code null}、数值 {@code 0}、
+ * <p><b>用途二（{@link #KIND_CONDITIONAL}）</b>：新增字段的写入（final 与非 final 统一）
+ * 走 Unsafe 条件 CAS——仅当字段当前等于该类型默认值（引用 {@code null}、数值 {@code 0}、
  * {@code boolean} {@code false}、{@code char} {@code '\u0000'}）时才写入。
- * CAS 本身即 volatile 语义，且原子读-比较-写一次完成，不会有先读后写的
- * TOCTOU 竞态。</p>
+ * CAS 本身即 volatile 语义，原子读-比较-写一次完成，无 TOCTOU 竞态。
+ * 这样 redefine 之后、补丁执行之前或期间其他线程给字段赋过值时，补丁不会覆盖；
+ * 代价是字段已是默认值以外时跳过（保守方向）。</p>
  *
  * <p><b>方法名分布（对照 {@code jdk.internal.misc.Unsafe}）</b>：</p>
  * <ul>
@@ -44,13 +44,13 @@ import java.util.Map;
  *       只作用于整型，JDK 官方（如 VarHandle）用 raw bits + {@code compareAndSetInt/Long}
  *       实现浮点 CAS。本类不做位转换，直接降级为 {@code putFloatVolatile}/
  *       {@code putDoubleVolatile} 无条件写——丢掉条件语义，但保持 volatile 可见性。
- *       float/double 的字段在补丁里极少是 final，影响面很小。</li>
+ *       float/double 字段极少是 final，影响面很小。</li>
  * </ul>
  *
  * <p><b>bsmArgs 布局</b>：{@code [int kind, int opcode, Class owner, Class host]}。
  * <ul>
  *   <li>{@code KIND_PROTECTED}：{@code owner} = 成员声明类，{@code host} = 宿主类。</li>
- *   <li>{@code KIND_FINAL}：{@code owner} = 宿主类，{@code host} = 宿主类（占位）。
+ *   <li>{@code KIND_CONDITIONAL}：{@code owner} = 宿主类，{@code host} = 宿主类（占位）。
  *       字段类型从 {@code callSiteType} 派生：静态字段在参数 0，实例字段在参数 1。</li>
  * </ul>
  *
@@ -63,8 +63,8 @@ public final class HotswapBridge {
     /** protected 成员桥接：owner 是声明类，host 是宿主类。 */
     public static final int KIND_PROTECTED = 0;
 
-    /** final 字段的 Unsafe 条件 CAS 写：owner 是宿主类。 */
-    public static final int KIND_FINAL = 1;
+    /** 新增字段的条件 CAS 写：owner 是宿主类。 */
+    public static final int KIND_CONDITIONAL = 1;
 
     private static final Unsafe UNSAFE      = Unsafe.getUnsafe();
     private static final Lookup IMPL_LOOKUP = Reflect.IMPL_LOOKUP;
@@ -72,23 +72,26 @@ public final class HotswapBridge {
     /**
      * valueClass -> MethodHandle {@code (Object, long, V)void}。
      * <p>键：引用类型统一用 {@link Object Object.class}；基本类型用各自的 {@code Class}。</p>
-     * <p>值：优先条件 CAS（expected 已固定为默认值、返回值已 drop）；{@code Unsafe}
-     * 缺对应 CAS 的类型（float/double）降级为无条件 volatile 写。两种形态的剩余签名
-     * 一致，都是 {@code (receiver, offset, value)}。</p>
+     * <p>值：优先条件 CAS（expected 已固定为默认值、返回值已 drop）；
+     * {@code Unsafe} 缺对应 CAS 的类型（float/double）降级为无条件 volatile 写。
+     * 两种形态的剩余签名一致，都是 {@code (receiver, offset, value)}。</p>
      */
     private static final Map<Class<?>, MethodHandle> CONDITIONAL_PUTTERS;
 
     static {
         Map<Class<?>, MethodHandle> m = new HashMap<>(16);
         try {
-            // 引用类型：JDK 12+ 用 Reference 名字，JDK 11- 用 Object 名字。
-            // 注意 jdk.internal.misc.Unsafe 从来没有 compareAndSwapObject——
-            // 那是 sun.misc.Unsafe 的名字。
-            boolean modernRef = Reflect.version >= 12;
-            m.put(Object.class, conditional(
-                modernRef ? "compareAndSetReference" : "compareAndSetObject",
-                modernRef ? "putReferenceVolatile"   : "putObjectVolatile",
-                Object.class, null));
+            // 引用类型：优先使用 JDK 12+ 的 Reference 名字，不存在则回退到 JDK 11- 的 Object 名字
+            MethodHandle refHandle = null;
+            try {
+                refHandle = conditional(
+                    "compareAndSetReference", "putReferenceVolatile", Object.class, null);
+            } catch (Throwable ignored) { }
+            if (refHandle == null) {
+                refHandle = conditional(
+                    "compareAndSetObject", "putObjectVolatile", Object.class, null);
+            }
+            m.put(Object.class, refHandle);
 
             // 6 种整型/布尔：JDK 9 起就叫 compareAndSetXxx，无需版本分流
             m.put(boolean.class, conditional("compareAndSetBoolean", "putBooleanVolatile",
@@ -122,10 +125,8 @@ public final class HotswapBridge {
      *   <li>找 {@code casName}；找到就
      *       {@code bindTo(UNSAFE) + insertArguments(2, expected) + dropReturn}，
      *       得到 {@code (Object, long, V)void} 的条件 CAS。</li>
-     *   <li>找不到就找 {@code putName}，{@code bindTo(UNSAFE)} 后形态一致，
-     *       但无条件写。</li>
-     *   <li>都没有则抛异常，让类初始化失败——这属于"JDK 版本超出预期"，
-     *       应该大声暴露而不是静默降级。</li>
+     *   <li>找不到就找 {@code putName}，{@code bindTo(UNSAFE)} 后形态一致，但无条件写。</li>
+     *   <li>都没有则抛异常，让类初始化失败——"JDK 版本超出预期"应该大声暴露。</li>
      * </ol>
      */
     private static MethodHandle conditional(
@@ -173,8 +174,8 @@ public final class HotswapBridge {
     ) {
         try {
             return switch (kind) {
-                case KIND_PROTECTED -> protectedCallSite(name, callSiteType, opcode, owner, host);
-                case KIND_FINAL     -> finalCallSite(name, callSiteType, opcode, owner);
+                case KIND_PROTECTED   -> protectedCallSite(name, callSiteType, opcode, owner, host);
+                case KIND_CONDITIONAL -> conditionalFieldCallSite(name, callSiteType, opcode, owner);
                 default -> throw new IllegalArgumentException("unknown bridge kind: " + kind);
             };
         } catch (BootstrapMethodError bme) {
@@ -186,9 +187,9 @@ public final class HotswapBridge {
         }
     }
 
-    // ==================== final 字段：条件 CAS 写 ====================
+    // ==================== 字段条件 CAS 写 ====================
 
-    private static CallSite finalCallSite(
+    private static CallSite conditionalFieldCallSite(
         String fieldName, MethodType callSiteType, int opcode, Class<?> owner
     ) throws Throwable {
         boolean isStatic = opcode == Opcodes.PUTSTATIC;
@@ -217,7 +218,7 @@ public final class HotswapBridge {
 
     /**
      * 沿 owner -> 父类链逐层 {@code getDeclaredFields()} 查找。
-     * 热更注入的 final 字段就在 owner 上，第一次迭代即命中。
+     * 热更注入的字段就在 owner 上，第一次迭代即命中。
      */
     private static Field findField(Class<?> owner, String name, String desc)
         throws NoSuchFieldException {

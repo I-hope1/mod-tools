@@ -23,121 +23,76 @@ import java.util.concurrent.*;
 import static nipx.HotSwapAgent.log;
 
 /**
- * Hotswap时初始化修复器
- * <p>新增字段的初始化表达式如果依赖构造器参数、局部变量、含分支/内联，存量实例不会被初始化。</p>
- * <p>补丁逻辑不再注入被redefine的字节码：改为生成一个hidden nestmate class，
- * 在{@link #afterRedefined}里定义并调用，避免污染diff、避免依赖"允许增方法"的redefine。</p>
- * <p>不再摘除final修饰符：补丁类不是宿主的&lt;init&gt;/&lt;clinit&gt;，直接PUTFIELD/PUTSTATIC写
- * final字段会抛IllegalAccessError，改为经{@link HotswapBridge}（kind=KIND_FINAL）做
- * <b>条件 volatile 写</b>——仅当字段当前值等于该类型默认值时才写，避免覆盖redefine之后
- * 其他线程已经赋过的新值。代价是字段已被赋非默认值时会跳过该字段的补丁。</p>
- * <p>补丁在热更线程执行，属于不安全发布：final字段走{@link HotswapBridge}的volatile条件写，
- * 非final字段的裸PUTFIELD/PUTSTATIC前各自插入{@link java.lang.invoke.VarHandle#releaseFence()}，
- * 保证构造写入先于发布。读端没有强制acquire，只是尽力而为的可见性保证。</p>
- * <p>针对Java 8字节码：同一类内私有方法调用生成的是{@code INVOKESPECIAL}，
- * 提取时放行并把补丁里的这类指令原地改写为{@code INVOKEVIRTUAL}（接口私有方法则为{@code INVOKEINTERFACE}）；
- * {@code invokedynamic} 的 {@code bsmArgs} 里指向宿主私有方法的 {@code H_INVOKESPECIAL} handle 同样改写。</p>
- * <p>跨包 protected 成员访问：hidden class 不是宿主的子类，直接调用会因 JVMS §5.4.4 的
- * receiver check 抛 {@code IllegalAccessError}。改写为 {@code invokedynamic}，由
- * {@link HotswapBridge}（kind=KIND_PROTECTED）以宿主特权 Lookup 解析。BSM 的
- * {@code bsmArgs} 显式携带宿主类（不能依赖 {@code getNestHost()}，嵌套类会倒错到最外层）。
- * 两种 bridge 共用一个 BSM 与一个 bsm handle。</p>
+ * Hotswap 时初始化修复器。
  *
- * <h2>字段依赖顺序</h2>
- * <p>同一类里的多个新增字段如果存在 {@code A = ...B...}、{@code B = ...} 的依赖，
- * 补丁体的指令顺序必须保证 B 先于 A 输出，否则 A 在重放时读到 B 的默认值。
- * {@link #topoSortFields} 对每个已放行集合做拓扑排序；出现循环依赖时保守地
- * 拒绝整组，避免输出顺序不确定。</p>
+ * <h2>策略</h2>
+ * <p>新增字段的初始化表达式如果依赖构造器参数、局部变量、含分支/内联，存量实例不会被初始化。
+ * 本类从字节码里反向切片出赋值表达式，生成一个 hidden nestmate class 承载补丁，
+ * 在 redefine 之后调用。补丁体是纯直线代码，{@code COMPUTE_MAXS} 足够。</p>
+ * <p>整体策略是"宁可拒绝，不可误改"：分支、try/catch 相交、控制依赖、局部变量依赖、
+ * 多根构造器不一致、循环依赖，都会拒绝。误补会静默污染对象状态，漏补只是字段保持默认值。</p>
  *
- * <h2>构造器参数回溯</h2>
- * <p>Java 编写的初始化表达式（如 {@code x = s.get(0).getType()}，其中 {@code s} 是
- * 构造器参数）在字节码里是直接加载指令读取（{@code ALOAD/ILOAD/LLOAD/FLOAD/DLOAD n}），
- * 不是 {@code GETFIELD}。若参数在 {@code <init>} 中通过
- * {@code ALOAD 0; XLOAD n; PUTFIELD this.f} 存入字段，就把提取片段里的加载指令替换为
- * {@code ALOAD 0; GETFIELD this.f}。</p>
+ * <h2>字段写入</h2>
+ * <p>所有新增字段的 {@code PUTFIELD}/{@code PUTSTATIC}（final 与非 final 统一）都改写为
+ * {@code invokedynamic}，由 {@link HotswapBridge#KIND_CONDITIONAL} 在链接期算好
+ * Unsafe offset 并用条件 CAS 写入：仅当字段当前等于该类型默认值才写。这样不会覆盖
+ * redefine 之后其他线程赋的新值；代价是字段已是默认值以外时跳过（保守方向）。
+ * CAS 本身即 volatile 语义，无需额外 fence。</p>
  *
- * <h3>参数回溯的安全条件</h3>
- * <p>替换正确的前提是"提取片段执行的时点，字段 {@code f} 的值等于参数槽位 {@code n}
- * 的值"。这要求槽位在整个 {@code <init>} 中满足单赋值语义，pattern 本身无条件执行，
- * 且字段没有被二次覆写。因此 {@link #scanParamFields} 对每个候选映射做以下检查，
- * 任一命中即弃用：</p>
- * <ul>
- *   <li><b>pattern 有控制依赖</b>：复用 {@link #checkControlDependency}，跳转不得跳过
- *       pattern，也禁止回到 pattern 之前。</li>
- *   <li><b>槽位被 store 覆盖</b>（pattern 之前或之后）：按参数宽度计算区间，
- *       {@code long}/{@code double} 占 2 槽位。</li>
- *   <li><b>槽位被 {@code IINC} 自增</b>：{@code IincInsnNode} 不继承
- *       {@code VarInsnNode}，必须单独判定。</li>
- *   <li><b>字段被二次 {@code PUTFIELD}</b>：pattern 之后同一字段被再次写入。</li>
- * </ul>
- *
- * <h3>伪指令处理</h3>
- * <p>{@code LineNumberNode}/{@code LabelNode}/{@code FrameNode} 的 opcode 为 -1，
- * 按指令下标紧邻匹配会错位。扫描时先过滤掉伪指令，在"真实指令"序列上做三元组匹配。
- * 控制依赖检查回落到原始 {@link InsnList} 索引进行。</p>
- *
- * <h3>控制依赖</h3>
- * <p>{@link #checkControlDependency} 要求 put 所在基本块是方法入口的无条件后继：
- * put 之前的跳转不得跳过 put；put 之后的跳转不得回到 put 之前（循环体）；
- * put 之前的 {@code RETURN} 拒绝（提前退出）；put 之前的 {@code ATHROW} 放行
- * （抛出意味着对象未构造完成，不会有实例）。</p>
- *
- * <h3>try/catch 相交</h3>
- * <p>{@link #checkSafe} 拒绝提取范围与任何 {@code tryCatchBlock} 相交，
- * 或包含任何 exception handler。</p>
- *
- * <h3>后续加工</h3>
- * <p>{@link #subsequentProcessingReason}：字段在所有相关方法里的每次 PUT 必须属于某个
- * "已放行字段的提取指令集"；引用类型字段的每次 GET 也必须属于某个已放行字段的提取指令集。
- * 基本类型与不可变类型（{@code String}、包装类、{@code Class}）的 GET 不拒绝。</p>
- * <p><b>静态字段的扫描包含 {@code <init>}</b>：静态容器常在实例构造器里被注册。</p>
- *
- * <h3>根构造器与覆盖完整性</h3>
- * <p><b>根构造器</b>指不通过 {@code this(...)} 委托给本类其他构造器的构造器。
- * 识别 {@code this(...)} 的准确判据：{@code INVOKESPECIAL <init> owner==hostClass.name}
- * 的接收者必须来自 {@code ALOAD 0}。</p>
+ * <h2>提取流程</h2>
  * <ol>
- *   <li>至少在一个根构造器里赋值</li>
- *   <li>若 rootCtorCount > 1，须在所有根构造器里赋值</li>
- *   <li>参数依赖 + 多根构造器：拒绝</li>
+ *   <li><b>提取</b>：对每个 {@code <init>}/{@code <clinit>} 里的目标 PUTFIELD/PUTSTATIC，
+ *       用 {@link AliasInterpreter} 做反向数据依赖切片，再检查区间内不得有表达式树外的
+ *       指令。{@link #checkSafe} 判定控制依赖、try/catch 相交、局部变量依赖、
+ *       INVOKESPECIAL/indy handle 的可用性、protected 跨包访问是否可桥接。</li>
+ *   <li><b>单字段判定</b>：{@link #fingerprintMismatchReason} 校验多构造器下表达式一致；
+ *       根构造器覆盖完整性；参数依赖 + 多根构造器组合被拒绝。</li>
+ *   <li><b>闭包迭代</b>：后续加工检查 + 依赖闭包，反复移除不合格字段直到不动点。</li>
+ *   <li><b>拓扑排序</b>：{@link #topoSortFields} 按依赖排序，成环则整组拒绝。</li>
+ *   <li><b>生成</b>：protected 桥接、私有调用改写、字段写入改写、hidden class 装配。</li>
  * </ol>
  *
- * <h3>自赋值与新增字段依赖</h3>
- * <p>自赋值（{@code this.x = x} 里 {@code x} 是新增字段）直接拒绝。
- * 若字段 A 的表达式读取了新增字段 B，而 B 的补丁被拒绝，A 在补丁执行时读到 B 的默认值：
- * {@link #buildPatch} 在单字段判定后进入依赖闭包迭代，反复移除这类字段。</p>
- *
- * <h2>报告</h2>
- * <p>{@link #buildPatch} 为每个待处理的字段生成一条 {@link FieldDecision}，
- * 装进 {@link PatchReport} 保存到按 {@code Class<?>} 弱键的 {@link #REPORTS}。
- * {@link #getLastReport(Class)} 供测试、IDE、UI 查询。</p>
- *
- * <h2>已知限制（无法在静态阶段安全处理）</h2>
+ * <h2>构造器参数回溯</h2>
+ * <p>Java 里 {@code x = s.get(0)}（{@code s} 是构造器参数）在字节码里是 {@code ALOAD n}
+ * 直接读取，不是 {@code GETFIELD}。若 {@code <init>} 里有 {@code ALOAD 0; XLOAD n; PUTFIELD this.f}，
+ * 就把提取片段里的加载指令替换为 {@code ALOAD 0; GETFIELD this.f}。</p>
+ * <p>安全条件（任一不满足即弃用该映射）：</p>
  * <ul>
- *   <li><b>参数委托给父类构造器</b>：{@code class Sub(samples) : Base(samples)} 里
- *       {@code PUTFIELD samples} 发生在父类，子类字节码看不到。</li>
- *   <li><b>Kotlin 防御式写法与 inline 函数</b>：{@code ?.}、{@code ?:}、
- *       {@code sumOf} 等展开为跳转与局部临时变量，被 {@code checkSafe} 拒绝。</li>
- *   <li><b>运行期状态变迁</b>：所有 {@code GETFIELD} 读旧字段都读出的是当前值
- *       而不是构造时的值。</li>
- *   <li><b>this 逃逸</b>：{@code names = new ArrayList<>(); init();} 中 {@code init}
- *       可能通过 {@code this} 访问 {@code names} 并加工，静态上看不出来。</li>
- *   <li><b>跨实例字段覆写检测</b>：{@code scanParamFields} 对同名字段的二次
- *       {@code PUTFIELD} 一律视为覆写，不区分 receiver。</li>
- *   <li><b>补丁条件写窗口</b>：final字段走"仅当为默认值才写"。redefine 之后、
- *       补丁执行之前其他线程已经给字段赋过值时补丁跳过该字段；这是保守方向的取舍。</li>
- *   <li><b>static final 的 JIT 常量折叠</b>：redefine 完成到补丁执行之间，
- *       若新方法恰好被 JIT 编译，{@code static final} 的默认值可能被常量折叠。
- *       概率很低但存在，无法在静态阶段消除。</li>
- *   <li><b>非final字段无条件写</b>：非final字段走裸PUTFIELD + releaseFence，
- *       会覆盖redefine之后其他线程赋的新值。要缓解需要引入字节码分支，
- *       与"checkSafe 拒绝分支"的现状冲突，暂不处理。</li>
+ *   <li><b>pattern 无条件执行</b>：复用 {@link #checkControlDependency}。</li>
+ *   <li><b>参数类型与字段描述符一致</b>：避免替换后栈类型不匹配 VerifyError。</li>
+ *   <li><b>槽位单赋值</b>：pattern 前后都不得被 xSTORE 覆盖或 IINC 自增（long/double 占 2 槽）。</li>
+ *   <li><b>字段不被二次写入</b>：pattern 之后同一字段不得再被 PUTFIELD。</li>
  * </ul>
  *
- * <p>实例快照：由框架在{@link #transform(Class, byte[], ClassDiff)}里做一次，
- * 并可在 {@code redefineClasses} 前通过 {@link #beforeRedefine(Class)} 覆盖一次。
- * 快照窗口只是被缩小、没有消失。</p>
- * <p>暂存键直接用 {@code Class<?>}：Class 身份已包含加载器，弱引用持有。</p>
+ * <h2>已知限制</h2>
+ * <ul>
+ *   <li><b>参数委托给父类构造器</b>：{@code Sub(samples) : Base(samples)} 里 PUTFIELD 在父类，
+ *       子类看不到。</li>
+ *   <li><b>Kotlin 防御式写法与 inline 函数</b>：{@code ?.}/{@code ?:}/{@code sumOf}
+ *       展开为跳转与局部临时变量，被 checkSafe 拒绝。</li>
+ *   <li><b>运行期状态变迁</b>：GETFIELD 读到的是当前值，不是构造时的值。</li>
+ *   <li><b>间接依赖</b>：依赖检查只看提取片段里的直接 GETFIELD/GETSTATIC。
+ *       若 {@code a = compute()} 而 {@code compute()} 读了被拒绝的新增字段 b，
+ *       a 会静默拿到 b 的默认值。</li>
+ *   <li><b>this 逃逸</b>：{@code names = new ArrayList<>(); init();} 中 init 可能通过
+ *       this 访问 names 并加工，静态上看不出来。</li>
+ *   <li><b>跨实例字段覆写检测</b>：{@link #scanParamFields} 对同名字段的二次 PUTFIELD
+ *       一律视为覆写，不区分 receiver。</li>
+ *   <li><b>static final 的 JIT 常量折叠</b>：redefine 到补丁执行之间，若新方法恰好被
+ *       JIT 编译，static final 的默认值可能被常量折叠。</li>
+ *   <li><b>逐实例补丁非原子</b>：循环里抛异常的实例处于部分初始化状态，日志能看到，
+ *       但没有标记。</li>
+ * </ul>
+ *
+ * <p>实例快照：由框架在 {@link #transform(Class, byte[], ClassDiff)} 里做一次，
+ * 可在 redefine 前通过 {@link #beforeRedefine(Class)} 覆盖。快照窗口只是被缩小、
+ * 没有消失。暂存键直接用 {@code Class<?>}，弱引用持有。</p>
+ *
+ * <h2>报告</h2>
+ * <p>{@link #buildPatch} 对每个 {@code addedInstanceFields}/{@code addedStaticFields} 里的
+ * 字段都生成一条 {@link FieldDecision}，包括在第一阶段提取就被拒（未进入
+ * {@code instanceExtracts}/{@code staticExtracts}）的字段——它们的决策是
+ * {@code "no safe initialization expression found in ..."}。</p>
  */
 public class InitFix {
 	private static final String STATIC_PATCH_METHOD   = "initStatic";
@@ -152,14 +107,18 @@ public class InitFix {
 	private static final Map<Class<?>, PendingPatch> PENDING =
 	 Collections.synchronizedMap(new WeakHashMap<>());
 
+	/**
+	 * 最近一次 {@link #transform} 的报告，按宿主类弱键保存。
+	 * <p>{@link PatchReport} 本身不持有宿主引用，避免 value 强引用 key
+	 * 导致 WeakHashMap 永不回收。</p>
+	 */
 	private static final Map<Class<?>, PatchReport> REPORTS =
 	 Collections.synchronizedMap(new WeakHashMap<>());
 
 	/**
 	 * 统一的补丁 bridge bootstrap：{@link HotswapBridge} 按 {@code kind} 分派到
-	 * protected 成员桥接或 final 字段 Unsafe 条件 volatile 写。
-	 * <p>bsmArgs 布局：{@code [int kind, int opcode, Class owner, Class host]}。
-	 * 字段类型从 indy 的 {@code callSiteType} 派生，无需额外 {@code String}。</p>
+	 * protected 成员桥接或新增字段的条件 CAS 写。
+	 * <p>bsmArgs 布局：{@code [int kind, int opcode, Class owner, Class host]}。</p>
 	 */
 	private static final Handle BRIDGE_BSM = new Handle(
 	 Opcodes.H_INVOKESTATIC,
@@ -218,9 +177,11 @@ public class InitFix {
 		}
 	}
 
-	/** 一次 transform 的完整报告。 */
+	/**
+	 * 一次 transform 的完整报告。
+	 * <p>不持有宿主类引用，避免与 {@link #REPORTS} 的弱键形成强引用循环。</p>
+	 */
 	public record PatchReport(
-	 Class<?> host,
 	 Map<String, FieldDecision> instanceFields,
 	 Map<String, FieldDecision> staticFields,
 	 boolean patchGenerated
@@ -248,7 +209,7 @@ public class InitFix {
 		}
 
 		if (addedStaticFields.isEmpty() && addedInstanceFields.isEmpty()) {
-			REPORTS.put(host, new PatchReport(host, Map.of(), Map.of(), false));
+			REPORTS.put(host, new PatchReport(Map.of(), Map.of(), false));
 			return;
 		}
 
@@ -310,13 +271,9 @@ public class InitFix {
 		new ClassReader(newBytes).accept(newClass, 0);
 		int hostVersion = newClass.version;
 
-		Map<String, String> unsafeFields = new HashMap<>();
 		Map<String, FieldNode> fieldNodes = new HashMap<>();
 		for (FieldNode fn : newClass.fields) {
 			fieldNodes.put(fn.name, fn);
-			if ((fn.access & Opcodes.ACC_FINAL) != 0) {
-				unsafeFields.put(fn.name, fn.desc);
-			}
 		}
 
 		Set<String> privateMethods = new HashSet<>();
@@ -381,12 +338,36 @@ public class InitFix {
 				 .add(fe.getValue());
 			}
 		}
+		// ConstantValue 静态字段：无需经过 <clinit> 解析，直接生成 LDC + PUTSTATIC 提取片段，
+		// 提前进入 staticExtracts，避免依赖闭包误杀依赖该常量的其他字段，并保证拓扑排序优先输出。
+		for (FieldNode field : newClass.fields) {
+			if ((field.access & Opcodes.ACC_STATIC) != 0
+			    && addedStaticFields.contains(field.name)
+			    && field.value != null
+			    && !staticExtracts.containsKey(field.name)) {
+				List<AbstractInsnNode> insns = List.of(
+				 new LdcInsnNode(field.value),
+				 new FieldInsnNode(Opcodes.PUTSTATIC, className, field.name, field.desc)
+				);
+				staticExtracts.computeIfAbsent(field.name, x -> new ArrayList<>())
+				 .add(new FieldExtract(insns, Map.of(), false, false, Set.copyOf(insns)));
+				log("Extracted constant field init from ConstantValue: "
+				    + className + "." + field.name);
+			}
+		}
 
 		List<MethodNode> staticScanMethods = new ArrayList<>(initMethods);
 		if (clinitMethod != null) staticScanMethods.add(clinitMethod);
 
 		// ==================== 阶段 1：单字段判定（实例） ====================
+		// 先把所有待处理字段标记为拒绝；有 extract 的会在此后覆盖为 ACCEPTED 或被具体原因拒绝。
+		// 这样即便某字段在 extractFieldInits 里就被拒（不进 instanceExtracts），
+		// PatchReport 里依然有它的一条决策记录。
 		Map<String, FieldDecision> instanceDecisions = new LinkedHashMap<>();
+		for (String f : addedInstanceFields) {
+			instanceDecisions.put(f, FieldDecision.rejected(
+			 "no safe initialization expression found in constructors"));
+		}
 		Set<String> acceptedInstance = new LinkedHashSet<>();
 		for (Map.Entry<String, List<FieldExtract>> e : instanceExtracts.entrySet()) {
 			String fieldName = e.getKey();
@@ -424,7 +405,12 @@ public class InitFix {
 		}
 
 		// ==================== 静态字段：接受 clinit 的提取结果 ====================
+		// 同上：先全部标记拒绝，再让 extract 命中的字段覆盖。
 		Map<String, FieldDecision> staticDecisions = new LinkedHashMap<>();
+		for (String f : addedStaticFields) {
+			staticDecisions.put(f, FieldDecision.rejected(
+			 "no safe initialization expression found in <clinit>"));
+		}
 		Set<String> acceptedStatic = new LinkedHashSet<>();
 		for (String f : staticExtracts.keySet()) {
 			acceptedStatic.add(f);
@@ -543,23 +529,9 @@ public class InitFix {
 			clinitInsns.addAll(fe.instructions());
 			clinitProtected.putAll(fe.protectedAccesses());
 		}
-		Set<String> remainingStaticFields = new HashSet<>(addedStaticFields);
-		remainingStaticFields.removeAll(acceptedStatic);
-		remainingStaticFields.removeAll(staticExtracts.keySet());
-		for (FieldNode field : newClass.fields) {
-			if ((field.access & Opcodes.ACC_STATIC) != 0
-			    && remainingStaticFields.contains(field.name)
-			    && field.value != null) {
-				clinitInsns.add(new LdcInsnNode(field.value));
-				clinitInsns.add(new FieldInsnNode(
-				 Opcodes.PUTSTATIC, className, field.name, field.desc));
-				log("Extracted constant field init from ConstantValue: "
-				    + className + "." + field.name);
-			}
-		}
+
 
 		PatchReport report = new PatchReport(
-		 host,
 		 Collections.unmodifiableMap(instanceDecisions),
 		 Collections.unmodifiableMap(staticDecisions),
 		 !initInsns.isEmpty() || !clinitInsns.isEmpty());
@@ -575,11 +547,10 @@ public class InitFix {
 		initInsns   = rewritePrivateInvokes(className, initInsns);
 		clinitInsns = rewritePrivateInvokes(className, clinitInsns);
 
-		initInsns   = rewriteFinalPuts(className, initInsns, unsafeFields);
-		clinitInsns = rewriteFinalPuts(className, clinitInsns, unsafeFields);
-
-		initInsns   = addReleaseFences(initInsns);
-		clinitInsns = addReleaseFences(clinitInsns);
+		Set<String> allAddedFields = new HashSet<>(addedInstanceFields);
+		allAddedFields.addAll(addedStaticFields);
+		initInsns   = rewriteFieldPuts(className, initInsns, allAddedFields);
+		clinitInsns = rewriteFieldPuts(className, clinitInsns, allAddedFields);
 
 		boolean hasStatic   = !clinitInsns.isEmpty();
 		boolean hasInstance = !initInsns.isEmpty();
@@ -620,10 +591,8 @@ public class InitFix {
 
 	/**
 	 * 对一组已放行字段做拓扑排序，保证被依赖字段先执行。
-	 * <p>依赖关系从 {@link FieldExtract#instructions()} 里的 {@code GETFIELD/GETSTATIC}
-	 * 派生：如果字段 A 的提取片段里读取了字段 B（同 owner，且 B 也在待排序集合里），
-	 * 则 B 必须先于 A。</p>
-	 * <p>返回 null 表示存在循环依赖。调用方应保守拒绝整组字段，避免输出顺序不确定。</p>
+	 * <p>依赖关系从 {@link FieldExtract#instructions()} 里的 GETFIELD/GETSTATIC 派生。
+	 * 返回 null 表示存在循环依赖。</p>
 	 */
 	private static List<String> topoSortFields(
 	 Set<String> fields,
@@ -668,7 +637,7 @@ public class InitFix {
 	 List<String> order) {
 
 		if (visited.contains(f)) return true;
-		if (!visiting.add(f)) return false;  // 已在当前 DFS 栈上 -> 环
+		if (!visiting.add(f)) return false;
 		for (String dep : deps.getOrDefault(f, Set.of())) {
 			if (!topoVisit(dep, deps, visited, visiting, order)) return false;
 		}
@@ -685,7 +654,6 @@ public class InitFix {
 		Analyzer<SourceValue> analyzer = new Analyzer<>(new AliasInterpreter()) {
 			@Override
 			protected boolean newControlFlowExceptionEdge(int insnIndex, TryCatchBlockNode tcb) {
-				// 不追踪异常边：补丁片段不会把 tryCatchBlocks 搬过去，异常边只会污染来源闭包
 				return false;
 			}
 		};
@@ -709,7 +677,6 @@ public class InitFix {
 		try {
 			frames = analyze(hostClass.name, init);
 		} catch (AnalyzerException e) {
-			// 分析失败时保守判定为 root：root 会触发更多检查，属保守方向的误杀
 			return true;
 		}
 
@@ -796,11 +763,6 @@ public class InitFix {
 
 	// ==================== 依赖闭包 ====================
 
-	/**
-	 * 检查字段提取指令里是否读到"未放行的新增字段"。
-	 * <p>实例字段需要同时关注 {@code GETFIELD} 新增实例字段与 {@code GETSTATIC} 新增静态字段；
-	 * 静态字段只关注 {@code GETSTATIC}。传入 {@code null} 表示该类别不参与检查。</p>
-	 */
 	private static String depReason(
 	 String self,
 	 List<FieldExtract> feList,
@@ -972,6 +934,15 @@ public class InitFix {
 				continue;
 			}
 
+			// 参数类型必须与字段描述符严格一致，否则替换成 GETFIELD 后
+			// 后续指令期望的类型会不匹配，触发 VerifyError
+			if (!paramTypeMatches(init.desc, slot, fc.desc)) {
+				log("Skipping constructor param slot " + slot + " in "
+				    + hostClass.name + ".<init>: parameter type != field type "
+				    + fc.desc);
+				continue;
+			}
+
 			int paramWidth = (vb.getOpcode() == Opcodes.LLOAD
 			                  || vb.getOpcode() == Opcodes.DLOAD) ? 2 : 1;
 
@@ -1040,6 +1011,23 @@ public class InitFix {
 			}
 		}
 		return map;
+	}
+
+	/**
+	 * 校验方法描述符中 {@code slot} 处的参数类型是否与 {@code fieldDesc} 一致。
+	 * <p>slot 0 是 this；long/double 占 2 槽。</p>
+	 */
+	private static boolean paramTypeMatches(String methodDesc, int slot, String fieldDesc) {
+		Type[] args = Type.getArgumentTypes(methodDesc);
+		int    cur  = 1;
+		for (Type t : args) {
+			if (cur == slot) {
+				return t.getDescriptor().equals(fieldDesc);
+			}
+			cur += t.getSize();
+			if (cur > slot) return false;
+		}
+		return false;
 	}
 
 	private static List<AbstractInsnNode> filterReal(InsnList insns) {
@@ -1199,18 +1187,19 @@ public class InitFix {
 	}
 
 	/**
-	 * 把补丁片段里对本类 final 字段的直接写入改写为 {@code invokedynamic}，
-	 * 由 {@link HotswapBridge#KIND_FINAL} 在链接期算好 Unsafe offset 并做条件 volatile 写。
+	 * 把补丁片段里对新增字段的 {@code PUTFIELD}/{@code PUTSTATIC} 改写为
+	 * {@code invokedynamic}，由 {@link HotswapBridge#KIND_CONDITIONAL} 做条件 CAS 写。
+	 * <p>final 与非 final 走同一条路径，语义统一。</p>
 	 */
-	private static List<AbstractInsnNode> rewriteFinalPuts(
-	 String className, List<AbstractInsnNode> insns, Map<String, String> unsafeFields) {
-		if (insns.isEmpty() || unsafeFields.isEmpty()) return insns;
+	private static List<AbstractInsnNode> rewriteFieldPuts(
+	 String className, List<AbstractInsnNode> insns, Set<String> targetFields) {
+		if (insns.isEmpty() || targetFields.isEmpty()) return insns;
 
 		List<AbstractInsnNode> rewritten = new ArrayList<>(insns.size());
 		for (AbstractInsnNode insn : insns) {
 			if (!(insn instanceof FieldInsnNode f)
 			    || !f.owner.equals(className)
-			    || !unsafeFields.containsKey(f.name)
+			    || !targetFields.contains(f.name)
 			    || (f.getOpcode() != Opcodes.PUTFIELD && f.getOpcode() != Opcodes.PUTSTATIC)) {
 				rewritten.add(insn);
 				continue;
@@ -1221,32 +1210,17 @@ public class InitFix {
 			Type    hostType = Type.getObjectType(className);
 
 			Object[] bsmArgs = new Object[] {
-			 HotswapBridge.KIND_FINAL,
+			 HotswapBridge.KIND_CONDITIONAL,
 			 f.getOpcode(),
 			 hostType,
 			 hostType
 			};
 
 			rewritten.add(new InvokeDynamicInsnNode(f.name, indyDesc, BRIDGE_BSM, bsmArgs));
-			log("Rewriting final field write via indy(conditional-volatile): "
+			log("Rewriting field write via indy(conditional): "
 			    + className + "." + f.name + " " + f.desc);
 		}
 		return rewritten;
-	}
-
-	private static List<AbstractInsnNode> addReleaseFences(List<AbstractInsnNode> insns) {
-		if (insns.isEmpty()) return insns;
-		List<AbstractInsnNode> result = new ArrayList<>(insns.size() + 8);
-		for (AbstractInsnNode insn : insns) {
-			if (insn instanceof FieldInsnNode f
-			    && (f.getOpcode() == Opcodes.PUTFIELD || f.getOpcode() == Opcodes.PUTSTATIC)) {
-				result.add(new MethodInsnNode(
-				 Opcodes.INVOKESTATIC, "java/lang/invoke/VarHandle",
-				 "releaseFence", "()V", false));
-			}
-			result.add(insn);
-		}
-		return result;
 	}
 
 	// ==================== 应用与生命周期 ====================
@@ -1732,7 +1706,6 @@ public class InitFix {
 			}
 		}
 
-		// try/catch 相交检查
 		for (TryCatchBlockNode tc : method.tryCatchBlocks) {
 			int tryStart   = insns.indexOf(tc.start);
 			int tryEnd     = insns.indexOf(tc.end);
@@ -1897,12 +1870,6 @@ public class InitFix {
 		return null;
 	}
 
-	/**
-	 * 判断 owner 上的字段/方法是否为跨包 protected 访问。
-	 * <p>返回三态：{@code Boolean.TRUE}（确定跨包 protected）、{@code Boolean.FALSE}
-	 * （确定不是）、{@code null}（无法判定）。null 由调用方保守拒绝。</p>
-	 * <p>{@code Class.forName(name, false, loader)} 只做加载+链接、不初始化。</p>
-	 */
 	private static Boolean isProtectedCrossPackageAccess(
 	 Class<?> host, String ownerInternal,
 	 String name, String desc, boolean isField) {

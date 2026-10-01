@@ -488,19 +488,8 @@ public class AnnotationTransformer implements ClassFileTransformer {
 	public static String internalName(Class<?> clazz) {
 		return clazz.getName().replace('.', '/');
 	}
-	public static String typeToNative(Class<?> cls) {
-		if (cls.isArray()) return "[" + typeToNative(cls.getComponentType());
-		if (cls == int.class) return "I";
-		if (cls == long.class) return "J";
-		if (cls == float.class) return "F";
-		if (cls == double.class) return "D";
-		if (cls == char.class) return "C";
-		if (cls == short.class) return "S";
-		if (cls == byte.class) return "B";
-		if (cls == boolean.class) return "Z";
-		if (cls == void.class) return "V";
-
-		return "L" + internalName(cls) + ";";
+	public static String getDescriptor(Class<?> cls) {
+		return Type.getDescriptor(cls);
 	}
 	//endregion
 

@@ -33,18 +33,18 @@ public class LambdaRef {
 		String floatc2Type       = internalName(Floatc2.class);
 		String eventListenerType = internalName(EventListener.class);
 
-		String runnableNative      = typeToNative(Runnable.class);
-		String boolpNative         = typeToNative(Boolp.class);
-		String provNative          = typeToNative(Prov.class);
-		String consNative          = typeToNative(Cons.class);
-		String floatcNative        = typeToNative(Floatc.class);
-		String floatc2Native       = typeToNative(Floatc2.class);
-		String eventListenerNative = typeToNative(EventListener.class);
+		String runnableNative      = getDescriptor(Runnable.class);
+		String boolpNative         = getDescriptor(Boolp.class);
+		String provNative          = getDescriptor(Prov.class);
+		String consNative          = getDescriptor(Cons.class);
+		String floatcNative        = getDescriptor(Floatc.class);
+		String floatc2Native       = getDescriptor(Floatc2.class);
+		String eventListenerNative = getDescriptor(EventListener.class);
 
-		String elementType         = typeToNative(Element.class);
-		String inputListenerNative = typeToNative(InputListener.class);
-		String clickListenerNative = typeToNative(ClickListener.class);
-		String keyCodeNative       = typeToNative(KeyCode.class);
+		String elementType         = getDescriptor(Element.class);
+		String inputListenerNative = getDescriptor(InputListener.class);
+		String clickListenerNative = getDescriptor(ClickListener.class);
+		String keyCodeNative       = getDescriptor(KeyCode.class);
 
 		redefineCell();
 		CellPropertyRef.redefineCellProperties();

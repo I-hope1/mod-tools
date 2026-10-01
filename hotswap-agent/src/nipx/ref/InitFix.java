@@ -217,7 +217,7 @@ public class InitFix {
 		try {
 			BuiltPatch built = buildPatch(host, newBytes, className,
 			                              addedStaticFields, addedInstanceFields);
-			if (built == null) return;
+			// if (built == null) return;
 
 			REPORTS.put(host, built.report());
 			if (!built.hasPatch()) return;
@@ -383,7 +383,7 @@ public class InitFix {
 				if (fe.dependsOnParam()) anyDependsOnParam = true;
 			}
 
-			String refuseReason = null;
+			String refuseReason;
 			if (fromRootCount == 0) {
 				refuseReason = "field is only initialized in delegating constructors";
 			} else if (rootCtorCount > 1 && fromRootCount < rootCtorCount) {

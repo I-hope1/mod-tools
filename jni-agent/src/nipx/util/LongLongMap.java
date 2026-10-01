@@ -9,43 +9,63 @@ import java.util.Arrays;
  * <p>PS：返回值 {@value NOT_FOUND} 是一个特殊值，表示无值。</p>
  */
 public class LongLongMap {
-	public static final  long  EMPTY_KEY   = 0;
-	public static final  long  NOT_FOUND   = Long.MIN_VALUE;
-	private static final float LOAD_FACTOR = 0.75f;
+	public static final  long  EMPTY_KEY        = 0;
+	public static final  long  NOT_FOUND        = Long.MIN_VALUE;
+	private static final float LOAD_FACTOR      = 0.75f;
+	private static final int   MIN_CAPACITY     = 4;       // 保证必须有空槽，防死循环
+	private static final int   MAXIMUM_CAPACITY = 1 << 30; // 2^30
+
 
 	private long[] keys;
 	private long[] values;
 	/** size 不包含 zero-key */
 	private int    size;
 	private int    capacity;
+	private int    mask;      // 缓存 capacity - 1
+	private int    threshold; // 缓存扩容阈值，避免浮点计算
 
 	private boolean hasZero;
 	private long    zeroValue;
 
+	public LongLongMap() {
+		this(16);
+	}
+
 	public LongLongMap(int initialCapacity) {
-		this.capacity = powerOfTwo(initialCapacity);
-		this.keys = new long[capacity];
-		this.values = new long[capacity];
+		capacity = tableSizeFor(initialCapacity);
+		mask = capacity - 1;
+		threshold = (int) (capacity * LOAD_FACTOR);
+		keys = new long[capacity];
+		values = new long[capacity];
 	}
 
 	public void put(long key, long value) {
-		if (value == NOT_FOUND) throw new IllegalArgumentException("value == " + NOT_FOUND);
+		if (value == NOT_FOUND) throw new IllegalArgumentException("value cannot be NOT_FOUND (" + NOT_FOUND + ")");
 		if (key == EMPTY_KEY) {
 			hasZero = true;
 			zeroValue = value;
 			return;
 		}
 
-		if (size >= capacity * LOAD_FACTOR) rehash();
-
-		int idx = hash(key) & (capacity - 1);
+		int idx = hash(key) & mask;
 		while (keys[idx] != EMPTY_KEY) {
 			if (keys[idx] == key) {
 				values[idx] = value;
 				return;
 			}
-			idx = (idx + 1) & (capacity - 1);
+			idx = (idx + 1) & mask;
 		}
+
+		// 确定要插入新 Key，此时才做容量检查
+		if (size >= threshold) {
+			rehash();
+			// 扩容后 mask 改变，重新定位
+			idx = hash(key) & mask;
+			while (keys[idx] != EMPTY_KEY) {
+				idx = (idx + 1) & mask;
+			}
+		}
+
 		keys[idx] = key;
 		values[idx] = value;
 		size++;
@@ -57,10 +77,10 @@ public class LongLongMap {
 			if (hasZero) return zeroValue;
 			return NOT_FOUND;
 		}
-		int idx = hash(key) & (capacity - 1);
+		int idx = hash(key) & mask;
 		while (keys[idx] != EMPTY_KEY) {
 			if (keys[idx] == key) return values[idx];
-			idx = (idx + 1) & (capacity - 1);
+			idx = (idx + 1) & mask;
 		}
 		return NOT_FOUND;
 	}
@@ -68,10 +88,10 @@ public class LongLongMap {
 		if (l == EMPTY_KEY) {
 			return hasZero;
 		}
-		int idx = hash(l) & (capacity - 1);
+		int idx = hash(l) & mask;
 		while (keys[idx] != EMPTY_KEY) {
 			if (keys[idx] == l) return true;
-			idx = (idx + 1) & (capacity - 1);
+			idx = (idx + 1) & mask;
 		}
 		return false;
 	}
@@ -88,16 +108,31 @@ public class LongLongMap {
 	public boolean isEmpty() { return size() == 0; }
 
 	private void rehash() {
-		if (capacity > (1 << 30)) throw new OutOfMemoryError("Capacity overflow");
+		if (capacity > MAXIMUM_CAPACITY) {
+			throw new IllegalStateException("LongLongMap capacity exceeded: " + MAXIMUM_CAPACITY);
+		}
 
 		long[] oldKeys   = keys;
 		long[] oldValues = values;
+		int    oldCap    = capacity;
+
 		capacity <<= 1;
+		mask = capacity - 1;
+		threshold = (int) (capacity * LOAD_FACTOR);
 		keys = new long[capacity];
 		values = new long[capacity];
-		size = 0;
-		for (int i = 0; i < oldKeys.length; i++) {
-			if (oldKeys[i] != EMPTY_KEY) put(oldKeys[i], oldValues[i]);
+
+		// 内部快速搬迁：不检查重复、不走递归 put、不需要更新 size
+		for (int i = 0; i < oldCap; i++) {
+			long k = oldKeys[i];
+			if (k != EMPTY_KEY) {
+				int idx = hash(k) & mask;
+				while (keys[idx] != EMPTY_KEY) {
+					idx = (idx + 1) & mask;
+				}
+				keys[idx] = k;
+				values[idx] = oldValues[i];
+			}
 		}
 	}
 
@@ -110,9 +145,13 @@ public class LongLongMap {
 		return (int) v;
 	}
 
-	private int powerOfTwo(int n) {
-		int res = 1;
-		while (res < n) res <<= 1;
-		return res;
+	/**
+	 * 安全计算 >= n 的最小 2 的幂次
+	 * @see java.util.HashMap#tableSizeFor(int)
+	 */
+	private static int tableSizeFor(int cap) {
+		if (cap <= MIN_CAPACITY) return MIN_CAPACITY;
+		int n = -1 >>> Integer.numberOfLeadingZeros(cap - 1);
+		return (n < 0) ? 1 : (n >= MAXIMUM_CAPACITY) ? MAXIMUM_CAPACITY : n + 1;
 	}
 }

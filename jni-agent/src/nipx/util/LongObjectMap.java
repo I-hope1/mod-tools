@@ -5,7 +5,11 @@ import java.util.function.*;
 
 /**
  * 高性能 Long -> Object 映射表
- * 采用开放寻址法（线性探测）减少对象开销和 GC 压力
+ * <p>采用开放寻址法（线性探测）减少对象开销和 GC 压力</p>
+ * <p><pre>{@code for (int idx = map.nextEntry(-1); idx != -1; idx = map.nextEntry(idx)) {
+ *  long key = map.keyAt(idx);
+ *  V value = map.valueAt(idx);
+ * }}</pre></p>
  */
 @SuppressWarnings("unchecked")
 public final class LongObjectMap<V> {
@@ -13,6 +17,7 @@ public final class LongObjectMap<V> {
 	// 哨兵对象
 	private static final Object TOMBSTONE        = new Object();
 	private static final float  LOAD_FACTOR      = 0.75f;
+	private static final int    DEFAULT_CAPACITY = 32;
 	private static final int    MAXIMUM_CAPACITY = 1 << 30;
 
 	private long[]   keys;
@@ -218,9 +223,14 @@ public final class LongObjectMap<V> {
 	}
 
 	public void clear() {
-		Arrays.fill(values, null); // keys 不需要 fill，因为根据 values 判断
-		size = 0;
-		tombstoneCount = 0;
+		// 如果曾经发生过大幅扩容，重新初始化为小数组，防止高水位占用
+		if (capacity > 128) {
+			init(DEFAULT_CAPACITY);
+		} else {
+			Arrays.fill(values, null);
+			size = 0;
+			tombstoneCount = 0;
+		}
 	}
 
 	@Override
@@ -244,7 +254,7 @@ public final class LongObjectMap<V> {
 
 		ensureMoreCapacity(other.size());
 
-		// 2. 物理搬移：直接遍历数组，跳过 null 和墓碑
+		// 物理搬移：直接遍历数组，跳过 null 和墓碑
 		long[]   keys1   = other.keys;
 		Object[] values1 = other.values;
 		for (int i = 0, cap = other.capacity; i < cap; i++) {
@@ -252,7 +262,7 @@ public final class LongObjectMap<V> {
 			long key   = keys1[i];
 			V    value = (V) values1[i];
 			// valueAt 已经处理了墓碑返回 null
-			if (value != null) {
+			if (isValid(value)) {
 				this.put(key, value);
 			}
 		}
@@ -331,23 +341,49 @@ public final class LongObjectMap<V> {
 		}
 		return h;
 	}
-
-	/** 内部使用，请勿修改 */
-	public long[] keys() { return keys; }
-	/** 内部使用，请勿修改 */
-	public Object[] values() { return values; }
 	/** 快速判断该位置是否有有效值 (逻辑内联) */
-	public static boolean isValid(Object value) {
+	private static boolean isValid(Object value) {
 		return value != null && value != TOMBSTONE;
 	}
 	public int capacity() {
 		return capacity;
 	}
-	/* public long keyAt(int i) {
-		return keys[i];
+
+	/**
+	 * 寻找下一个有效 Entry 的槽位索引（0 Allocation）
+	 * @param currentIndex 当前游标，首次遍历传入 -1
+	 * @return 下一个有效槽位索引；若已遍历完毕返回 -1
+	 */
+	public int nextEntry(int currentIndex) {
+		int idx = currentIndex + 1;
+		while (idx < capacity) {
+			Object v = values[idx];
+			if (v != null && v != TOMBSTONE) {
+				return idx;
+			}
+			idx++;
+		}
+		return -1;
 	}
-	public V valueAt(int i) {
-		Object v = values[i];
+
+	/** 获取指定槽位的 key（无装箱） */
+	public long keyAt(int index) {
+		return keys[index];
+	}
+
+	/** 获取指定槽位的 value */
+	@SuppressWarnings("unchecked")
+	public V valueAt(int index) {
+		Object v = values[index];
 		return v == TOMBSTONE ? null : (V) v;
-	} */
+	}
+
+	/** 安全删除当前槽位的数据（支持遍历时删除） */
+	public void removeAt(int index) {
+		if (values[index] != null && values[index] != TOMBSTONE) {
+			values[index] = TOMBSTONE;
+			size--;
+			tombstoneCount++;
+		}
+	}
 }

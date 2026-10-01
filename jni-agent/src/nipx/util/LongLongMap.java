@@ -9,15 +9,15 @@ import java.util.Arrays;
  * <p>PS：返回值 {@value NOT_FOUND} 是一个特殊值，表示无值。</p>
  */
 public class LongLongMap {
-	public static final long EMPTY_KEY = 0;
-	public static final long NOT_FOUND = Long.MIN_VALUE;
+	public static final  long  EMPTY_KEY   = 0;
+	public static final  long  NOT_FOUND   = Long.MIN_VALUE;
+	private static final float LOAD_FACTOR = 0.75f;
 
-	private       long[] keys;
-	private       long[] values;
+	private long[] keys;
+	private long[] values;
 	/** size 不包含 zero-key */
-	private       int    size;
-	private       int    capacity;
-	private final float  loadFactor = 0.75f;
+	private int    size;
+	private int    capacity;
 
 	private boolean hasZero;
 	private long    zeroValue;
@@ -36,7 +36,7 @@ public class LongLongMap {
 			return;
 		}
 
-		if (size >= capacity * loadFactor) rehash();
+		if (size >= capacity * LOAD_FACTOR) rehash();
 
 		int idx = hash(key) & (capacity - 1);
 		while (keys[idx] != EMPTY_KEY) {

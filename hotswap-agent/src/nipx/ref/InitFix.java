@@ -27,24 +27,24 @@ import static nipx.HotSwapAgent.log;
  * <p>新增字段的初始化表达式如果依赖构造器参数、局部变量、含分支/内联，存量实例不会被初始化。</p>
  * <p>补丁逻辑不再注入被redefine的字节码：改为生成一个hidden nestmate class，
  * 在{@link #afterRedefined}里定义并调用，避免污染diff、避免依赖"允许增方法"的redefine。</p>
- * <p>不再摘除final修饰符：补丁类不是宿主的&lt;init&gt;/&lt;clinit&gt;，
- * 直接PUTFIELD/PUTSTATIC写final字段会抛IllegalAccessError，改为经{@link FinalFieldWriter}
- * 用Unsafe的volatile写入。</p>
- * <p>补丁在热更线程执行，属于不安全发布：final字段走{@link FinalFieldWriter}的volatile写，
+ * <p>不再摘除final修饰符：补丁类不是宿主的&lt;init&gt;/&lt;clinit&gt;，直接PUTFIELD/PUTSTATIC写
+ * final字段会抛IllegalAccessError，改为经{@link HotswapBridge}（kind=KIND_FINAL）用Unsafe的
+ * volatile写入。</p>
+ * <p>补丁在热更线程执行，属于不安全发布：final字段走{@link HotswapBridge}的volatile写，
  * 非final字段的裸PUTFIELD/PUTSTATIC前各自插入{@link java.lang.invoke.VarHandle#releaseFence()}，
- * 保证构造写入先于发布。读端没有强制 acquire，只是尽力而为的可见性保证。</p>
+ * 保证构造写入先于发布。读端没有强制acquire，只是尽力而为的可见性保证。</p>
  * <p>针对Java 8字节码：同一类内私有方法调用生成的是{@code INVOKESPECIAL}，
  * 提取时放行并把补丁里的这类指令原地改写为{@code INVOKEVIRTUAL}（接口私有方法则为{@code INVOKEINTERFACE}）；
  * {@code invokedynamic} 的 {@code bsmArgs} 里指向宿主私有方法的 {@code H_INVOKESPECIAL} handle 同样改写。</p>
  * <p>跨包 protected 成员访问：hidden class 不是宿主的子类，直接调用会因 JVMS §5.4.4 的
  * receiver check 抛 {@code IllegalAccessError}。改写为 {@code invokedynamic}，由
- * {@link ProtectedBridge} 以宿主特权 Lookup 解析。BSM 的 {@code bsmArgs} 显式携带
- * 宿主类（不能依赖 {@code getNestHost()}，嵌套类会倒错到最外层），字段类型从
- * {@code indyType} 派生（基本类型不能进 {@code bsmArgs}）。
+ * {@link HotswapBridge}（kind=KIND_PROTECTED）以宿主特权 Lookup 解析。BSM 的
+ * {@code bsmArgs} 显式携带宿主类（不能依赖 {@code getNestHost()}，嵌套类会倒错到最外层）。
  * <b>indy 调用点类型的接收者必须是 host，不是 owner</b>：受保护成员经
  * {@code findVirtual/findGetter/findSetter} 解析时，返回的 MethodHandle 的接收者类型
  * 会被 JVM 收窄为 lookup class（即 host），indyDesc 若用 owner 作为接收者类型，
- * 会因 {@code ConstantCallSite} 类型不匹配抛 {@code WrongMethodTypeException}。</p>
+ * 会因 {@code ConstantCallSite} 类型不匹配抛 {@code WrongMethodTypeException}。
+ * 两种 bridge 共用一个 BSM 与一个 bsm handle。</p>
  *
  * <h2>构造器参数回溯</h2>
  * <p>Java 编写的初始化表达式（如 {@code x = s.get(0).getType()}，其中 {@code s} 是
@@ -162,18 +162,24 @@ public class InitFix {
 	private static final Map<Class<?>, PendingPatch> PENDING =
 	 Collections.synchronizedMap(new WeakHashMap<>());
 
-	private static final Handle PROTECTED_BSM = new Handle(
-	 Opcodes.H_INVOKESTATIC,
-	 Type.getInternalName(ProtectedBridge.class),
-	 "bootstrap",
-	 "(Ljava/lang/invoke/MethodHandles$Lookup;"
-	 + "Ljava/lang/String;"
-	 + "Ljava/lang/invoke/MethodType;"
-	 + "I"
-	 + "Ljava/lang/Class;"
-	 + "Ljava/lang/Class;"
-	 + ")Ljava/lang/invoke/CallSite;",
-	 false);
+	/**
+	 * 统一的补丁 bridge bootstrap：{@link HotswapBridge} 按 {@code kind} 分派到
+	 * protected 成员桥接或 final 字段 Unsafe 写入。
+	 * <p>bsmArgs 布局：{@code [int kind, int opcode, Class owner, Class host, String extra]}。</p>
+	 */
+	private static final Handle BRIDGE_BSM = new Handle(
+    Opcodes.H_INVOKESTATIC,
+    Type.getInternalName(HotswapBridge.class),
+    "bootstrap",
+    "(Ljava/lang/invoke/MethodHandles$Lookup;"
+    + "Ljava/lang/String;"
+    + "Ljava/lang/invoke/MethodType;"
+    + "I"
+    + "I"
+    + "Ljava/lang/Class;"
+    + "Ljava/lang/Class;"
+    + ")Ljava/lang/invoke/CallSite;",
+    false);
 
 	private record BuiltPatch(byte[] bytes, boolean hasStatic, boolean hasInstance) { }
 
@@ -1015,6 +1021,12 @@ public class InitFix {
 
 	// ==================== 指令改写 ====================
 
+	/**
+	 * 把跨包 protected 成员访问改写为 {@code invokedynamic}，由
+	 * {@link HotswapBridge#KIND_PROTECTED} 在链接期以宿主特权 Lookup 解析。
+	 * <p>{@code bsmArgs} 显式携带宿主类，因为 hidden class 的 nest host 是宿主，
+	 * 嵌套类场景下 {@code getNestHost()} 会倒错到最外层。</p>
+	 */
 	private static List<AbstractInsnNode> rewriteProtectedAccesses(
 	 String hostInternal,
 	 List<AbstractInsnNode> insns,
@@ -1036,12 +1048,13 @@ public class InitFix {
 			String indyDesc = indyDescFor(pa, hostInternal);
 
 			Object[] bsmArgs = new Object[] {
+			 HotswapBridge.KIND_PROTECTED,
 			 pa.opcode(),
 			 Type.getObjectType(ownerInternal),
 			 hostType
 			};
 
-			rewritten.add(new InvokeDynamicInsnNode(pa.name(), indyDesc, PROTECTED_BSM, bsmArgs));
+			rewritten.add(new InvokeDynamicInsnNode(pa.name(), indyDesc, BRIDGE_BSM, bsmArgs));
 			log("Bridging protected access via indy: "
 			    + ownerInternal + "." + pa.name() + " " + pa.desc()
 			    + " (opcode=" + pa.opcode() + ", host=" + hostInternal + ")");
@@ -1107,11 +1120,21 @@ public class InitFix {
 		return new InvokeDynamicInsnNode(indy.name, indy.desc, indy.bsm, copy);
 	}
 
+	/**
+	 * 把补丁片段里对本类 final 字段的直接写入改写为 {@code invokedynamic}，
+	 * 由 {@link HotswapBridge#KIND_FINAL} 在链接期算好 Unsafe offset 并用 volatile 写入。
+	 * <p>指令形态：实例字段原本是 {@code [obj, value] + PUTFIELD}，换成 indy 后
+	 * 栈上参数与 indyDesc 一致；静态字段原本是 {@code [value] + PUTSTATIC}，同理。</p>
+	 * <p>栈平衡校验作用在提取阶段的原始 {@code Frame} 上，与本次改写无关，
+	 * 改写前后净栈增量一致（实例 -2，静态 -1）。</p>
+	 * <p>{@link HotswapBridge} 的 final 分支走 {@code putXxxVolatile}，release 语义由
+	 * volatile 写入承担，此处无需再额外加 fence。</p>
+	 */
 	private static List<AbstractInsnNode> rewriteFinalPuts(
 	 String className, List<AbstractInsnNode> insns, Map<String, String> unsafeFields) {
 		if (insns.isEmpty() || unsafeFields.isEmpty()) return insns;
 
-		List<AbstractInsnNode> rewritten = new ArrayList<>(insns.size() + 8);
+		List<AbstractInsnNode> rewritten = new ArrayList<>(insns.size());
 		for (AbstractInsnNode insn : insns) {
 			if (!(insn instanceof FieldInsnNode f)
 			    || !f.owner.equals(className)
@@ -1122,18 +1145,19 @@ public class InitFix {
 			}
 
 			boolean isStatic = f.getOpcode() == Opcodes.PUTSTATIC;
-			String  method   = (isStatic ? "putStatic" : "put") + typeSuffix(f.desc);
+			String  indyDesc = (isStatic ? "(" : "(L" + className + ";") + f.desc + ")V";
+			Type    hostType = Type.getObjectType(className);
 
-			String valDesc = (f.desc.charAt(0) == 'L' || f.desc.charAt(0) == '[')
-			 ? "Ljava/lang/Object;" : f.desc;
+			Object[] bsmArgs = new Object[] {
+			 HotswapBridge.KIND_FINAL,
+			 f.getOpcode(),
+			 hostType,
+			 hostType
+			};
 
-			String desc = (isStatic ? "(" : "(Ljava/lang/Object;")
-			              + valDesc + "Ljava/lang/Class;Ljava/lang/String;)V";
-
-			rewritten.add(new LdcInsnNode(Type.getObjectType(className)));
-			rewritten.add(new LdcInsnNode(f.name));
-			rewritten.add(new MethodInsnNode(
-			 Opcodes.INVOKESTATIC, Type.getInternalName(FinalFieldWriter.class), method, desc, false));
+			rewritten.add(new InvokeDynamicInsnNode(f.name, indyDesc, BRIDGE_BSM, bsmArgs));
+			log("Rewriting final field write via indy(volatile): "
+			    + className + "." + f.name + " " + f.desc);
 		}
 		return rewritten;
 	}
@@ -1153,26 +1177,10 @@ public class InitFix {
 		return result;
 	}
 
-	private static String typeSuffix(String desc) {
-		return switch (desc.charAt(0)) {
-			case 'Z' -> "Boolean";
-			case 'B' -> "Byte";
-			case 'C' -> "Char";
-			case 'S' -> "Short";
-			case 'I' -> "Int";
-			case 'J' -> "Long";
-			case 'F' -> "Float";
-			case 'D' -> "Double";
-			default -> "Object";
-		};
-	}
-
 	// ==================== 应用与生命周期 ====================
 
 	public static void afterRedefined(Class<?> clazz) {
 		if (!HotSwapAgent.HOTSWAP_PLUS || clazz == null) return;
-
-		FinalFieldWriter.clearCache(clazz);
 
 		PendingPatch patch = PENDING.remove(clazz);
 		if (patch == null) return;
@@ -1181,8 +1189,6 @@ public class InitFix {
 			applyPatch(clazz, patch);
 		} catch (Throwable e) {
 			HotSwapAgent.error("Field init patch failed: " + e.getMessage(), e);
-		} finally {
-			FinalFieldWriter.clearCache(clazz);
 		}
 	}
 

@@ -60,4 +60,34 @@ public class Reflect {
 			}
 		}
 	}
+
+	public static final int version = getVersion();
+	private static int getVersion() {
+		try {
+			// JDK 9+ 标准 API
+			return Runtime.version().feature();
+		} catch (Throwable ignored) { }
+		String version = System.getProperty("java.version");
+		if (version == null) {
+			return -1;
+		}
+
+		// 如果是老版本，格式通常为 1.8.0_xxx
+		// 如果是新版本，格式通常为 11.0.x 或 12.0.x 或 17...
+		String[] parts = version.split("\\.");
+		if (parts.length > 0) {
+			try {
+				int major = Integer.parseInt(parts[0]);
+				// 如果主版本号是 1，说明是 1.8 及以下，需要看第二个数字（例如 1.8 则是 8）
+				if (major == 1 && parts.length > 1) {
+					major = Integer.parseInt(parts[1]);
+				}
+				return major;
+			} catch (NumberFormatException e) {
+				// 预防部分非标准 JDK 供应商修改了版本字符串格式
+				return -1;
+			}
+		}
+		return -1;
+	}
 }

@@ -153,7 +153,7 @@ public class InitFix {
 		PendingPatch withSnapshot(List<WeakReference<Object>> snapshot) {
 			return new PendingPatch(
 			 bytes, hasStatic, hasInstance,
-			 List.copyOf(snapshot),
+			 new ArrayList<>(snapshot),
 			 System.nanoTime());
 		}
 	}
@@ -351,7 +351,7 @@ public class InitFix {
 				 new FieldInsnNode(Opcodes.PUTSTATIC, className, field.name, field.desc)
 				);
 				staticExtracts.computeIfAbsent(field.name, x -> new ArrayList<>())
-				 .add(new FieldExtract(insns, Map.of(), false, false, Set.copyOf(insns)));
+				 .add(new FieldExtract(insns, Map.of(), false, false, new HashSet<>(insns)));
 				log("Extracted constant field init from ConstantValue: "
 				    + className + "." + field.name);
 			}

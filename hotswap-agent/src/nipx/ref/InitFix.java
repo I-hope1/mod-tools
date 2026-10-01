@@ -302,6 +302,7 @@ public class InitFix {
 
 		// ==================== 实例字段提取 ====================
 		Map<String, List<FieldExtract>> instanceExtracts = new LinkedHashMap<>();
+		Set<String> selfAssignedFields = new HashSet<>();
 		for (MethodNode init : initMethods) {
 			log("Extracting field init for " + className + "." + init.name + "()");
 			boolean fromRoot = isRootConstructor(newClass, init, rootCtorCache);
@@ -317,7 +318,7 @@ public class InitFix {
 			}
 			Map<String, FieldExtract> perField = extractFieldInits(
 			 host, className, init, addedInstanceFields, false, privateMethods,
-			 paramFields, fromRoot);
+			 paramFields, fromRoot, selfAssignedFields);
 
 			for (Map.Entry<String, FieldExtract> fe : perField.entrySet()) {
 				instanceExtracts
@@ -331,7 +332,7 @@ public class InitFix {
 		if (clinitMethod != null) {
 			Map<String, FieldExtract> perField = extractFieldInits(
 			 host, className, clinitMethod, addedStaticFields,
-			 true, privateMethods, Map.of(), true);
+			 true, privateMethods, Map.of(), true, null);
 			for (Map.Entry<String, FieldExtract> fe : perField.entrySet()) {
 				staticExtracts
 				 .computeIfAbsent(fe.getKey(), x -> new ArrayList<>())
@@ -365,8 +366,10 @@ public class InitFix {
 		// PatchReport 里依然有它的一条决策记录。
 		Map<String, FieldDecision> instanceDecisions = new LinkedHashMap<>();
 		for (String f : addedInstanceFields) {
-			instanceDecisions.put(f, FieldDecision.rejected(
-			 "no safe initialization expression found in constructors"));
+			String reason = selfAssignedFields.contains(f)
+			 ? "self-assignment from constructor parameter (patch would be a no-op)"
+			 : "no safe initialization expression found in constructors";
+			instanceDecisions.put(f, FieldDecision.rejected(reason));
 		}
 		Set<String> acceptedInstance = new LinkedHashSet<>();
 		for (Map.Entry<String, List<FieldExtract>> e : instanceExtracts.entrySet()) {
@@ -1396,7 +1399,8 @@ public class InitFix {
 	private static Map<String, FieldExtract> extractFieldInits(
 	 Class<?> host, String className, MethodNode method, Set<String> targetFields,
 	 boolean isStatic, Set<String> privateMethods,
-	 Map<Integer, ParamField> paramFields, boolean fromRootCtor) {
+	 Map<Integer, ParamField> paramFields, boolean fromRootCtor,
+	 Set<String> outSelfAssigned) {
 
 		if (method == null || targetFields.isEmpty()) return Map.of();
 
@@ -1524,6 +1528,7 @@ public class InitFix {
 			}
 
 			if (selfAssign) {
+				if (outSelfAssigned != null) outSelfAssigned.add(fieldName);
 				log("Field '" + fieldName + "' is self-assigned from its own constructor "
 				    + "parameter in " + className + "." + method.name
 				    + "(); patch would be a no-op. Refusing.");

@@ -11,7 +11,7 @@ import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.FieldUtils;
 import nipx.UtilsAgent;
 import nipx.jni.JNIEnv;
-import nipx.jvmti.LibTool;
+import nipx.util.LibTool;
 import sun.tools.attach.HotSpotVirtualMachine;
 
 import java.io.*;

@@ -40,7 +40,7 @@ import modtools.utils.search.Search.SearchItem;
 import modtools.utils.ui.LerpFun.DrawExecutor;
 import nipx.HotSwapAgent;
 import nipx.jni.helper.MasterKey;
-import nipx.jvmti.LibTool;
+import nipx.util.LibTool;
 import rhino.NativeArray;
 
 import java.lang.invoke.MethodHandle;

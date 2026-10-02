@@ -1,13 +1,16 @@
-package nipx.jvmti;
+package nipx.util;
 
+import nipx.HotSwapAgent;
 import nipx.jni.JNIEnv;
 import nipx.jni.helper.GlobalRef;
+import nipx.jvmti.JVMTIEnv;
 
 import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Array;
 import java.nio.file.*;
 
+/** 依赖jvmti的工具类 */
 public class LibTool {
 	private static boolean initialized;
 	public static boolean initialized() {
@@ -18,7 +21,7 @@ public class LibTool {
 		Lib.load();
 		initialized = true;
 		// getInstances(Unsafe.class);
-		System.out.println("[NIPX] Loaded libtool.");
+		HotSwapAgent.info("[NIPX] Loaded libtool.");
 	}
 	static class Lib {
 		private static final MethodHandle

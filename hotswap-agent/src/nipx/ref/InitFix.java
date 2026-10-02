@@ -3,7 +3,7 @@ package nipx.ref;
 import jdk.internal.misc.Unsafe;
 import nipx.ClassDiffUtil.ClassDiff;
 import nipx.*;
-import nipx.jvmti.LibTool;
+import nipx.util.LibTool;
 import org.objectweb.asm.*;
 import org.objectweb.asm.tree.*;
 import org.objectweb.asm.tree.analysis.*;

@@ -2,9 +2,8 @@ package nipx;
 
 import arc.Core;
 import nipx.annotation.*;
-import nipx.jvmti.LibTool;
+import nipx.util.LibTool;
 import nipx.ref.InitFix;
-import nipx.uihook.*;
 import nipx.util.*;
 
 import java.io.*;

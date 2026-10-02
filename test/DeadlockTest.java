@@ -43,6 +43,7 @@ public class DeadlockTest {
 		testNormalPlatformContentionNotReported();
 		testVirtualThreadHiddenDeadlock();
 		testPureVirtualThreadDeadlockManual();
+		testThreadDumpRotation();
 		testWatchdogLifecycle();
 
 		System.out.println("\n>>> ALL DEADLOCK TESTS COMPLETED SUCCESSFULLY! <<<");
@@ -293,10 +294,36 @@ public class DeadlockTest {
 	}
 
 	/**
-	 * 测试场景 5：看门狗启动与停止生命周期。
+	 * 测试场景 5：线程转储文件轮转清理。
+	 * 验证当已存在的 threads-*.json 达到 5 个或更多时，自动删除旧文件，只保留最新的 5 个。
+	 */
+	private static void testThreadDumpRotation() throws Exception {
+		System.out.println("\n--- Test 5: Thread Dump Rotation ---");
+		// 先创建 7 个模拟的历史 dump 文件，时间戳依次递增
+		for (int i = 0; i < 7; i++) {
+			Fi dummy = IntVars.dataDirectory.child("threads-" + (1000000000000L + i * 1000) + ".json");
+			dummy.writeString("{}");
+			// 设置修改时间
+			dummy.file().setLastModified(1000000000000L + i * 1000);
+		}
+
+		// 触发一次转储
+		DeadlockDetector.dumpAndAnalyzeDeadlocks();
+
+		Fi[] remaining = IntVars.dataDirectory.list(f -> f.getName().startsWith("threads-") && f.getName().endsWith(".json"));
+		System.out.println("Remaining thread dump files after rotation: " + remaining.length);
+		if (remaining.length > 5) {
+			throw new AssertionError("Expected at most 5 thread dumps after rotation, but found: " + remaining.length);
+		}
+
+		System.out.println("Test 5 PASSED: Thread Dump Rotation works correctly.");
+	}
+
+	/**
+	 * 测试场景 6：看门狗启动与停止生命周期。
 	 */
 	private static void testWatchdogLifecycle() throws Exception {
-		System.out.println("\n--- Test 5: Watchdog Lifecycle ---");
+		System.out.println("\n--- Test 6: Watchdog Lifecycle ---");
 		DeadlockDetector.startWatchdog();
 		if (!DeadlockDetector.isRunning()) {
 			throw new AssertionError("Watchdog should be running!");
@@ -308,6 +335,6 @@ public class DeadlockTest {
 			throw new AssertionError("Watchdog should be stopped!");
 		}
 		System.out.println("Watchdog stopped successfully.");
-		System.out.println("Test 5 PASSED: Watchdog Lifecycle works cleanly.");
+		System.out.println("Test 6 PASSED: Watchdog Lifecycle works cleanly.");
 	}
 }

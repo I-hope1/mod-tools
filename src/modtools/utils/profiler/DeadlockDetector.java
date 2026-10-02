@@ -1,6 +1,7 @@
 package modtools.utils.profiler;
 
 import arc.Core;
+import arc.files.Fi;
 import arc.struct.LongMap;
 import arc.struct.LongSeq;
 import arc.util.Log;
@@ -457,6 +458,20 @@ public class DeadlockDetector {
 	private static String dumpAllThreadsJson() {
 		try {
 			if (IntVars.dataDirectory == null) return null;
+
+			// 简单的文件轮转清理：只保留最新的 5 个 threads-*.json，清理旧文件避免占满磁盘
+			try {
+				Fi[] oldDumps = IntVars.dataDirectory.list(f -> f.getName().startsWith("threads-") && f.getName().endsWith(".json"));
+				if (oldDumps != null && oldDumps.length >= 5) {
+					Arrays.sort(oldDumps, Comparator.comparingLong(Fi::lastModified));
+					for (int i = 0; i <= oldDumps.length - 5; i++) {
+						oldDumps[i].delete();
+					}
+				}
+			} catch (Throwable t) {
+				Log.warn("[DeadlockDetector] Failed to clean old thread dumps", t);
+			}
+
 			var f = IntVars.dataDirectory.child("threads-" + System.currentTimeMillis() + ".json");
 			ManagementFactory.getPlatformMXBean(com.sun.management.HotSpotDiagnosticMXBean.class)
 				.dumpThreads(f.file().getAbsolutePath(),

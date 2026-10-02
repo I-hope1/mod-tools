@@ -15,42 +15,77 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 
 /**
- * JVM 死锁检测看门狗与排查工具。
+ * JVM 线程死锁检测看门狗与自动化排查工具。
  * <p>独立于火焰图采样分析器运行，避免对 5ms 高频 CPU 采样造成时延抖动。
  *
- * <p><b>已知限制（Known Limitations）：</b>
+ * <h2>一、演进背景：虚拟线程死锁的排查困境（The Virtual Thread Deadlock Dilemma）</h2>
  * <ul>
- *   <li><b>隐形死锁检测（分歧判据）覆盖范围与局限：</b>
+ *   <li><b>JDK 19 预览期痛点（Heinz Kabutz - The Java Specialists' Newsletter Issue 302）：</b><br>
+ *       在虚拟线程（Virtual Thread / Project Loom）早期阶段，定位虚拟线程死锁极为困难：
+ *       传统诊断工具（如 {@code jstack}、{@code ThreadMXBean.findDeadlockedThreads()}）仅针对平台线程（Platform Threads），
+ *       对虚拟线程完全不可见，或仅能看到载体线程（Carrier Thread）；早期甚至必须显式添加 {@code -Djdk.trackAllThreads=true}
+ *       启动参数才记录虚拟线程；且当时的转储完全缺少内置监视器锁（{@code synchronized}）的持锁与等锁信息；
+ *       同时载体线程被 {@code synchronized} 钉住（Pinning）还会引发载体池耗尽伪死锁。</li>
+ *   <li><b>JDK 21 正式落地（JEP 444）：</b><br>
+ *       确立了非 STW（安全点停顿）的异步转储入口 {@code jcmd <pid> Thread.dump_to_file}（以及底层的
+ *       {@link HotSpotDiagnosticMXBean#dumpThreads(String, ThreadDumpFormat)}），并默认开启全量线程追踪（JDK-8309406）。
+ *       但在 JDK 21~24 中，导出的转储依然缺乏 Object Monitor 锁的持有者与等待者映射。</li>
+ *   <li><b>JDK 24 消除 Pinning（JEP 491）：</b><br>
+ *       重构了 HotSpot 内部监视器机制，虚拟线程在争用 {@code synchronized} 锁时不再钉住载体线程，允许正常卸载（Unmount）。</li>
+ *   <li><b>JDK 25 引入 Monitor 锁转储（JDK-8356870 / JDK-8356872）：</b><br>
+ *       在 JDK 25 中，{@code Thread.dump_to_file}（以及底层 Diagnostic MXBean）正式支持输出 Object Monitor 锁信息，
+ *       转储 JSON 中新增了 {@code monitorsOwned}（持有的监视器锁）与 {@code blockedOn}（正在等待的锁对象）。</li>
+ *   <li><b>本工具的核心定位与闭环补充：</b><br>
+ *       虽然 JDK 25 补全了锁的原始转储数据，但 <b>HotSpot 自身至今仍未提供针对虚拟线程的死锁检测算法</b>
+ *       （相关功能仍跟踪在 JDK-8365057 等议题中），传统 {@link ThreadMXBean#findDeadlockedThreads()} 依然无法感知虚拟线程死锁。<br>
+ *       本工具在此基础上，实现了<b>轻量级分歧启发式秒级监控</b>与<b>基于转储图分析（Cycle Graph Analysis）的有向图找环算法</b>，
+ *       闭环了官方“只提供原始数据、不替开发者分析死锁环”的关键一步。</li>
+ * </ul>
+ *
+ * <h2>二、检测架构与工作机制（Detection Architecture）</h2>
+ * <ol>
+ *   <li><b>第一层：标准平台线程死锁（Standard Deadlock Detection）</b><br>
+ *       周期性（默认 3 秒）调用 {@link ThreadMXBean#findDeadlockedThreads()}，检测平台线程间的 {@code synchronized}
+ *       及 JUC 独占锁死锁，获取完整线程名、ID、状态与栈帧。</li>
+ *   <li><b>第二层：隐形混合死锁启发式（Hidden Hybrid Deadlock Heuristic）</b><br>
+ *       由于虚拟线程持锁时 JVM 内部状态映射的分歧，平台线程在等待虚拟线程持有的监视器时，
+ *       Java 层 {@link Thread#getState()} 显示为 {@link Thread.State#BLOCKED}，
+ *       但 {@link ThreadMXBean#getThreadInfo(long)} 却报告为非 BLOCKED（如 RUNNABLE 且无锁信息）。<br>
+ *       本工具秒级扫描此“分歧特征”，并结合持续时间阈值（默认 9 秒）和堆栈帧不变性判定，自动过滤瞬间锁竞争。</li>
+ *   <li><b>第三层：自动化死锁环路图分析（Cycle Graph Analysis）</b><br>
+ *       当隐形死锁或异常阻塞成立时，自动触发调用 {@code dumpThreads(..., JSON)} 导出全量转储，
+ *       自建 {@code Thread -> Lock -> Thread} 有向图，使用 DFS/拓扑算法还原跨平台线程与虚拟线程的死锁闭环；
+ *       若无闭环但存在单向等待，自动输出锁等待链（Waiting Chains），直击长时间阻塞卡死根因。</li>
+ * </ol>
+ *
+ * <h2>三、能力矩阵与已知限制（Limitations & Scope）</h2>
+ * <ul>
+ *   <li><b>支持范围：</b>
  *     <ul>
- *       <li><b>判据特征：</b>Java 层 {@link Thread#getState()} 显示为 {@link Thread.State#BLOCKED}，
- *           但 {@link ThreadMXBean#getThreadInfo(long)} 报告的状态非 BLOCKED（如 RUNNABLE 且无锁信息）。
- *           这是 Java 24+ (JEP 491) 下监视器由虚拟线程持有且平台线程争用时的典型特征。
- *           同时自动过滤普通平台线程争用（两边一致为 BLOCKED 且带锁信息），交由标准死锁检测处理。</li>
- *       <li><b>自动转储与死锁环解析：</b>报警时自动调用 {@code HotSpotDiagnosticMXBean.dumpThreads(..., JSON)}
- *           导出包含虚拟线程在内的完整线程转储，并自动解析其中的 {@code blockedOn} 与 {@code monitorsOwned}，
- *           在报告中重构闭环等待图（标明各线程名、平台/虚拟类型、持有锁与等待锁）。</li>
- *       <li><b>纯虚拟线程死锁支持：</b>纯虚拟线程间的循环互锁因平台线程未受阻塞，无法触发 3 秒周期的后台巡检；
- *           但可通过手动调用 {@link #dumpAndAnalyzeDeadlocks()} 导出全量转储并自动分析死锁环
- *           （在 Java 24/25 JEP 491 环境下已实测验证转储 JSON 完整包含虚拟线程的 {@code blockedOn} 与 {@code monitorsOwned}）。</li>
- *       <li><b>无法检测：</b>虚拟线程持有 {@code ReentrantLock} 导致等待线程处于 {@link Thread.State#WAITING}（而非 BLOCKED）；
- *           以及调用 {@code wait()}、{@code park()}、{@code join()} 的协作式等待。</li>
+ *       <li>平台线程 ⟷ 平台线程（{@code synchronized} 与 JUC 独占锁，如 {@code ReentrantLock}）：全自动秒级报警。</li>
+ *       <li>平台线程 ⟷ 虚拟线程（{@code synchronized} 混合死锁）：全自动分歧启发式捕获 + 自动转储生成死锁闭环报告。</li>
+ *       <li>虚拟线程 ⟷ 虚拟线程（纯虚拟线程死锁）：支持通过 {@link #dumpAndAnalyzeDeadlocks()} 一键手动排查并输出环路分析
+ *           （因纯虚拟线程互锁时无平台线程陷入 BLOCKED，后台周期性看门狗不主动高频扫描，以避免大规模虚拟线程下的性能损耗）。</li>
  *     </ul>
  *   </li>
- *   <li><b>主线程死锁时 UI 无响应：</b>若死锁涉及游戏主线程（渲染/事件分发线程），整个 UI 将冻结，
- *       界面按钮无法点击，{@link Core#app} post 投递的桌面通知也将无法被消费。
- *       此时主要依赖后台守护线程向控制台输出，以及写入磁盘 {@code deadlock.log} 文件。</li>
- *   <li><b>仅支持 Java 层互斥锁：</b>基于 {@link ThreadMXBean#findDeadlockedThreads()} 实现，
- *       仅能检测 Java 内置对象监视器（{@code synchronized}）及 JUC 独占同步器（如 {@code ReentrantLock}）
- *       构成的循环等待死锁。</li>
- *   <li><b>不支持 Native 死锁检测：</b>无法探测 JNI/C++ 层的原生锁死锁（如 {@code std::mutex}、
- *       POSIX 互斥锁、Windows CriticalSection 或处于 native 状态的死锁）。</li>
- *   <li><b>不支持逻辑死锁与假死：</b>因条件变量未触发（如 {@code Object.wait()}、{@code CountDownLatch.await()}、
- *       {@code CompletableFuture.join()}）导致的永久挂起或阻塞 IO，不属于资源循环互锁，无法被探测。</li>
- *   <li><b>读写锁共享模式限制：</b>部分 JVM 实现下，{@link java.util.concurrent.locks.ReentrantReadWriteLock}
- *       在共享读锁等待引起的死锁可能不会被报告。</li>
- *   <li><b>JVM 全局排查开销：</b>构建死锁环与抓取全量栈需要遍历 JVM 内部线程栈，因此检测间隔应保持在秒级
- *       （默认 3000ms，代码强制最低 500ms），切勿调为毫秒级以免引起周期性停顿。</li>
+ *   <li><b>暂不支持：</b>
+ *     <ul>
+ *       <li><b>虚拟线程持有的 JUC 显式锁：</b>等待 JUC 显式锁（{@code ReentrantLock}）处于 WAITING 状态（非 BLOCKED），
+ *           且目前 JDK 25 的 dumpThreads JSON 尚未记录 JUC 锁的所有权。</li>
+ *       <li><b>协作式逻辑死锁与假死：</b>因条件变量未触发（如 {@code Object.wait()}、{@code CountDownLatch.await()}、
+ *           {@code CompletableFuture.join()}）导致的永久等待或阻塞 IO，不属于资源循环互锁，无法被探测。</li>
+ *       <li><b>Native 锁：</b>JNI/C++ 层的原生锁死锁（如 {@code std::mutex}、Windows CriticalSection）。</li>
+ *     </ul>
+ *   </li>
+ *   <li><b>主线程死锁时 UI 冻结：</b>若死锁涉及游戏主线程（渲染/事件分发），UI 将冻结且桌面飘字无法显示，
+ *       依赖后台守护线程向控制台输出与写入本地磁盘 {@code deadlock.log} 文件。</li>
+ *   <li><b>文件保护机制：</b>转储文件 {@code threads-*.json} 自动执行磁盘轮转保留（最多保留最新 5 份），防止占满磁盘空间。</li>
  * </ul>
+ *
+ * @see <a href="https://www.javaspecialists.eu/archive/Issue302-Virtual-Thread-Deadlocks.html">The Java Specialists' Newsletter Issue 302</a>
+ * @see <a href="https://openjdk.org/jeps/444">JEP 444: Virtual Threads</a>
+ * @see <a href="https://openjdk.org/jeps/491">JEP 491: Synchronize Virtual Threads without Pinning</a>
+ * @see <a href="https://bugs.openjdk.org/browse/JDK-8356870">JDK-8356870: Thread dump enhancements</a>
  */
 public class DeadlockDetector {
 	public static volatile int checkIntervalMs = 3000;
@@ -226,9 +261,24 @@ public class DeadlockDetector {
 	}
 
 	/**
-	 * 专门检测被虚拟线程（Virtual Thread）卡死或存在状态分歧的平台线程。
-	 * <p>核心判据：Java 层 {@link Thread#getState()} 显示为 BLOCKED，但 {@link ThreadMXBean} 报告的状态非 BLOCKED（如 RUNNABLE 且无锁信息）。
-	 * 普通平台线程争用时两边状态一致（均为 BLOCKED 且带锁信息），此处自动放行。
+	 * 专门检测被虚拟线程（Virtual Thread）阻塞或与虚拟线程发生混合死锁的平台线程。
+	 *
+	 * <h3>核心判据：JVM 内部状态映射分歧</h3>
+	 * 在 Java 24/25（JEP 491）环境下，Object Monitor 的所有权与虚拟线程实例绑定。
+	 * 当平台线程试图进入被虚拟线程持有的 {@code synchronized} 块时：
+	 * <ul>
+	 *   <li>Java 语言层 {@link Thread#getState()} 显示为 {@link Thread.State#BLOCKED}；</li>
+	 *   <li>但管理层 {@link ThreadMXBean#getThreadInfo(long)} 报出的状态非 BLOCKED（实测报 RUNNABLE，且 lockName 与 lockOwnerId 均为 null）。</li>
+	 * </ul>
+	 * 而如果是平台线程之间的普通锁争用，两边状态均一致报告为 BLOCKED 且包含持有者信息，此处自动放行并交由标准死锁检测处理。
+	 *
+	 * <h3>多重防护与防抖机制</h3>
+	 * <ol>
+	 *   <li><b>持续性过滤：</b>连续处于该分歧状态达到 {@link #suspiciousBlockThresholdMs}（默认 9 秒）才进入怀疑期。</li>
+	 *   <li><b>栈帧稳定性验证：</b>对比 {@link StackTraceElement} 数组，仅当卡在相同栈顶时才累计计时，避免正常锁抢占。</li>
+	 *   <li><b>零 STW 与低开销：</b>通过 {@link Thread#getAllStackTraces()} 仅扫描平台线程，未触发异常时不发起全量虚拟线程转储。</li>
+	 *   <li><b>合并报警与自动建图：</b>命中怀疑期时，自动触发 {@link #dumpAllThreadsJson()}，解析全量 JSON 拓扑并输出死锁闭环报告。</li>
+	 * </ol>
 	 */
 	public static void checkHiddenDeadlocks() {
 		ThreadMXBean bean = ManagementFactory.getThreadMXBean();
@@ -476,6 +526,13 @@ public class DeadlockDetector {
 		return sb.toString();
 	}
 
+	/**
+	 * 调用 JVM 底层 Diagnostic 机制导出包含虚拟线程在内的全量线程 JSON 转储。
+	 * <p>基于 {@link HotSpotDiagnosticMXBean#dumpThreads(String, ThreadDumpFormat)} 实现（JDK 21+ 规范，JDK 25+ 包含 Monitor 锁信息）。
+	 * 执行前自动做磁盘轮转清理，保持磁盘中最多保留 5 份最新的 JSON 文件。
+	 *
+	 * @return 生成的 JSON 文件绝对路径，若失败返回 null。
+	 */
 	private static String dumpAllThreadsJson() {
 		try {
 			if (IntVars.dataDirectory == null) return null;

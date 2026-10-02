@@ -126,6 +126,14 @@ public class JNIEnv {
 		MASTER_ENV = this;
 	}
 
+	public static JNIEnv getInstance() {
+		return new JNIEnv(Arena.ofAuto(), getCurrentThreadEnvPointer());
+	}
+
+	public static JNIEnv getCurrentThreadEnv() {
+		return getInstance();
+	}
+
 	public static JNIEnv getInstance(SegmentAllocator allocator) {
 		return new JNIEnv(allocator, getCurrentThreadEnvPointer());
 	}

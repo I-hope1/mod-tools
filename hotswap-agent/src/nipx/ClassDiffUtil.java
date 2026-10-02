@@ -315,7 +315,7 @@ public final class ClassDiffUtil {
 		sb.append("[DIFF] ").append(className).append(":\n");
 
 		// 依次追加各种变更类型的信息
-		appendIfNotEmpty(sb, " !!!Errors:   ", diff.errors);
+		appendIfNotEmpty(sb, " !!!Errors: ", diff.errors);
 		appendIfNotEmpty(sb, " *Modified: ", diff.modifiedBodyMethods);
 		appendIfNotEmpty(sb, " +Added:    ", diff.addedMethods);
 		appendIfNotEmpty(sb, " -Removed:  ", diff.removedMethods);

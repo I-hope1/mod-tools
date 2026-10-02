@@ -125,7 +125,7 @@ public class SamplingProfiler {
 		keyBuf.append(simpleClass(className)).append('.').append(methodName)
 		 .append(methodSig);
 		// Log.info("thisAddr: @",thisAddr);
-		if (!className.startsWith("Larc/scene/") && thisAddr != 0L) keyBuf.append(": ").append(Long.toHexString(thisAddr));
+		if (!className.startsWith("arc/scene/") && !className.startsWith("arc.scene.") && thisAddr != 0L) keyBuf.append(": ").append(Long.toHexString(thisAddr));
 		String key = keyBuf.toString();
 
 		curHolder = curHolder.children
@@ -199,7 +199,8 @@ public class SamplingProfiler {
 	}
 
 	private static boolean isBlacklist(String className) {
-		return className.startsWith("nipx.") || className.startsWith("modtools.ui.windows.profile.");
+		return className.startsWith("nipx.") || className.startsWith("nipx/")
+			|| className.startsWith("modtools.ui.windows.profile.") || className.startsWith("modtools/ui/windows/profile/");
 	}
 
 	// ── 辅助 ─────────────────────────────────────────────────────────────────
@@ -207,13 +208,15 @@ public class SamplingProfiler {
 	private static boolean matchesAny(String className, String[] pkgs) {
 		for (String pkg : pkgs) {
 			if (className.startsWith(pkg)) return true;
+			String slashPkg = pkg.replace('.', '/');
+			if (className.startsWith(slashPkg)) return true;
 		}
 		return false;
 	}
 
 	/** "com.example.Foo$Bar" → "Foo$Bar"（保留内部类标记）。 */
 	private static String simpleClass(String className) {
-		int dot = className.lastIndexOf('.');
+		int dot = Math.max(className.lastIndexOf('.'), className.lastIndexOf('/'));
 		return dot < 0 ? className : className.substring(dot + 1);
 	}
 

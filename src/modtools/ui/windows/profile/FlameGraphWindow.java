@@ -440,38 +440,45 @@ public class FlameGraphWindow extends Window {
 				Draw.color(Color.white, parentAlpha);
 				return;
 			}
-			boolean hasSearch = !searchQuery.isEmpty();
-			Font    font      = getFont();
-			for (Slot s : slots) {
-				if (s.w < 0.5f) continue;
-				float wx    = x + s.x, wy = y + s.y, rw = Math.max(s.w - GAP, 0), rh = ROW_H - GAP, cx = wx + rw / 2f, cy = wy + rh / 2f;
-				float alpha = parentAlpha;
-				if (hasSearch) {
-					if (s.node.name.toLowerCase(Locale.ROOT).contains(searchQuery)) {
-						Draw.color(SEARCH_HIGHLIGHT, alpha);
-						Fill.rect(cx, cy, rw + 2, rh + 2);
-					} else { alpha *= 0.25f; }
-				}
-				Draw.color(s.color, alpha);
-				Fill.rect(cx, cy, rw, rh);
-				if (s.w > 8f && s.childrenW < s.w - 2f) {
-					float sw = rw - s.childrenW;
-					if (sw > 1f) {
-						Draw.color(SELF_TIME_TINT, alpha);
-						Fill.rect(wx + s.childrenW + sw / 2f, cy, sw, rh);
+			boolean clip = clipBegin();
+			if (!clip) return;
+			try {
+				boolean hasSearch = !searchQuery.isEmpty();
+				Font    font      = getFont();
+				for (Slot s : slots) {
+					if (s.w < 0.5f) continue;
+					float wx = x + s.x, wy = y + s.y, rw = Math.max(s.w - GAP, 0), rh = ROW_H - GAP, cx = wx + rw / 2f, cy = wy + rh / 2f;
+					if (wx + rw < x || wx > x + width || wy + rh < y || wy > y + height) continue;
+					float alpha = parentAlpha;
+					if (hasSearch) {
+						if (s.node.name.toLowerCase(Locale.ROOT).contains(searchQuery)) {
+							Draw.color(SEARCH_HIGHLIGHT, alpha);
+							Fill.rect(cx, cy, rw + 2, rh + 2);
+						} else { alpha *= 0.25f; }
+					}
+					Draw.color(s.color, alpha);
+					Fill.rect(cx, cy, rw, rh);
+					if (s.w > 8f && s.childrenW < s.w - 2f) {
+						float sw = rw - s.childrenW;
+						if (sw > 1f) {
+							Draw.color(SELF_TIME_TINT, alpha);
+							Fill.rect(wx + s.childrenW + sw / 2f, cy, sw, rh);
+						}
+					}
+					if (s.node == hoveredNode) {
+						Draw.color(Color.white, parentAlpha);
+						Lines.rect(wx, wy, rw, rh);
+					}
+					if (font != null && rw > 24) {
+						Draw.color(Color.white, parentAlpha);
+						CharSequence lbl = fitLabel(font, s.node.name, rw - 6);
+						if (lbl.length() > 0) MyDraw.drawText(lbl, wx + 3, wy + rh - 3, Draw.getColor(), Align.left);
 					}
 				}
-				if (s.node == hoveredNode) {
-					Draw.color(Color.white, parentAlpha);
-					Lines.rect(wx, wy, rw, rh);
-				}
-				if (font != null && rw > 24) {
-					Draw.color(Color.white, parentAlpha);
-					String lbl = fitLabel(font, s.node.name, rw - 6);
-					if (!lbl.isEmpty()) MyDraw.drawText(lbl, wx + 3, wy + rh - 3, Draw.getColor(), Align.left);
-				}
+				Draw.color(Color.white, parentAlpha);
+			} finally {
+				clipEnd();
 			}
-			Draw.color(Color.white, parentAlpha);
 		}
 
 		static long effectiveTotal(FlameNode node) {
@@ -494,7 +501,7 @@ public class FlameGraphWindow extends Window {
 		private static final ThreadLocal<StringBuilder> SB_TEST  = ThreadLocal.withInitial(() -> new StringBuilder(128));
 
 		private static final GlyphLayout _gl = new GlyphLayout();
-		public static String fitLabel(Font font, String text, float maxWidth) {
+		public static CharSequence fitLabel(Font font, String text, float maxWidth) {
 			if (text == null) return "";
 
 			_gl.setText(font, text);
@@ -506,7 +513,7 @@ public class FlameGraphWindow extends Window {
 			simplifySignature(text, simple);
 
 			_gl.setText(font, simple);
-			if (_gl.width <= maxWidth) return simple.toString(); // 精简后能装下，仅在这里构造一次 String
+			if (_gl.width <= maxWidth) return simple; // 精简后能装下，仅在这里构造一次 String
 
 			// 二分查找
 			int           lo      = 1, hi = simple.length();
@@ -537,7 +544,7 @@ public class FlameGraphWindow extends Window {
 			testSb.setLength(0);
 			testSb.append(simple, 0, bestMid);
 			testSb.append('…');
-			return testSb.toString();
+			return testSb;
 		}
 
 		/**

@@ -168,7 +168,7 @@ public class GlTimerProfiler {
 					// 写入火焰图树（与 CPU 节点并列，节点名加 "[gpu]" 后缀）
 					String gpuKey = key.isBlank() ? "[gpu]" : key + "[gpu]";
 					ProfilerData.FlameNode gpuNode =
-						ProfilerData.flameRoot.children.computeIfAbsent(gpuKey, ProfilerData.FlameNode::new);
+						ProfilerData.flameRoot.getOrCreateChild(gpuKey);
 					gpuNode.totalNanos.add(gpuNs);
 
 					queryKeys[slot] = null;

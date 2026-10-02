@@ -6,6 +6,7 @@ import nipx.jni.JNIEnv;
 import nipx.jni.helper.GlobalRef;
 import nipx.jvmti.*;
 import nipx.jvmti.JVMTIEnv.FrameConsumer;
+import nipx.profiler.LookupKey;
 import nipx.profiler.ProfilerData;
 import nipx.profiler.ProfilerData.FlameNode;
 
@@ -112,24 +113,22 @@ public class SamplingProfiler {
 			}
 		}
 	}
-	private static final StringBuilder keyBuf   = new StringBuilder();
-	private static       FlameNode     curHolder;
+	private static final LookupKey lookupKey = new LookupKey();
+	private static       FlameNode curHolder;
 	private static final FrameConsumer CONSUMER = (className, methodName, methodSig, thisAddr) -> {
 		if (isBlacklist(className)) return true;
 		String[] pkgs = includePackages;
 		if (pkgs != null && pkgs.length > 0 && !matchesAny(className, pkgs)) return true;
-		// Log.info(className + "." + methodName + " " + methodSig);
 
-		// 复用 StringBuilder 拼 key
-		keyBuf.setLength(0);
-		keyBuf.append(simpleClass(className)).append('.').append(methodName)
+		// 零分配拼装 LookupKey
+		lookupKey.reset();
+		lookupKey.append(simpleClass(className)).append('.').append(methodName)
 		 .append(methodSig);
-		// Log.info("thisAddr: @",thisAddr);
-		if (!className.startsWith("arc/scene/") && !className.startsWith("arc.scene.") && thisAddr != 0L) keyBuf.append(": ").append(Long.toHexString(thisAddr));
-		String key = keyBuf.toString();
+		if (!className.startsWith("arc/scene/") && !className.startsWith("arc.scene.") && thisAddr != 0L) {
+			lookupKey.append(": ").appendHex(thisAddr);
+		}
 
-		curHolder = curHolder.children
-		 .computeIfAbsent(key, FlameNode::new);
+		curHolder = curHolder.getOrCreateChild(lookupKey);
 		curHolder.totalNanos.add(intervalMs * 1_000_000L);
 		return true;
 	};
@@ -164,6 +163,8 @@ public class SamplingProfiler {
 		sample(stack);
 	}
 
+	private static final LookupKey sampleKey = new LookupKey();
+
 	/**
 	 * 将一次采样写入 {@link ProfilerData#flameRoot}。
 	 *
@@ -187,13 +188,11 @@ public class SamplingProfiler {
 			// 包名过滤：pkgs 为空则全部接受
 			if (pkgs != null && pkgs.length > 0 && !matchesAny(className, pkgs)) continue;
 
-			// key 格式与插桩模式相同："ClassName.methodName"
-			String key = simpleClass(className) + "." + frame.getMethodName();
+			// 零分配构建 LookupKey
+			sampleKey.reset();
+			sampleKey.append(simpleClass(className)).append('.').append(frame.getMethodName());
 
-			// computeIfAbsent：key 存在时无 GC；首次出现才 new FlameNode
-			cur = cur.children.computeIfAbsent(key, FlameNode::new);
-
-			// 用 intervalMs（转纳秒）作为权重，使采样和插桩的单位统一
+			cur = cur.getOrCreateChild(sampleKey);
 			cur.totalNanos.add(intervalMs * 1_000_000L);
 		}
 	}

@@ -154,7 +154,7 @@ public class MyDraw {
 		font.getColor().set(oldColor);
 		font.getData().setScale(oldScaleX, oldScaleY);
 	}
-	public static void drawText(String text, float x, float y, Color color, int align) {
+	public static void drawText(CharSequence text, float x, float y, Color color, int align) {
 		if (Mathf.zero(color.a)) return;
 		int oldColor = font.getColor().rgba();
 		font.setColor(color);

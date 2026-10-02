@@ -2,16 +2,13 @@ package nipx.profiler;
 
 import arc.Core;
 import arc.graphics.GL30;
+import nipx.HotSwapAgent;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.IntBuffer;
+import java.nio.*;
 import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
 
-import nipx.HotSwapAgent;
-import static nipx.HotSwapAgent.error;
 import static nipx.HotSwapAgent.info;
 
 /**
@@ -70,6 +67,9 @@ public class GlTimerProfiler {
 		.allocateDirect(4)
 		.order(ByteOrder.nativeOrder())
 		.asIntBuffer();
+
+	/** 复用的 LookupKey，避免每帧生成 "[gpu]" 节点名时产生 String 垃圾。只在 GL 线程访问。*/
+	private static final LookupKey gpuLookupKey = new LookupKey(64);
 
 	// ── 输出数据 ─────────────────────────────────────────────────────────────
 	/** flushKey → 累计 GPU 纳秒。供 FlameGraphWindow 渲染 GPU 泳道。*/
@@ -165,10 +165,15 @@ public class GlTimerProfiler {
 					// 写入 flat GPU 统计
 					gpuData.computeIfAbsent(key, k -> new LongAdder()).add(gpuNs);
 
-					// 写入火焰图树（与 CPU 节点并列，节点名加 "[gpu]" 后缀）
-					String gpuKey = key.isBlank() ? "[gpu]" : key + "[gpu]";
+					// 写入火焰图树（与 CPU 节点并列，节点名加 "[gpu]" 后缀，零 GC 分配）
+					gpuLookupKey.reset();
+					if (key.isBlank()) {
+						gpuLookupKey.append("[gpu]");
+					} else {
+						gpuLookupKey.append(key).append("[gpu]");
+					}
 					ProfilerData.FlameNode gpuNode =
-						ProfilerData.flameRoot.getOrCreateChild(gpuKey);
+						ProfilerData.flameRoot.getOrCreateChild(gpuLookupKey);
 					gpuNode.totalNanos.add(gpuNs);
 
 					queryKeys[slot] = null;

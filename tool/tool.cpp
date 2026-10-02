@@ -37,26 +37,12 @@ template <typename F>
 #define CONCAT(a, b) CONCAT_IMPL(a, b)
 #define SCOPE_EXIT auto CONCAT(_scope_guard_, __LINE__) = make_scope_guard
 
-/** 全局 Raw Monitor 句柄与互斥保护锁 */
-static std::atomic<jrawMonitorID> g_raw_monitor{nullptr};
-static std::mutex g_monitor_mutex;
-
-/** 线程安全获取或创建全局 JVMTI Raw Monitor，支持失败后安全重试 */
-static jrawMonitorID getOrCreateRawMonitor(jvmtiEnv* jvmti) {
-    jrawMonitorID monitor = g_raw_monitor.load(std::memory_order_acquire);
-    if (monitor) return monitor;
-
-    std::lock_guard<std::mutex> lock(g_monitor_mutex);
-    monitor = g_raw_monitor.load(std::memory_order_relaxed);
-    if (monitor) return monitor;
-
-    jrawMonitorID created = nullptr;
-    if (jvmti->CreateRawMonitor("ToolGlobalHeapMonitor", &created) == JVMTI_ERROR_NONE && created) {
-        g_raw_monitor.store(created, std::memory_order_release);
-        return created;
-    }
-    return nullptr;
-}
+/**
+ * 保护整串堆操作序列（Iterate → GetObjectsWithTags → SetTag×N）的全局互斥锁。
+ * 不使用 JVMTI Raw Monitor：Raw Monitor 的等待者被 JVM 视为需要挂起的线程，
+ * 会卡住 safepoint 造成死锁；std::mutex 持有者处于 native 状态，safepoint 可正常推进。
+ */
+static std::mutex g_heap_mutex;
 
 /** 全局递增 Tag 序列号，用于生成唯一的动态标签 */
 static std::atomic<jlong> g_tag_sequence{100000};
@@ -124,11 +110,7 @@ getInstancesInternal(jvmtiEnv* jvmti, JNIEnv* env, jclass klass) {
     if (!jvmti || !env || !klass) return std::unexpected(JVMTI_ERROR_NULL_POINTER);
     ensureCapabilities(jvmti);
 
-    jrawMonitorID monitor = getOrCreateRawMonitor(jvmti);
-    if (!monitor || jvmti->RawMonitorEnter(monitor) != JVMTI_ERROR_NONE) {
-        return std::unexpected(JVMTI_ERROR_INTERNAL);
-    }
-    SCOPE_EXIT([&] { jvmti->RawMonitorExit(monitor); });
+    std::lock_guard<std::mutex> lock(g_heap_mutex);
 
     jlong tag = allocateTagPair().first;
 
@@ -222,13 +204,7 @@ static std::expected<jobjectArray, jvmtiError> getReferrersInternal(jvmtiEnv* jv
 
     ensureCapabilities(jvmti);
 
-    jrawMonitorID monitor = getOrCreateRawMonitor(jvmti);
-    if (!monitor) return std::unexpected(JVMTI_ERROR_INTERNAL);
-
-    if (jvmti->RawMonitorEnter(monitor) != JVMTI_ERROR_NONE) {
-        return std::unexpected(JVMTI_ERROR_INTERNAL);
-    }
-    SCOPE_EXIT([&] { jvmti->RawMonitorExit(monitor); });
+    std::lock_guard<std::mutex> lock(g_heap_mutex);
 
     TagPair tags = allocateTagPair();
     jlong target_tag = tags.first;

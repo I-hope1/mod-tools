@@ -179,7 +179,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 		MenuBuilder.addShowMenuListenerp(this, () -> {
 			ValueLabel label = this;
 			// Log.info(hoveredVal);
-			final Object val = hoveredValRef != null ? hoveredValRef.get() : null;
+			final Object val = hoveredVal();
 			if (val != null) {
 				Class<?> type1 = valToType.get(val);
 				Object   obj   = valToObj.get(val);

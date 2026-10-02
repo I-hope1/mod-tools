@@ -1,5 +1,6 @@
 package nipx.ref;
 
+import arc.Core;
 import arc.func.*;
 import arc.scene.Element;
 import arc.scene.event.*;
@@ -11,21 +12,6 @@ import java.util.*;
 
 /** @see nipx.LambdaRef */
 public class UpdateRef {
-	/**
-	 * 弱键集合：UpdateRef 被回收后自动移除，无需手动清理。
-	 * 用途：HotSwap 重载某类时主动清理其 lambda。
-	 * 若不需要主动清理（只靠 NoSuchMethodError 兜底），可以整体删掉 ALL、
-	 * snapshot() 和 clearIfFromClass()，wrap 就变成零登记开销。
-	 */
-	private static final Set<UpdateRef> ALL =
-	 Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
-
-	/** 仅用于热重载时的少量遍历，返回快照 */
-	public static List<UpdateRef> snapshot() {
-		synchronized (ALL) {
-			return new ArrayList<>(ALL);
-		}
-	}
 
 	private volatile Object  fn;
 	/** 直接强引用即可：element -> listener -> UpdateRef -> element 只是孤立的环，不影响 GC */
@@ -34,7 +20,6 @@ public class UpdateRef {
 	private UpdateRef(Object fn, Element element) {
 		this.fn = fn;
 		this.element = element;
-		ALL.add(this);
 	}
 
 	public static Runnable wrap(Element element, Runnable original) {
@@ -94,7 +79,7 @@ public class UpdateRef {
 		if (checkFn(f)) return;
 		try {
 			f.run();
-		} catch (NoSuchMethodError e) {
+		} catch (LinkageError e) {
 			onNoSuchMethodError(f, e);
 		}
 	}
@@ -109,7 +94,7 @@ public class UpdateRef {
 		if (checkFn(f)) return null;
 		try {
 			return f.get();
-		} catch (NoSuchMethodError e) {
+		} catch (LinkageError e) {
 			onNoSuchMethodError(f, e);
 			return null;
 		}
@@ -120,7 +105,7 @@ public class UpdateRef {
 		if (checkFn(f)) return false;
 		try {
 			return f.get();
-		} catch (NoSuchMethodError e) {
+		} catch (LinkageError e) {
 			onNoSuchMethodError(f, e);
 			return false;
 		}
@@ -132,7 +117,7 @@ public class UpdateRef {
 		if (checkFn(f)) return;
 		try {
 			f.get(t);
-		} catch (NoSuchMethodError e) {
+		} catch (LinkageError e) {
 			onNoSuchMethodError(f, e);
 		}
 	}
@@ -143,7 +128,7 @@ public class UpdateRef {
 		if (checkFn(f)) return false;
 		try {
 			return f.get(t);
-		} catch (NoSuchMethodError e) {
+		} catch (LinkageError e) {
 			onNoSuchMethodError(f, e);
 			return false;
 		}
@@ -154,7 +139,7 @@ public class UpdateRef {
 		if (checkFn(fn)) return;
 		try {
 			fn.get(f);
-		} catch (NoSuchMethodError e) {
+		} catch (LinkageError e) {
 			onNoSuchMethodError(fn, e);
 		}
 	}
@@ -164,7 +149,7 @@ public class UpdateRef {
 		if (checkFn(fn)) return;
 		try {
 			fn.get(f1, f2);
-		} catch (NoSuchMethodError e) {
+		} catch (LinkageError e) {
 			onNoSuchMethodError(fn, e);
 		}
 	}
@@ -174,7 +159,7 @@ public class UpdateRef {
 		if (checkFn(f)) return false;
 		try {
 			return f.valid(t);
-		} catch (NoSuchMethodError e) {
+		} catch (LinkageError e) {
 			onNoSuchMethodError(f, e);
 			return false;
 		}
@@ -185,7 +170,7 @@ public class UpdateRef {
 		if (checkFn(f)) return false;
 		try {
 			return f.handle(eventType);
-		} catch (NoSuchMethodError e) {
+		} catch (LinkageError e) {
 			onNoSuchMethodError(f, e);
 			return false;
 		}
@@ -197,10 +182,13 @@ public class UpdateRef {
 	 * 2) lambda 内部深处调用到的、与热重载无关的方法。
 	 * 两种情况都清掉 fn 并移除元素，但打印日志方便区分。
 	 */
-	private void onNoSuchMethodError(Object f, NoSuchMethodError e) {
+	private void onNoSuchMethodError(Object f, LinkageError e) {
 		HotSwapAgent.info("[UpdateRef] NoSuchMethodError from " + (f == null ? "?" : f.getClass().getName())
 		                  + ": " + e.getMessage());
 		clearFn();
+		if (element != null) {
+			Core.app.post(element::remove);
+		}
 	}
 
 
@@ -209,33 +197,11 @@ public class UpdateRef {
 			// fn 已被清空（HotSwap 删除或 NoSuchMethodError 兜底），移除元素
 			// element 可能为 null（wrap 调用方传入 null 的极端情况）
 			if (element != null) {
-				element.remove();
+				Core.app.post(element::remove);
 			}
 			return true;
 		}
 		return false;
 	}
 
-
-	/**
-	 * 清理来自指定类的 lambda。
-	 * <p>HotSpot 的 lambda 类名形如：
-	 * <pre>
-	 *   com.example.Foo$$Lambda$123/0x...
-	 *   com.example.Foo$$Lambda/0x...   (JDK 21+)
-	 * </pre>
-	 * 内部类的 lambda 宿主名是 {@code Foo$Inner}，重定义内部类时
-	 * {@code beforeClassRedefined} 会以内部类自己的名字再调用一次，所以这里
-	 * 只需精确匹配 {@code dotClassName + "$$Lambda"}，不要做前缀覆盖，
-	 * 否则重载 {@code Foo} 会误清 {@code Foo$Bar} 里的 lambda。
-	 */
-	public boolean clearIfFromClass(String dotClassName) {
-		var f = this.fn;
-		if (f == null) return false;
-		if (f.getClass().getName().startsWith(dotClassName + "$$Lambda")) {
-			clearFn();
-			return true;
-		}
-		return false;
-	}
 }

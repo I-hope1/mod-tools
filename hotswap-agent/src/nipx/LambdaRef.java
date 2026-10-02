@@ -180,14 +180,14 @@ public class LambdaRef {
 				cleared++;
 			}
 		} */
-		String dotClassName = slashClassName.replace('/', '.');
+		/* String dotClassName = slashClassName.replace('/', '.');
 		int    cleared      = 0;
 		for (UpdateRef ref : UpdateRef.snapshot()) {
 			if (ref.clearIfFromClass(dotClassName)) cleared++;
 		}
 		if (cleared > 0) {
 			info("[LambdaRef] Cleared " + cleared + " UpdateRef lambda(s) from " + dotClassName);
-		}
+		} */
 		// if (Core.app != null && Core.scene != null) {
 		// 	Core.app.post(() -> reloadAffectedTables(Collections.singleton(dotClassName)));
 		// }

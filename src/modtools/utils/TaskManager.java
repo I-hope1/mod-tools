@@ -27,16 +27,15 @@ public class TaskManager {
 	}
 
 	/**
-	 * 防抖/重置任务：如果正在排队则取消并重新倒计时
+	 * 防抖/重置任务：如果正在排队则取消并重新倒计时。
+	 * 注：Timer.schedule 与 cancel 内部已线程安全，无需额外加锁。
 	 */
 	public static void reset(Task task, float delaySeconds) {
-		synchronized (Timer.instance()) {
-			synchronized (task) {
-				if (task.isScheduled()) {
-					task.cancel();
-				}
-				Timer.schedule(task, delaySeconds);
+		synchronized (task) {
+			if (task.isScheduled()) {
+				task.cancel();
 			}
+			Timer.schedule(task, delaySeconds);
 		}
 	}
 
@@ -45,19 +44,17 @@ public class TaskManager {
 	}
 
 	/**
-	 * 启停任务（Toggle）：排队中则取消，未排队则调度
+	 * 启停任务（Toggle）：排队中则取消，未排队则调度。
 	 * @return true 表示启动了调度；false 表示取消了调度
 	 */
 	public static boolean toggle(Task task, float delaySeconds) {
-		synchronized (Timer.instance()) {
-			synchronized (task) {
-				if (task.isScheduled()) {
-					task.cancel();
-					return false;
-				} else {
-					Timer.schedule(task, delaySeconds);
-					return true;
-				}
+		synchronized (task) {
+			if (task.isScheduled()) {
+				task.cancel();
+				return false;
+			} else {
+				Timer.schedule(task, delaySeconds);
+				return true;
 			}
 		}
 	}
@@ -67,18 +64,16 @@ public class TaskManager {
 	}
 
 	/**
-	 * 尝试调度：只有未在排队时才添加调度
+	 * 尝试调度：只有未在排队时才添加调度。
 	 * @return true 表示添加成功；false 表示已有排队中任务，未作处理
 	 */
 	public static boolean trySchedule(Task task, float delaySeconds) {
-		synchronized (Timer.instance()) {
-			synchronized (task) {
-				if (task.isScheduled()) {
-					return false;
-				} else {
-					Timer.schedule(task, delaySeconds);
-					return true;
-				}
+		synchronized (task) {
+			if (task.isScheduled()) {
+				return false;
+			} else {
+				Timer.schedule(task, delaySeconds);
+				return true;
 			}
 		}
 	}

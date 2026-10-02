@@ -1,6 +1,8 @@
 package modtools.utils.profiler;
 
 import arc.Core;
+import arc.struct.LongMap;
+import arc.struct.LongSeq;
 import arc.util.Log;
 import modtools.IntVars;
 import modtools.ui.IntUI;
@@ -58,6 +60,21 @@ public class DeadlockDetector {
 		watchdogThread.start();
 	}
 
+	// 记录连续处于异常 BLOCKED 的平台线程: threadId -> SuspiciousBlock
+	private static final LongMap<SuspiciousBlock> suspiciousMap = new LongMap<>();
+
+	private static class SuspiciousBlock {
+		String lockName;
+		int hits;
+		boolean reported;
+
+		SuspiciousBlock(String lockName) {
+			this.lockName = lockName;
+			this.hits = 1;
+			this.reported = false;
+		}
+	}
+
 	public static synchronized void stopWatchdog() {
 		running = false;
 		if (watchdogThread != null) {
@@ -65,6 +82,7 @@ public class DeadlockDetector {
 			watchdogThread = null;
 		}
 		lastDeadlockedThreadIds = Collections.emptySet();
+		suspiciousMap.clear();
 	}
 
 	public static boolean isRunning() {
@@ -90,6 +108,11 @@ public class DeadlockDetector {
 	}
 
 	public static void checkAndLog() {
+		checkStandardDeadlocks();
+		checkHiddenDeadlocks();
+	}
+
+	private static void checkStandardDeadlocks() {
 		DeadlockResult result = detectDeadlocks();
 		if (result == null || result.deadlockedIds.length == 0) {
 			lastDeadlockedThreadIds = Collections.emptySet();
@@ -124,6 +147,72 @@ public class DeadlockDetector {
 						IntUI.showInfoFade("Deadlock Detected! Check console or deadlock.log");
 					} catch (Throwable ignored) {}
 				});
+			}
+		}
+	}
+
+	/**
+	 * 专门检测被虚拟线程（Virtual Thread）或隐形持有者长时间卡死的平台线程。
+	 * 核心特征：正在争抢 monitor (BLOCKED)，但底层找不到持有者 (lockOwnerId == -1 且 lockName != null)。
+	 */
+	public static void checkHiddenDeadlocks() {
+		ThreadMXBean bean = ManagementFactory.getThreadMXBean();
+		long[] allIds = bean.getAllThreadIds();
+		// 批量轻量拉取平台线程状态，maxDepth = 0 不抓取堆栈以将常规开销降到最低
+		ThreadInfo[] infos = bean.getThreadInfo(allIds, 0);
+		LongSeq currentBlockedIds = new LongSeq();
+
+		for (ThreadInfo ti : infos) {
+			if (ti == null) continue;
+
+			if (ti.getThreadState() == Thread.State.BLOCKED && ti.getLockOwnerId() == -1 && ti.getLockName() != null) {
+				long tid = ti.getThreadId();
+				currentBlockedIds.add(tid);
+
+				SuspiciousBlock block = suspiciousMap.get(tid);
+				if (block != null && Objects.equals(block.lockName, ti.getLockName())) {
+					block.hits++;
+					// 连续 3 次检测（约 9 秒）都在等同一个无主锁，且未报警过，判定为严重挂起/隐形死锁
+					if (block.hits >= 3 && !block.reported) {
+						block.reported = true;
+						ThreadInfo fullInfo = bean.getThreadInfo(tid, Integer.MAX_VALUE);
+						String report = String.format(
+							"\n================= [SUSPECTED HIDDEN DEADLOCK] =================\n" +
+							"Platform thread \"%s\" (Id=%d) has been BLOCKED on '%s' for a long time,\n" +
+							"but the lock owner is invisible! (Likely held by a Virtual Thread or native monitor)\n\n" +
+							"%s\n" +
+							"===============================================================",
+							ti.getThreadName(), tid, ti.getLockName(), fullInfo != null ? fullInfo.toString() : "<no stack>"
+						);
+
+						Log.err("[DeadlockDetector] @", report);
+
+						try {
+							if (IntVars.dataDirectory != null) {
+								IntVars.dataDirectory.child("deadlock.log").writeString(report, false);
+							}
+						} catch (Throwable ignored) {}
+
+						if (Core.app != null) {
+							Core.app.post(() -> {
+								try {
+									IntUI.showInfoFade("Hidden Deadlock Detected! Check console or deadlock.log");
+								} catch (Throwable ignored) {}
+							});
+						}
+					}
+				} else {
+					suspiciousMap.put(tid, new SuspiciousBlock(ti.getLockName()));
+				}
+			}
+		}
+
+		// 移出已恢复正常或已退出的线程
+		var entries = suspiciousMap.entries().iterator();
+		while (entries.hasNext()) {
+			var entry = entries.next();
+			if (!currentBlockedIds.contains(entry.key)) {
+				entries.remove();
 			}
 		}
 	}

@@ -3,7 +3,7 @@ package nipx.profiler;
 /** 自定义可复用 LookupKey，内嵌 StringBuilder 实现零字符串分配的 Map 查找与存储 */
 public final class LookupKey implements CharSequence, Comparable<LookupKey> {
 
-	public final StringBuilder sb;
+	private final StringBuilder sb;
 	private int     hash;
 	private boolean hashComputed;
 
@@ -87,13 +87,9 @@ public final class LookupKey implements CharSequence, Comparable<LookupKey> {
 		return this;
 	}
 
-	/** 创建当前内容的永久副本，用于插入 Map 作为持久 key */
-	public LookupKey copy() {
-		LookupKey copy = new LookupKey(this.sb.length());
-		copy.sb.append(this.sb);
-		copy.hash = this.hashCode();
-		copy.hashComputed = true;
-		return copy;
+	/** 将当前内容持久化为 String */
+	public String copy() {
+		return sb.toString();
 	}
 
 	@Override
@@ -130,21 +126,20 @@ public final class LookupKey implements CharSequence, Comparable<LookupKey> {
 		if (this == obj) return true;
 		if (obj instanceof LookupKey) {
 			LookupKey other = (LookupKey) obj;
+			int len = sb.length();
+			if (len != other.sb.length()) return false;
 			if (this.hashCode() != other.hashCode()) return false;
-			StringBuilder b1 = this.sb;
 			StringBuilder b2 = other.sb;
-			int len = b1.length();
-			if (len != b2.length()) return false;
 			for (int i = 0; i < len; i++) {
-				if (b1.charAt(i) != b2.charAt(i)) return false;
+				if (sb.charAt(i) != b2.charAt(i)) return false;
 			}
 			return true;
 		}
 		if (obj instanceof String) {
 			String s = (String) obj;
-			if (this.hashCode() != s.hashCode()) return false;
 			int len = sb.length();
 			if (len != s.length()) return false;
+			if (this.hashCode() != s.hashCode()) return false;
 			for (int i = 0; i < len; i++) {
 				if (sb.charAt(i) != s.charAt(i)) return false;
 			}
@@ -155,14 +150,12 @@ public final class LookupKey implements CharSequence, Comparable<LookupKey> {
 
 	@Override
 	public int compareTo(LookupKey o) {
-		StringBuilder b1 = this.sb;
-		StringBuilder b2 = o.sb;
-		int len1 = b1.length();
-		int len2 = b2.length();
-		int lim = Math.min(len1, len2);
+		int len1 = sb.length();
+		int len2 = o.sb.length();
+		int lim  = Math.min(len1, len2);
 		for (int k = 0; k < lim; k++) {
-			char c1 = b1.charAt(k);
-			char c2 = b2.charAt(k);
+			char c1 = sb.charAt(k);
+			char c2 = o.sb.charAt(k);
 			if (c1 != c2) return c1 - c2;
 		}
 		return len1 - len2;

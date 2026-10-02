@@ -34,29 +34,23 @@ public class ProfilerData {
 
 	// ── Flame Graph 活树 ──────────────────────────────────────────────────────
 	public static final class FlameNode {
-		public final String                                  name;
-		public final LongAdder                               totalNanos = new LongAdder();
-		public final ConcurrentHashMap<LookupKey, FlameNode> children   = new ConcurrentHashMap<>();
+		public final String                               name;
+		public final LongAdder                            totalNanos = new LongAdder();
+		public final ConcurrentHashMap<String, FlameNode> children   = new ConcurrentHashMap<>();
 
 		public FlameNode(String name) { this.name = name; }
 
-		/** 使用 LookupKey 获取或创建子节点，零字符串分配 */
+		/** 使用 LookupKey 获取或创建子节点，查询常态零字符串分配 */
 		public FlameNode getOrCreateChild(LookupKey key) {
 			FlameNode node = children.get(key);
 			if (node != null) return node;
-			LookupKey copy = key.copy();
-			return children.computeIfAbsent(copy, k -> new FlameNode(k.toString()));
+			String str = key.copy();
+			return children.computeIfAbsent(str, FlameNode::new);
 		}
-
-		private static final ThreadLocal<LookupKey> TL_KEY = ThreadLocal.withInitial(LookupKey::new);
 
 		/** 使用 String 名称获取或创建子节点 */
 		public FlameNode getOrCreateChild(String name) {
-			LookupKey key = TL_KEY.get().reset().append(name);
-			FlameNode node = children.get(key);
-			if (node != null) return node;
-			LookupKey copy = key.copy();
-			return children.computeIfAbsent(copy, k -> new FlameNode(name));
+			return children.computeIfAbsent(name, FlameNode::new);
 		}
 
 		public int maxDepth(int cur) {

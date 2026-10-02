@@ -11,16 +11,14 @@ public class DynamicProfilerAPI {
 	public static final GlTimerInjector glTimerInjector = new GlTimerInjector();
 
 	public static void init() {
-		Instrumentation inst = HotSwapAgent.getInst();
-		inst.addTransformer(transformer, true);
-		inst.addTransformer(glTimerInjector, true);
-		glTimerInjector.load();
-
-		/* try {
-			loadWalker();
-		} catch (Exception e) {
-			HotSwapAgent.error("Failed to load walker", e);
-		} */
+		try {
+			Instrumentation inst = HotSwapAgent.getInst();
+			inst.addTransformer(transformer, true);
+			inst.addTransformer(glTimerInjector, true);
+			glTimerInjector.load();
+		} catch (Throwable t) {
+			HotSwapAgent.error("Failed to initialize DynamicProfilerAPI", t);
+		}
 	}
 	static void loadWalker() throws Exception {
 		Instrumentation inst   = HotSwapAgent.getInst();

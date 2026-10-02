@@ -2,6 +2,7 @@ package nipx;
 
 import arc.Core;
 import nipx.annotation.*;
+import nipx.profiler.DynamicProfilerAPI;
 import nipx.util.LibTool;
 import nipx.ref.InitFix;
 import nipx.util.*;
@@ -87,7 +88,7 @@ public class HotSwapAgent {
 			transformer = new AnnotationTransformer();
 			inst.addTransformer(transformer, true);
 			// if (UI_HOOK) inst.addTransformer(new UIHookTransformer(), true);
-			// DynamicProfilerAPI.init();
+			DynamicProfilerAPI.init();
 		}
 		var loadedClasses = inst.getAllLoadedClasses();
 		refreshPackageLoaders(loadedClasses);

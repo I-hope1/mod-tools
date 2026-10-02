@@ -3,11 +3,15 @@ package nipx.profiler;
 import arc.Core;
 import arc.graphics.GL30;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
 
+import nipx.HotSwapAgent;
+import static nipx.HotSwapAgent.error;
 import static nipx.HotSwapAgent.info;
 
 /**
@@ -57,14 +61,14 @@ public class GlTimerProfiler {
 	private static int readIdx  = 0;
 
 	/** 复用的 NIO buffer，避免每帧分配。只在 GL 线程访问，无并发问题。*/
-	private static final IntBuffer tmpInt = java.nio.ByteBuffer
+	private static final IntBuffer tmpInt = ByteBuffer
 		.allocateDirect(RING * 4)
-		.order(java.nio.ByteOrder.nativeOrder())
+		.order(ByteOrder.nativeOrder())
 		.asIntBuffer();
 
-	private static final IntBuffer oneInt = java.nio.ByteBuffer
+	private static final IntBuffer oneInt = ByteBuffer
 		.allocateDirect(4)
-		.order(java.nio.ByteOrder.nativeOrder())
+		.order(ByteOrder.nativeOrder())
 		.asIntBuffer();
 
 	// ── 输出数据 ─────────────────────────────────────────────────────────────
@@ -75,89 +79,105 @@ public class GlTimerProfiler {
 
 	private static boolean initialized = false;
 
-	/**
-	 * 懒初始化——在第一次 flush 时调用，此时 GL context 已就绪。
-	 * @return 初始化成功且 gl30 可用
-	 */
+	/** 懒初始化：在第一次 flush 时调用，此时 GL context 已就绪 */
 	static boolean ensureInit() {
 		if (initialized) return queryIds != null;
 		initialized = true;
-		GL30 gl = Core.gl30;
-		if (gl == null) {
-			info("[GlTimer] Core.gl30 is null, GPU profiling unavailable");
+		try {
+			GL30 gl = Core.gl30;
+			if (gl == null) {
+				info("[GlTimer] Core.gl30 is null, GPU profiling unavailable");
+				return false;
+			}
+			tmpInt.clear();
+			tmpInt.limit(RING);
+			gl.glGenQueries(RING, tmpInt);
+			queryIds = new int[RING];
+			tmpInt.position(0);
+			tmpInt.get(queryIds);
+			info("[GlTimer] Initialized, " + RING + " query slots");
+			return true;
+		} catch (Throwable t) {
+			HotSwapAgent.error("[GlTimer] Failed to initialize OpenGL timer queries", t);
+			queryIds = null;
 			return false;
 		}
-		tmpInt.clear();
-		tmpInt.limit(RING);
-		gl.glGenQueries(RING, tmpInt);
-		queryIds = new int[RING];
-		tmpInt.position(0);
-		tmpInt.get(queryIds);
-		info("[GlTimer] Initialized, " + RING + " query slots");
-		return true;
 	}
 
 	// ── 注入点（由 GlTimerInjector 插入到 SpriteBatch.flush()） ───────────────
 
 	private static boolean isQuerying = false;
-	/** flush 入口：开始 GPU 计时，记录当前方法 key 作为归属。*/
+	/** flush 入口：开始 GPU 计时，记录当前方法 key 作为归属 */
 	public static void onFlushEnter(String flushKey) {
 		if (isQuerying || !enabled || !ensureInit()) return;
-		// 如果已经绕了一圈还没读完，说明 GPU 太慢或 RING 太小，此时放弃这一条，防止覆盖
-    if (writeIdx - readIdx >= RING) return;
+		if (writeIdx - readIdx >= RING) return;
 
-		int slot = writeIdx & (RING - 1); // 即使 writeIdx 溢出变为负数，结果依然正确
-		queryKeys[slot] = flushKey;
-		Core.gl30.glBeginQuery(GL_TIME_ELAPSED, queryIds[slot]);
-		isQuerying = true;
+		try {
+			int slot = writeIdx & (RING - 1);
+			queryKeys[slot] = flushKey;
+			Core.gl30.glBeginQuery(GL_TIME_ELAPSED, queryIds[slot]);
+			isQuerying = true;
+		} catch (Throwable t) {
+			isQuerying = false;
+			enabled = false;
+			HotSwapAgent.error("[GlTimer] glBeginQuery failed, disabling GPU profiler", t);
+		}
 	}
 
-	/** flush 出口：结束 GPU 计时，推进写指针。*/
+	/** flush 出口：结束 GPU 计时，推进写指针 */
 	public static void onFlushExit() {
 		if (!isQuerying || !enabled || queryIds == null) return;
-		Core.gl30.glEndQuery(GL_TIME_ELAPSED);
-		isQuerying = false;
-		writeIdx++;
+		try {
+			Core.gl30.glEndQuery(GL_TIME_ELAPSED);
+			writeIdx++;
+		} catch (Throwable t) {
+			enabled = false;
+			HotSwapAgent.error("[GlTimer] glEndQuery failed, disabling GPU profiler", t);
+		} finally {
+			isQuerying = false;
+		}
 	}
 
 	// ── 结果读取（由 GlTimerInjector 注入到帧循环入口） ──────────────────────
 
-	/**
-	 * 非阻塞读取已完成的 GPU query 结果，写入 {@link #gpuData} 和火焰图树。
-	 * 每帧开始时调用（注入到 {@code Logic.update()} 入口）。
-	 */
+	/** 非阻塞读取已完成的 GPU query 结果并写入火焰图树 */
 	public static void drainResults() {
-		if (queryIds == null) return;
-		// if (!Mathf.chance(0.1f)) return;
+		if (queryIds == null || !enabled) return;
 		GL30 gl = Core.gl30;
+		if (gl == null) return;
 
-		while (readIdx < writeIdx) {
-			int slot = readIdx % RING;
+		try {
+			while (readIdx < writeIdx) {
+				int slot = readIdx & (RING - 1);
 
-			// 非阻塞检查：GPU 还没完成则停止（后续 query 更不可能完成）
-			oneInt.clear();
-			gl.glGetQueryObjectuiv(queryIds[slot], GL_QUERY_RESULT_AVAILABLE, oneInt);
-			if (oneInt.get(0) == 0) break;
+				// 非阻塞检查：GPU 还没完成则停止（后续 query 更不可能完成）
+				oneInt.clear();
+				gl.glGetQueryObjectuiv(queryIds[slot], GL_QUERY_RESULT_AVAILABLE, oneInt);
+				if (oneInt.get(0) == 0) break;
 
-			// 读取结果（uint32，单位纳秒，~4.29s 才溢出，每帧 flush 安全）
-			oneInt.clear();
-			gl.glGetQueryObjectuiv(queryIds[slot], GL_QUERY_RESULT, oneInt);
-			long gpuNs = Integer.toUnsignedLong(oneInt.get(0));
+				// 读取结果（uint32，单位纳秒，~4.29s 才溢出，每帧 flush 安全）
+				oneInt.clear();
+				gl.glGetQueryObjectuiv(queryIds[slot], GL_QUERY_RESULT, oneInt);
+				long gpuNs = Integer.toUnsignedLong(oneInt.get(0));
 
-			String key = queryKeys[slot];
-			if (key != null) {
-				// 写入 flat GPU 统计
-				gpuData.computeIfAbsent(key, k -> new LongAdder()).add(gpuNs);
+				String key = queryKeys[slot];
+				if (key != null) {
+					// 写入 flat GPU 统计
+					gpuData.computeIfAbsent(key, k -> new LongAdder()).add(gpuNs);
 
-				// 写入火焰图树（与 CPU 节点并列，节点名加 "[gpu]" 后缀）
-				String gpuKey = key.isBlank() ? "[gpu]" : key + "[gpu]";
-				ProfilerData.FlameNode gpuNode =
-					ProfilerData.flameRoot.children.computeIfAbsent(gpuKey, ProfilerData.FlameNode::new);
-				gpuNode.totalNanos.add(gpuNs);
+					// 写入火焰图树（与 CPU 节点并列，节点名加 "[gpu]" 后缀）
+					String gpuKey = key.isBlank() ? "[gpu]" : key + "[gpu]";
+					ProfilerData.FlameNode gpuNode =
+						ProfilerData.flameRoot.children.computeIfAbsent(gpuKey, ProfilerData.FlameNode::new);
+					gpuNode.totalNanos.add(gpuNs);
 
-				queryKeys[slot] = null;
+					queryKeys[slot] = null;
+				}
+				readIdx++;
 			}
-			readIdx++;
+		} catch (Throwable t) {
+			enabled = false;
+			HotSwapAgent.error("[GlTimer] drainResults failed, disabling GPU profiler", t);
 		}
 	}
 

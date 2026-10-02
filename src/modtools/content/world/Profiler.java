@@ -37,11 +37,12 @@ public class Profiler extends Content {
 	public Profiler() {
 		super("profiler", HopeIcons.profile);
 		defLoadable = false;
-		if (!HotSwapManager.valid()) Tools.TASKS.add(this::disable);
+		if (OS.isAndroid || !HotSwapManager.valid()) Tools.TASKS.add(this::disable);
 	}
 
 	Window ui;
 	public void lazyLoad() {
+		if (OS.isAndroid) return;
 		ui = new Window("Profiler", 300, 480, true);
 
 		ui.cont.defaults().size(220, 60);
@@ -60,6 +61,7 @@ public class Profiler extends Content {
 	}
 
 	public void build() {
+		if (OS.isAndroid) return;
 		ui.show();
 	}
 
@@ -317,6 +319,7 @@ public class Profiler extends Content {
 
 
 	public void loadSettings(Data settings) {
+		if (OS.isAndroid) return;
 		Contents.settings_ui.addSection(localizedName(), icon, t -> {
 			ISettings.buildAll(name, t, Settings.class);
 		});
@@ -346,42 +349,44 @@ public class Profiler extends Content {
 		Settings(Class<?> type, Cons<ISettings> builder) { }
 
 		static {
-			Runnable r = () -> {
-				TaskManager.runWhen(HotSwapManager::loaded, () -> {
-					SamplingProfiler.toggleSampling(R_profiler.mode == Mode.sample);
-					Tools.TASKS.add(() -> GlTimerProfiler.enabled = sample_gpu_time.enabled());
-				});
-			};
-			capture_method_signature.def(isPanama());
+			if (!OS.isAndroid) {
+				Runnable r = () -> {
+					TaskManager.runWhen(HotSwapManager::loaded, () -> {
+						SamplingProfiler.toggleSampling(R_profiler.mode == Mode.sample);
+						Tools.TASKS.add(() -> GlTimerProfiler.enabled = sample_gpu_time.enabled());
+					});
+				};
+				capture_method_signature.def(isPanama());
 
-			/* 不用@FlushField是因为SamplingProfiler可能还未加载  */
-			TaskManager.runWhen(HotSwapManager::loaded, () -> {
-				SamplingProfiler.intervalMs = sample_freq.getInt();
-				DeadlockDetector.setEnabled(dead_lock_detection.enabled());
-				SamplingProfiler.includePackages = include_packages.getArray().map(Jval::toString).toArray(String.class);
-				SamplingProfiler.captureMethodSignature = capture_method_signature.enabled();
-			});
-			dead_lock_detection.onChange(() -> {
-				DeadlockDetector.setEnabled(dead_lock_detection.enabled());
-			});
-			sample_freq.onChange(() -> {
+				/* 不用@FlushField是因为SamplingProfiler可能还未加载  */
 				TaskManager.runWhen(HotSwapManager::loaded, () -> {
 					SamplingProfiler.intervalMs = sample_freq.getInt();
-				});
-			});
-			sample_gpu_time.onChange(() -> {
-				TaskManager.runWhen(HotSwapManager::loaded, () -> {
-					GlTimerProfiler.enabled = sample_gpu_time.enabled();
-				});
-			});
-			capture_method_signature.onChange(() -> {
-				TaskManager.runWhen(HotSwapManager::loaded, () -> {
+					DeadlockDetector.setEnabled(dead_lock_detection.enabled());
+					SamplingProfiler.includePackages = include_packages.getArray().map(Jval::toString).toArray(String.class);
 					SamplingProfiler.captureMethodSignature = capture_method_signature.enabled();
-					ProfilerData.clear();
 				});
-			});
-			mode.onChange(r);
-			r.run();
+				dead_lock_detection.onChange(() -> {
+					DeadlockDetector.setEnabled(dead_lock_detection.enabled());
+				});
+				sample_freq.onChange(() -> {
+					TaskManager.runWhen(HotSwapManager::loaded, () -> {
+						SamplingProfiler.intervalMs = sample_freq.getInt();
+					});
+				});
+				sample_gpu_time.onChange(() -> {
+					TaskManager.runWhen(HotSwapManager::loaded, () -> {
+						GlTimerProfiler.enabled = sample_gpu_time.enabled();
+					});
+				});
+				capture_method_signature.onChange(() -> {
+					TaskManager.runWhen(HotSwapManager::loaded, () -> {
+						SamplingProfiler.captureMethodSignature = capture_method_signature.enabled();
+						ProfilerData.clear();
+					});
+				});
+				mode.onChange(r);
+				r.run();
+			}
 		}
 	}
 	private static boolean isPanama() {

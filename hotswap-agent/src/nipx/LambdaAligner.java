@@ -47,13 +47,19 @@ public class LambdaAligner {
 	 * 孤儿 lambda 被复活为空壳时的处理策略。
 	 */
 	public enum OrphanPolicy {
+		/**
+		 * 智能自适应策略（<b>推荐且默认</b>）：
+		 * <ul>
+		 *   <li>若由 {@link nipx.ref.UpdateRef} 发起（UI / 定时轮询 / 事件回调）：抛出 {@link NoSuchMethodError}，
+		 *       触发精准局部熔断（如 {@code element.update(null)}），彻底切断 60FPS 空转与死循环刷屏；</li>
+		 *   <li>若由普通业务代码发起（未受 UpdateRef 保护）：向 {@code System.err} 打印警告并返回默认值（0 / null / false），
+		 *       绝不抛出异常引发程序崩溃。</li>
+		 * </ul>
+		 */
+		SMART_ADAPTIVE,
 		/** 向 {@code System.err} 打印一条日志，并返回默认值（0 / null / false）。 */
 		LOG_AND_RETURN_DEFAULT,
-		/**
-		 * 抛出 {@link NoSuchMethodError}。
-		 * <p>此为<b>推荐且默认</b>策略：既满足类结构与符号解析要求，又能在调用时抛出标准的链接错误，
-		 * 与 {@link nipx.ref.UpdateRef} 协同触发精准局部熔断（如自动移除回调），杜绝 60FPS 空转刷屏。</p>
-		 */
+		/** 无条件抛出 {@link NoSuchMethodError}。 */
 		THROW_NO_SUCH_METHOD,
 		/** 抛出 {@link IllegalStateException}，便于显式暴露问题。 */
 		THROW,
@@ -61,7 +67,7 @@ public class LambdaAligner {
 		SILENT
 	}
 
-	private static volatile OrphanPolicy orphanPolicy = OrphanPolicy.THROW_NO_SUCH_METHOD;
+	private static volatile OrphanPolicy orphanPolicy = OrphanPolicy.SMART_ADAPTIVE;
 
 	public static void setOrphanPolicy(OrphanPolicy policy) {
 		orphanPolicy = Objects.requireNonNull(policy);
@@ -857,6 +863,36 @@ public class LambdaAligner {
 		mv.visitCode();
 		Type returnType = Type.getReturnType(desc);
 
+		if (policy == OrphanPolicy.SMART_ADAPTIVE) {
+			Label returnDefault = new Label();
+			// 1. 调用 LambdaAligner.isCalledByUpdateRef()
+			mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+				Type.getInternalName(LambdaAligner.class),
+				"isCalledByUpdateRef", "()Z", false);
+			// 若非 UpdateRef 保护调用，跳转返回默认值
+			mv.visitJumpInsn(Opcodes.IFEQ, returnDefault);
+
+			// 2. 是 UpdateRef 发起的调用：抛出 NoSuchMethodError 触发局部熔断与清理
+			mv.visitTypeInsn(Opcodes.NEW, "java/lang/NoSuchMethodError");
+			mv.visitInsn(Opcodes.DUP);
+			mv.visitLdcInsn("Lambda removed by hot swap: " + name + desc);
+			mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+				"java/lang/NoSuchMethodError", "<init>", "(Ljava/lang/String;)V", false);
+			mv.visitInsn(Opcodes.ATHROW);
+
+			// 3. 普通业务调用：打印警告日志并返回类型默认值，绝不崩溃
+			mv.visitLabel(returnDefault);
+			mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/System", "err", "Ljava/io/PrintStream;");
+			mv.visitLdcInsn("[LambdaAligner] orphaned lambda invoked: " + name + desc);
+			mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+				"java/io/PrintStream", "println", "(Ljava/lang/String;)V", false);
+
+			injectDefaultReturnValue(mv, returnType, desc);
+			mv.visitMaxs(0, 0);
+			mv.visitEnd();
+			return;
+		}
+
 		if (policy == OrphanPolicy.THROW_NO_SUCH_METHOD) {
 			mv.visitTypeInsn(Opcodes.NEW, "java/lang/NoSuchMethodError");
 			mv.visitInsn(Opcodes.DUP);
@@ -888,6 +924,12 @@ public class LambdaAligner {
 				"java/io/PrintStream", "println", "(Ljava/lang/String;)V", false);
 		}
 
+		injectDefaultReturnValue(mv, returnType, desc);
+		mv.visitMaxs(0, 0);
+		mv.visitEnd();
+	}
+
+	private static void injectDefaultReturnValue(MethodVisitor mv, Type returnType, String desc) {
 		switch (returnType.getSort()) {
 			case Type.VOID:
 				mv.visitInsn(Opcodes.RETURN);
@@ -920,8 +962,57 @@ public class LambdaAligner {
 			default:
 				throw new IllegalStateException("Unhandled return type parsing: " + desc);
 		}
-		mv.visitMaxs(0, 0);
-		mv.visitEnd();
+	}
+
+	private static final String UPDATE_REF_CLASS_NAME = "nipx.ref.UpdateRef";
+
+	/**
+	 * 检查当前调用栈浅层中是否存在 {@link nipx.ref.UpdateRef}。
+	 * <p>
+	 * 优先使用 Java 9+ 的 {@link StackWalker} 进行高效的浅层流式遍历（limit(8) 即刻短路）；
+	 * 若当前运行环境缺少 StackWalker（如 Android Dalvik/ART 或 Java 8），则安全降级为 {@link Throwable#getStackTrace()}，
+	 * 保证在全平台环境下均能 100% 稳定运行。
+	 * </p>
+	 *
+	 * @return 若调用栈来自 UpdateRef 则返回 true，否则返回 false
+	 */
+	public static boolean isCalledByUpdateRef() {
+		try {
+			if (StackWalkerHolder.IS_SUPPORTED) {
+				return StackWalkerHolder.WALKER.walk(s -> s.limit(8)
+					.anyMatch(f -> UPDATE_REF_CLASS_NAME.equals(f.getClassName())));
+			}
+		} catch (Throwable ignored) {}
+
+		try {
+			StackTraceElement[] trace = new Throwable().getStackTrace();
+			int limit = Math.min(trace.length, 8);
+			for (int i = 1; i < limit; i++) {
+				if (UPDATE_REF_CLASS_NAME.equals(trace[i].getClassName())) {
+					return true;
+				}
+			}
+		} catch (Throwable ignored) {}
+		return false;
+	}
+
+	/**
+	 * 延迟初始化 Holder 类，避免在缺少 StackWalker 的低版本环境中触发 ClassNotFoundException / NoClassDefFoundError。
+	 */
+	private static class StackWalkerHolder {
+		static final boolean     IS_SUPPORTED;
+		static final StackWalker WALKER;
+
+		static {
+			boolean     supported = false;
+			StackWalker walker    = null;
+			try {
+				walker = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
+				supported = true;
+			} catch (Throwable ignored) {}
+			IS_SUPPORTED = supported;
+			WALKER = walker;
+		}
 	}
 	//endregion
 

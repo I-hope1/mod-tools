@@ -48,6 +48,11 @@ public class JNIEnv {
 	/** 类名路径缓存：Class.getName() → "pkg/Cls" 格式 */
 	private static final ConcurrentHashMap<Class<?>, String> CLASS_PATH_CACHE = new ConcurrentHashMap<>(128);
 
+	/** 获取并缓存类的 JNI 内部路径名（如 java/lang/String） */
+	public static String getClassPath(Class<?> clazz) {
+		return CLASS_PATH_CACHE.computeIfAbsent(clazz, c -> c.getName().replace('.', '/'));
+	}
+
 	/** 可复用的 JValue 写入缓冲区（最大 8 个参数，一般足够） */
 	private static final int                 MAX_JVALUES  = 8;
 	private static final ThreadLocal<long[]> JVALUE_LONGS = ThreadLocal.withInitial(() -> new long[MAX_JVALUES]);
@@ -60,9 +65,27 @@ public class JNIEnv {
 	private final SegmentAllocator allocator;
 	private final MemorySegment    jniEnvPointer;
 
+	/**
+	 * JNI 方法 ID (jmethodID)。
+	 * <p>
+	 * 根据 JNI 规范，jmethodID 并非 Java 堆对象（jobject），而是指向 JVM 内部方法元数据结构（如 HotSpot 的 Method*）的指针。
+	 * 因此它不需要（也无法）调用 NewGlobalRef。
+	 * <p>
+	 * jmethodID 具有<b>全局有效性</b>（跨线程、跨 JNI 调用均有效），并且只要其所属的 Class 未被卸载，该指针在整个 JVM 进程生命周期内
+	 * 始终保持有效。由于 {@link #classJNIEnvRef} 与 {@link #classSystem} 均已使用 {@link GlobalRef} 全局持久化持有，其所属 Class 绝不会被卸载，
+	 * 因此此处缓存的 mid 具有全局有效性且永久安全可用。
+	 */
 	private final MemorySegment midGetSecret;
 	private final MemorySegment midSetSecret;
 	private final MemorySegment midIdentityHashCode;
+
+	/**
+	 * JNI 全局引用 (GlobalRef)。
+	 * <p>
+	 * 通过 JNI {@code NewGlobalRef} 创建，跨线程、跨 JNI 帧持久有效，不受局部引用帧销毁或 GC 回收影响。
+	 * 同时，全局引用会阻止底层 Java Class 对象被类加载器卸载，从而确保对应的 {@code jmethodID}（如 {@link #midGetSecret} 等）
+	 * 在整个 JVM 生命周期内保持全局有效。
+	 */
 	private final GlobalRef     classJNIEnvRef;
 	private final GlobalRef     classSystem;
 
@@ -110,6 +133,13 @@ public class JNIEnv {
 
 	//region JNI Environment Initialization
 	static {
+		// MASTER_ENV 仅在类加载阶段充当引导模板（Bootstrap Template）：
+		// 1. 初始化 JNI 函数表（JNIEnvFunctions）；
+		// 2. 将 JNIEnv.class 和 System.class 转为 JNI GlobalRef 永久持有，防止类被卸载；
+		// 3. 解析并记录 getSecret/setSecret/identityHashCode 等全局有效的方法 ID (jmethodID)。
+		// 引导完成后，arena 关闭释放初始化阶段占用的临时堆外内存。
+		// 外部所有实际业务调用均通过 JNIEnv.getInstance(allocator) 创建实例，
+		// 共享 MASTER_ENV 的 GlobalRef 与 mid，但各自拥有独立的 allocator 与当前线程的 jniEnvPointer。
 		try (Arena arena = Arena.ofConfined()) {
 			MASTER_ENV = new JNIEnv(arena);
 		}
@@ -264,6 +294,15 @@ public class JNIEnv {
 	public void DeleteGlobalRef(MemorySegment globalRef) {
 		try {
 			JNIEnvFunctions.DeleteGlobalRef_MH.invokeExact(functions.DeleteGlobalRefFp, jniEnvPointer, globalRef);
+		} catch (Throwable t) {
+			throw new RuntimeException(t);
+		}
+	}
+
+	public void DeleteLocalRef(MemorySegment localRef) {
+		if (localRef == null || localRef.address() == 0) return;
+		try {
+			JNIEnvFunctions.DeleteLocalRef_MH.invokeExact(functions.DeleteLocalRefFp, jniEnvPointer, localRef);
 		} catch (Throwable t) {
 			throw new RuntimeException(t);
 		}
@@ -450,30 +489,36 @@ public class JNIEnv {
 
 	//region Method Invocation
 
+	private static String getMethodSignature(Method method) {
+		return METHOD_SIG_CACHE.computeIfAbsent(method, m -> {
+			String paramSig = Arrays.stream(m.getParameters())
+			 .map(Parameter::getType)
+			 .map(NativeHelper::classToSig)
+			 .collect(Collectors.joining());
+			return "(" + paramSig + ")" + NativeHelper.classToSig(m.getReturnType());
+		});
+	}
+
 	public GlobalRef CallStaticMethodByName(Method method) {
-		return CallStaticMethodByName(method, MemorySegment.NULL, "()" + NativeHelper.classToSig(method.getReturnType()));
+		return CallStaticMethodByName(method, MemorySegment.NULL, getMethodSignature(method));
 	}
 
 	public GlobalRef CallStaticMethodByName(Method method, MemorySegment jvalues) {
-		String paramSig = Arrays.stream(method.getParameters())
-		 .map(Parameter::getType)
-		 .map(NativeHelper::classToSig)
-		 .collect(Collectors.joining());
-		return CallStaticMethodByName(method, jvalues, "(" + paramSig + ")" + NativeHelper.classToSig(method.getReturnType()));
+		return CallStaticMethodByName(method, jvalues, getMethodSignature(method));
 	}
 
 	public GlobalRef CallStaticMethodByName(Method method, JValue... jvalues) {
-		String paramSig = Arrays.stream(method.getParameters())
-		 .map(Parameter::getType)
-		 .map(NativeHelper::classToSig)
-		 .collect(Collectors.joining());
-		long[] longs = new long[jvalues.length];
-		for (int i = 0; i < jvalues.length; i++) {
-			longs[i] = jvalues[i].getLong();
+		String sig = getMethodSignature(method);
+		MemorySegment jValuesPtr;
+		if (jvalues == null || jvalues.length == 0) {
+			jValuesPtr = MemorySegment.NULL;
+		} else {
+			jValuesPtr = allocator.allocate(JValue.jvalueLayout, jvalues.length);
+			for (int i = 0; i < jvalues.length; i++) {
+				jValuesPtr.set(ValueLayout.JAVA_LONG, (long) i * Long.BYTES, jvalues[i].getLong());
+			}
 		}
-		MemorySegment jValuesPtr = allocator.allocate(JValue.jvalueLayout, jvalues.length);
-		jValuesPtr.copyFrom(MemorySegment.ofArray(longs));
-		return CallStaticMethodByName(method, jValuesPtr, "(" + paramSig + ")" + NativeHelper.classToSig(method.getReturnType()));
+		return CallStaticMethodByName(method, jValuesPtr, sig);
 	}
 
 	/**
@@ -533,15 +578,11 @@ public class JNIEnv {
 	}
 
 	public GlobalRef CallMethodByName(Method method, MemorySegment jobject) {
-		return CallMethodByName(method, jobject, MemorySegment.NULL, "()" + NativeHelper.classToSig(method.getReturnType()));
+		return CallMethodByName(method, jobject, MemorySegment.NULL, getMethodSignature(method));
 	}
 
 	public GlobalRef CallMethodByName(Method method, MemorySegment jobject, MemorySegment jvalues) {
-		String paramSig = Arrays.stream(method.getParameters())
-		 .map(Parameter::getType)
-		 .map(NativeHelper::classToSig)
-		 .collect(Collectors.joining());
-		return CallMethodByName(method, jobject, jvalues, "(" + paramSig + ")" + NativeHelper.classToSig(method.getReturnType()));
+		return CallMethodByName(method, jobject, jvalues, getMethodSignature(method));
 	}
 
 	public GlobalRef CallMethodByName(Method method, MemorySegment jobject, MemorySegment jvalues, String sig) {
@@ -555,9 +596,9 @@ public class JNIEnv {
 		return throwable(() -> {
 			boolean       isRef = false;
 			MemorySegment clazz = (MemorySegment) JNIEnvFunctions.GetObjectClass_MH.invokeExact(functions.GetObjectClassFp, jniEnvPointer, jobject);
-			try (GlobalRef ref = new GlobalRef(this, clazz)) {
+			try {
 				MemorySegment rref = null;
-				MemorySegment mid  = (MemorySegment) JNIEnvFunctions.GetMethodID_MH.invokeExact(functions.GetMethodIDFp, jniEnvPointer, ref.ref(), allocator.allocateFrom(methodName), allocator.allocateFrom(sig));
+				MemorySegment mid  = (MemorySegment) JNIEnvFunctions.GetMethodID_MH.invokeExact(functions.GetMethodIDFp, jniEnvPointer, clazz, allocator.allocateFrom(methodName), allocator.allocateFrom(sig));
 				long returnValue = switch (method.getReturnType().getName()) {
 					case "void" -> {
 						JNIEnvFunctions.CallVoidMethodA_MH.invokeExact(functions.CallVoidMethodAFp, jniEnvPointer, jobject, mid, jvalues);
@@ -589,8 +630,9 @@ public class JNIEnv {
 					return new GlobalRef(this, rref);
 				}
 				return new GlobalRef(this, new JValue(returnValue));
+			} finally {
+				DeleteLocalRef(clazz);
 			}
-
 		});
 	}
 
@@ -599,11 +641,11 @@ public class JNIEnv {
 	//region Java / JNI Object Conversion
 
 	public Object jObjectToJavaObject(MemorySegment jobject) {
+		long address = jobject.address();
+		if (address == 0) return null;
 		return throwable(() -> {
 			MemorySegment jValuesPtr = allocator.allocate(JValue.jvalueLayout, 1);
-			long          address    = jobject.address();
-			if (address == 0) return null;
-			jValuesPtr.copyFrom(MemorySegment.ofArray(new long[]{address}));
+			jValuesPtr.set(ValueLayout.JAVA_LONG, 0, address);
 			jniToJava.remove();
 			try {
 				JNIEnvFunctions.CallStaticVoidMethodA_MH.invokeExact(
@@ -616,6 +658,9 @@ public class JNIEnv {
 	}
 
 	public GlobalRef JavaObjectToJObject(Object o) {
+		if (o == null) {
+			return new GlobalRef(this, MemorySegment.NULL);
+		}
 		return throwable(() -> {
 			// 直接调用 JNI，不经过 Java 的 Method.invoke，不查找类
 			setSecret(o);
@@ -634,9 +679,10 @@ public class JNIEnv {
 	//region Other Public Methods
 
 	public int identityHashCode(MemorySegment ref) {
+		if (ref == null || ref.address() == 0) return 0;
 		return throwable(() -> {
 			MemorySegment jValuesPtr = allocator.allocate(JValue.jvalueLayout, 1);
-			jValuesPtr.copyFrom(MemorySegment.ofArray(new long[]{JValue.getLong(ref.address())}));
+			jValuesPtr.set(ValueLayout.JAVA_LONG, 0, JValue.getLong(ref.address()));
 			return (int) JNIEnvFunctions.CallStaticIntMethodA_MH.invokeExact(
 			 functions.CallStaticIntMethodAFp,
 			 jniEnvPointer, classSystem.ref(), midIdentityHashCode, jValuesPtr);

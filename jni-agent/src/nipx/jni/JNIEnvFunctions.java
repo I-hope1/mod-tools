@@ -21,6 +21,8 @@ public class JNIEnvFunctions {
 
     final static MethodHandle DeleteGlobalRef_MH = Linker.nativeLinker().downcallHandle(FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS));
 
+    final static MethodHandle DeleteLocalRef_MH = Linker.nativeLinker().downcallHandle(FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+
     final static MethodHandle GetStaticFieldID_MH = Linker.nativeLinker().downcallHandle(FunctionDescriptor.of(
             ValueLayout.ADDRESS,
             /*JNIEnv *env */ ValueLayout.ADDRESS,

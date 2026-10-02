@@ -179,16 +179,28 @@ public class MountManager {
 		// 比如 modtools.android.SomeOtherUtil 可能是加载过的
 		if (className.contains(".")) {
 			String packageName = className.substring(0, className.lastIndexOf('.'));
+
+			// 优先查已缓存的精确包名映射（O(1) 极速查询）
+			WeakReference<ClassLoader> ref = packageLoaders.get(packageName);
+			if (ref != null && ref.get() != null) {
+				return ref.get();
+			}
+
+			// 向上追溯父包（处理新增子包的情形，如 a.b.c.NewClass，父包 a.b 已存在加载器）
+			String parentPkg = packageName;
+			while (parentPkg.contains(".")) {
+				parentPkg = parentPkg.substring(0, parentPkg.lastIndexOf('.'));
+				ref = packageLoaders.get(parentPkg);
+				if (ref != null && ref.get() != null) {
+					return ref.get();
+				}
+			}
+
+			// 遍历全量已加载类，查找同包或子包的前缀匹配
 			for (Class<?> c : loadedClassesMap.values()) {
 				if (c.getName().startsWith(packageName + ".")) {
 					return c.getClassLoader();
 				}
-			}
-
-			// 尝试查之前缓存的 packageLoaders
-			WeakReference<ClassLoader> ref = packageLoaders.get(packageName);
-			if (ref != null && ref.get() != null) {
-				return ref.get();
 			}
 		}
 

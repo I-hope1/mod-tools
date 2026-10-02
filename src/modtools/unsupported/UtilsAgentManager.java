@@ -11,7 +11,6 @@ import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.FieldUtils;
 import nipx.UtilsAgent;
 import nipx.jni.JNIEnv;
-import nipx.util.LibTool;
 import sun.tools.attach.HotSpotVirtualMachine;
 
 import java.io.*;
@@ -87,16 +86,6 @@ public class UtilsAgentManager {
 		}
 	}
 
-	/**
-	 * Maps a platform independent library name to a platform dependent name.
-	 * @see SharedLibraryLoader#mapLibraryName(String)
-	 */
-	public static String mapLibraryName(String libraryName) {
-		if (OS.isWindows) return libraryName + (OS.is64Bit ? "64.dll" : ".dll");
-		if (OS.isLinux) return "lib" + libraryName + (OS.isARM ? "arm" : "") + (OS.is64Bit ? "64.so" : ".so");
-		if (OS.isMac) return "lib" + libraryName + (OS.isARM ? "arm" : "") + (OS.is64Bit ? "64.dylib" : ".dylib");
-		return libraryName;
-	}
 	public static void init() throws Throwable {
 		if (initialized) return; // 避免重复
 		initialized = true;
@@ -108,9 +97,6 @@ public class UtilsAgentManager {
 
 		try {
 			JNIEnv.load();
-			Fi lib = IntVars.libs.child(mapLibraryName("tool"));
-			System.setProperty("nipx.path.libtool", FileUtils.copyToTmp(lib).absolutePath());
-			LibTool.init();
 		} catch (Throwable th) {
 			Log.err(th);
 		}

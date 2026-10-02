@@ -1,7 +1,7 @@
 package modtools.unsupported;
 
 import arc.files.Fi;
-import arc.util.*;
+import arc.util.OS;
 import modtools.IntVars;
 import modtools.events.E_Hook;
 import modtools.jsfunc.reflect.UNSAFE;
@@ -9,6 +9,7 @@ import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.ClassUtils;
 import nipx.HotSwapAgent;
 import nipx.jni.helper.MasterKey;
+import nipx.util.LibTool;
 
 import java.io.File;
 
@@ -39,6 +40,23 @@ public class HotSwapManager {
 			initialized = true;
 		}
 		hotswap(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator));
+		try {
+			Fi lib = IntVars.libs.child(mapLibraryName("tool"));
+			System.setProperty("nipx.path.libtool", FileUtils.copyToTmp(lib).absolutePath());
+			LibTool.init();
+		} catch (Throwable e) {
+			HotSwapAgent.error("[HotSwapManager] Failed to load libtool.", e);
+		}
+	}
+	/**
+	 * Maps a platform independent library name to a platform dependent name.
+	 * @see SharedLibraryLoader#mapLibraryName(String)
+	 */
+	public static String mapLibraryName(String libraryName) {
+		if (OS.isWindows) return libraryName + (OS.is64Bit ? "64.dll" : ".dll");
+		if (OS.isLinux) return "lib" + libraryName + (OS.isARM ? "arm" : "") + (OS.is64Bit ? "64.so" : ".so");
+		if (OS.isMac) return "lib" + libraryName + (OS.isARM ? "arm" : "") + (OS.is64Bit ? "64.dylib" : ".dylib");
+		return libraryName;
 	}
 	public static boolean loaded() {
 		return ClassUtils.exists("nipx.HotSwapAgent");

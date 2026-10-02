@@ -21,7 +21,7 @@ public class LibTool {
 		Lib.load();
 		initialized = true;
 		// getInstances(Unsafe.class);
-		HotSwapAgent.info("[NIPX] Loaded libtool.");
+		HotSwapAgent.info("[Lib] Loaded libtool.");
 	}
 	static class Lib {
 		private static final MethodHandle

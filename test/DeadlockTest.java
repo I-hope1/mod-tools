@@ -308,7 +308,7 @@ public class DeadlockTest {
 		      {
 		        "threads": [
 		          {
-		            "tid": "101",
+		            "tid": 101,
 		            "name": "worker-platform",
 		            "virtual": false,
 		            "state": "BLOCKED",
@@ -341,7 +341,10 @@ public class DeadlockTest {
 		if (!result.contains("worker-platform") || !result.contains("slow-virtual-holder")) {
 			throw new AssertionError("Expected thread names in wait chain report!");
 		}
-		System.out.println("Test 5 PASSED: Non-cycle Wait Chain & Null Lock handling verified.");
+		if (!result.contains("Id=101") || !result.contains("Id=102")) {
+			throw new AssertionError("Expected thread Ids (both numeric and string) in wait chain report!");
+		}
+		System.out.println("Test 5 PASSED: Non-cycle Wait Chain, Null Lock & Numeric/String tid (JDK-8381169) handling verified.");
 	}
 
 	/**

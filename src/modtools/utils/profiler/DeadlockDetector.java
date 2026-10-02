@@ -416,7 +416,7 @@ public class DeadlockDetector {
 		for (Jval container : threadDump.get("threadContainers").asArray()) {
 			if (!container.has("threads")) continue;
 			for (Jval t : container.get("threads").asArray()) {
-				String tid = t.getString("tid", "");
+				String tid = idOf(t.get("tid"));
 				String name = t.getString("name", "");
 				boolean isVirtual = t.getBool("virtual", false);
 				String state = t.getString("state", "");
@@ -524,6 +524,17 @@ public class DeadlockDetector {
 		}
 
 		return sb.toString();
+	}
+
+	/**
+	 * 安全提取 JSON 中可能为 String 或 Number 格式的 ID 字段（如线程 ID tid、进程 ID pid 等）。
+	 * <p>兼容 JDK-8381169 将 threadDump 中的 tid 从字符串改写为数值的变更。
+	 */
+	private static String idOf(Jval v) {
+		if (v == null || v.isNull()) return "";
+		if (v.isNumber()) return String.valueOf(v.asLong());
+		if (v.isString()) return v.asString();
+		return "";
 	}
 
 	/**

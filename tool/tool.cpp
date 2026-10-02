@@ -77,52 +77,37 @@ static inline void ensureCapabilities(jvmtiEnv* jvmti) {
     jvmti->AddCapabilities(&caps);
 }
 
-/** 清理堆中被打上特定 Tag 的对象标记并释放局部引用与内存缓冲区 */
-static void clearTaggedObjects(jvmtiEnv* jvmti, JNIEnv* env, jlong tag) {
-    jint count = 0;
-    jobject* instances = nullptr;
-    jlong search_tag = tag;
-    if (jvmti->GetObjectsWithTags(1, &search_tag, &count, &instances, nullptr) == JVMTI_ERROR_NONE) {
-        SCOPE_EXIT([&] {
-            if (instances != nullptr) {
-                jvmti->Deallocate(reinterpret_cast<unsigned char*>(instances));
-            }
-        });
-        if (env && count > 0) {
-            env->EnsureLocalCapacity(count + 16);
-        }
-        std::span<jobject> objs(instances, static_cast<size_t>(count));
-        for (jobject elem : objs) {
-            jvmti->SetTag(elem, 0);
-            if (env) {
-                env->DeleteLocalRef(elem);
-            }
-        }
-    }
-}
+/** 遍历回调：将堆中匹配 tag_a 或 tag_b 的对象标记清零，不创建任何 JNI 局部引用 */
+struct ClearTagsCtx {
+    jlong tag_a;
+    jlong tag_b;
+};
 
-/** 全量候选对象遍历标记回调 */
-static jvmtiIterationControl JNICALL HeapObjectCallback(
-    jlong class_tag,
-    jlong size,
-    jlong* tag_ptr,
-    void* user_data
+static jint JNICALL ClearTagsCallback(
+    jlong /*class_tag*/, jlong /*size*/, jlong* tag_ptr, jint /*length*/, void* user_data
 ) {
-    (void)class_tag;
-    (void)size;
-    jlong tag_val = *reinterpret_cast<jlong*>(user_data);
-    *tag_ptr = tag_val;
-    return JVMTI_ITERATION_CONTINUE;
+    auto* ctx = static_cast<const ClearTagsCtx*>(user_data);
+    if (tag_ptr != nullptr && (*tag_ptr == ctx->tag_a || *tag_ptr == ctx->tag_b)) {
+        *tag_ptr = 0;
+    }
+    return JVMTI_VISIT_OBJECTS;
 }
 
-/** 可达性筛选上下文 */
-struct ReachableContext {
-    jlong candidate_tag;
+/** 通过 IterateThroughHeap 清除指定 tag（零 JNI 局部引用，不会复活垃圾对象，一次可清两个 tag） */
+static void clearTags(jvmtiEnv* jvmti, jlong tag_a, jlong tag_b = 0) {
+    jvmtiHeapCallbacks cbs{ .heap_iteration_callback = ClearTagsCallback };
+    ClearTagsCtx ctx{ .tag_a = tag_a, .tag_b = tag_b };
+    jvmti->IterateThroughHeap(JVMTI_HEAP_FILTER_UNTAGGED, nullptr, &cbs, &ctx);
+}
+
+/** 单次遍历实例查找上下文 */
+struct InstanceCtx {
+    jlong class_marker;
     jlong reachable_tag;
 };
 
-/** 可达性过滤引用回调函数，仅将存活可达的候选对象提升为可达标签 */
-static jint JNICALL ReachableFilterCallback(
+/** 单次遍历引用回调：结合 Class 标记直接识别存活目标类及其子类实例 */
+static jint JNICALL InstanceCallback(
     jvmtiHeapReferenceKind reference_kind,
     const jvmtiHeapReferenceInfo* reference_info,
     jlong class_tag,
@@ -135,13 +120,12 @@ static jint JNICALL ReachableFilterCallback(
 ) {
     (void)reference_kind;
     (void)reference_info;
-    (void)class_tag;
     (void)referrer_class_tag;
     (void)size;
     (void)referrer_tag_ptr;
     (void)length;
-    const auto* ctx = reinterpret_cast<const ReachableContext*>(user_data);
-    if (tag_ptr != nullptr && *tag_ptr == ctx->candidate_tag) {
+    auto* ctx = static_cast<const InstanceCtx*>(user_data);
+    if (tag_ptr != nullptr && (class_tag == ctx->class_marker || class_tag == ctx->reachable_tag)) {
         *tag_ptr = ctx->reachable_tag;
     }
     return JVMTI_VISIT_OBJECTS;
@@ -162,40 +146,68 @@ static std::expected<jobjectArray, jvmtiError> getInstancesInternal(jvmtiEnv* jv
     SCOPE_EXIT([&] { jvmti->RawMonitorExit(monitor); });
 
     TagPair tags = allocateTagPair();
-    jlong tag_candidate = tags.first;
+    jlong tag_marker = tags.first;
     jlong tag_reachable = tags.second;
 
-    jvmtiError err1 = jvmti->IterateOverInstancesOfClass(
-        klass,
-        JVMTI_HEAP_OBJECT_EITHER,
-        HeapObjectCallback,
-        &tag_candidate
-    );
-    if (err1 != JVMTI_ERROR_NONE) {
-        clearTaggedObjects(jvmti, env, tag_candidate);
-        return std::unexpected(err1);
-    }
+    SCOPE_EXIT([&] {
+        clearTags(jvmti, tag_marker);
+    });
 
-    jvmtiHeapCallbacks callbacks{
-        .heap_reference_callback = ReachableFilterCallback,
-    };
+    int retries = 0;
+    while (true) {
+        jint class_count = 0;
+        jclass* loaded_classes = nullptr;
+        if (jvmti->GetLoadedClasses(&class_count, &loaded_classes) != JVMTI_ERROR_NONE) {
+            return std::unexpected(JVMTI_ERROR_INTERNAL);
+        }
+        // PushLocalFrame 将这批类的局部引用限定在独立帧内，不污染外层帧
+        if (env->PushLocalFrame(class_count + 16) != JNI_OK) {
+            jvmti->Deallocate(reinterpret_cast<unsigned char*>(loaded_classes));
+            return std::unexpected(JVMTI_ERROR_OUT_OF_MEMORY);
+        }
+        for (jint i = 0; i < class_count; ++i) {
+            if (env->IsAssignableFrom(loaded_classes[i], klass)) {
+                jvmti->SetTag(loaded_classes[i], tag_marker);
+            }
+        }
+        jvmti->Deallocate(reinterpret_cast<unsigned char*>(loaded_classes));
+        env->PopLocalFrame(nullptr);
 
-    ReachableContext filter_ctx{
-        .candidate_tag = tag_candidate,
-        .reachable_tag = tag_reachable,
-    };
+        jvmtiHeapCallbacks callbacks{
+            .heap_reference_callback = InstanceCallback,
+        };
+        InstanceCtx ctx{
+            .class_marker = tag_marker,
+            .reachable_tag = tag_reachable,
+        };
 
-    jvmtiError err_follow = jvmti->FollowReferences(
-        0,
-        nullptr,
-        nullptr,
-        &callbacks,
-        &filter_ctx
-    );
-    if (err_follow != JVMTI_ERROR_NONE) {
-        clearTaggedObjects(jvmti, env, tag_candidate);
-        clearTaggedObjects(jvmti, env, tag_reachable);
-        return std::unexpected(err_follow);
+        jvmtiError err_follow = jvmti->FollowReferences(
+            0,
+            nullptr,
+            nullptr,
+            &callbacks,
+            &ctx
+        );
+        if (err_follow != JVMTI_ERROR_NONE) {
+            clearTags(jvmti, tag_reachable);
+            return std::unexpected(err_follow);
+        }
+
+        jint check_count = 0;
+        jclass* check_classes = nullptr;
+        if (jvmti->GetLoadedClasses(&check_count, &check_classes) == JVMTI_ERROR_NONE) {
+            if (env->PushLocalFrame(check_count + 16) == JNI_OK) {
+                env->PopLocalFrame(nullptr); // check_classes 都是局部引用，批量释放
+            }
+            jvmti->Deallocate(reinterpret_cast<unsigned char*>(check_classes));
+        }
+
+        if (check_count != class_count && retries < 2) {
+            retries++;
+            clearTags(jvmti, tag_marker, tag_reachable);
+            continue;
+        }
+        break;
     }
 
     jint count = 0;
@@ -203,8 +215,7 @@ static std::expected<jobjectArray, jvmtiError> getInstancesInternal(jvmtiEnv* jv
     jlong search_tag = tag_reachable;
     jvmtiError err2 = jvmti->GetObjectsWithTags(1, &search_tag, &count, &instances, nullptr);
     if (err2 != JVMTI_ERROR_NONE) {
-        clearTaggedObjects(jvmti, env, tag_candidate);
-        clearTaggedObjects(jvmti, env, tag_reachable);
+        clearTags(jvmti, tag_reachable);
         return std::unexpected(err2);
     }
 
@@ -214,16 +225,14 @@ static std::expected<jobjectArray, jvmtiError> getInstancesInternal(jvmtiEnv* jv
         }
     });
 
-    clearTaggedObjects(jvmti, env, tag_candidate);
-
     if (env->EnsureLocalCapacity(count + 16) != JNI_OK) {
-        clearTaggedObjects(jvmti, env, tag_reachable);
+        clearTags(jvmti, tag_reachable);
         return std::unexpected(JVMTI_ERROR_OUT_OF_MEMORY);
     }
 
     jobjectArray result_array = env->NewObjectArray(count, klass, nullptr);
     if (!result_array) {
-        clearTaggedObjects(jvmti, env, tag_reachable);
+        clearTags(jvmti, tag_reachable);
         return std::unexpected(JVMTI_ERROR_OUT_OF_MEMORY);
     }
 
@@ -318,7 +327,7 @@ static std::expected<jobjectArray, jvmtiError> getReferrersInternal(jvmtiEnv* jv
     );
     if (err_follow != JVMTI_ERROR_NONE) {
         jvmti->SetTag(target_object, 0);
-        clearTaggedObjects(jvmti, env, referrer_tag);
+        clearTags(jvmti, referrer_tag);
         return std::unexpected(err_follow);
     }
 
@@ -332,7 +341,7 @@ static std::expected<jobjectArray, jvmtiError> getReferrersInternal(jvmtiEnv* jv
     jvmtiError err_get = jvmti->GetObjectsWithTags(1, &search_tag, &count, &instances, nullptr);
     if (err_get != JVMTI_ERROR_NONE) {
         jvmti->SetTag(target_object, 0);
-        clearTaggedObjects(jvmti, env, referrer_tag);
+        clearTags(jvmti, referrer_tag);
         return std::unexpected(err_get);
     }
 
@@ -344,14 +353,14 @@ static std::expected<jobjectArray, jvmtiError> getReferrersInternal(jvmtiEnv* jv
 
     if (env->EnsureLocalCapacity(count + 16) != JNI_OK) {
         jvmti->SetTag(target_object, 0);
-        clearTaggedObjects(jvmti, env, referrer_tag);
+        clearTags(jvmti, referrer_tag);
         return std::unexpected(JVMTI_ERROR_OUT_OF_MEMORY);
     }
 
     jclass obj_class = env->FindClass("java/lang/Object");
     if (!obj_class) {
         jvmti->SetTag(target_object, 0);
-        clearTaggedObjects(jvmti, env, referrer_tag);
+        clearTags(jvmti, referrer_tag);
         return std::unexpected(JVMTI_ERROR_CLASS_NOT_PREPARED);
     }
     SCOPE_EXIT([&] { env->DeleteLocalRef(obj_class); });
@@ -359,7 +368,7 @@ static std::expected<jobjectArray, jvmtiError> getReferrersInternal(jvmtiEnv* jv
     jobjectArray result_array = env->NewObjectArray(count, obj_class, nullptr);
     if (!result_array) {
         jvmti->SetTag(target_object, 0);
-        clearTaggedObjects(jvmti, env, referrer_tag);
+        clearTags(jvmti, referrer_tag);
         return std::unexpected(JVMTI_ERROR_OUT_OF_MEMORY);
     }
 

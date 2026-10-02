@@ -42,6 +42,7 @@ public enum E_Hook implements ISettings {
 	profile,
 	@Switch(dependency = "profile")
 	capture_locals,
+
 	_2,
 
 	capture_exceptions,

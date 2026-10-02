@@ -4,13 +4,13 @@ import arc.util.*;
 import modtools.unsupported.HotSwapManager;
 import nipx.jni.JNIEnv;
 import nipx.jni.helper.GlobalRef;
-import nipx.jvmti.*;
+import nipx.jvmti.JVMTIEnv;
 import nipx.jvmti.JVMTIEnv.FrameConsumer;
-import nipx.profiler.LookupKey;
-import nipx.profiler.ProfilerData;
+import nipx.profiler.*;
 import nipx.profiler.ProfilerData.FlameNode;
 
-import java.lang.foreign.*;
+import java.lang.foreign.Arena;
+import java.lang.management.*;
 import java.util.*;
 
 import static nipx.HotSwapAgent.*;
@@ -36,6 +36,16 @@ public class SamplingProfiler {
 
 	/** 默认采样间隔（毫秒）。200 Hz ≈ 5 ms/sample，对 60 FPS 游戏足够。 */
 	public static volatile int intervalMs = 5;
+
+	/** @deprecated 建议直接使用 {@link DeadlockDetector#enabled} */
+	@Deprecated
+	public static boolean enableDeadlockCheck() {
+		return DeadlockDetector.enabled;
+	}
+
+	public static void setEnableDeadlockCheck(boolean enable) {
+		DeadlockDetector.setEnabled(enable);
+	}
 
 	/**
 	 * 过滤前缀：只保留包含这些包名的帧，其余视为"框架噪音"跳过。
@@ -89,33 +99,28 @@ public class SamplingProfiler {
 	// ── 采样循环 ──────────────────────────────────────────────────────────────
 
 	private static void loop() {
-		if (!HotSwapManager.jniValid()) {
-			while (running) {
-				Threads.sleep(intervalMs);
-
-				Thread target = targetThread;
-				if (target == null || !target.isAlive()) continue;
-
-				planA(target);
-			}
-			return;
-		}
+		boolean useJni = HotSwapManager.jniValid();
 		while (running) {
 			Threads.sleep(intervalMs);
 
+			// 线程栈采样
 			Thread target = targetThread;
 			if (target == null || !target.isAlive()) continue;
 
-			if (captureMethodSignature) {
-				planC();
-			} else {
+			if (!useJni) {
 				planA(target);
+			} else {
+				if (captureMethodSignature) {
+					planC();
+				} else {
+					planA(target);
+				}
 			}
 		}
 	}
-	private static final LookupKey lookupKey = new LookupKey();
-	private static       FlameNode curHolder;
-	private static final FrameConsumer CONSUMER = (className, methodName, methodSig, thisAddr) -> {
+	private static final LookupKey     lookupKey = new LookupKey();
+	private static       FlameNode     curHolder;
+	private static final FrameConsumer CONSUMER  = (className, methodName, methodSig, thisAddr) -> {
 		if (isBlacklist(className)) return true;
 		String[] pkgs = includePackages;
 		if (pkgs != null && pkgs.length > 0 && !matchesAny(className, pkgs)) return true;
@@ -199,7 +204,7 @@ public class SamplingProfiler {
 
 	private static boolean isBlacklist(String className) {
 		return className.startsWith("nipx.") || className.startsWith("nipx/")
-			|| className.startsWith("modtools.ui.windows.profile.") || className.startsWith("modtools/ui/windows/profile/");
+		       || className.startsWith("modtools.ui.windows.profile.") || className.startsWith("modtools/ui/windows/profile/");
 	}
 
 	// ── 辅助 ─────────────────────────────────────────────────────────────────
@@ -244,5 +249,14 @@ public class SamplingProfiler {
 			if (!t.isDaemon() && fallback == null) fallback = t;
 		}
 		return fallback;
+	}
+
+
+	/**
+	 * 手动执行一次死锁探查。
+	 * @return 如果存在死锁，返回详细的排查报告；否则返回 null。
+	 */
+	public static String checkDeadlocks() {
+		return DeadlockDetector.checkDeadlocks();
 	}
 }

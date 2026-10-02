@@ -22,6 +22,7 @@ import modtools.ui.windows.profile.FlameGraphWindow;
 import modtools.unsupported.HotSwapManager;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
+import modtools.utils.profiler.DeadlockDetector;
 import modtools.utils.profiler.SamplingProfiler;
 import modtools.utils.search.*;
 import modtools.utils.ui.ShowInfoWindow;
@@ -42,13 +43,21 @@ public class Profiler extends Content {
 
 	Window ui;
 	public void lazyLoad() {
-		ui = new Window("Profiler", 300, 430, true);
+		ui = new Window("Profiler", 300, 480, true);
 
-		ui.cont.defaults().size(220, 64);
+		ui.cont.defaults().size(220, 60);
 		ui.cont.button("Show Probe Selector Window", Styles.flatt, ProbeSelectorWindow::staticShow).row();
 		ui.cont.button("Show Profiler Window", Styles.flatt, ProfilerWindow::staticShow).row();
 		ui.cont.button("Show Flame Graph", Styles.flatt, FlameGraphWindow::staticShow).row();
 		ui.cont.button("Hot Swap Log", Styles.flatt, HotSwapDialog::staticShow).row();
+		ui.cont.button("Check Deadlocks", Styles.flatt, () -> {
+			String report = DeadlockDetector.checkDeadlocks();
+			if (report == null) {
+				IntUI.showInfoFade("No deadlock detected.");
+			} else {
+				IntUI.showException(new RuntimeException("Deadlock Detected:\n" + report));
+			}
+		}).row();
 	}
 
 	public void build() {
@@ -319,6 +328,7 @@ public class Profiler extends Content {
 		// 单位ms
 		mode(Mode.class, it -> it.buildEnum(Mode.sample, Mode.class)),
 		auto_update_pane,
+		dead_lock_detection,
 		sample_gpu_time,
 		/** @see SamplingProfiler#intervalMs  */
 		sample_freq(int.class, it -> it.$(5, 1, 10)),
@@ -348,8 +358,12 @@ public class Profiler extends Content {
 			/* 不用@FlushField是因为SamplingProfiler可能还未加载  */
 			TaskManager.runWhen(HotSwapManager::loaded, () -> {
 				SamplingProfiler.intervalMs = sample_freq.getInt();
+				DeadlockDetector.setEnabled(dead_lock_detection.enabled());
 				SamplingProfiler.includePackages = include_packages.getArray().map(Jval::toString).toArray(String.class);
 				SamplingProfiler.captureMethodSignature = capture_method_signature.enabled();
+			});
+			dead_lock_detection.onChange(() -> {
+				DeadlockDetector.setEnabled(dead_lock_detection.enabled());
 			});
 			sample_freq.onChange(() -> {
 				TaskManager.runWhen(HotSwapManager::loaded, () -> {

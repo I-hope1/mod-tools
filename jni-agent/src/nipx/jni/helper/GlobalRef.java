@@ -7,10 +7,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class GlobalRef implements AutoCloseable {
 
-    private final MemorySegment globalRef;
-    public final  boolean       isRef;
-    public final  JValue        jValue;
-    private final AtomicBoolean closed = new AtomicBoolean(false);
+    private volatile MemorySegment globalRef;
+    public final   boolean         isRef;
+    public final   JValue          jValue;
+    private final  AtomicBoolean   closed = new AtomicBoolean(false);
 
     public GlobalRef(JNIEnv env, MemorySegment jobject) {
         if (jobject != null && jobject.address() != 0) {
@@ -54,8 +54,10 @@ public class GlobalRef implements AutoCloseable {
     @Override
     public void close() {
         if (closed.compareAndSet(false, true)) {
-            if (isRef && globalRef != null && globalRef.address() != 0) {
-                JNIEnv.getInstance().DeleteGlobalRef(globalRef);
+            MemorySegment ref = this.globalRef;
+            this.globalRef = null;
+            if (isRef && ref != null && ref.address() != 0) {
+                JNIEnv.getInstance().DeleteGlobalRef(ref);
             }
         }
     }

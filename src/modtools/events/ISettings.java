@@ -40,8 +40,44 @@ import static modtools.utils.Tools.or;
 import static modtools.utils.ui.CellTools.rowSelf;
 
 /**
- * 以 ‘_’ 开头的键，会变成下划线
+ * ModTools 统一设置项系统的核心契约接口。
+ * <p>通常由各模块内部的 {@code Settings} 枚举实现，配合 {@link SettingsInit} 注解驱动自动初始化。
+ *
+ * <h3>1. 国际化与 Bundle 键名规则 (I18N & Bundle Naming Conventions)</h3>
+ * <ul>
+ *   <li><b>标题键名（Title Key）：</b>在调用 {@link #buildAll(String, Table, Class)} 时，系统会自动拼接
+ *       {@code "@settings.<prefix>.<constant_name_lowercase>"}。<br>
+ *       例如：{@code buildAll("profiler", t, Settings.class)} 下的 {@code sample_freq}，
+ *       对应属性文件中的键为 {@code settings.profiler.sample_freq}。若 prefix 为空，则为 {@code settings.<name>}。</li>
+ *   <li><b>提示键名（Tooltip Key）：</b>在 {@link modtools.content.SettingsUI#TIP_PREFIX} 下遵循
+ *       {@code "settings.tip.<prefix>.<constant_name_lowercase>"}。<br>
+ *       若属性文件中定义了该键，UI 构建器会自动为该配置条目绑定浮动 Tooltip 提示。</li>
+ *   <li><b>UI 分割线占位符：</b>若枚举常量名以 {@code '_'} 开头（如 {@code _1}、{@code _2}），不会生成配置项，
+ *       而是被 {@link modtools.ui.comp.Underline} 渲染为水平视觉分割线。</li>
+ * </ul>
+ *
+ * <h3>2. 数据持久化与类型支持 (Data & Type System)</h3>
+ * <ul>
+ *   <li>底层通过 {@link Data}（基于 JSON/Hjson）进行全局或局部的键值持久化读写。</li>
+ *   <li>通过重载的 {@code $(...)} 系列方法提供流畅的 DSL，声明默认值与取值范围：
+ *       包括 {@code boolean}、{@code int}（滑块/数值框）、{@code float}、{@code String}（下拉/输入）、
+ *       {@code String[]}（动态数组列表）、{@code Enum}、{@code Color}、{@code Drawable} 等。</li>
+ * </ul>
+ *
+ * <h3>3. 复合开关与依赖联动 (Switch & Dependencies)</h3>
+ * <ul>
+ *   <li>若配置项附带总开关（如 {@code @Switch}），开关键名默认为 {@code <name>$enabled}。</li>
+ *   <li>当总开关关闭时，该项在 UI 上会自动被禁用并呈现半透明状态（{@value #DISABLED_ALPHA}），
+ *       逻辑上由 {@link #isSwitchOn()} 控制是否生效。</li>
+ * </ul>
+ *
+ * <h3>4. 事件监听与响应 (Reactivity)</h3>
+ * <ul>
+ *   <li>支持 {@link #onChange(Runnable)} 与 {@link #runAndOnChange(Runnable)}，当设置值发生变更时实时响应更新业务逻辑。</li>
+ * </ul>
+ *
  * @see SettingsInit
+ * @see modtools.content.SettingsUI
  */
 @SuppressWarnings({"StringTemplateMigration", "unused"})
 public interface ISettings extends E_DataInterface {

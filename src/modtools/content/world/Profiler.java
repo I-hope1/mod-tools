@@ -40,7 +40,6 @@ public class Profiler extends Content {
 		if (!HotSwapManager.valid()) Tools.TASKS.add(this::disable);
 	}
 
-
 	Window ui;
 	public void lazyLoad() {
 		ui = new Window("Profiler", 300, 480, true);

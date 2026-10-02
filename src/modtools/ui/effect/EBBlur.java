@@ -61,6 +61,7 @@ public class EBBlur implements DrawEffect {
 
 	public int   blurScl   = 4;
 	public float blurSpace = 1.26f;
+	public float alpha     = 1.0f;
 
 	public EBBlur() {
 		this(R_Blur.convolution_scheme.floats);
@@ -145,20 +146,18 @@ public class EBBlur implements DrawEffect {
 			uniform lowp sampler2D u_texture1;
 			
 			uniform lowp float def_alpha;
+			uniform lowp float u_alpha;
 			
 			varying vec2 v_texCoords;
 			%s
 			void main(){
-			  vec4 blur = texture2D(u_texture0, v_texCoords);
-			  vec3 color = texture2D(u_texture1, v_texCoords).rgb;
+			  vec3 blurColor = %s
 			
-			  if(blur.a > 0.0){
-			    vec3 blurColor = %s
-			    gl_FragColor.rgb = blurColor;
-			    gl_FragColor.a = blur.a;
+			  if(def_alpha > 0.5){
+			    gl_FragColor = vec4(blurColor, 1.0);
 			  } else {
-			    gl_FragColor.rgb = color;
-			    gl_FragColor.a = def_alpha;
+			    float maskAlpha = texture2D(u_texture0, v_texCoords).a;
+			    gl_FragColor = vec4(blurColor, maskAlpha * u_alpha);
 			  }
 			}
 			""".formatted(varyings, convolution);
@@ -170,25 +169,33 @@ public class EBBlur implements DrawEffect {
 	}
 	public void resize(float width, float height) {
 		blurScl = E_Blur.scale_level.getInt();
-		if (blurScl == 0) blurScl = 1;
-		width /= blurScl;
-		height /= blurScl;
+		if (blurScl <= 0) blurScl = 1;
 
+		// 遮罩 buffer 必须是 1:1 全屏原生分辨率，彻底消除移动时的 4 像素量化卡顿与坐标错位
 		buffer.resize((int) width, (int) height);
-		pingpong.resize((int) width, (int) height);
+
+		// pingpong 用于低分辨率模糊加速，保持 1/blurScl
+		int blurW = Math.max(1, (int) (width / blurScl));
+		int blurH = Math.max(1, (int) (height / blurScl));
+		pingpong.resize(blurW, blurH);
 
 		blurShader.bind();
-		blurShader.setUniformf("size", width, height);
+		blurShader.setUniformf("size", (float) blurW, (float) blurH);
 	}
 	public void capture(float x, float y, float w, float h) {
+		alpha = Draw.getColor().a;
+
 		capture();
-		Draw.reset();
+		Draw.color(1f, 1f, 1f, 1f);
 		Fill.crect(x, y, w, h);
 	}
 
 	public void capture() {
 		if (!capturing) {
-			buffer.begin(Color.clear);
+			buffer.begin();
+			// 必须使用硬件清屏，确保彻底抹除上一帧残留的白雾和孤立小方块
+			Gl.clearColor(0f, 0f, 0f, 0f);
+			Gl.clear(Gl.colorBufferBit);
 
 			capturing = true;
 		}
@@ -207,18 +214,22 @@ public class EBBlur implements DrawEffect {
 		screen.resize(Core.graphics.getWidth(), Core.graphics.getHeight());
 		ScreenSampler.instance.getToBuffer(screen, true);
 		screen.getTexture().bind(1);
+
+		// Pass 1: 水平降采样模糊 (screen -> pingpong)
 		pingpong.begin();
 		blurShader.bind();
 		blurShader.setUniformf("dir", blurSpace, 0f);
 		blurShader.setUniformf("def_alpha", 1);
 		screen.getTexture().bind(1);
 		Draw.shader();
-		buffer.blit(blurShader);
+		pingpong.blit(blurShader);
 		pingpong.end();
 
+		// Pass 2: 垂直模糊并采样全分辨率 Mask 贴回屏幕 (pingpong -> screen)
 		blurShader.bind();
 		blurShader.setUniformf("dir", 0f, blurSpace);
 		blurShader.setUniformf("def_alpha", 0);
+		blurShader.setUniformf("u_alpha", alpha);
 		pingpong.getTexture().bind(1);
 
 		Gl.enable(Gl.blend);

@@ -9,7 +9,7 @@ import arc.input.KeyCode;
 import arc.math.*;
 import arc.math.geom.*;
 import arc.math.geom.QuadTree.QuadTreeObject;
-import arc.scene.Element;
+import arc.scene.*;
 import arc.scene.actions.Actions;
 import arc.scene.event.*;
 import arc.scene.style.TextureRegionDrawable;
@@ -966,7 +966,7 @@ public class Selection extends Content {
 		public Table pane;
 
 		public Window show() {
-			return show(scene, Actions.fadeIn(0.1f));
+			return show(scene, Actions.fadeIn(0.05f));
 		}
 
 		HKeyCode fixedKeyCode = keyCodeData().dynamicKeyCode("fixedWindow", () -> new HKeyCode(KeyCode.anyKey).ctrl().alt());
@@ -977,10 +977,6 @@ public class Selection extends Content {
 			/* 禁用缩放和移动侦听器 */
 			touchable = Touchable.childrenOnly;
 			sclListener.remove();
-			cont.update(() -> {
-				if (updatePosUI && focusEnabled) { updatePosUIAndWorld(); } else updatePosOnlyWorld();
-				clampPosition();
-			});
 			cont.pane(Styles.smallPane, p -> pane = p).grow();
 			buildCont0();
 			Tools.TASKS.add(() -> {
@@ -1000,13 +996,20 @@ public class Selection extends Content {
 			});
 		}
 
-		public void hide() {
-			if (!isShown()) return;
-			if (!(this instanceof IDisposable)) screenshot();
-			setOrigin(Align.center);
-			setClip(false);
-
-			hide(null);
+		@Override
+		public void act(float delta) {
+			super.act(delta);
+			// 必须在 act 阶段更新位置，绝不能在 draw/cont.update 阶段才更新！
+			if (updatePosUI && focusEnabled) {
+				updatePosUIAndWorld();
+			} else {
+				updatePosOnlyWorld();
+			}
+			clampPosition();
+		}
+		@SuppressWarnings("RedundantCast")
+		public void hide(Action action) {
+			super.hide((Action) null);
 		}
 		public Element hit(float x, float y, boolean touchable) {
 			Element el = super.hit(x, y, touchable);
@@ -1130,7 +1133,6 @@ public class Selection extends Content {
 					});
 				}).growX().row();
 			}
-			;
 		}
 
 		private final ObjectSet<Bullet> cachedBullets = new ObjectSet<>();

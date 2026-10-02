@@ -704,8 +704,9 @@ public class Window extends Table implements Position {
 		topGroup.drawResidentTasks.forEach(task -> task.beforeDraw(this));
 		float prev = Draw.z();
 		Draw.draw(getZIndex() + 1, () -> {
-			Draw.alpha(parentAlpha);
-			MyDraw.blurRect(x, y, width, height);
+			Draw.alpha(parentAlpha * color.a);
+			Vec2 stagePos = localToStageCoordinates(Tmp.v1.set(0, 0));
+			MyDraw.blurRect(stagePos.x, stagePos.y, width, height);
 		});
 		Draw.z(prev);
 		super.draw();

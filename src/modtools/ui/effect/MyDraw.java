@@ -55,15 +55,16 @@ public class MyDraw {
 	}
 
 
-	static final LazyValue<DrawEffect> blur = LazyValue.of(EBBlur::new);
+	static final LazyValue<EBBlur> blur = LazyValue.of(EBBlur::new);
 
 	// static ObjectMap<String, Seq<Runnable>> draws = new ObjectMap<>();
 	public static void blurRect(float x, float y, float w, float h) {
 		if (!isBlurEnable()) return;
 		// draws.get("blur", Seq::new).add(draw);
-		blur.get().resize(w, h);
-		blur.get().capture(x, y, w, h);
-		blur.get().render();
+		EBBlur blur1 = blur.get();
+		blur1.resize(w, h);
+		blur1.capture(x, y, w, h);
+		blur1.render();
 		Draw.flush();
 	}
 	public static boolean isBlurEnable() {

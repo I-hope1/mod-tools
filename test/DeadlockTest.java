@@ -42,6 +42,7 @@ public class DeadlockTest {
 		testStandardDeadlock();
 		testNormalPlatformContentionNotReported();
 		testVirtualThreadHiddenDeadlock();
+		testPureVirtualThreadDeadlockManual();
 		testWatchdogLifecycle();
 
 		System.out.println("\n>>> ALL DEADLOCK TESTS COMPLETED SUCCESSFULLY! <<<");
@@ -221,6 +222,12 @@ public class DeadlockTest {
 				if (!content.contains("TestThread-Platform-Victim")) {
 					throw new AssertionError("deadlock.log does not contain victim thread name!");
 				}
+				if (!content.contains("[DEADLOCK CYCLE ANALYSIS]")) {
+					throw new AssertionError("deadlock.log does not contain [DEADLOCK CYCLE ANALYSIS]!");
+				}
+				if (!content.contains("WAITING FOR LOCK:")) {
+					throw new AssertionError("deadlock.log does not contain WAITING FOR LOCK!");
+				}
 
 				// 验证是否生成了 threads-*.json 转储文件
 				Fi[] dumps = IntVars.dataDirectory.list(f -> f.getName().startsWith("threads-") && f.getName().endsWith(".json"));
@@ -232,17 +239,64 @@ public class DeadlockTest {
 				System.out.println("JSON dump length: " + dumpContent.length() + ", contains 'virtual': " + dumpContent.contains("virtual"));
 			}
 
-			System.out.println("Test 3 PASSED: Virtual Thread Hidden Deadlock Successfully Detected & Dumped.");
+			System.out.println("Test 3 PASSED: Virtual Thread Hidden Deadlock Successfully Detected, Analyzed & Dumped.");
 		} finally {
 			DeadlockDetector.suspiciousBlockThresholdMs = oldThreshold;
 		}
 	}
 
 	/**
-	 * 测试场景 4：看门狗启动与停止生命周期。
+	 * 测试场景 4：纯虚拟线程之间的死锁（两个虚拟线程互锁）。
+	 * 验证通过手动触发 dumpAndAnalyzeDeadlocks() 能够完整发现纯虚拟线程死锁环并输出各节点持有与等待锁。
+	 */
+	private static void testPureVirtualThreadDeadlockManual() throws Exception {
+		System.out.println("\n--- Test 4: Pure Virtual Thread Deadlock (Manual Dump & Analyze) ---");
+		Object vLockA = new Object();
+		Object vLockB = new Object();
+		Phaser vCoop = new Phaser(2);
+
+		Thread v1 = Thread.ofVirtual().name("pure-v1").start(() -> {
+			synchronized (vLockA) {
+				vCoop.arriveAndAwaitAdvance();
+				synchronized (vLockB) {
+					System.out.println("v1 done");
+				}
+			}
+		});
+
+		Thread v2 = Thread.ofVirtual().name("pure-v2").start(() -> {
+			synchronized (vLockB) {
+				vCoop.arriveAndAwaitAdvance();
+				synchronized (vLockA) {
+					System.out.println("v2 done");
+				}
+			}
+		});
+
+		Thread.sleep(300);
+
+		// 手动调用分析
+		String analysis = DeadlockDetector.dumpAndAnalyzeDeadlocks();
+		System.out.println("Manual dump analysis result:\n" + analysis);
+
+		if (analysis == null) {
+			throw new AssertionError("Expected pure virtual thread deadlock to be detected by dumpAndAnalyzeDeadlocks()!");
+		}
+		if (!analysis.contains("pure-v1") || !analysis.contains("pure-v2")) {
+			throw new AssertionError("Analysis does not contain pure virtual thread names!");
+		}
+		if (!analysis.contains("[Virtual] Thread \"pure-v1\"") || !analysis.contains("[Virtual] Thread \"pure-v2\"")) {
+			throw new AssertionError("Analysis should identify both as Virtual threads!");
+		}
+
+		System.out.println("Test 4 PASSED: Pure Virtual Thread Deadlock detected and analyzed correctly.");
+	}
+
+	/**
+	 * 测试场景 5：看门狗启动与停止生命周期。
 	 */
 	private static void testWatchdogLifecycle() throws Exception {
-		System.out.println("\n--- Test 4: Watchdog Lifecycle ---");
+		System.out.println("\n--- Test 5: Watchdog Lifecycle ---");
 		DeadlockDetector.startWatchdog();
 		if (!DeadlockDetector.isRunning()) {
 			throw new AssertionError("Watchdog should be running!");
@@ -254,6 +308,6 @@ public class DeadlockTest {
 			throw new AssertionError("Watchdog should be stopped!");
 		}
 		System.out.println("Watchdog stopped successfully.");
-		System.out.println("Test 4 PASSED: Watchdog Lifecycle works cleanly.");
+		System.out.println("Test 5 PASSED: Watchdog Lifecycle works cleanly.");
 	}
 }

@@ -4,6 +4,7 @@ import arc.Core;
 import arc.struct.LongMap;
 import arc.struct.LongSeq;
 import arc.util.Log;
+import arc.util.serialization.Jval;
 import modtools.IntVars;
 import modtools.ui.IntUI;
 
@@ -22,13 +23,13 @@ import java.util.*;
  *           但 {@link ThreadMXBean#getThreadInfo(long)} 报告的状态非 BLOCKED（如 RUNNABLE 且无锁信息）。
  *           这是 Java 24+ (JEP 491) 下监视器由虚拟线程持有且平台线程争用时的典型特征。
  *           同时自动过滤普通平台线程争用（两边一致为 BLOCKED 且带锁信息），交由标准死锁检测处理。</li>
- *       <li><b>自动线程转储：</b>报警时自动调用 {@code HotSpotDiagnosticMXBean.dumpThreads(..., JSON)}
- *           导出包含虚拟线程在内的完整线程转储至 {@code threads-<timestamp>.json}。</li>
- *       <li><b>无法检测：</b>纯虚拟线程之间的相互死锁（因平台线程未受阻塞）；虚拟线程持有
- *           {@code ReentrantLock} 导致平台线程处于 {@link Thread.State#WAITING}（而非 BLOCKED）；
+ *       <li><b>自动转储与死锁环解析：</b>报警时自动调用 {@code HotSpotDiagnosticMXBean.dumpThreads(..., JSON)}
+ *           导出包含虚拟线程在内的完整线程转储，并自动解析其中的 {@code blockedOn} 与 {@code monitorsOwned}，
+ *           在报告中重构闭环等待图（标明各线程名、平台/虚拟类型、持有锁与等待锁）。</li>
+ *       <li><b>纯虚拟线程死锁支持：</b>纯虚拟线程间的循环互锁因平台线程未受阻塞，无法触发 3 秒周期的后台巡检；
+ *           但可通过手动调用 {@link #dumpAndAnalyzeDeadlocks()} 导出全量转储并自动分析死锁环。</li>
+ *       <li><b>无法检测：</b>虚拟线程持有 {@code ReentrantLock} 导致等待线程处于 {@link Thread.State#WAITING}（而非 BLOCKED）；
  *           以及调用 {@code wait()}、{@code park()}、{@code join()} 的协作式等待。</li>
- *       <li><b>锁信息局限：</b>由于底层 ThreadInfo 在此场景下未暴露 lockName，报告无法直显锁名称，
- *           需通过栈顶方法帧自行排查。</li>
  *     </ul>
  *   </li>
  *   <li><b>主线程死锁时 UI 无响应：</b>若死锁涉及游戏主线程（渲染/事件分发线程），整个 UI 将冻结，
@@ -288,13 +289,169 @@ public class DeadlockDetector {
 
 		// 在锁外输出，避免持有私有锁时做 IO
 		if (!reports.isEmpty()) {
-			String dump = dumpAllThreadsJson();
+			String dumpPath = dumpAllThreadsJson();
+			String cycleAnalysis = dumpPath != null ? analyzeDump(dumpPath) : null;
 			for (String r : reports) {
-				String full = r + (dump != null ? "Full thread dump (incl. virtual): " + dump + "\n" : "")
-								+ "===================================================";
-				writeLog(full, "Hidden Deadlock Suspected! Check console or deadlock.log");
+				StringBuilder full = new StringBuilder(r);
+				if (cycleAnalysis != null) {
+					full.append("\n----------- [DEADLOCK CYCLE ANALYSIS] -----------\n")
+						.append(cycleAnalysis).append("\n");
+				}
+				if (dumpPath != null) {
+					full.append("Full thread dump (incl. virtual): ").append(dumpPath).append("\n");
+				}
+				full.append("===================================================");
+				writeLog(full.toString(), "Hidden Deadlock Suspected! Check console or deadlock.log");
 			}
 		}
+	}
+
+	/**
+	 * 手动导出全局线程转储（含虚拟线程）并执行死锁环图分析。
+	 * <p>注意：全量转储涉及虚拟线程遍历，在大规模并发下开销较高，仅建议手动触发排查纯虚拟线程死锁，
+	 * 切勿调入高频周期性循环中。
+	 * @return 分析报告字符串，若未检测到死锁环返回 null。
+	 */
+	public static String dumpAndAnalyzeDeadlocks() {
+		String dumpPath = dumpAllThreadsJson();
+		if (dumpPath == null) return null;
+		return analyzeDump(dumpPath);
+	}
+
+	/**
+	 * 解析指定线程转储 JSON 文件中的死锁等待环。
+	 */
+	public static String analyzeDump(String dumpPath) {
+		try {
+			String jsonContent = new arc.files.Fi(dumpPath).readString();
+			return analyzeJsonDump(jsonContent);
+		} catch (Throwable t) {
+			Log.err("[DeadlockDetector] Failed to parse thread dump JSON", t);
+			return null;
+		}
+	}
+
+	public static class DumpedThread {
+		public final String tid;
+		public final String name;
+		public final boolean isVirtual;
+		public final String state;
+		public final String blockedOn;
+		public final List<String> ownedLocks = new ArrayList<>();
+
+		public DumpedThread(String tid, String name, boolean isVirtual, String state, String blockedOn) {
+			this.tid = tid;
+			this.name = name;
+			this.isVirtual = isVirtual;
+			this.state = state;
+			this.blockedOn = blockedOn;
+		}
+	}
+
+	/**
+	 * 纯数据解析方法：通过 blockedOn 与 monitorsOwned 构建等待图，拓扑检测死锁环。
+	 */
+	public static String analyzeJsonDump(String jsonContent) {
+		if (jsonContent == null || jsonContent.isEmpty()) return null;
+		Jval root = Jval.read(jsonContent);
+		Jval threadDump = root.get("threadDump");
+		if (threadDump == null || !threadDump.has("threadContainers")) return null;
+
+		Map<String, DumpedThread> threadsById = new HashMap<>();
+		Map<String, DumpedThread> lockToOwner = new HashMap<>();
+
+		for (Jval container : threadDump.get("threadContainers").asArray()) {
+			if (!container.has("threads")) continue;
+			for (Jval t : container.get("threads").asArray()) {
+				String tid = t.getString("tid", "");
+				String name = t.getString("name", "");
+				boolean isVirtual = t.getBool("virtual", false);
+				String state = t.getString("state", "");
+				String blockedOn = t.has("blockedOn") ? t.getString("blockedOn", null) : null;
+
+				DumpedThread dt = new DumpedThread(tid, name, isVirtual, state, blockedOn);
+				threadsById.put(tid, dt);
+
+				if (t.has("monitorsOwned")) {
+					for (Jval m : t.get("monitorsOwned").asArray()) {
+						if (m.has("locks")) {
+							for (Jval lock : m.get("locks").asArray()) {
+								String lockStr = lock.asString();
+								dt.ownedLocks.add(lockStr);
+								lockToOwner.put(lockStr, dt);
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// 构建死锁等待有向图并寻找简单环
+		// 边：waiter -> owner (通过 blockedOn 查持有者)
+		List<List<DumpedThread>> cycles = new ArrayList<>();
+		Set<String> visitedInCycle = new HashSet<>();
+
+		for (DumpedThread start : threadsById.values()) {
+			if (start.blockedOn == null || !lockToOwner.containsKey(start.blockedOn)) continue;
+			if (visitedInCycle.contains(start.tid)) continue;
+
+			List<DumpedThread> path = new ArrayList<>();
+			Set<String> onPath = new HashSet<>();
+			DumpedThread curr = start;
+
+			while (curr != null && curr.blockedOn != null && lockToOwner.containsKey(curr.blockedOn)) {
+				if (onPath.contains(curr.tid)) {
+					// 发现环
+					int cycleStartIdx = -1;
+					for (int i = 0; i < path.size(); i++) {
+						if (path.get(i).tid.equals(curr.tid)) {
+							cycleStartIdx = i;
+							break;
+						}
+					}
+					if (cycleStartIdx != -1) {
+						List<DumpedThread> cycle = new ArrayList<>(path.subList(cycleStartIdx, path.size()));
+						boolean newCycle = false;
+						for (DumpedThread node : cycle) {
+							if (visitedInCycle.add(node.tid)) {
+								newCycle = true;
+							}
+						}
+						if (newCycle) {
+							cycles.add(cycle);
+						}
+					}
+					break;
+				}
+
+				path.add(curr);
+				onPath.add(curr.tid);
+				curr = lockToOwner.get(curr.blockedOn);
+			}
+		}
+
+		if (cycles.isEmpty()) return null;
+
+		StringBuilder sb = new StringBuilder();
+		sb.append("Detected ").append(cycles.size()).append(" deadlocked cycle(s) from thread dump:\n");
+
+		for (int c = 0; c < cycles.size(); c++) {
+			List<DumpedThread> cycle = cycles.get(c);
+			sb.append(String.format("\nCycle #%d (%d threads in cycle):\n", c + 1, cycle.size()));
+			for (int i = 0; i < cycle.size(); i++) {
+				DumpedThread waiter = cycle.get(i);
+				DumpedThread nextOwner = cycle.get((i + 1) % cycle.size());
+				sb.append(String.format("  [%s] Thread \"%s\" (Id=%s, State=%s)\n",
+					waiter.isVirtual ? "Virtual" : "Platform", waiter.name, waiter.tid, waiter.state));
+				sb.append(String.format("    - WAITING FOR LOCK: %s (held by [%s] \"%s\")\n",
+					waiter.blockedOn, nextOwner.isVirtual ? "Virtual" : "Platform", nextOwner.name));
+				if (!waiter.ownedLocks.isEmpty()) {
+					sb.append(String.format("    - HOLDING LOCK(S): %s\n", waiter.ownedLocks));
+				}
+			}
+		}
+
+		return sb.toString();
 	}
 
 	private static String dumpAllThreadsJson() {

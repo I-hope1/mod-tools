@@ -48,6 +48,7 @@ public class FlameGraphWindow extends Window {
 	private Label       infoLabel;
 	private TextField   searchField;
 	private SelectTable navigatorTable;
+	private static final StringBuilder SB_HOVER = new StringBuilder(128);
 
 	private static final FlameGraphWindow instance = new FlameGraphWindow();
 
@@ -122,18 +123,26 @@ public class FlameGraphWindow extends Window {
 				infoLabel.setText("Hover over a block for details");
 				return;
 			}
-			long   total   = node.totalNanos.sum();
-			long   self    = selfNanos(node);
-			long   rootTot = effectiveTotal(canvas.currentRoot);
-			double pct     = rootTot > 0 ? 100.0 * total / rootTot : 0.0;
-			// 采样模式下 totalNanos 单位是 intervalMs * 1_000_000，换算回 ms 时直接除即可
-			boolean sampling = SamplingProfiler.isRunning();
-			String unit = sampling
-			 ? String.format("~%.0f samples", total / (SamplingProfiler.intervalMs * 1_000_000.0))
-			 : String.format("%.3f ms", total / 1_000_000.0);
-			infoLabel.setText(String.format(
-			 "%s   |   %s (%.1f%%)   |   self %.3f ms   |   children %d",
-			 node.name, unit, pct, self / 1_000_000.0, node.children.size()));
+			long total   = node.totalNanos.sum();
+			long self    = selfNanos(node);
+			long rootTot = effectiveTotal(canvas.currentRoot);
+
+			SB_HOVER.setLength(0);
+			SB_HOVER.append(node.name).append("   |   ");
+			if (SamplingProfiler.isRunning()) {
+				long intervalNs = SamplingProfiler.intervalMs * 1_000_000L;
+				long samples = intervalNs > 0 ? (total + intervalNs / 2) / intervalNs : 0;
+				SB_HOVER.append('~').append(samples).append(" samples (");
+			} else {
+				appendMillis(SB_HOVER, total);
+				SB_HOVER.append(" (");
+			}
+			appendPercent(SB_HOVER, total, rootTot);
+			SB_HOVER.append(")   |   self ");
+			appendMillis(SB_HOVER, self);
+			SB_HOVER.append("   |   children ").append(node.children.size());
+
+			infoLabel.setText(SB_HOVER);
 		};
 
 		shown(() -> Core.app.post(() -> {
@@ -149,6 +158,30 @@ public class FlameGraphWindow extends Window {
 	}
 
 	// ─── 工具方法 ────────────────────────────────────────────────────────────
+
+	/** 零 GC 格式化毫秒（固定保留 3 位小数） */
+	static void appendMillis(StringBuilder sb, long nanos) {
+		if (nanos < 0) {
+			sb.append('-');
+			nanos = -nanos;
+		}
+		long ms   = nanos / 1_000_000L;
+		long frac = (nanos % 1_000_000L) / 1000L;
+		sb.append(ms).append('.');
+		if (frac < 100) sb.append('0');
+		if (frac < 10) sb.append('0');
+		sb.append(frac).append(" ms");
+	}
+
+	/** 零 GC 格式化百分比（固定保留 1 位小数） */
+	static void appendPercent(StringBuilder sb, long part, long total) {
+		if (total <= 0) {
+			sb.append("0.0%");
+			return;
+		}
+		long permill = (part * 1000L) / total;
+		sb.append(permill / 10L).append('.').append(Math.abs(permill % 10L)).append('%');
+	}
 
 	static long selfNanos(FlameNode node) {
 		long childSum = 0;
@@ -215,7 +248,8 @@ public class FlameGraphWindow extends Window {
 			}
 		}
 
-		final Seq<Slot> slots = new Seq<>();
+		final Seq<Slot>            slots      = new Seq<>();
+		final ArrayList<Seq<Slot>> depthSlots = new ArrayList<>();
 		float prefW = 600, prefH = 200;
 		FlameNode hoveredNode = null;
 
@@ -225,6 +259,9 @@ public class FlameGraphWindow extends Window {
 		void rebuild(float availW) {
 			Pools.freeAll(slots, true);
 			slots.clear();
+			for (int i = 0; i < depthSlots.size(); i++) {
+				depthSlots.get(i).clear();
+			}
 			hoveredNode = null;
 			if (currentRoot.children.isEmpty()) {
 				prefH = 60;
@@ -248,7 +285,10 @@ public class FlameGraphWindow extends Window {
 				childW += cw;
 				cx += cw;
 			}
-			slots.add(Slot.obtain(node, x, slotY, w, depth, colorOf(node.name), childW));
+			Slot s = Slot.obtain(node, x, slotY, w, depth, colorOf(node.name), childW);
+			slots.add(s);
+			while (depthSlots.size() <= depth) depthSlots.add(new Seq<>());
+			depthSlots.get(depth).add(s);
 		}
 
 		void liveUpdate() {
@@ -276,7 +316,40 @@ public class FlameGraphWindow extends Window {
 		}
 
 		Slot findSlot(FlameNode node, int depth) {
-			for (Slot s : slots) if (s.node == node && s.depth == depth) return s;
+			if (depth < 0 || depth >= depthSlots.size()) return null;
+			Seq<Slot> row = depthSlots.get(depth);
+			for (int i = 0; i < row.size; i++) {
+				Slot s = row.get(i);
+				if (s.node == node) return s;
+			}
+			return null;
+		}
+
+		/** 根据 Y 坐标 O(1) 计算层级深度，返回 -1 表示未命中有效行 */
+		int getDepthAt(float my) {
+			float topDist = prefH - my;
+			if (topDist <= GAP) return -1;
+			int depth = (int) ((topDist - GAP) / (ROW_H + GAP));
+			if (depth < 0) return -1;
+			float slotY = prefH - (depth + 1) * (ROW_H + GAP);
+			if (my < slotY || my >= slotY + ROW_H) return -1;
+			return depth;
+		}
+
+		/** 在单行单调递增的 Slot 列表中二分查找命中 Slot */
+		static Slot findSlotAtX(Seq<Slot> row, float mx) {
+			int low = 0, high = row.size - 1;
+			while (low <= high) {
+				int  mid = (low + high) >>> 1;
+				Slot s   = row.get(mid);
+				if (mx < s.x) {
+					high = mid - 1;
+				} else if (mx >= s.x + s.w) {
+					low = mid + 1;
+				} else {
+					return s.w >= 0.5f ? s : null;
+				}
+			}
 			return null;
 		}
 
@@ -316,21 +389,26 @@ public class FlameGraphWindow extends Window {
 				public boolean mouseMoved(InputEvent ev, float mx, float my) {
 					FlameNode prev = hoveredNode;
 					hoveredNode = null;
-					for (Slot s : slots)
-						if (s.w >= 0.5f && mx >= s.x && mx < s.x + s.w && my >= s.y && my < s.y + ROW_H) {
+					int depth = getDepthAt(my);
+					if (depth >= 0 && depth < depthSlots.size()) {
+						Slot s = findSlotAtX(depthSlots.get(depth), mx);
+						if (s != null) {
 							hoveredNode = s.node;
-							break;
 						}
+					}
 					if (hoveredNode != prev && onHover != null) onHover.accept(hoveredNode);
 					return false;
 				}
 				@Override
 				public boolean touchDown(InputEvent ev, float mx, float my, int ptr, KeyCode button) {
-					for (Slot s : slots)
-						if (s.w >= 0.5f && mx >= s.x && mx < s.x + s.w && my >= s.y && my < s.y + ROW_H) {
+					int depth = getDepthAt(my);
+					if (depth >= 0 && depth < depthSlots.size()) {
+						Slot s = findSlotAtX(depthSlots.get(depth), mx);
+						if (s != null) {
 							zoomIn(s.node);
 							return true;
 						}
+					}
 					return false;
 				}
 				@Override

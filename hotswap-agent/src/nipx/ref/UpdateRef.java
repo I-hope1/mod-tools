@@ -19,16 +19,13 @@ public class UpdateRef {
 	public static final Runnable NOOP = () -> {};
 
 	private volatile Object   fn;
-	/** 直接强引用即可：element -> listener -> UpdateRef -> element 只是孤立的环，不影响 GC */
-	private final    Element  element;
-	/** 自定义销毁动作；为 null 时默认回退到 Core.app.post(element::remove) 或监听器注销 */
+	/** 自定义销毁动作；为 null 时表示静默失效（清除 fn 引用，不再执行） */
 	private volatile Runnable onRemove;
 
 	private static final ThreadLocal<Runnable> CONTEXT_ON_REMOVE = new ThreadLocal<>();
 
-	private UpdateRef(Object fn, Element element, Runnable onRemove) {
+	private UpdateRef(Object fn, Runnable onRemove) {
 		this.fn = fn;
-		this.element = element;
 		this.onRemove = onRemove != null ? onRemove : CONTEXT_ON_REMOVE.get();
 	}
 
@@ -38,10 +35,6 @@ public class UpdateRef {
 
 	public void setOnRemove(Runnable onRemove) {
 		this.onRemove = onRemove;
-	}
-
-	public Element getElement() {
-		return element;
 	}
 
 	/**
@@ -69,13 +62,53 @@ public class UpdateRef {
 
 	//region 通用 wrap 重载
 
+	//region 通用 wrap 重载（不依赖 Element）
+	public static Runnable wrap(Runnable original) {
+		return wrap(original, (Runnable) null);
+	}
+
+	public static Runnable wrap(Runnable original, Runnable onRemove) {
+		if (returnOriginal(original)) return original;
+		return new UpdateRef(original, onRemove)::run;
+	}
+
+	public static <T> Prov<T> wrap(Prov<T> original) {
+		return wrap(original, (Runnable) null);
+	}
+
+	public static <T> Prov<T> wrap(Prov<T> original, Runnable onRemove) {
+		if (returnOriginal(original)) return original;
+		return new UpdateRef(original, onRemove)::runProv;
+	}
+
+	public static Boolp wrap(Boolp original) {
+		return wrap(original, (Runnable) null);
+	}
+
+	public static Boolp wrap(Boolp original, Runnable onRemove) {
+		if (returnOriginal(original)) return original;
+		return new UpdateRef(original, onRemove)::runBoolp;
+	}
+
+	public static <T> Cons<T> wrap(Cons<T> original) {
+		return wrap(original, (Runnable) null);
+	}
+
+	public static <T> Cons<T> wrap(Cons<T> original, Runnable onRemove) {
+		if (returnOriginal(original)) return original;
+		return new UpdateRef(original, onRemove)::runCons;
+	}
+	//endregion
+
+	//region 兼容 Element 的通用 wrap 重载
+
 	public static Runnable wrap(Element element, Runnable original) {
 		return wrap(element, original, null);
 	}
 
 	public static Runnable wrap(Element element, Runnable original, Runnable onRemove) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, element, onRemove)::run;
+		return new UpdateRef(original, onRemove)::run;
 	}
 
 	public static Prov<?> wrap(Element element, Prov<?> original) {
@@ -84,7 +117,7 @@ public class UpdateRef {
 
 	public static Prov<?> wrap(Element element, Prov<?> original, Runnable onRemove) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, element, onRemove)::runProv;
+		return new UpdateRef(original, onRemove)::runProv;
 	}
 
 	public static Boolp wrap(Element element, Boolp original) {
@@ -93,7 +126,7 @@ public class UpdateRef {
 
 	public static Boolp wrap(Element element, Boolp original, Runnable onRemove) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, element, onRemove)::runBoolp;
+		return new UpdateRef(original, onRemove)::runBoolp;
 	}
 
 	public static Cons<?> wrap(Element element, Cons<?> original) {
@@ -102,7 +135,7 @@ public class UpdateRef {
 
 	public static Cons<?> wrap(Element element, Cons<?> original, Runnable onRemove) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, element, onRemove)::runCons;
+		return new UpdateRef(original, onRemove)::runCons;
 	}
 
 	public static Boolf<?> wrap(Element element, Boolf<?> original) {
@@ -111,7 +144,7 @@ public class UpdateRef {
 
 	public static Boolf<?> wrap(Element element, Boolf<?> original, Runnable onRemove) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, element, onRemove)::runBoolf;
+		return new UpdateRef(original, onRemove)::runBoolf;
 	}
 
 	public static TextFieldValidator wrap(Element element, TextFieldValidator original) {
@@ -120,7 +153,7 @@ public class UpdateRef {
 
 	public static TextFieldValidator wrap(Element element, TextFieldValidator original, Runnable onRemove) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, element, onRemove)::runValidator;
+		return new UpdateRef(original, onRemove)::runValidator;
 	}
 
 	public static Floatc wrap(Element element, Floatc original) {
@@ -129,7 +162,7 @@ public class UpdateRef {
 
 	public static Floatc wrap(Element element, Floatc original, Runnable onRemove) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, element, onRemove)::runFloatc;
+		return new UpdateRef(original, onRemove)::runFloatc;
 	}
 
 	public static Floatc2 wrap(Element element, Floatc2 original) {
@@ -138,7 +171,7 @@ public class UpdateRef {
 
 	public static Floatc2 wrap(Element element, Floatc2 original, Runnable onRemove) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, element, onRemove)::runFloatc2;
+		return new UpdateRef(original, onRemove)::runFloatc2;
 	}
 
 	public static EventListener wrap(Element element, EventListener original) {
@@ -147,7 +180,7 @@ public class UpdateRef {
 
 	public static EventListener wrap(Element element, EventListener original, Runnable onRemove) {
 		if (returnOriginal(original)) return original;
-		UpdateRef ref = new UpdateRef(original, element, onRemove);
+		UpdateRef ref = new UpdateRef(original, onRemove);
 		EventListener listener = ref::runEventListener;
 		if (ref.onRemove == null && element != null) {
 			ref.onRemove = () -> element.removeListener(listener);
@@ -161,42 +194,42 @@ public class UpdateRef {
 
 	public static Runnable wrapUpdate(Element element, Runnable original) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, element, () -> {
+		return new UpdateRef(original, () -> {
 			if (element != null) element.update(null);
 		})::run;
 	}
 
 	public static Boolp wrapVisible(Element element, Boolp original) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, element, () -> {
+		return new UpdateRef(original, () -> {
 			if (element != null) element.visible(null);
 		})::runBoolp;
 	}
 
 	public static Prov<?> wrapTouchable(Element element, Prov<?> original) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, element, () -> {
+		return new UpdateRef(original, () -> {
 			if (element != null) element.touchable((Prov) null);
 		})::runProv;
 	}
 
 	public static Boolp wrapButtonDisabled(Element element, Boolp original) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, element, () -> {
+		return new UpdateRef(original, () -> {
 			if (element instanceof Button b) b.setDisabled(null);
 		})::runBoolp;
 	}
 
 	public static TextFieldValidator wrapValidator(Element element, TextFieldValidator original) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, element, () -> {
+		return new UpdateRef(original, () -> {
 			if (element instanceof TextField tf) tf.setValidator(null);
 		})::runValidator;
 	}
 
 	public static EventListener wrapListener(Element element, EventListener original) {
 		if (returnOriginal(original)) return original;
-		UpdateRef ref = new UpdateRef(original, element, null);
+		UpdateRef ref = new UpdateRef(original, null);
 		EventListener listener = ref::runEventListener;
 		ref.setOnRemove(() -> {
 			if (element != null) element.removeListener(listener);
@@ -206,7 +239,7 @@ public class UpdateRef {
 
 	public static EventListener wrapCaptureListener(Element element, EventListener original) {
 		if (returnOriginal(original)) return original;
-		UpdateRef ref = new UpdateRef(original, element, null);
+		UpdateRef ref = new UpdateRef(original, null);
 		EventListener listener = ref::runEventListener;
 		ref.setOnRemove(() -> {
 			if (element != null) element.removeCaptureListener(listener);
@@ -217,28 +250,28 @@ public class UpdateRef {
 	// Cell 专用
 	public static Cons<?> wrapCellUpdate(Cell<?> cell, Cons<?> original) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, cell != null ? cell.get() : null, () -> {
+		return new UpdateRef(original, () -> {
 			if (cell != null) cell.update(null);
 		})::runCons;
 	}
 
 	public static Boolf<?> wrapCellDisabled(Cell<?> cell, Boolf<?> original) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, cell != null ? cell.get() : null, () -> {
+		return new UpdateRef(original, () -> {
 			if (cell != null) cell.disabled(null);
 		})::runBoolf;
 	}
 
 	public static Cons<?> wrapCellTooltip(Cell<?> cell, Cons<?> original) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, cell != null ? cell.get() : null, () -> {
+		return new UpdateRef(original, () -> {
 			if (cell != null) cell.tooltip((Cons) null);
 		})::runCons;
 	}
 
 	public static Boolf<?> wrapCellChecked(Cell<?> cell, Boolf<?> original) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, cell != null ? cell.get() : null, () -> {
+		return new UpdateRef(original, () -> {
 			if (cell != null) cell.checked(null);
 		})::runBoolf;
 	}
@@ -246,22 +279,22 @@ public class UpdateRef {
 	// 事件静默熔断专用（针对 clicked, hovered 等事件回调，报错仅停止回调，不删元素）
 	public static Runnable wrapSilent(Element element, Runnable original) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, element, NOOP)::run;
+		return new UpdateRef(original, NOOP)::run;
 	}
 
 	public static Cons<?> wrapSilent(Element element, Cons<?> original) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, element, NOOP)::runCons;
+		return new UpdateRef(original, NOOP)::runCons;
 	}
 
 	public static Floatc wrapSilent(Element element, Floatc original) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, element, NOOP)::runFloatc;
+		return new UpdateRef(original, NOOP)::runFloatc;
 	}
 
 	public static Floatc2 wrapSilent(Element element, Floatc2 original) {
 		if (returnOriginal(original)) return original;
-		return new UpdateRef(original, element, NOOP)::runFloatc2;
+		return new UpdateRef(original, NOOP)::runFloatc2;
 	}
 
 	//endregion
@@ -376,14 +409,14 @@ public class UpdateRef {
 	}
 
 	private void doRemove() {
-		if (onRemove != null) {
+		Runnable r = this.onRemove;
+		this.onRemove = null; // 确保仅执行一次，且断开对捕获对象的引用
+		if (r != null) {
 			try {
-				onRemove.run();
+				r.run();
 			} catch (Throwable t) {
 				HotSwapAgent.error("[UpdateRef] onRemove failed: " + t.getMessage(), t);
 			}
-		} else if (element != null) {
-			element.remove();
 		}
 	}
 
@@ -391,7 +424,7 @@ public class UpdateRef {
 	 * NoSuchMethodError 可能是：
 	 * 1) 宿主 lambda 被 HotSwap 删除后残留的旧引用；
 	 * 2) lambda 内部深处调用到的、与热重载无关的方法。
-	 * 两种情况都清掉 fn 并移除元素，但打印日志方便区分。
+	 * 两种情况都清掉 fn 并触发熔断动作，打印日志方便排查。
 	 */
 	private void onNoSuchMethodError(Object f, LinkageError e) {
 		HotSwapAgent.info("[UpdateRef] NoSuchMethodError from " + (f == null ? "?" : f.getClass().getName())
@@ -403,8 +436,7 @@ public class UpdateRef {
 
 	private boolean checkFn(Object f) {
 		if (f == null) {
-			// fn 已被清空（HotSwap 删除或 NoSuchMethodError 兜底），移除元素
-			// element 可能为 null（wrap 调用方传入 null 的极端情况）
+			// fn 已被清空（HotSwap 删除或 NoSuchMethodError 兜底），触发熔断动作
 			Core.app.post(this::doRemove);
 			return true;
 		}

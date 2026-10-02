@@ -50,27 +50,27 @@ public class LambdaRef {
 		CellPropertyRef.redefineCellProperties();
 
 		// 子类在前面，父类在后
-		Injector.redefineTask(Button.class, "setDisabled", boolpNative);
+		Injector.redefineTask(Button.class, "setDisabled", "(" + boolpNative + ")V", boolpType, 1, "wrapButtonDisabled");
 		Injector.redefineTask(Label.class, "setText", provNative);
-		Injector.redefineTask(TextField.class, "setValidator", internalName(TextFieldValidator.class));
+		Injector.redefineTask(TextField.class, "setValidator", "(" + getDescriptor(TextFieldValidator.class) + ")V", internalName(TextFieldValidator.class), 1, "wrapValidator");
 
-		Injector.redefineTask(Element.class, "dragged", "(" + floatc2Native + ")V", floatc2Type);
-		Injector.redefineTask(Element.class, "scrolled", "(" + floatcNative + ")V", floatcType);
-		Injector.redefineTask(Element.class, "addListener", "(" + eventListenerNative + ")V", eventListenerType);
-		Injector.redefineTask(Element.class, "addCaptureListener", "(" + eventListenerNative + ")V", eventListenerType);
-		Injector.redefineTask(Element.class, "clicked", "(" + runnableNative + ")" + clickListenerNative, runnableType);
-		Injector.redefineTask(Element.class, "clicked", "(" + keyCodeNative + runnableNative + ")" + clickListenerNative, runnableType, 2);
-		Injector.redefineTask(Element.class, "clicked", "(" + consNative + runnableNative + ")" + clickListenerNative, runnableType, 2);
-		Injector.redefineTask(Element.class, "clicked", "(" + consNative + consNative + ")" + clickListenerNative, consType, 2);
-		Injector.redefineTask(Element.class, "keyDown", "(" + keyCodeNative + runnableNative + ")V", runnableType, 2);
-		Injector.redefineTask(Element.class, "keyDown", "(" + consNative + ")V", consType);
-		Injector.redefineTask(Element.class, "tapped", "(" + runnableNative + ")" + inputListenerNative, runnableType);
-		Injector.redefineTask(Element.class, "hovered", "(" + runnableNative + ")V", runnableType);
-		Injector.redefineTask(Element.class, "released", "(" + runnableNative + ")V", runnableType);
-		Injector.redefineTask(Element.class, "changed", "(" + runnableNative + ")V", runnableType);
-		Injector.redefineTask(Element.class, "update", "(" + runnableNative + ")" + elementType, runnableType);
-		Injector.redefineTask(Element.class, "visible", "(" + boolpNative + ")" + elementType, boolpType);
-		Injector.redefineTask(Element.class, "touchable", "(" + provNative + ")" + elementType, provType);
+		Injector.redefineTask(Element.class, "dragged", "(" + floatc2Native + ")V", floatc2Type, 1, "wrapSilent");
+		Injector.redefineTask(Element.class, "scrolled", "(" + floatcNative + ")V", floatcType, 1, "wrapSilent");
+		Injector.redefineTask(Element.class, "addListener", "(" + eventListenerNative + ")V", eventListenerType, 1, "wrapListener");
+		Injector.redefineTask(Element.class, "addCaptureListener", "(" + eventListenerNative + ")V", eventListenerType, 1, "wrapCaptureListener");
+		Injector.redefineTask(Element.class, "clicked", "(" + runnableNative + ")" + clickListenerNative, runnableType, 1, "wrapSilent");
+		Injector.redefineTask(Element.class, "clicked", "(" + keyCodeNative + runnableNative + ")" + clickListenerNative, runnableType, 2, "wrapSilent");
+		Injector.redefineTask(Element.class, "clicked", "(" + consNative + runnableNative + ")" + clickListenerNative, runnableType, 2, "wrapSilent");
+		Injector.redefineTask(Element.class, "clicked", "(" + consNative + consNative + ")" + clickListenerNative, consType, 2, "wrapSilent");
+		Injector.redefineTask(Element.class, "keyDown", "(" + keyCodeNative + runnableNative + ")V", runnableType, 2, "wrapSilent");
+		Injector.redefineTask(Element.class, "keyDown", "(" + consNative + ")V", consType, 1, "wrapSilent");
+		Injector.redefineTask(Element.class, "tapped", "(" + runnableNative + ")" + inputListenerNative, runnableType, 1, "wrapSilent");
+		Injector.redefineTask(Element.class, "hovered", "(" + runnableNative + ")V", runnableType, 1, "wrapSilent");
+		Injector.redefineTask(Element.class, "released", "(" + runnableNative + ")V", runnableType, 1, "wrapSilent");
+		Injector.redefineTask(Element.class, "changed", "(" + runnableNative + ")V", runnableType, 1, "wrapSilent");
+		Injector.redefineTask(Element.class, "update", "(" + runnableNative + ")" + elementType, runnableType, 1, "wrapUpdate");
+		Injector.redefineTask(Element.class, "visible", "(" + boolpNative + ")" + elementType, boolpType, 1, "wrapVisible");
+		Injector.redefineTask(Element.class, "touchable", "(" + provNative + ")" + elementType, provType, 1, "wrapTouchable");
 
 		Injector.batchProcess();
 
@@ -98,19 +98,19 @@ public class LambdaRef {
 				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
 				// 拦截 update(Larc/func/Cons;)Larc/scene/ui/layout/Cell;
 				if ("update".equals(name) && "(Larc/func/Cons;)Larc/scene/ui/layout/Cell;".equals(descriptor)) {
-					return new CellAdviceAdapter(mv, access, name, descriptor, "Larc/func/Cons;");
+					return new CellAdviceAdapter(mv, access, name, descriptor, "Larc/func/Cons;", "wrapCellUpdate");
 				}
 				// 拦截 disabled(Larc/func/Boolf;)Larc/scene/ui/layout/Cell;
 				if ("disabled".equals(name) && "(Larc/func/Boolf;)Larc/scene/ui/layout/Cell;".equals(descriptor)) {
-					return new CellAdviceAdapter(mv, access, name, descriptor, "Larc/func/Boolf;");
+					return new CellAdviceAdapter(mv, access, name, descriptor, "Larc/func/Boolf;", "wrapCellDisabled");
 				}
 				// 拦截 tooltip(Larc/func/Cons;)Larc/scene/ui/layout/Cell;
 				if ("tooltip".equals(name) && "(Larc/func/Cons;)Larc/scene/ui/layout/Cell;".equals(descriptor)) {
-					return new CellAdviceAdapter(mv, access, name, descriptor, "Larc/func/Cons;");
+					return new CellAdviceAdapter(mv, access, name, descriptor, "Larc/func/Cons;", "wrapCellTooltip");
 				}
 				// 拦截 checked(Larc/func/Boolf;)Larc/scene/ui/layout/Cell;
 				if ("checked".equals(name) && "(Larc/func/Boolf;)Larc/scene/ui/layout/Cell;".equals(descriptor)) {
-					return new CellAdviceAdapter(mv, access, name, descriptor, "Larc/func/Boolf;");
+					return new CellAdviceAdapter(mv, access, name, descriptor, "Larc/func/Boolf;", "wrapCellChecked");
 				}
 				return mv;
 			}
@@ -254,23 +254,23 @@ public class LambdaRef {
 	//endregion
 	private static class CellAdviceAdapter extends AdviceAdapter {
 		private final String lambdaType;
+		private final String wrapMethodName;
 		public CellAdviceAdapter(MethodVisitor mv, int access, String name, String descriptor,
-		                         String lambdaType) {
+		                         String lambdaType, String wrapMethodName) {
 			super(Opcodes.ASM9, mv, access, name, descriptor);
 			this.lambdaType = lambdaType;
+			this.wrapMethodName = wrapMethodName;
 		}
 		@Override
 		protected void onMethodEnter() {
-			// UpdateRef.wrap(this.element, cons)
-			// Cell.element 是 package-private 字段
-			visitVarInsn(ALOAD, 0);
-			visitFieldInsn(GETFIELD, "arc/scene/ui/layout/Cell", "element", "Larc/scene/Element;");
-			visitVarInsn(ALOAD, 1);  // Cons
+			// UpdateRef.wrapCell*(this, cons)
+			visitVarInsn(ALOAD, 0); // Cell
+			visitVarInsn(ALOAD, 1); // lambda
 			visitMethodInsn(
 			 INVOKESTATIC,
 			 internalName(UpdateRef.class),
-			 "wrap",
-			 "(L" + Injector.CL_ELEMENT + ";" + lambdaType + ")" + lambdaType,
+			 wrapMethodName,
+			 "(Larc/scene/ui/layout/Cell;" + lambdaType + ")" + lambdaType,
 			 false
 			);
 			visitVarInsn(ASTORE, 1);

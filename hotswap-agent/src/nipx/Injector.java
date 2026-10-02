@@ -23,7 +23,11 @@ public class Injector {
 	}
 
 	static Map<Class<?>, ArrayList<Todo>> todos = new HashMap<>();
-	record Todo(String methodName, String methodDesc, String lambdaType, int lambdaSlot) { }
+	record Todo(String methodName, String methodDesc, String lambdaType, int lambdaSlot, String wrapMethodName) {
+		Todo(String methodName, String methodDesc, String lambdaType, int lambdaSlot) {
+			this(methodName, methodDesc, lambdaType, lambdaSlot, "wrap");
+		}
+	}
 
 	/** 批量处理所有任务 */
 	public static void batchProcess() {
@@ -32,7 +36,7 @@ public class Injector {
 			Class<?> clazz           = entry.getKey();
 			byte[]   currentBytecode = fetchCurrentBytecode(clazz);
 			for (Todo todo : entry.getValue()) {
-				currentBytecode = injectForElement(currentBytecode, todo.methodName, todo.methodDesc, todo.lambdaType, todo.lambdaSlot);
+				currentBytecode = injectForElement(currentBytecode, todo.methodName, todo.methodDesc, todo.lambdaType, todo.lambdaSlot, todo.wrapMethodName);
 			}
 			tasks.add(new ClassDefinition(clazz, currentBytecode));
 		}
@@ -47,9 +51,16 @@ public class Injector {
 	public static void redefineTask(Class<?> clazz, String methodName, String methodDesc, String lambdaType) {
 		redefineTask(clazz, methodName, methodDesc, lambdaType, 1);
 	}
+	public static void redefineTask(Class<?> clazz, String methodName, String methodDesc, String lambdaType, String wrapMethodName) {
+		redefineTask(clazz, methodName, methodDesc, lambdaType, 1, wrapMethodName);
+	}
 	public static void redefineTask(Class<?> clazz, String methodName, String methodDesc, String lambdaType,
 	                                int lambdaSlot) {
-		todos.computeIfAbsent(clazz, _ -> new ArrayList<>()).add(new Todo(methodName, methodDesc, lambdaType, lambdaSlot));
+		redefineTask(clazz, methodName, methodDesc, lambdaType, lambdaSlot, "wrap");
+	}
+	public static void redefineTask(Class<?> clazz, String methodName, String methodDesc, String lambdaType,
+	                                int lambdaSlot, String wrapMethodName) {
+		todos.computeIfAbsent(clazz, _ -> new ArrayList<>()).add(new Todo(methodName, methodDesc, lambdaType, lambdaSlot, wrapMethodName));
 	}
 	/**
 	 * 拦截 Element.update(Runnable) 等方法，
@@ -65,7 +76,7 @@ public class Injector {
 	 */
 	private static byte[] injectForElement(
 	 byte[] bytes, String methodName, String methodDesc,
-	 String lambdaType, int lambdaSlot) {
+	 String lambdaType, int lambdaSlot, String wrapMethodName) {
 		// 拦截 setText(Lprov;) 入口
 		// var0=this(Label), var1=prov
 		// 插入: var1 = UpdateRef.wrap(this, var1)
@@ -91,7 +102,7 @@ public class Injector {
 						visitMethodInsn(
 						 INVOKESTATIC,
 						 AnnotationTransformer.internalName(UpdateRef.class),
-						 "wrap",
+						 wrapMethodName,
 						 "(L" + CL_ELEMENT + ";L" + lambdaType + ";)L" + lambdaType + ";",
 						 false
 						);

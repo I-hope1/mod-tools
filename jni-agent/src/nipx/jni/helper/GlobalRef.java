@@ -9,7 +9,7 @@ public class GlobalRef implements AutoCloseable {
 
     private volatile MemorySegment globalRef;
     public final   boolean         isRef;
-    public final   JValue          jValue;
+    public volatile JValue         jValue;
     private final  AtomicBoolean   closed = new AtomicBoolean(false);
 
     public GlobalRef(JNIEnv env, MemorySegment jobject) {
@@ -56,6 +56,7 @@ public class GlobalRef implements AutoCloseable {
         if (closed.compareAndSet(false, true)) {
             MemorySegment ref = this.globalRef;
             this.globalRef = null;
+            this.jValue = null;
             if (isRef && ref != null && ref.address() != 0) {
                 JNIEnv.getInstance().DeleteGlobalRef(ref);
             }

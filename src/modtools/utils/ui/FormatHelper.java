@@ -3,6 +3,7 @@ package modtools.utils.ui;
 import arc.Core;
 import arc.graphics.Color;
 import arc.graphics.g2d.Font;
+import arc.math.Mathf;
 import arc.scene.Group;
 import arc.scene.event.Touchable;
 import arc.scene.style.*;
@@ -54,6 +55,27 @@ public class FormatHelper {
 		if (Float.isNaN(value)) return "NaN";
 		if (Float.isInfinite(value)) return value > 0 ? "+∞" : "-∞";
 		return digits <= 4 ? Strings.autoFixed(value, digits) : Strings.fixed(value, digits);
+	}
+	public static void fixedBuilder(StringBuilder sb, float value, int digits) {
+		if (Float.isNaN(value)) {
+			sb.append("NaN");
+		} else if (Float.isInfinite(value)) {
+			sb.append(value > 0 ? "+∞" : "-∞");
+		} else if (digits <= 4) {
+			//truncate extra digits past the max
+			value = (float) Mathf.floor(value * Mathf.pow(10, digits) + 0.001f) / Mathf.pow(10, digits);
+
+			int precision =
+			 Math.abs(Mathf.floor(value) - value) < 0.0001f ? 0 :
+				Math.abs(Mathf.floor(value * 10) - value * 10) < 0.0001f ? 1 :
+				 Math.abs(Mathf.floor(value * 100) - value * 100) < 0.0001f ? 2 :
+					Math.abs(Mathf.floor(value * 1000) - value * 1000) < 0.0001f ? 3 :
+					 4;
+
+			sb.append(Strings.fixedBuilder(value, Math.min(digits, precision)));
+		} else {
+			sb.append(Strings.fixedBuilder(value, digits));
+		}
 	}
 
 	private static final char[] HEX_DIGITS = "0123456789ABCDEF".toCharArray();

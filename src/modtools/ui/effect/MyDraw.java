@@ -10,6 +10,7 @@ import mindustry.graphics.Pal;
 import modtools.events.E_Blur;
 import modtools.struct.LazyValue;
 import modtools.ui.MyFonts;
+import modtools.utils.ui.FormatHelper;
 
 public class MyDraw {
 	public static void dashLine(float thick, Color color, float x, float y, float x2, float y2, int segments) {
@@ -138,8 +139,21 @@ public class MyDraw {
 			return true;
 		});
 	} */
-	public static void drawTextScale(String text, float x, float y, Color color) {
-		fontScaleDraw(() -> drawText(text, x, y, color, Align.center));
+	private static final StringBuilder textBuilder = new StringBuilder();
+	public static void drawTextFixedValue(float value, float textX, float textY, Color color) {
+		drawTextFixedValue(value, textX, textY, color, Align.center);
+	}
+	public static void drawTextFixedValue(float value, float textX, float textY, Color color, int align) {
+		textBuilder.setLength(0);
+		FormatHelper.fixedBuilder(textBuilder, value, 1);
+		drawTextScale(textBuilder, textX, textY, color, align);
+		textBuilder.setLength(0);
+	}
+	public static void drawTextScale(CharSequence text, float x, float y, Color color) {
+		drawTextScale(text, x, y, color, Align.center);
+	}
+	public static void drawTextScale(CharSequence text, float x, float y, Color color, int align) {
+		fontScaleDraw(() -> drawText(text, x, y, color, align));
 	}
 	public static float fontHeight() {
 		return font.getLineHeight() * fontScale;

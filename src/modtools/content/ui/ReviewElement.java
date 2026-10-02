@@ -202,6 +202,7 @@ public class ReviewElement extends Content {
 		return (color & 0xFF) == 0;
 	}
 
+	/** arc的margin与web的语义相反 */
 	public static void drawMargin(Vec2 vec2, Table table) {
 		if (checkA(marginColor)) return;
 		Draw.color(marginColor);
@@ -291,7 +292,7 @@ public class ReviewElement extends Content {
 		}
 
 		Fill.crect(rectX, rectY, rectW, rectH);
-		MyDraw.drawTextScale(fixed(value * textMultiplier), textX, textY, color);
+		MyDraw.drawTextFixedValue(value * textMultiplier, textX, textY, color);
 	}
 	/** 从元素到hover的元素的连线 */
 	public static void drawLine() {
@@ -1181,12 +1182,12 @@ public class ReviewElement extends Content {
 				// 绝对坐标
 				// x: 0 -> x
 				if (pos.x != 0) {
-					MyDraw.drawTextScale(fixed(pos.x),
+					MyDraw.drawTextFixedValue(pos.x,
 					 pos.x / 2f, pos.y, Tmp.c1.set(posTextColor));
 				}
 				// y: 0 -> y
 				if (pos.y != 0) {
-					MyDraw.drawTextScale(fixed(pos.y),
+					MyDraw.drawTextFixedValue(pos.y,
 					 pos.x, pos.y / 2f, Tmp.c1.set(posTextColor));
 				}
 			}
@@ -1209,15 +1210,15 @@ public class ReviewElement extends Content {
 				// width
 				boolean flipX = pos.x < 32, flipY = pos.y < 32;
 				if (w != 0) {
-					MyDraw.drawText(fixed(w),
+					MyDraw.drawTextFixedValue(w,
 					 pos.x + w / 2f,
 					 (flipY ? Core.graphics.getHeight() - MyDraw.fontHeight() : MyDraw.fontHeight()),
-					 color, Align.center);
+					 color);
 				}
 
 				// height
 				if (h != 0) {
-					MyDraw.drawText(fixed(h),
+					MyDraw.drawTextFixedValue(h,
 					 flipX ? Core.graphics.getWidth() : 0,
 					 pos.y + (h + MyDraw.fontHeight()) / 2f,
 					 color, flipX ? Align.right : Align.left);

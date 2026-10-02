@@ -49,13 +49,19 @@ public class LambdaAligner {
 	public enum OrphanPolicy {
 		/** 向 {@code System.err} 打印一条日志，并返回默认值（0 / null / false）。 */
 		LOG_AND_RETURN_DEFAULT,
+		/**
+		 * 抛出 {@link NoSuchMethodError}。
+		 * <p>此为<b>推荐且默认</b>策略：既满足类结构与符号解析要求，又能在调用时抛出标准的链接错误，
+		 * 与 {@link nipx.ref.UpdateRef} 协同触发精准局部熔断（如自动移除回调），杜绝 60FPS 空转刷屏。</p>
+		 */
+		THROW_NO_SUCH_METHOD,
 		/** 抛出 {@link IllegalStateException}，便于显式暴露问题。 */
 		THROW,
 		/** 静默返回默认值。 */
 		SILENT
 	}
 
-	private static volatile OrphanPolicy orphanPolicy = OrphanPolicy.LOG_AND_RETURN_DEFAULT;
+	private static volatile OrphanPolicy orphanPolicy = OrphanPolicy.THROW_NO_SUCH_METHOD;
 
 	public static void setOrphanPolicy(OrphanPolicy policy) {
 		orphanPolicy = Objects.requireNonNull(policy);
@@ -850,6 +856,18 @@ public class LambdaAligner {
 	private static void injectDummyBody(MethodVisitor mv, String name, String desc, OrphanPolicy policy) {
 		mv.visitCode();
 		Type returnType = Type.getReturnType(desc);
+
+		if (policy == OrphanPolicy.THROW_NO_SUCH_METHOD) {
+			mv.visitTypeInsn(Opcodes.NEW, "java/lang/NoSuchMethodError");
+			mv.visitInsn(Opcodes.DUP);
+			mv.visitLdcInsn("Lambda removed by hot swap: " + name + desc);
+			mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+				"java/lang/NoSuchMethodError", "<init>", "(Ljava/lang/String;)V", false);
+			mv.visitInsn(Opcodes.ATHROW);
+			mv.visitMaxs(0, 0);
+			mv.visitEnd();
+			return;
+		}
 
 		if (policy == OrphanPolicy.THROW) {
 			mv.visitTypeInsn(Opcodes.NEW, "java/lang/IllegalStateException");

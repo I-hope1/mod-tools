@@ -17,6 +17,9 @@ import static nipx.HotSwapAgent.error;
  */
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class ArcReflectionAdapter {
+	/** @see Cell#unset  */
+	static final float UNSET = Float.NEGATIVE_INFINITY;
+
 	private static Field f_table_columns;
 	private static Field f_table_rows;
 	private static Field f_table_implicitEndRow;

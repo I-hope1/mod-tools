@@ -158,7 +158,7 @@ configurations {
 task runTest(type: JavaExec) {
 	dependsOn compileTestJava
 	classpath = sourceSets.test.runtimeClasspath + configurations.compileClasspath + sourceSets.main.output
-	mainClass = "JSSyntaxTest"
+	mainClass = project.findProperty("mainClass") ?: "JSSyntaxTest"
 }
 
 task jarAndroid(type: JavaExec) {

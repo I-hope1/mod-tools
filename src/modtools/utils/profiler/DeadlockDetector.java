@@ -16,6 +16,21 @@ import java.util.*;
  *
  * <p><b>已知限制（Known Limitations）：</b>
  * <ul>
+ *   <li><b>隐形死锁检测（分歧判据）覆盖范围与局限：</b>
+ *     <ul>
+ *       <li><b>判据特征：</b>Java 层 {@link Thread#getState()} 显示为 {@link Thread.State#BLOCKED}，
+ *           但 {@link ThreadMXBean#getThreadInfo(long)} 报告的状态非 BLOCKED（如 RUNNABLE 且无锁信息）。
+ *           这是 Java 24+ (JEP 491) 下监视器由虚拟线程持有且平台线程争用时的典型特征。
+ *           同时自动过滤普通平台线程争用（两边一致为 BLOCKED 且带锁信息），交由标准死锁检测处理。</li>
+ *       <li><b>自动线程转储：</b>报警时自动调用 {@code HotSpotDiagnosticMXBean.dumpThreads(..., JSON)}
+ *           导出包含虚拟线程在内的完整线程转储至 {@code threads-<timestamp>.json}。</li>
+ *       <li><b>无法检测：</b>纯虚拟线程之间的相互死锁（因平台线程未受阻塞）；虚拟线程持有
+ *           {@code ReentrantLock} 导致平台线程处于 {@link Thread.State#WAITING}（而非 BLOCKED）；
+ *           以及调用 {@code wait()}、{@code park()}、{@code join()} 的协作式等待。</li>
+ *       <li><b>锁信息局限：</b>由于底层 ThreadInfo 在此场景下未暴露 lockName，报告无法直显锁名称，
+ *           需通过栈顶方法帧自行排查。</li>
+ *     </ul>
+ *   </li>
  *   <li><b>主线程死锁时 UI 无响应：</b>若死锁涉及游戏主线程（渲染/事件分发线程），整个 UI 将冻结，
  *       界面按钮无法点击，{@link Core#app} post 投递的桌面通知也将无法被消费。
  *       此时主要依赖后台守护线程向控制台输出，以及写入磁盘 {@code deadlock.log} 文件。</li>
@@ -28,12 +43,14 @@ import java.util.*;
  *       {@code CompletableFuture.join()}）导致的永久挂起或阻塞 IO，不属于资源循环互锁，无法被探测。</li>
  *   <li><b>读写锁共享模式限制：</b>部分 JVM 实现下，{@link java.util.concurrent.locks.ReentrantReadWriteLock}
  *       在共享读锁等待引起的死锁可能不会被报告。</li>
- *   <li><b>JVM 全局排查开销：</b>构建死锁环需要遍历 JVM 内部锁图与线程栈，因此检测间隔应保持在秒级
+ *   <li><b>JVM 全局排查开销：</b>构建死锁环与抓取全量栈需要遍历 JVM 内部线程栈，因此检测间隔应保持在秒级
  *       （默认 3000ms，代码强制最低 500ms），切勿调为毫秒级以免引起周期性停顿。</li>
  * </ul>
  */
 public class DeadlockDetector {
 	public static volatile int checkIntervalMs = 3000;
+	/** 判定隐形死锁/异常挂起的持续时间阈值（毫秒），默认 9000ms */
+	public static volatile long suspiciousBlockThresholdMs = 9000;
 
 	private static volatile Thread watchdogThread = null;
 	private static volatile boolean running = false;
@@ -64,13 +81,13 @@ public class DeadlockDetector {
 	private static final LongMap<SuspiciousBlock> suspiciousMap = new LongMap<>();
 
 	private static class SuspiciousBlock {
-		String lockName;
-		int hits;
+		final StackTraceElement[] stack;
+		final long firstSeenNanos;
 		boolean reported;
 
-		SuspiciousBlock(String lockName) {
-			this.lockName = lockName;
-			this.hits = 1;
+		SuspiciousBlock(StackTraceElement[] stack, long now) {
+			this.stack = stack;
+			this.firstSeenNanos = now;
 			this.reported = false;
 		}
 	}
@@ -82,7 +99,9 @@ public class DeadlockDetector {
 			watchdogThread = null;
 		}
 		lastDeadlockedThreadIds = Collections.emptySet();
-		suspiciousMap.clear();
+		synchronized (suspiciousMap) {
+			suspiciousMap.clear();
+		}
 	}
 
 	public static boolean isRunning() {
@@ -112,6 +131,39 @@ public class DeadlockDetector {
 		checkHiddenDeadlocks();
 	}
 
+	/**
+	 * 统一记录死锁日志：安全控制台格式化输出、磁盘追加写入（带时间戳）、主线程 UI 提示。
+	 */
+	private static void writeLog(String report, String uiNotice) {
+		// 1. 控制台输出
+		Log.err("[DeadlockDetector] @", report);
+
+		// 2. 磁盘文件追加写入，带时间戳分隔
+		try {
+			if (IntVars.dataDirectory != null) {
+				String timestamp = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
+				IntVars.dataDirectory.child("deadlock.log").writeString(
+					"\n\n==================== [" + timestamp + "] ====================\n" + report, true
+				);
+			}
+		} catch (Throwable t) {
+			Log.err("[DeadlockDetector] Failed to write deadlock.log", t);
+		}
+
+		// 3. 若主线程仍然存活，向顶层弹出浮动提示
+		if (Core.app != null) {
+			Core.app.post(() -> {
+				try {
+					IntUI.showInfoFade(uiNotice);
+				} catch (Throwable ignored) {}
+			});
+		}
+	}
+
+	public static void writeLog(String report) {
+		writeLog(report, "Deadlock Detected! Check console or deadlock.log");
+	}
+
 	private static void checkStandardDeadlocks() {
 		DeadlockResult result = detectDeadlocks();
 		if (result == null || result.deadlockedIds.length == 0) {
@@ -127,93 +179,135 @@ public class DeadlockDetector {
 		// 仅在死锁线程发生变化（如首次发生，或又卷入了新线程）时报警，避免每隔几秒狂刷日志
 		if (!currentIds.equals(lastDeadlockedThreadIds)) {
 			lastDeadlockedThreadIds = currentIds;
+			writeLog(result.report, "Deadlock Detected! Check console or deadlock.log");
+		}
+	}
 
-			// 使用占位符格式化，避免报告内容里的 '@' (如 Object@1a2b3c) 被错误解析
-			Log.err("[DeadlockDetector] @", result.report);
+	/**
+	 * 格式化单个线程的完整状态、持有锁、等待锁及全量栈帧（避免 toString() 仅打印 8 帧的限制）。
+	 */
+	public static void formatThreadInfo(StringBuilder sb, ThreadInfo ti) {
+		sb.append(String.format("-> Thread \"%s\" (Id=%d) State: %s\n", ti.getThreadName(), ti.getThreadId(), ti.getThreadState()));
+		if (ti.getLockName() != null) {
+			sb.append(String.format("   Waiting for lock: %s\n", ti.getLockName()));
+		}
+		if (ti.getLockOwnerName() != null) {
+			sb.append(String.format("   Lock owned by thread: \"%s\" (Id=%d)\n", ti.getLockOwnerName(), ti.getLockOwnerId()));
+		}
 
-			// 写入磁盘文件，非终端启动也能在事后排查
-			try {
-				if (IntVars.dataDirectory != null) {
-					IntVars.dataDirectory.child("deadlock.log").writeString(result.report, false);
-				}
-			} catch (Throwable t) {
-				Log.err("[DeadlockDetector] Failed to write deadlock.log", t);
+		MonitorInfo[] monitors = ti.getLockedMonitors();
+		if (monitors != null && monitors.length > 0) {
+			sb.append("   Locked monitors:\n");
+			for (MonitorInfo mi : monitors) {
+				sb.append(String.format("     - %s at %s\n", mi.getClassName(), mi.getLockedStackFrame()));
 			}
+		}
 
-			// 若主线程还活着，在游戏顶层飘字提示
-			if (Core.app != null) {
-				Core.app.post(() -> {
-					try {
-						IntUI.showInfoFade("Deadlock Detected! Check console or deadlock.log");
-					} catch (Throwable ignored) {}
-				});
+		LockInfo[] synchronizers = ti.getLockedSynchronizers();
+		if (synchronizers != null && synchronizers.length > 0) {
+			sb.append("   Locked synchronizers:\n");
+			for (LockInfo li : synchronizers) {
+				sb.append(String.format("     - %s\n", li));
+			}
+		}
+
+		sb.append("   Stack Trace:\n");
+		StackTraceElement[] stack = ti.getStackTrace();
+		if (stack != null) {
+			for (StackTraceElement ste : stack) {
+				sb.append("     at ").append(ste).append("\n");
 			}
 		}
 	}
 
 	/**
-	 * 专门检测被虚拟线程（Virtual Thread）或隐形持有者长时间卡死的平台线程。
-	 * 核心特征：正在争抢 monitor (BLOCKED)，但底层找不到持有者 (lockOwnerId == -1 且 lockName != null)。
+	 * 专门检测被虚拟线程（Virtual Thread）卡死或存在状态分歧的平台线程。
+	 * <p>核心判据：Java 层 {@link Thread#getState()} 显示为 BLOCKED，但 {@link ThreadMXBean} 报告的状态非 BLOCKED（如 RUNNABLE 且无锁信息）。
+	 * 普通平台线程争用时两边状态一致（均为 BLOCKED 且带锁信息），此处自动放行。
 	 */
 	public static void checkHiddenDeadlocks() {
 		ThreadMXBean bean = ManagementFactory.getThreadMXBean();
-		long[] allIds = bean.getAllThreadIds();
-		// 批量轻量拉取平台线程状态，maxDepth = 0 不抓取堆栈以将常规开销降到最低
-		ThreadInfo[] infos = bean.getThreadInfo(allIds, 0);
-		LongSeq currentBlockedIds = new LongSeq();
+		Map<Thread, StackTraceElement[]> all = Thread.getAllStackTraces();
 
-		for (ThreadInfo ti : infos) {
-			if (ti == null) continue;
+		List<Thread> blocked = new ArrayList<>();
+		for (Thread t : all.keySet()) {
+			if (t.getState() == Thread.State.BLOCKED) blocked.add(t);
+		}
 
-			if (ti.getThreadState() == Thread.State.BLOCKED && ti.getLockOwnerId() == -1 && ti.getLockName() != null) {
-				long tid = ti.getThreadId();
-				currentBlockedIds.add(tid);
+		List<String> reports = new ArrayList<>();
+		long now = System.nanoTime();
+		long thresholdNanos = suspiciousBlockThresholdMs * 1_000_000L;
 
-				SuspiciousBlock block = suspiciousMap.get(tid);
-				if (block != null && Objects.equals(block.lockName, ti.getLockName())) {
-					block.hits++;
-					// 连续 3 次检测（约 9 秒）都在等同一个无主锁，且未报警过，判定为严重挂起/隐形死锁
-					if (block.hits >= 3 && !block.reported) {
-						block.reported = true;
-						ThreadInfo fullInfo = bean.getThreadInfo(tid, Integer.MAX_VALUE);
-						String report = String.format(
-							"\n================= [SUSPECTED HIDDEN DEADLOCK] =================\n" +
-							"Platform thread \"%s\" (Id=%d) has been BLOCKED on '%s' for a long time,\n" +
-							"but the lock owner is invisible! (Likely held by a Virtual Thread or native monitor)\n\n" +
-							"%s\n" +
-							"===============================================================",
-							ti.getThreadName(), tid, ti.getLockName(), fullInfo != null ? fullInfo.toString() : "<no stack>"
-						);
+		synchronized (suspiciousMap) {
+			Set<Long> alive = new HashSet<>();
+			if (!blocked.isEmpty()) {
+				long[] ids = new long[blocked.size()];
+				for (int i = 0; i < ids.length; i++) ids[i] = blocked.get(i).getId();
+				ThreadInfo[] infos = bean.getThreadInfo(ids, 0);
 
-						Log.err("[DeadlockDetector] @", report);
+				for (int i = 0; i < ids.length; i++) {
+					ThreadInfo ti = infos[i];
+					if (ti == null) continue;                                   // 线程已退出
+					if (ti.getThreadState() == Thread.State.BLOCKED) continue;  // 两边一致：普通竞争
 
-						try {
-							if (IntVars.dataDirectory != null) {
-								IntVars.dataDirectory.child("deadlock.log").writeString(report, false);
-							}
-						} catch (Throwable ignored) {}
+					Thread t = blocked.get(i);
+					StackTraceElement[] st = all.get(t);
+					long tid = ids[i];
+					alive.add(tid);
 
-						if (Core.app != null) {
-							Core.app.post(() -> {
-								try {
-									IntUI.showInfoFade("Hidden Deadlock Detected! Check console or deadlock.log");
-								} catch (Throwable ignored) {}
-							});
-						}
+					SuspiciousBlock b = suspiciousMap.get(tid);
+					if (b == null || !Arrays.equals(b.stack, st)) {             // 新出现，或栈变了
+						suspiciousMap.put(tid, new SuspiciousBlock(st, now));
+						continue;
 					}
-				} else {
-					suspiciousMap.put(tid, new SuspiciousBlock(ti.getLockName()));
+					if (!b.reported && now - b.firstSeenNanos >= thresholdNanos) {
+						b.reported = true;
+						StringBuilder sb = new StringBuilder();
+						sb.append("\n=========== [SUSPECTED HIDDEN DEADLOCK] ===========\n")
+						  .append("Platform thread \"").append(t.getName()).append("\" (Id=").append(tid)
+						  .append(") is BLOCKED (Thread.getState) for >= ").append(suspiciousBlockThresholdMs / 1000).append("s, but ThreadMXBean reports ")
+						  .append(ti.getThreadState()).append(" with no lock info.\n")
+						  .append("The monitor is probably held by a virtual thread.\n");
+						if (st != null) {
+							for (StackTraceElement e : st) sb.append("  at ").append(e).append('\n');
+						}
+						reports.add(sb.toString());
+					}
+				}
+			}
+
+			// 移出已恢复正常或已退出的线程
+			var entries = suspiciousMap.entries().iterator();
+			while (entries.hasNext()) {
+				var entry = entries.next();
+				if (!alive.contains(entry.key)) {
+					entries.remove();
 				}
 			}
 		}
 
-		// 移出已恢复正常或已退出的线程
-		var entries = suspiciousMap.entries().iterator();
-		while (entries.hasNext()) {
-			var entry = entries.next();
-			if (!currentBlockedIds.contains(entry.key)) {
-				entries.remove();
+		// 在锁外输出，避免持有私有锁时做 IO
+		if (!reports.isEmpty()) {
+			String dump = dumpAllThreadsJson();
+			for (String r : reports) {
+				String full = r + (dump != null ? "Full thread dump (incl. virtual): " + dump + "\n" : "")
+								+ "===================================================";
+				writeLog(full, "Hidden Deadlock Suspected! Check console or deadlock.log");
 			}
+		}
+	}
+
+	private static String dumpAllThreadsJson() {
+		try {
+			if (IntVars.dataDirectory == null) return null;
+			var f = IntVars.dataDirectory.child("threads-" + System.currentTimeMillis() + ".json");
+			ManagementFactory.getPlatformMXBean(com.sun.management.HotSpotDiagnosticMXBean.class)
+				.dumpThreads(f.file().getAbsolutePath(),
+					com.sun.management.HotSpotDiagnosticMXBean.ThreadDumpFormat.JSON);
+			return f.file().getAbsolutePath();
+		} catch (Throwable t) {
+			Log.err("[DeadlockDetector] Thread dump failed", t);
+			return null;
 		}
 	}
 
@@ -254,37 +348,7 @@ public class DeadlockDetector {
 
 		for (ThreadInfo ti : infos) {
 			if (ti == null) continue;
-			sb.append(String.format("-> Thread \"%s\" (Id=%d) State: %s\n", ti.getThreadName(), ti.getThreadId(), ti.getThreadState()));
-			if (ti.getLockName() != null) {
-				sb.append(String.format("   Waiting for lock: %s\n", ti.getLockName()));
-			}
-			if (ti.getLockOwnerName() != null) {
-				sb.append(String.format("   Lock owned by thread: \"%s\" (Id=%d)\n", ti.getLockOwnerName(), ti.getLockOwnerId()));
-			}
-
-			MonitorInfo[] monitors = ti.getLockedMonitors();
-			if (monitors != null && monitors.length > 0) {
-				sb.append("   Locked monitors:\n");
-				for (MonitorInfo mi : monitors) {
-					sb.append(String.format("     - %s at %s\n", mi.getClassName(), mi.getLockedStackFrame()));
-				}
-			}
-
-			LockInfo[] synchronizers = ti.getLockedSynchronizers();
-			if (synchronizers != null && synchronizers.length > 0) {
-				sb.append("   Locked synchronizers:\n");
-				for (LockInfo li : synchronizers) {
-					sb.append(String.format("     - %s\n", li));
-				}
-			}
-
-			sb.append("   Stack Trace:\n");
-			StackTraceElement[] stack = ti.getStackTrace();
-			if (stack != null) {
-				for (StackTraceElement ste : stack) {
-					sb.append("     at ").append(ste).append("\n");
-				}
-			}
+			formatThreadInfo(sb, ti);
 			sb.append("\n");
 		}
 		sb.append("===============================================================");

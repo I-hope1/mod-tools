@@ -19,6 +19,14 @@ import java.util.*;
  *   <li>重写新字节码中的方法名引用，包括 {@code $deserializeLambda$} 里
  *       {@code String.hashCode()} 分派的 {@code lookupswitch} 常量。</li>
  *   <li>解决热交换时因 Lambda 名称变化导致的 {@link NoSuchMethodError}。</li>
+ *   <li><b>孤儿 Lambda 智能自适应分流（{@link OrphanPolicy#SMART_ADAPTIVE}）：</b><br>
+ *       对于在新版本中被彻底删除的“孤儿方法”，生成带调用栈探测的空壳方法：
+ *       <ul>
+ *         <li>若调用栈由 {@link nipx.ref.UpdateRef} 发起（UI / 定时轮询 / 事件监听）：主动抛出 {@link NoSuchMethodError}，
+ *             驱动 {@code UpdateRef} 执行精准局部熔断（如注销回调 {@code el.update(null)}），彻底根除 60FPS 刷屏空转；</li>
+ *         <li>若由普通业务代码发起（未受 UpdateRef 保护）：静默降级返回类型默认值（0 / null / false），绝不引发程序崩溃。</li>
+ *       </ul>
+ *   </li>
  * </ol>
  *
  * <p><b>调用约定（重要）：</b>{@link #align} 的 {@code oldBytes} 必须是
@@ -38,6 +46,10 @@ import java.util.*;
  * 保住名字，但若同组内有其它新增方法，可能被次优先级抢占，引发不必要的重命名。
  * 修复需要给幽灵方法打标记（自定义 attribute 或特殊 access 位），代价与收益
  * 暂不匹配，暂列为已知限制。</p>
+ *
+ * @see nipx.ref.UpdateRef
+ * @see nipx.LambdaRef
+ * @see nipx.HotSwapAgent
  */
 public class LambdaAligner {
 

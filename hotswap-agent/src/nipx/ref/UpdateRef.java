@@ -29,8 +29,13 @@ import java.util.*;
  *   <li><b>无 Element 强绑定：</b>类内部仅维护 {@code fn} 与 {@code onRemove} 两个轻量引用，不直接持有 UI 节点，
  *       生命周期结束后即刻切断闭包引用，对 GC 极度友好。</li>
  *   <li><b>静默降级（Silent）：</b>对于点击、鼠标悬停、弹窗生命周期等瞬时事件，采用 {@link #wrapSilent}，异常时仅将内部引用置空静音。</li>
+ *   <li><b>与 {@link nipx.LambdaAligner} 的双轨协同：</b><br>
+ *       对于已被删除的“孤儿方法”，{@code LambdaAligner} 内部通过 {@link StackWalker} 探测调用栈：
+ *       若检测到当前由 {@link UpdateRef} 调用，则定向抛出 {@link NoSuchMethodError}，精准触发此处的局部熔断与清理动作；
+ *       若为普通业务代码调用，则静默返回类型默认值，绝不中断业务。</li>
  * </ul>
  *
+ * @see nipx.LambdaAligner
  * @see nipx.LambdaRef
  * @see nipx.Injector
  */

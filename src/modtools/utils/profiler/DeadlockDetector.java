@@ -3,13 +3,15 @@ package modtools.utils.profiler;
 import arc.Core;
 import arc.files.Fi;
 import arc.struct.LongMap;
-import arc.struct.LongSeq;
 import arc.util.Log;
 import arc.util.serialization.Jval;
+import com.sun.management.HotSpotDiagnosticMXBean;
+import com.sun.management.HotSpotDiagnosticMXBean.ThreadDumpFormat;
 import modtools.IntVars;
 import modtools.ui.IntUI;
 
 import java.lang.management.*;
+import java.text.SimpleDateFormat;
 import java.util.*;
 
 /**
@@ -143,7 +145,7 @@ public class DeadlockDetector {
 		// 2. 磁盘文件追加写入，带时间戳分隔
 		try {
 			if (IntVars.dataDirectory != null) {
-				String timestamp = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
+				String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
 				IntVars.dataDirectory.child("deadlock.log").writeString(
 					"\n\n==================== [" + timestamp + "] ====================\n" + report, true
 				);
@@ -324,7 +326,7 @@ public class DeadlockDetector {
 	 */
 	public static String analyzeDump(String dumpPath) {
 		try {
-			String jsonContent = new arc.files.Fi(dumpPath).readString();
+			String jsonContent = new Fi(dumpPath).readString();
 			return analyzeJsonDump(jsonContent);
 		} catch (Throwable t) {
 			Log.err("[DeadlockDetector] Failed to parse thread dump JSON", t);
@@ -473,9 +475,9 @@ public class DeadlockDetector {
 			}
 
 			var f = IntVars.dataDirectory.child("threads-" + System.currentTimeMillis() + ".json");
-			ManagementFactory.getPlatformMXBean(com.sun.management.HotSpotDiagnosticMXBean.class)
+			ManagementFactory.getPlatformMXBean(HotSpotDiagnosticMXBean.class)
 				.dumpThreads(f.file().getAbsolutePath(),
-					com.sun.management.HotSpotDiagnosticMXBean.ThreadDumpFormat.JSON);
+					ThreadDumpFormat.JSON);
 			return f.file().getAbsolutePath();
 		} catch (Throwable t) {
 			Log.err("[DeadlockDetector] Thread dump failed", t);

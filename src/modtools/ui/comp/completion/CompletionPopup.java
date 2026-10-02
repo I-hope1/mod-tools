@@ -113,9 +113,10 @@ public class CompletionPopup extends Table {
 		listTable.clearChildren(); // Clear actors and cells
 		suggestionButtons.clear();
 
+		int prefixLen = currentPrefix.length();
 		for (String suggestion : allSuggestions) {
 			// Filter by prefix client-side, even though it might be pre-filtered
-			if (suggestion.toLowerCase().startsWith(currentPrefix.toLowerCase())) {
+			if (suggestion.regionMatches(true, 0, currentPrefix, 0, prefixLen)) {
 				TextButton button = new TextButton(suggestion, HopeStyles.cleart);
 				button.getLabelCell().labelAlign(Align.left).padLeft(4).padRight(4);
 				// Log.info(button.getLabel());

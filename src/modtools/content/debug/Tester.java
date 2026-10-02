@@ -46,6 +46,7 @@ import modtools.ui.*;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.buttons.FoldedImageButton;
 import modtools.ui.comp.completion.CompletionPopup;
+import nipx.profiler.LookupKey;
 import modtools.ui.comp.input.*;
 import modtools.ui.comp.input.area.TextAreaTab;
 import modtools.ui.comp.input.area.TextAreaTab.MyTextArea;
@@ -1007,6 +1008,7 @@ public class Tester extends Content {
 
 		private final Seq<String> complements = new Seq<>();
 		private final Seq<Object> keys        = new Seq<>();
+		private final LookupKey   lookupKey   = new LookupKey();
 
 		private void complement0(String prefix, int originalCursor, boolean afterDot, int actualPrefixStart) {
 			if (completionPopup == null || syntax == null) return;
@@ -1031,22 +1033,23 @@ public class Tester extends Content {
 
 			keys.clear().addAll(getAllIds(prefix, obj));
 			// For non-dot completion, also add global/scope vars
+			int prefixLen = prefix.length();
 			if (!afterDot) {
 				if (obj == customScope) { // Only add these if we're in the global-like scope
 					JSSyntax.varSet.each(s -> {
-						if (s.toLowerCase().startsWith(prefix.toLowerCase())) keys.addUnique(s);
+						if (s.regionMatches(true, 0, prefix, 0, prefixLen)) keys.addUnique(s);
 					});
 					JSSyntax.constantSet.each(s -> {
-						if (s.toLowerCase().startsWith(prefix.toLowerCase())) keys.addUnique(s);
+						if (s.regionMatches(true, 0, prefix, 0, prefixLen)) keys.addUnique(s);
 					});
 					if (syntax != null) {
 						syntax.eachLocalName(s -> {
-							if (s.toLowerCase().startsWith(prefix.toLowerCase())) keys.addUnique(s);
+							if (s.regionMatches(true, 0, prefix, 0, prefixLen)) keys.addUnique(s);
 						});
 					}
 				}
 				if (obj instanceof NativeJavaClass || (obj instanceof NativeJavaObject njo && njo.unwrap() instanceof Class)) { // if completing on a class name itself
-					if (RHINO.javaClassPropertyName.toLowerCase().startsWith(prefix.toLowerCase())) {
+					if (RHINO.javaClassPropertyName.regionMatches(true, 0, prefix, 0, prefixLen)) {
 						keys.addUnique(RHINO.javaClassPropertyName);
 					}
 				}
@@ -1056,7 +1059,7 @@ public class Tester extends Content {
 			complements.clear();
 			keys.each(o -> {
 				String key = String.valueOf(o);
-				if (key.toLowerCase().startsWith(prefix.toLowerCase()) && !key.equals(prefix)) {
+				if (key.regionMatches(true, 0, prefix, 0, prefixLen) && !key.equals(prefix)) {
 					complements.add(key);
 				}
 			});
@@ -1077,11 +1080,13 @@ public class Tester extends Content {
 			completionPopup.show(complements, prefix, selectedSuggestion -> {
 				String text = area.getText();
 
-				String before = text.substring(0, actualPrefixStart);
-				String after  = text.substring(originalCursor);
+				// 参考 LookupKey 零分配切片拼接，避免多余的 substring 与中间临时 String 垃圾
+				lookupKey.reset();
+				lookupKey.append(text, 0, actualPrefixStart);
+				lookupKey.append(selectedSuggestion);
+				lookupKey.append(text, originalCursor, text.length());
 
-				String newText = before + selectedSuggestion + after;
-				area.setText(newText);
+				area.setText(lookupKey.toString());
 				area.setCursorPosition(actualPrefixStart + selectedSuggestion.length());
 				area.clearSelection();
 			}, uiCoords.x, uiCoords.y);

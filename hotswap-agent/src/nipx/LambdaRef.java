@@ -7,6 +7,7 @@ import arc.scene.*;
 import arc.scene.event.*;
 import arc.scene.event.EventListener;
 import arc.scene.ui.*;
+import arc.scene.ui.Dialog;
 import arc.scene.ui.Label;
 import arc.scene.ui.TextField.TextFieldValidator;
 import arc.scene.ui.layout.*;
@@ -53,6 +54,13 @@ public class LambdaRef {
 		Injector.redefineTask(Button.class, "setDisabled", "(" + boolpNative + ")V", boolpType, 1, "wrapButtonDisabled");
 		Injector.redefineTask(Label.class, "setText", provNative);
 		Injector.redefineTask(TextField.class, "setValidator", "(" + getDescriptor(TextFieldValidator.class) + ")V", internalName(TextFieldValidator.class), 1, "wrapValidator");
+
+		Injector.redefineTask(Dialog.class, "shown", "(" + runnableNative + ")V", runnableType, 1, "wrapSilent");
+		Injector.redefineTask(Dialog.class, "hidden", "(" + runnableNative + ")V", runnableType, 1, "wrapSilent");
+		Injector.redefineTask(Dialog.class, "resizedShown", "(" + runnableNative + ")V", runnableType, 1, "wrapSilent");
+		Injector.redefineTask(Dialog.class, "resized", "(" + runnableNative + ")V", runnableType, 1, "wrapSilent");
+		Injector.redefineTask(Dialog.class, "resized", "(Z" + runnableNative + ")V", runnableType, 2, "wrapSilent");
+		Injector.redefineTask(Dialog.class, "closeOnBack", "(" + runnableNative + ")V", runnableType, 1, "wrapSilent");
 
 		Injector.redefineTask(Element.class, "dragged", "(" + floatc2Native + ")V", floatc2Type, 1, "wrapSilent");
 		Injector.redefineTask(Element.class, "scrolled", "(" + floatcNative + ")V", floatcType, 1, "wrapSilent");

@@ -30,7 +30,8 @@ import java.util.*;
  *           导出包含虚拟线程在内的完整线程转储，并自动解析其中的 {@code blockedOn} 与 {@code monitorsOwned}，
  *           在报告中重构闭环等待图（标明各线程名、平台/虚拟类型、持有锁与等待锁）。</li>
  *       <li><b>纯虚拟线程死锁支持：</b>纯虚拟线程间的循环互锁因平台线程未受阻塞，无法触发 3 秒周期的后台巡检；
- *           但可通过手动调用 {@link #dumpAndAnalyzeDeadlocks()} 导出全量转储并自动分析死锁环。</li>
+ *           但可通过手动调用 {@link #dumpAndAnalyzeDeadlocks()} 导出全量转储并自动分析死锁环
+ *           （在 Java 24/25 JEP 491 环境下已实测验证转储 JSON 完整包含虚拟线程的 {@code blockedOn} 与 {@code monitorsOwned}）。</li>
  *       <li><b>无法检测：</b>虚拟线程持有 {@code ReentrantLock} 导致等待线程处于 {@link Thread.State#WAITING}（而非 BLOCKED）；
  *           以及调用 {@code wait()}、{@code park()}、{@code join()} 的协作式等待。</li>
  *     </ul>
@@ -290,22 +291,21 @@ public class DeadlockDetector {
 			}
 		}
 
-		// 在锁外输出，避免持有私有锁时做 IO
+		// 在锁外输出，避免持有私有锁时做 IO；合并多线程报告，防止重复写日志与弹窗
 		if (!reports.isEmpty()) {
 			String dumpPath = dumpAllThreadsJson();
 			String cycleAnalysis = dumpPath != null ? analyzeDump(dumpPath) : null;
-			for (String r : reports) {
-				StringBuilder full = new StringBuilder(r);
-				if (cycleAnalysis != null) {
-					full.append("\n----------- [DEADLOCK CYCLE ANALYSIS] -----------\n")
-						.append(cycleAnalysis).append("\n");
-				}
-				if (dumpPath != null) {
-					full.append("Full thread dump (incl. virtual): ").append(dumpPath).append("\n");
-				}
-				full.append("===================================================");
-				writeLog(full.toString(), "Hidden Deadlock Suspected! Check console or deadlock.log");
+			StringBuilder full = new StringBuilder();
+			for (String r : reports) full.append(r);
+			if (cycleAnalysis != null) {
+				full.append("\n----------- [DEADLOCK CYCLE ANALYSIS] -----------\n")
+					.append(cycleAnalysis).append("\n");
 			}
+			if (dumpPath != null) {
+				full.append("Full thread dump (incl. virtual): ").append(dumpPath).append("\n");
+			}
+			full.append("===================================================");
+			writeLog(full.toString(), "Hidden Deadlock Suspected! Check console or deadlock.log");
 		}
 	}
 
@@ -379,6 +379,7 @@ public class DeadlockDetector {
 					for (Jval m : t.get("monitorsOwned").asArray()) {
 						if (m.has("locks")) {
 							for (Jval lock : m.get("locks").asArray()) {
+								if (lock == null || !lock.isString()) continue;
 								String lockStr = lock.asString();
 								dt.ownedLocks.add(lockStr);
 								lockToOwner.put(lockStr, dt);
@@ -433,14 +434,32 @@ public class DeadlockDetector {
 			}
 		}
 
-		if (cycles.isEmpty()) return null;
+		if (cycles.isEmpty()) {
+			// 未成环，但排查是否有线程正被其他线程（如虚拟线程）持有的锁长时间阻塞（锁等待链）
+			StringBuilder waitChains = new StringBuilder();
+			int count = 0;
+			for (DumpedThread waiter : threadsById.values()) {
+				if (waiter.blockedOn != null && lockToOwner.containsKey(waiter.blockedOn)) {
+					DumpedThread owner = lockToOwner.get(waiter.blockedOn);
+					count++;
+					waitChains.append(String.format("  [%s] Thread \"%s\" (Id=%s, State=%s)\n",
+						waiter.isVirtual ? "Virtual" : "Platform", waiter.name, waiter.tid, waiter.state));
+					waitChains.append(String.format("    - WAITING FOR LOCK: %s (held by [%s] \"%s\", Id=%s, State=%s)\n",
+						waiter.blockedOn, owner.isVirtual ? "Virtual" : "Platform", owner.name, owner.tid, owner.state));
+				}
+			}
+			if (count > 0) {
+				return "No circular deadlock detected, but found " + count + " thread(s) waiting on known lock holder(s):\n" + waitChains;
+			}
+			return null;
+		}
 
 		StringBuilder sb = new StringBuilder();
-		sb.append("Detected ").append(cycles.size()).append(" deadlocked cycle(s) from thread dump:\n");
+		sb.append("Detected ").append(cycles.size()).append(" suspected deadlocked cycle(s) from thread dump (locks identified by Class@identityHash):\n");
 
 		for (int c = 0; c < cycles.size(); c++) {
 			List<DumpedThread> cycle = cycles.get(c);
-			sb.append(String.format("\nCycle #%d (%d threads in cycle):\n", c + 1, cycle.size()));
+			sb.append(String.format("\nSuspected Cycle #%d (%d threads in cycle):\n", c + 1, cycle.size()));
 			for (int i = 0; i < cycle.size(); i++) {
 				DumpedThread waiter = cycle.get(i);
 				DumpedThread nextOwner = cycle.get((i + 1) % cycle.size());

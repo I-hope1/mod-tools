@@ -43,6 +43,7 @@ public class DeadlockTest {
 		testNormalPlatformContentionNotReported();
 		testVirtualThreadHiddenDeadlock();
 		testPureVirtualThreadDeadlockManual();
+		testNonCycleWaitChainAndNullLockParsing();
 		testThreadDumpRotation();
 		testWatchdogLifecycle();
 
@@ -294,11 +295,61 @@ public class DeadlockTest {
 	}
 
 	/**
-	 * 测试场景 5：线程转储文件轮转清理。
+	 * 测试场景 5：非环状锁等待链排查及 JSON locks 容错。
+	 * 验证当未形成死锁环时（例如平台线程正等待慢虚拟线程），能够提取并输出直接的锁持有与等待链，
+	 * 且对 locks 数组中的 null 或非 String 元素具备容错能力。
+	 */
+	private static void testNonCycleWaitChainAndNullLockParsing() {
+		System.out.println("\n--- Test 5: Non-cycle Wait Chain and Null Lock in JSON ---");
+		String mockJson = """
+		{
+		  "threadDump": {
+		    "threadContainers": [
+		      {
+		        "threads": [
+		          {
+		            "tid": "101",
+		            "name": "worker-platform",
+		            "virtual": false,
+		            "state": "BLOCKED",
+		            "blockedOn": "java.lang.Object@abcdef",
+		            "monitorsOwned": []
+		          },
+		          {
+		            "tid": "102",
+		            "name": "slow-virtual-holder",
+		            "virtual": true,
+		            "state": "RUNNABLE",
+		            "monitorsOwned": [
+		              {
+		                "locks": [null, 123, "java.lang.Object@abcdef"]
+		              }
+		            ]
+		          }
+		        ]
+		      }
+		    ]
+		  }
+		}
+		""";
+
+		String result = DeadlockDetector.analyzeJsonDump(mockJson);
+		System.out.println("Wait chain analysis:\n" + result);
+		if (result == null || !result.contains("No circular deadlock detected, but found 1 thread(s)")) {
+			throw new AssertionError("Expected non-cycle wait chain to be detected!");
+		}
+		if (!result.contains("worker-platform") || !result.contains("slow-virtual-holder")) {
+			throw new AssertionError("Expected thread names in wait chain report!");
+		}
+		System.out.println("Test 5 PASSED: Non-cycle Wait Chain & Null Lock handling verified.");
+	}
+
+	/**
+	 * 测试场景 6：线程转储文件轮转清理。
 	 * 验证当已存在的 threads-*.json 达到 5 个或更多时，自动删除旧文件，只保留最新的 5 个。
 	 */
 	private static void testThreadDumpRotation() throws Exception {
-		System.out.println("\n--- Test 5: Thread Dump Rotation ---");
+		System.out.println("\n--- Test 6: Thread Dump Rotation ---");
 		// 先创建 7 个模拟的历史 dump 文件，时间戳依次递增
 		for (int i = 0; i < 7; i++) {
 			Fi dummy = IntVars.dataDirectory.child("threads-" + (1000000000000L + i * 1000) + ".json");
@@ -316,14 +367,14 @@ public class DeadlockTest {
 			throw new AssertionError("Expected at most 5 thread dumps after rotation, but found: " + remaining.length);
 		}
 
-		System.out.println("Test 5 PASSED: Thread Dump Rotation works correctly.");
+		System.out.println("Test 6 PASSED: Thread Dump Rotation works correctly.");
 	}
 
 	/**
-	 * 测试场景 6：看门狗启动与停止生命周期。
+	 * 测试场景 7：看门狗启动与停止生命周期。
 	 */
 	private static void testWatchdogLifecycle() throws Exception {
-		System.out.println("\n--- Test 6: Watchdog Lifecycle ---");
+		System.out.println("\n--- Test 7: Watchdog Lifecycle ---");
 		DeadlockDetector.startWatchdog();
 		if (!DeadlockDetector.isRunning()) {
 			throw new AssertionError("Watchdog should be running!");
@@ -335,6 +386,6 @@ public class DeadlockTest {
 			throw new AssertionError("Watchdog should be stopped!");
 		}
 		System.out.println("Watchdog stopped successfully.");
-		System.out.println("Test 6 PASSED: Watchdog Lifecycle works cleanly.");
+		System.out.println("Test 7 PASSED: Watchdog Lifecycle works cleanly.");
 	}
 }

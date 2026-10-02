@@ -3,7 +3,7 @@ package nipx;
 import jdk.internal.loader.BuiltinClassLoader;
 import nipx.util.Utils;
 
-import java.io.IOException;
+import java.io.*;
 import java.lang.invoke.*;
 import java.lang.ref.WeakReference;
 import java.net.*;
@@ -13,7 +13,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 import static nipx.HotSwapAgent.*;
-import static nipx.HotSwapAgent.info;
 
 public class MountManager {
 	//region Caches
@@ -79,6 +78,17 @@ public class MountManager {
 		}
 		if (rootDir == null) return;
 
+		// 解除当前类所属包的密封限制，防止挂载后加载报错 sealing violation
+		try {
+			Path rel = rootDir.relativize(classFilePath.toAbsolutePath());
+			Path parent = rel.getParent();
+			if (parent != null) {
+				String pkgName = parent.toString().replace('/', '.').replace('\\', '.');
+				PackageUnsealer.unsealPackage(targetLoader, pkgName);
+			}
+		} catch (Throwable ignored) {
+		}
+
 		try {
 			// 获取该加载器的 UCP
 			Object ucp;
@@ -116,6 +126,8 @@ public class MountManager {
 				synchronized (loaders) {
 					loaders.add(0, fileLoader);
 				}
+
+				PackageUnsealer.unsealAllPackages(targetLoader);
 
 				info("[MOUNT] Successfully injected priority path: " + rootUrl
 				     + " into " + targetLoader);

@@ -314,7 +314,10 @@ public class HotSwapAgent {
 						// lazy_load + jar：ClassLoader 推断用虚拟路径（clHintPath），
 						// 实际挂载用真实 tmpDir 路径，否则 ClassLoader 找不到 class 文件
 						Path mountPath = tmpToJar.containsKey(path) ? path : clHintPath;
-						if (mountPath != null) mountForClass(loader, mountPath);
+						if (mountPath != null) {
+							PackageUnsealer.unsealClassPackage(loader, className);
+							mountForClass(loader, mountPath);
+						}
 						bytecodeCache.put(className, bytecode);
 					}
 				}
@@ -496,6 +499,7 @@ public class HotSwapAgent {
 				return false;
 			}
 
+			PackageUnsealer.unsealClassPackage(loader, className);
 			Reflect.defineClass(className, bytes, 0, bytes.length, loader, null);
 			info("[INJECTED] Successfully defined new class: " + className + " into " + loader);
 			return true;

@@ -706,7 +706,16 @@ public class Window extends Table implements Position {
 		Draw.draw(getZIndex() + 1, () -> {
 			Draw.alpha(parentAlpha * color.a);
 			Vec2 stagePos = localToStageCoordinates(Tmp.v1.set(0, 0));
-			MyDraw.blurRect(stagePos.x, stagePos.y, width, height);
+
+			float ml = getMarginLeft(), mr = getMarginRight();
+			float mb = getMarginBottom(), mt = getMarginTop();
+			// 偏移起点并扣除内外边距
+			MyDraw.blurRect(
+			 stagePos.x + ml,
+			 stagePos.y + mb,
+			 width - ml - mr,
+			 height - mb - mt
+			);
 		});
 		Draw.z(prev);
 		super.draw();

@@ -48,6 +48,8 @@ public class UpdateRef {
 	private volatile Object   fn;
 	/** 自定义熔断/销毁动作；为 null 时表示静默失效（仅清除 fn 引用，不再重复执行） */
 	private volatile Runnable onRemove;
+	/** 标记熔断清理任务是否已投递，避免在 60FPS 轮询或高频触发下向事件队列狂发重复任务 */
+	private volatile boolean  removed;
 
 	/** 线程本地上下文，支持通过 {@link #withOnRemove} 跨调用栈隐式传递熔断清理回调 */
 	private static final ThreadLocal<Runnable> CONTEXT_ON_REMOVE = new ThreadLocal<>();
@@ -676,15 +678,18 @@ public class UpdateRef {
 
 	/**
 	 * 检查原始函数引用是否已被清空。
-	 * 若为 null，说明已发生热重载异常或已被清理，异步触发熔断动作并返回 true 以便短路跳过执行。
+	 * 若为 null，说明已发生热重载异常或已被清理，若尚未投递熔断动作则仅投递一次，并返回 true 以便短路跳过执行。
 	 *
 	 * @param f 目标函数对象
 	 * @return true 表示已被清空，当前执行应短路中断
 	 */
 	private boolean checkFn(Object f) {
 		if (f == null) {
-			// fn 已被清空（HotSwap 删除或 NoSuchMethodError 兜底），触发熔断动作
-			Core.app.post(this::doRemove);
+			// fn 已被清空（HotSwap 删除或 NoSuchMethodError 兜底），若尚未投递熔断动作则仅触发一次
+			if (!removed) {
+				removed = true;
+				Core.app.post(this::doRemove);
+			}
 			return true;
 		}
 		return false;
@@ -821,10 +826,20 @@ public class UpdateRef {
 	}
 
 	/**
+	 * 查询当前代理是否已触发熔断清理流程。
+	 *
+	 * @return 若熔断清理动作已投递或已执行则返回 true
+	 */
+	public boolean isRemoved() {
+		return removed;
+	}
+
+	/**
 	 * 执行熔断清理动作。
 	 * 保证有且仅有一次执行，并在执行时即刻将 {@link #onRemove} 置空以彻底释放所捕获的变量闭包。
 	 */
 	private void doRemove() {
+		this.removed = true;
 		Runnable r = this.onRemove;
 		this.onRemove = null; // 确保仅执行一次，且断开对捕获对象的引用
 		if (r != null) {
@@ -840,7 +855,7 @@ public class UpdateRef {
 	 * 处理 LinkageError（热重载导致方法不存在或签名不兼容）：
 	 * 1) 打印诊断日志方便热重载排查；
 	 * 2) 立即置空 {@code fn} 停止后续调用；
-	 * 3) 投递主线程异步任务执行精准熔断清理 {@link #doRemove()}。
+	 * 3) 投递主线程异步任务执行精准熔断清理 {@link #doRemove()}（具备 removed 防抖，单实例仅投递一次）。
 	 *
 	 * @param f 发生故障的原始函数实例
 	 * @param e 捕获的链接错误异常
@@ -849,7 +864,10 @@ public class UpdateRef {
 		HotSwapAgent.info("[UpdateRef] NoSuchMethodError from " + (f == null ? "?" : f.getClass().getName())
 		                  + ": " + e.getMessage());
 		clearFn();
-		Core.app.post(this::doRemove);
+		if (!removed) {
+			removed = true;
+			Core.app.post(this::doRemove);
+		}
 	}
 
 }

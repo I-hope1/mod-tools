@@ -6,6 +6,7 @@ import org.objectweb.asm.commons.*;
 import org.objectweb.asm.tree.*;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Lambda 表达式对齐工具类。
@@ -87,6 +88,13 @@ public class LambdaAligner {
 
 	public static OrphanPolicy getOrphanPolicy() {
 		return orphanPolicy;
+	}
+
+	/**
+	 * 清空已记录的孤儿 Lambda 日志去重缓存。
+	 */
+	public static void clearLoggedOrphans() {
+		LOGGED_ORPHANS.clear();
 	}
 
 	//region 匹配上下文
@@ -839,8 +847,8 @@ public class LambdaAligner {
 		// 3. 以空壳形式追加到新类末尾
 		ClassReader cr = new ClassReader(newBytes);
 		// 关键：不用 COMPUTE_FRAMES，避免 getCommonSuperClass 触发目标类加载
-		ClassWriter        cw     = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
-		final OrphanPolicy policy = orphanPolicy;
+		ClassWriter  cw        = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
+		final String className = cr.getClassName();
 
 		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
 			@Override
@@ -852,7 +860,7 @@ public class LambdaAligner {
 						access, mn.name, mn.desc, mn.signature,
 						mn.exceptions == null ? null : mn.exceptions.toArray(new String[0]));
 					if (dummy != null) {
-						injectDummyBody(dummy, mn.name, mn.desc, policy);
+						injectDummyBody(dummy, className, mn.name, mn.desc);
 					}
 				}
 				super.visitEnd();
@@ -863,79 +871,32 @@ public class LambdaAligner {
 	}
 
 	/**
-	 * 按给定策略生成空方法体的指令流。
-	 *
-	 * <p>返回值按 {@link Type#getSort()} 分派，统一返回类型默认值（0 / null / false）
-	 * 或抛出异常。栈大小交给 {@code COMPUTE_MAXS} 处理。</p>
-	 *
-	 * <p><b>注意</b>：{@link OrphanPolicy#LOG_AND_RETURN_DEFAULT} 每次调用都会打日志，
-	 * 若孤儿 lambda 位于热路径上可能刷屏。生产环境建议切到 {@link OrphanPolicy#THROW}。</p>
+	 * 生成空壳 Lambda 方法体的指令流。
+	 * <p>
+	 * <b>关键设计（100% 线性无跳转分支，彻底杜绝 VerifyError）</b>：<br>
+	 * 字节码中完全不使用任何 {@code IFEQ} / {@code GOTO} 等分支跳转指令和 {@link Label}。
+	 * 所有的策略判定、UpdateRef 栈探测、异常抛出与日志去重均下沉到纯 Java 静态方法
+	 * {@link #onOrphanInvoked(String, String, String)} 中执行。<br>
+	 * <ul>
+	 *   <li>若为 UpdateRef 保护的调用：Java 静态方法直接抛出 {@link NoSuchMethodError} 展开栈中断执行；</li>
+	 *   <li>若为普通业务调用：Java 静态方法去重打印警告日志后正常返回，随后由生成的字节码 100% 线性返回类型默认值（0 / null / false）。</li>
+	 * </ul>
+	 * 从而在 Java 7+ / 8 / 11 / 17 / 21 任意平台环境下，无需 StackMapTable 即可 100% 通过 JVM 类验证。
+	 * </p>
 	 */
-	private static void injectDummyBody(MethodVisitor mv, String name, String desc, OrphanPolicy policy) {
+	private static void injectDummyBody(MethodVisitor mv, String className, String name, String desc) {
 		mv.visitCode();
 		Type returnType = Type.getReturnType(desc);
 
-		if (policy == OrphanPolicy.SMART_ADAPTIVE) {
-			Label returnDefault = new Label();
-			// 1. 调用 LambdaAligner.isCalledByUpdateRef()
-			mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-				Type.getInternalName(LambdaAligner.class),
-				"isCalledByUpdateRef", "()Z", false);
-			// 若非 UpdateRef 保护调用，跳转返回默认值
-			mv.visitJumpInsn(Opcodes.IFEQ, returnDefault);
+		// 1. 调用纯 Java 静态方法：统一处理策略分发、UpdateRef 栈探测（若命中抛出 NoSuchMethodError）及日志去重
+		mv.visitLdcInsn(className != null ? className : "");
+		mv.visitLdcInsn(name);
+		mv.visitLdcInsn(desc);
+		mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+			Type.getInternalName(LambdaAligner.class),
+			"onOrphanInvoked", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", false);
 
-			// 2. 是 UpdateRef 发起的调用：抛出 NoSuchMethodError 触发局部熔断与清理
-			mv.visitTypeInsn(Opcodes.NEW, "java/lang/NoSuchMethodError");
-			mv.visitInsn(Opcodes.DUP);
-			mv.visitLdcInsn("Lambda removed by hot swap: " + name + desc);
-			mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
-				"java/lang/NoSuchMethodError", "<init>", "(Ljava/lang/String;)V", false);
-			mv.visitInsn(Opcodes.ATHROW);
-
-			// 3. 普通业务调用：打印警告日志并返回类型默认值，绝不崩溃
-			mv.visitLabel(returnDefault);
-			mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/System", "err", "Ljava/io/PrintStream;");
-			mv.visitLdcInsn("[LambdaAligner] orphaned lambda invoked: " + name + desc);
-			mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-				"java/io/PrintStream", "println", "(Ljava/lang/String;)V", false);
-
-			injectDefaultReturnValue(mv, returnType, desc);
-			mv.visitMaxs(0, 0);
-			mv.visitEnd();
-			return;
-		}
-
-		if (policy == OrphanPolicy.THROW_NO_SUCH_METHOD) {
-			mv.visitTypeInsn(Opcodes.NEW, "java/lang/NoSuchMethodError");
-			mv.visitInsn(Opcodes.DUP);
-			mv.visitLdcInsn("Lambda removed by hot swap: " + name + desc);
-			mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
-				"java/lang/NoSuchMethodError", "<init>", "(Ljava/lang/String;)V", false);
-			mv.visitInsn(Opcodes.ATHROW);
-			mv.visitMaxs(0, 0);
-			mv.visitEnd();
-			return;
-		}
-
-		if (policy == OrphanPolicy.THROW) {
-			mv.visitTypeInsn(Opcodes.NEW, "java/lang/IllegalStateException");
-			mv.visitInsn(Opcodes.DUP);
-			mv.visitLdcInsn("Lambda removed by hot swap: " + name + desc);
-			mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
-				"java/lang/IllegalStateException", "<init>", "(Ljava/lang/String;)V", false);
-			mv.visitInsn(Opcodes.ATHROW);
-			mv.visitMaxs(0, 0);
-			mv.visitEnd();
-			return;
-		}
-
-		if (policy == OrphanPolicy.LOG_AND_RETURN_DEFAULT) {
-			mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/System", "err", "Ljava/io/PrintStream;");
-			mv.visitLdcInsn("[LambdaAligner] orphaned lambda invoked: " + name + desc);
-			mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-				"java/io/PrintStream", "println", "(Ljava/lang/String;)V", false);
-		}
-
+		// 2. 100% 线性无分支返回类型默认值（若上面抛出异常则直接展开调用栈，根本不会执行到此）
 		injectDefaultReturnValue(mv, returnType, desc);
 		mv.visitMaxs(0, 0);
 		mv.visitEnd();
@@ -976,12 +937,57 @@ public class LambdaAligner {
 		}
 	}
 
-	private static final String UPDATE_REF_CLASS_NAME = "nipx.ref.UpdateRef";
+	private static final String UPDATE_REF_CLASS_PREFIX = "nipx.ref.UpdateRef";
+	private static final Set<String> LOGGED_ORPHANS = Collections.newSetFromMap(new ConcurrentHashMap<>());
+
+	/**
+	 * 当热重载中被删除/孤立的空壳 Lambda 方法被调用时由生成的字节码调用。
+	 * <p>
+	 * 所有的策略判定、UpdateRef 栈探测、异常抛出与日志去重均下沉到此 Java 方法中执行，
+	 * 从而保证 ASM 生成的字节码 100% 线性无跳转分支，彻底杜绝 Java 7+ 下因缺少 StackMapTable 引发的 {@link VerifyError}。
+	 * </p>
+	 *
+	 * @param className 调用方类名（内部形式，形如 {@code com/example/Foo}）
+	 * @param name      方法名
+	 * @param desc      方法描述符
+	 */
+	public static void onOrphanInvoked(String className, String name, String desc) {
+		OrphanPolicy policy = orphanPolicy;
+		String location = (className != null && !className.isEmpty() ? className.replace('/', '.') + "#" : "") + name + desc;
+
+		if (policy == OrphanPolicy.SMART_ADAPTIVE) {
+			if (isCalledByUpdateRef()) {
+				throw new NoSuchMethodError("Lambda removed by hot swap: " + location);
+			}
+			// 普通业务调用：去重后打印日志，随后正常返回，由外部字节码线性返回默认值
+			if (LOGGED_ORPHANS.add(location)) {
+				System.err.println("[LambdaAligner] orphaned lambda invoked: " + location + " (subsequent invocations will be muted)");
+			}
+			return;
+		}
+
+		if (policy == OrphanPolicy.THROW_NO_SUCH_METHOD) {
+			throw new NoSuchMethodError("Lambda removed by hot swap: " + location);
+		}
+
+		if (policy == OrphanPolicy.THROW) {
+			throw new IllegalStateException("Lambda removed by hot swap: " + location);
+		}
+
+		if (policy == OrphanPolicy.LOG_AND_RETURN_DEFAULT) {
+			if (LOGGED_ORPHANS.add(location)) {
+				System.err.println("[LambdaAligner] orphaned lambda invoked: " + location + " (subsequent invocations will be muted)");
+			}
+			return;
+		}
+
+		// OrphanPolicy.SILENT: 静默返回
+	}
 
 	/**
 	 * 检查当前调用栈浅层中是否存在 {@link nipx.ref.UpdateRef}。
 	 * <p>
-	 * 优先使用 Java 9+ 的 {@link StackWalker} 进行高效的浅层流式遍历（limit(8) 即刻短路）；
+	 * 优先使用 Java 9+ 的 {@link StackWalker} 进行高效的浅层流式遍历（limit(16) 即刻短路）；
 	 * 若当前运行环境缺少 StackWalker（如 Android Dalvik/ART 或 Java 8），则安全降级为 {@link Throwable#getStackTrace()}，
 	 * 保证在全平台环境下均能 100% 稳定运行。
 	 * </p>
@@ -991,16 +997,16 @@ public class LambdaAligner {
 	public static boolean isCalledByUpdateRef() {
 		try {
 			if (StackWalkerHolder.IS_SUPPORTED) {
-				return StackWalkerHolder.WALKER.walk(s -> s.limit(8)
-					.anyMatch(f -> UPDATE_REF_CLASS_NAME.equals(f.getClassName())));
+				return StackWalkerHolder.WALKER.walk(s -> s.limit(16)
+					.anyMatch(f -> f.getClassName().startsWith(UPDATE_REF_CLASS_PREFIX)));
 			}
 		} catch (Throwable ignored) {}
 
 		try {
 			StackTraceElement[] trace = new Throwable().getStackTrace();
-			int limit = Math.min(trace.length, 8);
+			int limit = Math.min(trace.length, 16);
 			for (int i = 1; i < limit; i++) {
-				if (UPDATE_REF_CLASS_NAME.equals(trace[i].getClassName())) {
+				if (trace[i].getClassName().startsWith(UPDATE_REF_CLASS_PREFIX)) {
 					return true;
 				}
 			}

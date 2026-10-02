@@ -1,7 +1,7 @@
 package nipx.jni;
 
-import nipx.jni.helper.*;
 import nipx.jni.helper.GlobalRef;
+import nipx.jni.helper.NativeHelper;
 
 import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
@@ -20,102 +20,147 @@ import java.util.stream.Collectors;
 
 @SuppressWarnings("rawtypes")
 public class RegisterNative {
-    private static final MemoryLayout JNI_NATIVE_METHOD_LAYOUT = MemoryLayout.structLayout(
-            ValueLayout.ADDRESS, /*name*/
-            ValueLayout.ADDRESS, /*signature*/
-            ValueLayout.ADDRESS /*fnPtr*/
-    );
+	private static final MemoryLayout JNI_NATIVE_METHOD_LAYOUT = MemoryLayout.structLayout(
+	 ValueLayout.ADDRESS, /*name*/
+	 ValueLayout.ADDRESS, /*signature*/
+	 ValueLayout.ADDRESS  /*fnPtr*/
+	);
 
-    private static final VarHandle nameVH = JNI_NATIVE_METHOD_LAYOUT.varHandle(MemoryLayout.PathElement.groupElement(0));
-    private static final VarHandle signatureVH = JNI_NATIVE_METHOD_LAYOUT.varHandle(MemoryLayout.PathElement.groupElement(1));
-    private static final VarHandle fnPtrVH = JNI_NATIVE_METHOD_LAYOUT.varHandle(MemoryLayout.PathElement.groupElement(2));
+	private static final VarHandle nameVH      = JNI_NATIVE_METHOD_LAYOUT.varHandle(MemoryLayout.PathElement.groupElement(0));
+	private static final VarHandle signatureVH = JNI_NATIVE_METHOD_LAYOUT.varHandle(MemoryLayout.PathElement.groupElement(1));
+	private static final VarHandle fnPtrVH     = JNI_NATIVE_METHOD_LAYOUT.varHandle(MemoryLayout.PathElement.groupElement(2));
 
-    private static final MethodHandle registerNativeMH = Linker.nativeLinker()
-            .downcallHandle(
-                    FunctionDescriptor.of(
-                            ValueLayout.JAVA_INT,
-                            ValueLayout.ADDRESS /*JNIEnv *env */ ,
-                            ValueLayout.ADDRESS /*jclass*/,
-                            ValueLayout.ADDRESS /*method*/,
-                            ValueLayout.JAVA_INT /*nMethods*/
-                    )
-            );
+	private static final MethodHandle registerNativeMH = Linker.nativeLinker()
+	 .downcallHandle(
+		FunctionDescriptor.of(
+		 ValueLayout.JAVA_INT,
+		 ValueLayout.ADDRESS /*JNIEnv *env */,
+		 ValueLayout.ADDRESS /*jclass*/,
+		 ValueLayout.ADDRESS /*method*/,
+		 ValueLayout.JAVA_INT /*nMethods*/
+		)
+	 );
 
-    public record MethodBinderRequest(Method source, MethodHandle target) {
+	public record MethodBinderRequest(Method source, MethodHandle target) {
+	}
 
-    }
+	public static void nativeBinder(Class clazz, Method source, MethodHandle target) {
+		nativeBinder(null, clazz, List.of(new MethodBinderRequest(source, target)), Arena.global());
+	}
 
-    public static void nativeBinder(JNIEnv jniEnv, Class clazz, List<MethodBinderRequest> methodBinderRequests) {
-        MemorySegment registerNativesFp = jniEnv.functions.RegisterNativesFp;
+	public static void nativeBinder(JNIEnv jniEnv, Class clazz, Method source, MethodHandle target) {
+		nativeBinder(jniEnv, clazz, List.of(new MethodBinderRequest(source, target)), Arena.global());
+	}
 
-        MethodHandles.Lookup backDoorMH = MasterKey.INSTANCE.getTrustedLookup();
-        try (
-         Arena arena = Arena.ofConfined();
-         GlobalRef jclassRef = jniEnv.FindClass(clazz);
-        ) {
-            MemorySegment methods = arena.allocate(JNI_NATIVE_METHOD_LAYOUT, methodBinderRequests.size());
+	public static void nativeBinder(Class clazz, MethodBinderRequest... requests) {
+		nativeBinder(null, clazz, Arrays.asList(requests), Arena.global());
+	}
 
-            int i = 0;
-            for (MethodBinderRequest request : methodBinderRequests) {
-                Method source = request.source;
-                String name = source.getName();
-                String signature = Arrays.stream(source.getParameterTypes())
-                        .map(Class::descriptorString)
-                        .collect(Collectors.joining("", "(", ")" + source.getReturnType().descriptorString()));
-                MethodHandle handle = request.target;
-                //mh (..)
-                //mh(MemorySegment,MemorySegment,..)
-                handle = MethodHandles.dropArguments(
-                        handle, 0, MemorySegment.class, MemorySegment.class
-                );
-                FunctionDescriptor functionDescriptor = toFunctionDescriptor(handle.type());
-                // (void* -> jnienv, void* -> jclass, ...)
-                MemorySegment fnPtr = Linker.nativeLinker()
-                        .upcallStub(
-                                handle,
-                                functionDescriptor,
-                                Arena.global()
-                        );
-                MemorySegment namePtr = arena.allocateFrom(name);
-                MemorySegment signaturePtr = arena.allocateFrom(signature);
+	public static void nativeBinder(JNIEnv jniEnv, Class clazz, List<MethodBinderRequest> methodBinderRequests) {
+		nativeBinder(jniEnv, clazz, methodBinderRequests, Arena.global());
+	}
 
-                long offset = i * JNI_NATIVE_METHOD_LAYOUT.byteSize();
-                nameVH.set(methods, offset, namePtr);
-                signatureVH.set(methods, offset, signaturePtr);
-                fnPtrVH.set(methods, offset, fnPtr);
-                i++;
-            }
+	public static void nativeBinder(JNIEnv jniEnv, Class clazz, List<MethodBinderRequest> methodBinderRequests, Arena stubArena) {
+		if (methodBinderRequests == null || methodBinderRequests.isEmpty()) {
+			return;
+		}
+		if (jniEnv == null) {
+			jniEnv = JNIEnv.getInstance();
+		}
+		if (stubArena == null) {
+			stubArena = Arena.global();
+		}
 
-            var res = (int) registerNativeMH.invokeExact(registerNativesFp, jniEnv.functions.jniEnvPointer, jclassRef.ref(), methods, methodBinderRequests.size());
-        } catch (Throwable t) {
-            throw new RuntimeException(t);
-        }
-    }
+		MemorySegment registerNativesFp = jniEnv.functions.RegisterNativesFp;
 
-    private static FunctionDescriptor toFunctionDescriptor(MethodType methodType) {
-        boolean isVoid = methodType.returnType().equals(void.class);
-        Class<?>[] parameterArray = methodType.parameterArray();
-        MemoryLayout[] valueLayouts = Arrays.stream(parameterArray)
-                .map(RegisterNative::toLayout)
-                .toArray(MemoryLayout[]::new);
+		try (
+		 Arena arena = Arena.ofConfined();
+		 GlobalRef jclassRef = jniEnv.FindClass(clazz);
+		) {
+			MemorySegment methods = arena.allocate(JNI_NATIVE_METHOD_LAYOUT, methodBinderRequests.size());
 
-        return isVoid ? FunctionDescriptor.ofVoid(valueLayouts)
-                : FunctionDescriptor.of(toLayout(methodType.returnType()), valueLayouts);
-    }
+			int i = 0;
+			for (MethodBinderRequest request : methodBinderRequests) {
+				Method source = request.source;
+				String name   = source.getName();
+				String paramSig = Arrays.stream(source.getParameterTypes())
+				 .map(NativeHelper::classToSig)
+				 .collect(Collectors.joining());
+				String signature = "(" + paramSig + ")" + NativeHelper.classToSig(source.getReturnType());
 
-    private static MemoryLayout toLayout(Class<?> clazz) {
-        return switch (clazz) {
-            case Class c when c == int.class -> ValueLayout.JAVA_INT;
-            case Class c when c == long.class -> ValueLayout.JAVA_LONG;
-            case Class c when c == short.class -> ValueLayout.JAVA_SHORT;
-            case Class c when c == char.class -> ValueLayout.JAVA_CHAR;
-            case Class c when c == float.class -> ValueLayout.JAVA_FLOAT;
-            case Class c when c == double.class -> ValueLayout.JAVA_DOUBLE;
-            case Class c when c == byte.class -> ValueLayout.JAVA_FLOAT;
-            case Class c when c == boolean.class -> ValueLayout.JAVA_BOOLEAN;
-            case Class c when c == MemorySegment.class -> ValueLayout.ADDRESS;
-            default -> throw new IllegalArgumentException("primitiveType must be a primitive type");
-        };
-    }
+				MethodHandle handle = request.target;
+				int targetParamCount = handle.type().parameterCount();
+				int sourceParamCount = source.getParameterCount();
 
+				// JNI 原生函数调用规范固定传入：(JNIEnv* env, jobject/jclass self, ...args)
+				if (targetParamCount == sourceParamCount) {
+					// 目标只接收实际业务参数，丢弃底层的 (env, self)
+					handle = MethodHandles.dropArguments(handle, 0, MemorySegment.class, MemorySegment.class);
+				} else if (targetParamCount == sourceParamCount + 1) {
+					// 目标接收 (self, ...args)，丢弃底层 (env)
+					handle = MethodHandles.dropArguments(handle, 0, MemorySegment.class);
+				} else if (targetParamCount == sourceParamCount + 2) {
+					// 目标显式接收 (env, self, ...args)
+				} else {
+					throw new IllegalArgumentException(
+					 "Method parameter count mismatch for " + source.getName() +
+					 ": target handle accepts " + targetParamCount + " params, but expected " +
+					 sourceParamCount + " (args only), " + (sourceParamCount + 1) + " (self+args), or " +
+					 (sourceParamCount + 2) + " (env+self+args)"
+					);
+				}
+
+				FunctionDescriptor functionDescriptor = toFunctionDescriptor(handle.type());
+				MemorySegment fnPtr = Linker.nativeLinker().upcallStub(
+				 handle,
+				 functionDescriptor,
+				 stubArena
+				);
+
+				MemorySegment namePtr      = arena.allocateFrom(name);
+				MemorySegment signaturePtr = arena.allocateFrom(signature);
+
+				long offset = i * JNI_NATIVE_METHOD_LAYOUT.byteSize();
+				nameVH.set(methods, offset, namePtr);
+				signatureVH.set(methods, offset, signaturePtr);
+				fnPtrVH.set(methods, offset, fnPtr);
+				i++;
+			}
+
+			int res = (int) registerNativeMH.invokeExact(registerNativesFp, jniEnv.getJniEnvPointer(), jclassRef.ref(), methods, methodBinderRequests.size());
+			if (res != 0) {
+				throw new IllegalStateException("RegisterNatives failed with error code: " + res);
+			}
+		} catch (Throwable t) {
+			throw new RuntimeException(t);
+		}
+	}
+
+	private static FunctionDescriptor toFunctionDescriptor(MethodType methodType) {
+		boolean        isVoid         = methodType.returnType().equals(void.class);
+		Class<?>[]     parameterArray = methodType.parameterArray();
+		MemoryLayout[] valueLayouts   = Arrays.stream(parameterArray)
+		 .map(RegisterNative::toLayout)
+		 .toArray(MemoryLayout[]::new);
+
+		return isVoid ? FunctionDescriptor.ofVoid(valueLayouts)
+		 : FunctionDescriptor.of(toLayout(methodType.returnType()), valueLayouts);
+	}
+
+	private static MemoryLayout toLayout(Class<?> c) {
+		if (c == int.class) return ValueLayout.JAVA_INT;
+		if (c == long.class) return ValueLayout.JAVA_LONG;
+		if (c == short.class) return ValueLayout.JAVA_SHORT;
+		if (c == char.class) return ValueLayout.JAVA_CHAR;
+		if (c == float.class) return ValueLayout.JAVA_FLOAT;
+		if (c == double.class) return ValueLayout.JAVA_DOUBLE;
+		if (c == byte.class) return ValueLayout.JAVA_BYTE;
+		if (c == boolean.class) return ValueLayout.JAVA_BOOLEAN;
+		if (c == MemorySegment.class || MemorySegment.class.isAssignableFrom(c)) return ValueLayout.ADDRESS;
+
+		throw new IllegalArgumentException(
+		 "Unsupported carrier type for native layout: " + c +
+		 ". In Panama upcall stubs, all JNI handles/pointers must be typed as MemorySegment.class, or primitive types for numbers/booleans."
+		);
+	}
 }

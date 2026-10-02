@@ -27,14 +27,18 @@ public class TaskManager {
 	}
 
 	/**
-	 * 防抖/重置任务：如果正在排队则取消并重新倒计时。
-	 * 注：Timer.schedule 与 cancel 内部已线程安全，无需额外加锁。
+	 * 只用于串行化 TaskManager 的调用方；绝不能在 Timer 内部路径上被获取。
+	 * Timer 线程持有的锁（threadLock、Timer 实例、task）与此锁完全无交集，不会形成死锁环。
+	 */
+	private static final Object LOCK = new Object();
+
+	/**
+	 * 防抖/重置任务：无论是否在排队，都取消并重新倒计时。
+	 * Task.cancel() 在 timer == null 时也安全，可直接调用而无需先判断 isScheduled()。
 	 */
 	public static void reset(Task task, float delaySeconds) {
-		synchronized (task) {
-			if (task.isScheduled()) {
-				task.cancel();
-			}
+		synchronized (LOCK) {
+			task.cancel();
 			Timer.schedule(task, delaySeconds);
 		}
 	}
@@ -48,14 +52,13 @@ public class TaskManager {
 	 * @return true 表示启动了调度；false 表示取消了调度
 	 */
 	public static boolean toggle(Task task, float delaySeconds) {
-		synchronized (task) {
+		synchronized (LOCK) {
 			if (task.isScheduled()) {
 				task.cancel();
 				return false;
-			} else {
-				Timer.schedule(task, delaySeconds);
-				return true;
 			}
+			Timer.schedule(task, delaySeconds);
+			return true;
 		}
 	}
 
@@ -68,15 +71,13 @@ public class TaskManager {
 	 * @return true 表示添加成功；false 表示已有排队中任务，未作处理
 	 */
 	public static boolean trySchedule(Task task, float delaySeconds) {
-		synchronized (task) {
-			if (task.isScheduled()) {
-				return false;
-			} else {
-				Timer.schedule(task, delaySeconds);
-				return true;
-			}
+		synchronized (LOCK) {
+			if (task.isScheduled()) return false;
+			Timer.schedule(task, delaySeconds);
+			return true;
 		}
 	}
+
 
 	public static boolean tryScheduleTicks(Task task, float delayTicks) {
 		return trySchedule(task, delayTicks / 60f);

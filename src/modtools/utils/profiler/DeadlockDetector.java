@@ -2,24 +2,46 @@ package modtools.utils.profiler;
 
 import arc.Core;
 import arc.util.Log;
+import modtools.IntVars;
+import modtools.ui.IntUI;
 
 import java.lang.management.*;
 import java.util.*;
 
 /**
- * JVM 死锁检测看门狗与分析工具。
- * 独立于采样分析器运行，避免对 5ms 高频火焰图采样造成时延抖动。
+ * JVM 死锁检测看门狗与排查工具。
+ * <p>独立于火焰图采样分析器运行，避免对 5ms 高频 CPU 采样造成时延抖动。
+ *
+ * <p><b>已知限制（Known Limitations）：</b>
+ * <ul>
+ *   <li><b>主线程死锁时 UI 无响应：</b>若死锁涉及游戏主线程（渲染/事件分发线程），整个 UI 将冻结，
+ *       界面按钮无法点击，{@link Core#app} post 投递的桌面通知也将无法被消费。
+ *       此时主要依赖后台守护线程向控制台输出，以及写入磁盘 {@code deadlock.log} 文件。</li>
+ *   <li><b>仅支持 Java 层互斥锁：</b>基于 {@link ThreadMXBean#findDeadlockedThreads()} 实现，
+ *       仅能检测 Java 内置对象监视器（{@code synchronized}）及 JUC 独占同步器（如 {@code ReentrantLock}）
+ *       构成的循环等待死锁。</li>
+ *   <li><b>不支持 Native 死锁检测：</b>无法探测 JNI/C++ 层的原生锁死锁（如 {@code std::mutex}、
+ *       POSIX 互斥锁、Windows CriticalSection 或处于 native 状态的死锁）。</li>
+ *   <li><b>不支持逻辑死锁与假死：</b>因条件变量未触发（如 {@code Object.wait()}、{@code CountDownLatch.await()}、
+ *       {@code CompletableFuture.join()}）导致的永久挂起或阻塞 IO，不属于资源循环互锁，无法被探测。</li>
+ *   <li><b>读写锁共享模式限制：</b>部分 JVM 实现下，{@link java.util.concurrent.locks.ReentrantReadWriteLock}
+ *       在共享读锁等待引起的死锁可能不会被报告。</li>
+ *   <li><b>JVM 全局排查开销：</b>构建死锁环需要遍历 JVM 内部锁图与线程栈，因此检测间隔应保持在秒级
+ *       （默认 3000ms，代码强制最低 500ms），切勿调为毫秒级以免引起周期性停顿。</li>
+ * </ul>
  */
 public class DeadlockDetector {
-	public static volatile boolean enabled = false;
 	public static volatile int checkIntervalMs = 3000;
 
 	private static volatile Thread watchdogThread = null;
 	private static volatile boolean running = false;
-	private static Set<Long> lastDeadlockedThreadIds = Collections.emptySet();
+	private static volatile Set<Long> lastDeadlockedThreadIds = Collections.emptySet();
+
+	public static boolean isEnabled() {
+		return running;
+	}
 
 	public static synchronized void setEnabled(boolean enable) {
-		enabled = enable;
 		if (enable) {
 			startWatchdog();
 		} else {
@@ -50,15 +72,20 @@ public class DeadlockDetector {
 	}
 
 	private static void loop() {
-		while (running) {
+		Thread self = Thread.currentThread();
+		while (running && watchdogThread == self) {
 			try {
-				Thread.sleep(checkIntervalMs);
+				Thread.sleep(Math.max(500, checkIntervalMs));
 			} catch (InterruptedException e) {
 				break;
 			}
-			if (!running || !enabled) break;
+			if (!running || watchdogThread != self) break;
 
-			checkAndLog();
+			try {
+				checkAndLog();
+			} catch (Throwable t) {
+				Log.err("[DeadlockDetector] Check failed", t);
+			}
 		}
 	}
 
@@ -77,11 +104,24 @@ public class DeadlockDetector {
 		// 仅在死锁线程发生变化（如首次发生，或又卷入了新线程）时报警，避免每隔几秒狂刷日志
 		if (!currentIds.equals(lastDeadlockedThreadIds)) {
 			lastDeadlockedThreadIds = currentIds;
-			Log.err("[DeadlockDetector] " + result.report);
+
+			// 使用占位符格式化，避免报告内容里的 '@' (如 Object@1a2b3c) 被错误解析
+			Log.err("[DeadlockDetector] @", result.report);
+
+			// 写入磁盘文件，非终端启动也能在事后排查
+			try {
+				if (IntVars.dataDirectory != null) {
+					IntVars.dataDirectory.child("deadlock.log").writeString(result.report, false);
+				}
+			} catch (Throwable t) {
+				Log.err("[DeadlockDetector] Failed to write deadlock.log", t);
+			}
+
+			// 若主线程还活着，在游戏顶层飘字提示
 			if (Core.app != null) {
 				Core.app.post(() -> {
 					try {
-						modtools.ui.IntUI.showInfoFade("Deadlock Detected! Check console.");
+						IntUI.showInfoFade("Deadlock Detected! Check console or deadlock.log");
 					} catch (Throwable ignored) {}
 				});
 			}
@@ -164,6 +204,7 @@ public class DeadlockDetector {
 
 	/**
 	 * 手动执行一次死锁探查并返回报告字符串。
+	 * <p>注意：仅能检测调用瞬时的 Java 互斥锁死锁，不能排查 Native 锁死锁与假死阻塞。
 	 * @return 如果存在死锁，返回排查报告；否则返回 null。
 	 */
 	public static String checkDeadlocks() {

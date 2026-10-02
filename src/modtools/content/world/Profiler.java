@@ -317,7 +317,7 @@ public class Profiler extends Content {
 	}
 
 
-	public void loadSettings(Data SETTINGS) {
+	public void loadSettings(Data settings) {
 		Contents.settings_ui.addSection(localizedName(), icon, t -> {
 			ISettings.buildAll(name, t, Settings.class);
 		});

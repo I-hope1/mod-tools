@@ -42,8 +42,6 @@ public class Executor extends Content {
 	/** @see OK#code() */
 	private int    statusCode = -1;
 
-	public void load() {
-	}
 	FilterTable<Intp> p;
 	public void loadUI() {
 		ui = new IconWindow(200, 100, true);

@@ -37,10 +37,10 @@ public class SamplingProfiler {
 	/** 默认采样间隔（毫秒）。200 Hz ≈ 5 ms/sample，对 60 FPS 游戏足够。 */
 	public static volatile int intervalMs = 5;
 
-	/** @deprecated 建议直接使用 {@link DeadlockDetector#enabled} */
+	/** @deprecated 建议直接使用 {@link DeadlockDetector#isEnabled()} */
 	@Deprecated
 	public static boolean enableDeadlockCheck() {
-		return DeadlockDetector.enabled;
+		return DeadlockDetector.isEnabled();
 	}
 
 	public static void setEnableDeadlockCheck(boolean enable) {

@@ -128,7 +128,7 @@ public class Selection extends Content {
 		loadUI();
 	}
 	public void load() {
-		loadSettings();
+		super.load(); // loadSettings
 		TaskManager.forceRun(0.5f, -1, () -> {
 			if (!state.isGame()) return false;
 			initTask();

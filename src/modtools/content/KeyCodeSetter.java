@@ -57,6 +57,7 @@ public class KeyCodeSetter extends Content {
 	}
 	public void load() {
 		super.load();
+
 		bindKeyCode = HKeyCode.data.dynamicKeyCode("bindKeyCode", () -> new HKeyCode(KeyCode.r).ctrl().shift());
 		final Seq<Button> toRemoveSeq = new Seq<>();
 		scene.addCaptureListener(new InputListener() {

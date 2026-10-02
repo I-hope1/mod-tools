@@ -148,6 +148,10 @@ public class SettingsUI extends Content {
 			ISettings.buildAll("hook", t, E_Hook.class);
 		});
 
+		// addSectionInternal("Profiler", Icon.refreshSmall, t -> {
+		// 	ISettings.buildAll("profiler", t, Profiler.Settings.class);
+		// });
+
 		addSectionInternal("UI", Icon.imageSmall, t -> {
 			SettingsBuilder.build(t);
 

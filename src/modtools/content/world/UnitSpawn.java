@@ -276,7 +276,7 @@ public class UnitSpawn extends Content {
 	}
 
 	int defCap;
-	public void loadSettings(Data SETTINGS) {
+	public void loadSettings(Data settings) {
 		Events.run(EventType.WorldLoadEvent.class, Tools.delegate(() -> {
 			defCap = Vars.state.rules.unitCap;
 			Vars.state.rules.unitCap = unitUnlimited ? 0xfff_fff : defCap;

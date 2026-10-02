@@ -123,7 +123,7 @@ public class ReviewElement extends Content {
 		   + (element.name != null ? " ★" + element.name + "★" : "");
 	}
 
-	public void loadSettings(Data SETTINGS) {
+	public void loadSettings(Data settings) {
 		Contents.settings_ui.addSection(localizedName(), icon, table -> {
 			table.left().defaults().left();
 			table.table(t -> {

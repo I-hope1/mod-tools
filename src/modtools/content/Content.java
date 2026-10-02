@@ -63,7 +63,7 @@ public abstract class Content implements Disposable {
 	public final void loadSettings() {
 		loadSettings(data());
 	}
-	public void loadSettings(Data SETTINGS) {
+	public void loadSettings(Data settings) {
 	}
 
 	private Data data;
@@ -73,6 +73,7 @@ public abstract class Content implements Disposable {
 	}
 	/** 加载 */
 	public void load() {
+		loadSettings();
 	}
 
 	private boolean lazyLoaded = false;

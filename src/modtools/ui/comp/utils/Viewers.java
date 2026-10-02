@@ -242,6 +242,7 @@ public class Viewers {
 				return true;
 			}
 			Runnable prev = label.appendTail;
+			Runnable prevOverride = label.overrideDelimiter;
 
 			// 提取 entries 遍历，避免在 pretty/普通 两个分支中重复
 			Runnable runEntries = () -> {
@@ -310,7 +311,7 @@ public class Viewers {
 				label.prettyDepth = depth + 1;
 				runEntries.run();
 				label.prettyDepth = depth;
-				label.overrideDelimiter = null;
+				label.overrideDelimiter = prevOverride;
 				// 彩色右括号（前加换行+基础缩进）
 				text.append('\n').append(baseIndent);
 				label.startColor(bColor);
@@ -354,6 +355,7 @@ public class Viewers {
 			Pool<IterCons> pool = Pools.get(IterCons.class, IterCons::new, 50);
 			IterCons       cons = pool.obtain().init(label, val, text);
 			Runnable       prev = label.appendTail;
+			Runnable       prevOverride = label.overrideDelimiter;
 
 			// pretty-print: 设置彩色括号和换行缩进
 			int     ppDepth     = label.prettyDepth;
@@ -418,7 +420,7 @@ public class Viewers {
 				label.appendTail = prev; // 丢弃末尾多余分隔符，还原外层上下文
 				if (prettyPrint) {
 					label.prettyDepth = ppDepth;
-					label.overrideDelimiter = null;
+					label.overrideDelimiter = prevOverride;
 				}
 				// 自动补位：格式化结果必须严格等于 SIZE_MAX_BIT 个字符，否则 text.replace
 				// 会插入多余字符，把之后所有 colorMap / startIndexMap / endIndexMap 的下标
@@ -516,7 +518,6 @@ public class Viewers {
 				return false;
 			} finally {
 				currentDepth--; // 绝对对称
-				label.postAppendDelimiter();
 			}
 		}
 
@@ -920,10 +921,6 @@ public class Viewers {
 		int endI = text.length();
 		label.endIndexMap.put(startIndex, endI);
 		label.endColor();
-		// 统一在此设置 delimiter tail，避免各 viewer 各自调用导致遗漏：
-		// appendValue(Object) 开头会 appendTail = null，若 viewer 提前 return 而不经过此处，
-		// IterCons.append() 已压入的 lambda 就永远死在 null 里，导致元素间没有分隔符。
-		label.postAppendDelimiter();
 	}
 	private static Object wrapVal(Object val) {
 		if (val == null) return ValueLabel.NULL_MARK;

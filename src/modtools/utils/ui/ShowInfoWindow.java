@@ -39,7 +39,6 @@ import modtools.utils.search.*;
 import modtools.utils.search.Search.SearchItem;
 import modtools.utils.ui.LerpFun.DrawExecutor;
 import nipx.HotSwapAgent;
-import nipx.jni.helper.MasterKey;
 import nipx.util.LibTool;
 import rhino.NativeArray;
 
@@ -269,15 +268,15 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 					 }))
 					 .disabled(boolf).row();
 					p.button("View Referrers", Styles.flatt, runT(() -> {
-						 INFO_DIALOG.showInfo(LibTool.getReferrers(obj));
+						 INFO_DIALOG.showInfo(LibTool.getStrongReferrersAsWeak(obj));
 						 hide.run();
 					 }))
-					 .disabled(_ -> !MasterKey.isPanamaBackend() || obj == null).row();
+					 .disabled(_ -> !LibTool.initialized() || obj == null).row();
 					p.button("View All Instances", Styles.flatt, runT(() -> {
 						 INFO_DIALOG.showInfo(LibTool.getInstances(clazz));
 						 hide.run();
 					 }))
-					 .disabled(_ -> !(MasterKey.isPanamaBackend() && clazz != null && clazz != String.class && clazz != Object.class
+					 .disabled(_ -> !(clazz != null && clazz != String.class && clazz != Object.class
 					                  && !Reflect.isWrapper(CAST.box(clazz))
 					                  && LibTool.initialized())).row();
 				}, false, Align.bottom);

@@ -36,6 +36,7 @@ import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.*;
 import modtools.utils.ui.FormatHelper;
 
+import java.lang.ref.WeakReference;
 import java.util.IdentityHashMap;
 
 import static modtools.events.E_JSFunc.*;
@@ -56,10 +57,10 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public static final String ERROR     = "<ERROR>";
 	public static final String STR_EMPTY = "<EMPTY>";
 
-	private static       ValueLabel hoveredLabel;
-	private static       Object     hoveredVal;
-	private static       long       hoveredPrimVal;
-	private static final Point2     hoveredChunk = new Point2();
+	private static       ValueLabel            hoveredLabel;
+	private static       WeakReference<Object> hoveredValRef;
+	private static       long                  hoveredPrimVal;
+	private static final Point2                hoveredChunk = new Point2();
 
 	/** configuration */
 	public static final int     STEP_SIZE = 64;
@@ -112,7 +113,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 
 	//region Hover State Accessors
 	public Object hoveredVal() {
-		return hoveredLabel == this ? hoveredVal : null;
+		return hoveredLabel == this && hoveredValRef != null ? hoveredValRef.get() : null;
 	}
 	public Point2 hoveredChunk() {
 		return hoveredLabel == this ? hoveredChunk : UNSET_P;
@@ -153,7 +154,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 			}
 			private final IntSeq keys = new IntSeq();
 			private void hover(float x, float y) {
-				hoveredVal = null;
+				hoveredValRef = null;
 				hoveredLabel = null;
 				hoveredChunk.set(UNSET_P);
 
@@ -168,7 +169,8 @@ public abstract class ValueLabel extends ExtendingLabel {
 					if (index <= cursor && cursor <= toIndex) {
 						hoveredChunk.set(index, toIndex);
 						hoveredLabel = ValueLabel.this;
-						hoveredVal = startIndexMap.get(index);
+						Object obj = startIndexMap.get(index);
+						hoveredValRef = (obj != null) ? new WeakReference<>(obj) : null;
 						return;
 					}
 				}
@@ -177,7 +179,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 		MenuBuilder.addShowMenuListenerp(this, () -> {
 			ValueLabel label = this;
 			// Log.info(hoveredVal);
-			final Object val = hoveredVal;
+			final Object val = hoveredValRef != null ? hoveredValRef.get() : null;
 			if (val != null) {
 				Class<?> type1 = valToType.get(val);
 				Object   obj   = valToObj.get(val);
@@ -338,6 +340,8 @@ public abstract class ValueLabel extends ExtendingLabel {
 		val = null;
 		primVal = 0;
 		primInited = false;
+		clearExpand();
+		resetRender();
 		super.setText((CharSequence) null);
 		prefSizeInvalid = true;
 	}
@@ -808,7 +812,7 @@ public abstract class ValueLabel extends ExtendingLabel {
 	public <T> T getVal(Class<T> type) {
 		return type.cast(val);
 	}
-	/** 自动包括primVal，用于右键菜单  */
+	/** 自动包括primVal，用于右键菜单 */
 	public Object currentVal() {
 		if (type != null && type.isPrimitive()) {
 			if (!primInited) return null;

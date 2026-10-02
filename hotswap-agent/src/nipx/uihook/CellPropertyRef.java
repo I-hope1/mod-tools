@@ -414,7 +414,7 @@ public class CellPropertyRef {
 
     //region 热替换回调
 
-    public static void afterRedefined(String slashName, byte[] newBytecode) {
+    public static void afterRedefine(String slashName, byte[] newBytecode) {
         if (!enabled) return;
         Runnable work = () -> {
             boolean[] busy = BUSY.get();

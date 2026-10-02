@@ -30,8 +30,8 @@ public final class ClassDiffUtil {
 		/** 线程本地变量，存储比较上下文，避免重复创建对象 */
 		static final ThreadLocal<ComparisonContext> CONTEXT       = ThreadLocal.withInitial(ComparisonContext::new);
 		/** 旧版本接口映射表：hash -> 接口全限定名 */
-		final                LongObjectMap<String>
-		                                                    oldInterfaces = new LongObjectMap<>(),
+		final        LongObjectMap<String>
+		                                            oldInterfaces = new LongObjectMap<>(),
 		/** 新版本接口映射表：hash -> 接口全限定名 */
 		newInterfaces = new LongObjectMap<>();
 
@@ -100,10 +100,14 @@ public final class ClassDiffUtil {
 		/** 字段变更列表：包括新增和删除的字段，存储格式为 "+ fieldName" 或 "- fieldName" */
 		public final List<String> changedFields       = new ArrayList<>();
 
+		/** 用于分析新增的实例字段 */
+		public final Set<String> addedInstanceFields = new HashSet<>();
+		public final Set<String> addedStaticFields   = new HashSet<>();
+
 		/** 继承层次是否发生变化（父类或接口变更） */
-		public boolean hierarchyChanged = false;
+		public       boolean      hierarchyChanged = false;
 		/** 错误信息列表：记录严重的不兼容变更 */
-		public final List<String> errors = new ArrayList<>();
+		public final List<String> errors           = new ArrayList<>();
 
 		/**
 		 * 重置所有集合，清空之前的比较结果
@@ -114,6 +118,8 @@ public final class ClassDiffUtil {
 			addedMethods.clear();
 			removedMethods.clear();
 			changedFields.clear();
+			addedInstanceFields.clear();
+			addedStaticFields.clear();
 			hierarchyChanged = false;
 			errors.clear();
 		}
@@ -204,12 +210,15 @@ public final class ClassDiffUtil {
 
 		// 遍历新版本字段
 		for (FieldNode newF : newC.fields) {
-			long key = Utils.compositeHash(newF.name, newF.desc);
-			String oldVal = oldFieldsMap.remove(key);
+			long    key         = Utils.compositeHash(newF.name, newF.desc);
+			String  oldVal      = oldFieldsMap.remove(key);
 			boolean newIsStatic = (newF.access & Opcodes.ACC_STATIC) != 0;
+
 			// 如果旧映射表中没有此key，说明是新增字段
 			if (oldVal == null) {
 				d.changedFields.add("+ " + (newIsStatic ? "*" : "") + newF.name);
+
+				(newIsStatic ? d.addedStaticFields : d.addedInstanceFields).add(newF.name);
 			} else {
 				boolean oldIsStatic = oldVal.startsWith("*");
 				if (oldIsStatic != newIsStatic) {
@@ -217,6 +226,8 @@ public final class ClassDiffUtil {
 					// 判定为：旧字段删除，新字段新增
 					d.changedFields.add("- " + (oldIsStatic ? "*" : "") + cleanName);
 					d.changedFields.add("+ " + (newIsStatic ? "*" : "") + newF.name);
+
+					(newIsStatic ? d.addedStaticFields : d.addedInstanceFields).add(newF.name);
 					// d.errors.add("! CRITICAL: Field static modifier changed: " + cleanName);
 				}
 			}

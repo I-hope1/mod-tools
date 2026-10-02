@@ -3,8 +3,8 @@ package nipx;
 import arc.Core;
 import nipx.annotation.*;
 import nipx.profiler.DynamicProfilerAPI;
-import nipx.util.LibTool;
 import nipx.ref.InitFix;
+import nipx.uihook.CellPropertyRef;
 import nipx.util.*;
 
 import java.io.*;
@@ -223,6 +223,7 @@ public class HotSwapAgent {
 			if (DEBUG) log("Processing changes: " + path);
 			try {
 				byte[] bytecode  = Files.readAllBytes(path);
+				// dotClassName
 				String className = Utils.getClassNameASM(bytecode);
 				if (className == null) {
 					skippedCount++;
@@ -330,6 +331,14 @@ public class HotSwapAgent {
 		// 批量执行重定义（针对已加载类）
 		applyRedefinitions(definitions);
 		processAnnotations(definitions);
+		for (ClassDefinition def : definitions) {
+			try {
+				InitFix.afterRedefine(def.getDefinitionClass());
+			} catch (Throwable e) {
+				error("Failed to process InitFix.", e);
+				InitFix.afterRedefineFailed(def.getDefinitionClass());
+			}
+		}
 		processUIDispatch(definitions);
 
 		if (skippedCount > 0) info("Skipped " + skippedCount + " unchanged classes.");
@@ -386,6 +395,12 @@ public class HotSwapAgent {
 
 
 	private static void processUIDispatch(List<ClassDefinition> definitions) {
+		if (CellPropertyRef.isEnabled()) {
+			for (ClassDefinition definition : definitions) {
+				Class<?> clazz = definition.getDefinitionClass();
+				CellPropertyRef.afterRedefine(AnnotationTransformer.internalName(clazz), definition.getDefinitionClassFile());
+			}
+		}
 	}
 
 

@@ -64,7 +64,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		String dotClassName = className.replace('/', '.');
 		if (HotSwapAgent.isBlacklisted(dotClassName)) return null;
 
-		byte[]  bytes    = classfileBuffer;  // 不clone，用引用做"是否修改"判断
+		byte[] bytes = classfileBuffer;  // 不clone，用引用做"是否修改"判断
 
 
 		boolean modified = false;
@@ -77,12 +77,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		}
 		if (classBeingRedefined != null) {
 			LambdaRef.beforeClassRedefined(className, classfileBuffer);
-			byte[] finalClassfileBuffer = classfileBuffer;
-			if (CellPropertyRef.isEnabled()) {
-				Core.app.post(() -> CellPropertyRef.afterRedefined(className, finalClassfileBuffer));
-			}
 			InitFix.beforeRedefine(classBeingRedefined);
-			Core.app.post(() -> InitFix.afterRedefined(classBeingRedefined));
 		}
 
 		try {

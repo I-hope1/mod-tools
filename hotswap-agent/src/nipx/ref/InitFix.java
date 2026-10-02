@@ -198,15 +198,8 @@ public class InitFix {
 		PENDING.remove(host);
 		cleanupStalePatches();
 
-		Set<String> addedStaticFields   = new HashSet<>();
-		Set<String> addedInstanceFields = new HashSet<>();
-		for (String change : diff.changedFields) {
-			if (change.startsWith("+ *")) {
-				addedStaticFields.add(change.substring(3));
-			} else if (change.startsWith("+ ")) {
-				addedInstanceFields.add(change.substring(2));
-			}
-		}
+		Set<String> addedStaticFields   = diff.addedStaticFields;
+		Set<String> addedInstanceFields = diff.addedInstanceFields;
 
 		if (addedStaticFields.isEmpty() && addedInstanceFields.isEmpty()) {
 			REPORTS.put(host, new PatchReport(Map.of(), Map.of(), false));
@@ -1228,7 +1221,7 @@ public class InitFix {
 
 	// ==================== 应用与生命周期 ====================
 
-	public static void afterRedefined(Class<?> clazz) {
+	public static void afterRedefine(Class<?> clazz) {
 		if (!HotSwapAgent.HOTSWAP_PLUS || clazz == null) return;
 
 		PendingPatch patch = PENDING.remove(clazz);

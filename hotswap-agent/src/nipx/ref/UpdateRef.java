@@ -1451,7 +1451,7 @@ public class UpdateRef {
 	private static final Seq<Runnable> DEFERRED_REMOVALS = new Seq<>();
 	private static volatile boolean hasDeferredRemovals;
 	private static volatile boolean flushScheduled;
-	private static volatile int flushFailCount;
+	private static volatile boolean flushLoggedError;
 
 	private static void deferRemoval(Runnable r) {
 		if (r == null || r == NOOP || r == REMOVED) return;
@@ -1459,7 +1459,6 @@ public class UpdateRef {
 			if (!DEFERRED_REMOVALS.contains(r, true)) {
 				DEFERRED_REMOVALS.add(r);
 				hasDeferredRemovals = true;
-				flushFailCount = 0; // 新动作入队时重置失败计数，允许重新尝试调度
 			}
 		}
 		tryScheduleDeferredFlush();
@@ -1470,22 +1469,23 @@ public class UpdateRef {
 	 * 通过 {@link Core#app} 的 {@link Application#post} 方法向主线程安全点投递清理任务。
 	 * 采用 {@code flushScheduled} 标志位与 double-check 快速短路：
 	 * 1) 无暂存动作或已有投递任务在等待主线程执行时 100% 零锁竞争与零开销，杜绝重复投递导致的空转 post；
-	 * 2) 若投递连续失败达到上限（5次），将暂停在热路径上反复调度，直到有新的清理动作入队（由 {@link #deferRemoval} 重置计数）。
+	 * 2) 若投递发生异常，仅在首次失败时记录日志，并允许后续轮询或新动作继续尝试自愈，杜绝永久挂起停摆。
 	 */
 	public static void tryScheduleDeferredFlush() {
-		if (!hasDeferredRemovals || flushScheduled || Core.app == null || flushFailCount >= 5) return;
+		if (!hasDeferredRemovals || flushScheduled || Core.app == null) return;
 		synchronized (DEFERRED_REMOVALS) {
-			if (!hasDeferredRemovals || flushScheduled || DEFERRED_REMOVALS.isEmpty() || flushFailCount >= 5) return;
+			if (!hasDeferredRemovals || flushScheduled || DEFERRED_REMOVALS.isEmpty()) return;
 			flushScheduled = true;
 		}
 		try {
 			Core.app.post(UpdateRef::flushDeferredRemovals);
+			flushLoggedError = false;
 		} catch (Throwable t) {
 			synchronized (DEFERRED_REMOVALS) {
 				flushScheduled = false;
-				flushFailCount++;
-				if (flushFailCount == 5) {
-					HotSwapAgent.error("[UpdateRef] Core.app.post failed 5 times continuously, suspending retries until new removals added: " + t.getMessage(), t);
+				if (!flushLoggedError) {
+					flushLoggedError = true;
+					HotSwapAgent.error("[UpdateRef] Core.app.post failed: " + t.getMessage(), t);
 				}
 			}
 		}
@@ -1507,7 +1507,7 @@ public class UpdateRef {
 		synchronized (DEFERRED_REMOVALS) {
 			flushScheduled = false;
 			hasDeferredRemovals = false;
-			flushFailCount = 0;
+			flushLoggedError = false;
 			if (DEFERRED_REMOVALS.isEmpty()) return;
 			toRun = new Seq<>(DEFERRED_REMOVALS);
 			DEFERRED_REMOVALS.clear();
@@ -1748,6 +1748,7 @@ public class UpdateRef {
 		if (f == null) {
 			// fn 已被清空（HotSwap 删除或 NoSuchMethodError 兜底），若尚未投递熔断动作则仅触发一次
 			triggerRemove();
+			tryScheduleDeferredFlush();
 			return true;
 		}
 		return false;

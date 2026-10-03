@@ -615,7 +615,22 @@ tasks.register("hstestRun", Exec) {
 		if (!new File(f).exists()) logger.warn("hstest: javac 不存在: " + f)
 	}
 	doFirst {
-		commandLine "bash", "suite.sh", cp
+		// 必须指定 **Git Bash 的绝对路径**。
+		//
+		// PATH 上的 `bash` 会解析到 C:\Windows\System32\bash.exe —— 那是 **WSL**，
+		// 而 WSL 是 Linux，**根本执行不了 Windows 的 javac.exe**（F: 也不在 /mnt 下）。
+		// 实测症状：cwd=/mnt/e/...、javac=/mnt/f/...: No such file or directory。
+		// 因此不依赖 PATH，直接找 Git Bash。
+		def candidates = ["E:/Program Files/Git/bin/bash.exe",
+		                  "C:/Program Files/Git/bin/bash.exe",
+		                  "E:/Program Files/Git/usr/bin/bash.exe",
+		                  "C:/Program Files/Git/usr/bin/bash.exe"]
+		def gitBash = candidates.find { new File(it).exists() }
+		if (gitBash == null) {
+			throw new GradleException("hstest 需要 Git Bash，但以下路径都没有: " + candidates)
+		}
+		logger.lifecycle("hstest: Git Bash = " + gitBash)
+		commandLine gitBash, "suite.sh", cp
 		environment "HSTEST_JAVA", javaBin
 		environment "HSTEST_JAVAC8", jdk8
 		environment "HSTEST_JAVAC17", jdk17

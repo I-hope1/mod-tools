@@ -602,7 +602,14 @@ public class LambdaAligner {
 		if (ni.children.isEmpty()) return false;
 		for (String child : ni.children) {
 			SyntheticInfo ci = ctx.childIndex.get(child);
-			if (ci != null && !ci.matched) return true;
+			if (ci != null && !ci.matched) {
+				// 这是"祖先链被死锁"那类问题的唯一现场证据：父被未落定的子挡住，
+				// 而该子若最终无候选（描述符不兼容等），父会在所有趟里一直被挡住，
+				// 最后与子一起走幽灵。DEBUG 下打印，便于区分"父被挡"与"父无候选"。
+				dbg(() -> "SKIP(parent has unmatched child) parent=" + ni.name
+					+ " child=" + child + " childMatched=false");
+				return true;
+			}
 		}
 		return false;
 	}

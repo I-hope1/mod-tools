@@ -1090,3 +1090,55 @@ for j in $CP; do unzip -l "$j" | grep -q 'asm/tree/ClassNode' && echo "$j"; done
 
 - "叶子归属对组内顺序敏感" —— 仅在 javac 25 上观察到 4/8 失败；
 - "JDK 21 下 8/8 通过是同名巧合掩盖" —— 未追踪、未验证。
+
+
+## 收紧：金丝雀测的是 Gradle，不是套件（review 纠正）
+
+review 指出：`hstestCanary` 是一个**无条件失败**的任务，它只证明"Gradle 任务失败会让构建变红"——
+这件事本来就成立。真正要守的是"**套件里某条断言失败 ⇒ 进程非零退出**"。
+
+`hstestSemAssert` 因缺夹具参数而失败也**不能代替**它：那是**异常路径**，不是**断言路径**。
+如果 `SemAssert` 遇到 FAIL 只打印、最后仍 `exit 0`，这两种验证都发现不了 ——
+**而这正是当初组 7 的 FAIL 无人察觉的形态。**
+
+### 正确的负对照（尚未做）
+
+放在**套件内部**：
+
+1. 套件末尾跑一条**故意错误的自检断言**（对已知输入断言一个已知错误的值），
+   要求框架**记录到一次失败**，而不是让整体变红；
+2. 一个单独开关（环境变量或参数）能让这条自检**真的暴露出来**；
+   手动打开一次，确认 `hstestSemAssert` 变红，再关掉。
+
+这样验证的是 **`check()` → 退出码** 的整条链。
+
+### 已确认的一行检查（review 第 4 点）
+
+- ✅ **编译确实没钉 21**：`:hstestClasses` 产出 major version **69**（宿主 JDK 25）。
+- ❌ **修不了**，而且原因值得记下：给 hstest 设 `toolchain 21` 或 `options.release = 21`，
+  都会让 Gradle 认为 hstest 的目标运行版本是 21，进而**拒绝消费用 25 编的
+  `hotswap-agent` / `jni-agent`**：
+
+  ```
+  Could not resolve project ':hotswap-agent'.
+  > Dependency resolution is looking for a library compatible with JVM runtime version 21,
+    but 'project ':hotswap-agent'' is only compatible with JVM runtime version 25 or newer.
+  ```
+
+  因此运行时也**不能**钉 21。结论：**测试入口跟着宿主 JDK 走**（与那些库一致）；
+  需要跨版本读字节码的是**夹具**，它们由 `--release 21` 单独编译（ASM 9.9.1 才读得动）。
+- ✅ `run.sh` 已在文件头标注**已废弃，勿用**，并写明替代入口是 `./gradlew hstest`。
+
+### 仍待做（下一轮，按 review 顺序）
+
+1. 套件内的自检断言 + `check()`→退出码整链的手动验证；
+2. 夹具改为**提交真实 javac 产物**（`.class` + 源码 + 生成命令清单，文件名带编译器版本），
+   **不要用 ASM 生成** —— ASM 生成的类没有真实 javac 的方法表顺序、lambda 编号、
+   indy 引导方法形态、行号与帧，而这些恰是本系列问题的变量；至少覆盖 8/17/21；
+   目标版本不得高于 ASM 9.9.1 能读的上限（别再用 25 编夹具）；
+3. 数量基线放进 `expected-count.txt`：**少于基线失败、多于基线也失败**（提示更新基线），
+   expected-failure **单独计数**，`check` 数为 0 要特判；
+4. 夹具能自包含加载后，把 `hstest` 挂到 `check`，再删掉本文件里"没有任何结果受构建约束"那句；
+5. 在 21 上存基线，然后做编号平移（用 `ClassRemapper`；注意核对没有 `$deserializeLambda$`），
+   检验同名巧合假设；
+6. 最后才是上行深度两趟，先写红的验收。

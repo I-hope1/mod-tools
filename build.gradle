@@ -534,10 +534,18 @@ sourceSets {
 	}
 }
 
+
 dependencies {
 	hstestImplementation project(":hotswap-agent")
 	hstestImplementation project(":jni-agent")
 }
+
+// javaLauncher 只管**运行**，不管编译：不设这一行，测试入口会被编成宿主 JDK 的
+// major 版本（实测 69 = JDK 25），运行时可能 UnsupportedClassVersionError。
+// 注意：不能给 hstest 设 toolchain 21、也不能设 options.release=21 ——
+// 两者都会让 Gradle 认为 hstest 的目标运行版本是 21，进而拒绝消费用 25 编的
+// hotswap-agent / jni-agent。测试入口就跟着宿主 JDK 编（与那些库一致），
+// 需要跨版本读字节码的是**夹具**，它们由 --release 21 单独编译。
 
 // 每个入口一个任务；断言失败 => 非零退出 => 构建变红。
 def hstestEntry = { String name, String cls, List<String> fixtureArgs ->
@@ -547,7 +555,10 @@ def hstestEntry = { String name, String cls, List<String> fixtureArgs ->
 		dependsOn tasks.named("hstestClasses")
 		classpath = sourceSets.hstest.runtimeClasspath
 		mainClass = cls
-		javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+		// 用宿主 JDK 运行（与 hotswap-agent/jni-agent 的编译版本一致）。
+		// 不要钉 21：那些库是用 25 编的，钉 21 会让 Gradle 拒绝解析依赖
+		// （"only compatible with JVM runtime version 25 or newer"）。
+		// 夹具由 --release 21 单独编，ASM 9.9.1 能读。
 		// 夹具目录由 run.sh 按版本编译；此处只跑入口
 		args = fixtureArgs
 	}

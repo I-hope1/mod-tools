@@ -372,9 +372,17 @@ public class LambdaAligner {
 			// 违反的配对就地撤销，让旧方法走幽灵、新方法走阶段二拿避障名 ——
 			// 把"静默错位"变回"显式熔断"，至少不比之前更糟。
 			//
-			// 实测动机（scratch/hstest 的 LeakProbe）：save3 两轮序列里 $3/$4 互换，
-			// 而判别实验已排除状态残留（CONTEXT.remove() 后结果不变），根因尚未定位；
-			// 这道校验与根因无关，单轮/两轮都适用。
+			// 实测动机（scratch/hstest 的 LeakProbe）：save3 两轮序列里 $3/$4 互换。
+			// 判别实验已排除**跨调用状态残留**（CONTEXT.remove() 后结果不变）。
+			//
+			// 根因后来已定位并修复，两处都在 scan 内：
+			//   • 子树形状只算了一遍 ⇒ 父可能先于子被处理、读到子的哨兵默认值，
+			//     于是新旧两侧被算成**同一个错值**，等值校验反而放行。
+			//     现改为迭代到定稿。
+			//   • 形状哨兵曾用 "()"（本身是叶子的合法形状）⇒ 与"未定稿"撞车。
+			//     现用 null 表示未定稿。
+			// 因此这道校验现在是纯粹的**收口防线**，正常情况下不触发；
+			// 若它真的触发，说明又出现了新的形状计算问题，值得查。
 			verifyShapeInvariant(ctx);
 
 			// 【阶段二】未匹配的新方法统一处理
@@ -428,8 +436,12 @@ public class LambdaAligner {
 			// 传入 oldCn（已解析过一次）—— 避免 resurrectOrphanedLambdas 二次读 oldBytes
 			return resurrectOrphanedLambdas(oldCn, alignedBytes, presentKeys, ctx);
 		} catch (Exception e) {
-			// 降级：不崩溃，返回原始字节码
+			// 降级：不崩溃，返回原始字节码。
+			// 默认只记一行（热更失败不该刷屏）；DEBUG 下打完整堆栈，便于定位。
 			HotSwapAgent.info("[LambdaAligner] align failed, fallback to newBytes: " + e);
+			if (DEBUG) {
+				e.printStackTrace();
+			}
 			return newBytes;
 		} finally {
 			ctx.reset();
@@ -620,7 +632,16 @@ public class LambdaAligner {
 				SyntheticInfo oi = ni.matchedWith;
 				if (oi == null || ni.shape.equals(oi.shape)) continue;
 
-				// 撤销：清掉改名登记与双方的匹配状态
+				// 撤销：清掉改名登记与双方的匹配状态。
+				//
+				// 注意**不回滚** simpleNameWitness / renameBySimpleName：那两张表记录的是
+				// "同一 simpleName 的唯一目标"，本轮撤销并不会抹掉"曾经见证过"这一事实。
+				// 后果偏保守 —— 该名字仍可能被见证为已使用/歧义，从而少做一次
+				// 字符串常量反查，**不会产生错误映射**。
+				//
+				// 之所以不尝试回滚：witnessSimpleName 未记录"本次调用是否插入/改写了该条目"，
+				// 盲目 remove 会把**别的配对**写入的见证一并删掉，反而制造不一致。
+				// 若将来要支持回滚，需要先让见证记录来源。
 				if (ctx.renameMap.get(ni.name + ni.desc) != null) {
 					ctx.renameMap.remove(ni.name + ni.desc);
 				}

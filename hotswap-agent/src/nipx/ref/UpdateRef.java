@@ -49,12 +49,13 @@ public class UpdateRef {
 	/** 空操作常量，用于事件回调发生异常时的静默熔断，防止触发任何外部破坏性清理 */
 	public static final Runnable NOOP = () -> {};
 
+	/** 标记熔断清理已被触发的哨兵对象，替代原有的 boolean removed 标志，兼顾状态判定与闭包引用释放 */
+	public static final Runnable REMOVED = () -> {};
+
 	/** 被代理的目标函数式接口实例（例如 {@link Runnable}、{@link Cons} 等）；发生异常或注销后置为 null */
 	private volatile Object   fn;
-	/** 自定义熔断/销毁动作；为 null 时表示静默失效（仅清除 fn 引用，不再重复执行） */
+	/** 自定义熔断/销毁动作；为 null 时表示静默失效；为 {@link #REMOVED} 时表示已触发熔断清理 */
 	private volatile Runnable onRemove;
-	/** 标记熔断清理任务是否已投递，避免在 60FPS 轮询或高频触发下向事件队列狂发重复任务 */
-	private volatile boolean  removed;
 
 	/** 线程本地上下文，支持通过 {@link #withOnRemove} 跨调用栈隐式传递熔断清理回调 */
 	private static final ThreadLocal<Runnable> CONTEXT_ON_REMOVE = new ThreadLocal<>();
@@ -73,19 +74,23 @@ public class UpdateRef {
 	/**
 	 * 获取当前配置的熔断清理动作。
 	 *
-	 * @return 当前绑定的清理动作，可能为 null
+	 * @return 当前绑定的清理动作，若已熔断或未设置则返回 null
 	 */
 	public Runnable getOnRemove() {
-		return onRemove;
+		Runnable r = onRemove;
+		return r == REMOVED ? null : r;
 	}
 
 	/**
 	 * 动态设置或替换当前包装引用的熔断清理动作。
+	 * 若当前已处于熔断状态（{@code onRemove == REMOVED}），则忽略此设置。
 	 *
 	 * @param onRemove 新的清理动作
 	 */
 	public void setOnRemove(Runnable onRemove) {
-		this.onRemove = onRemove;
+		if (this.onRemove != REMOVED) {
+			this.onRemove = onRemove;
+		}
 	}
 
 	/**
@@ -909,14 +914,7 @@ public class UpdateRef {
 	private boolean checkFn(Object f) {
 		if (f == null) {
 			// fn 已被清空（HotSwap 删除或 NoSuchMethodError 兜底），若尚未投递熔断动作则仅触发一次
-			if (!removed) {
-				removed = true;
-				if (Core.app != null) {
-					Core.app.post(this::doRemove);
-				} else {
-					doRemove();
-				}
-			}
+			triggerRemove();
 			return true;
 		}
 		return false;
@@ -1058,23 +1056,36 @@ public class UpdateRef {
 	 * @return 若熔断清理动作已投递或已执行则返回 true
 	 */
 	public boolean isRemoved() {
-		return removed;
+		return onRemove == REMOVED;
 	}
 
 	/**
-	 * 执行熔断清理动作。
-	 * 保证有且仅有一次执行，并在执行时即刻将 {@link #onRemove} 置空以彻底释放所捕获的变量闭包。
+	 * 触发精准熔断清理流程（单实例仅触发一次）。
+	 * 采用 {@code onRemove == REMOVED} 哨兵机制替代 boolean 状态标志，
+	 * 在触发瞬间断开对清理闭包的引用，并按需向主线程队列投递执行任务。
 	 */
-	private void doRemove() {
-		this.removed = true;
-		Runnable r = this.onRemove;
-		this.onRemove = null; // 确保仅执行一次，且断开对捕获对象的引用
+	private void triggerRemove() {
+		if (this.onRemove == REMOVED) return;
+		Runnable r;
+		synchronized (this) {
+			if (this.onRemove == REMOVED) return;
+			r = this.onRemove;
+			this.onRemove = REMOVED;
+		}
 		if (r != null) {
-			try {
-				r.run();
-			} catch (Throwable t) {
-				HotSwapAgent.error("[UpdateRef] onRemove failed: " + t.getMessage(), t);
+			if (Core.app != null) {
+				Core.app.post(() -> executeRemove(r));
+			} else {
+				executeRemove(r);
 			}
+		}
+	}
+
+	private static void executeRemove(Runnable r) {
+		try {
+			r.run();
+		} catch (Throwable t) {
+			HotSwapAgent.error("[UpdateRef] onRemove failed: " + t.getMessage(), t);
 		}
 	}
 
@@ -1082,7 +1093,7 @@ public class UpdateRef {
 	 * 处理 LinkageError（热重载导致方法不存在或签名不兼容）：
 	 * 1) 打印诊断日志方便热重载排查；
 	 * 2) 立即置空 {@code fn} 停止后续调用；
-	 * 3) 投递主线程异步任务执行精准熔断清理 {@link #doRemove()}（具备 removed 防抖，单实例仅投递一次）。
+	 * 3) 触发精准熔断清理 {@link #triggerRemove()}（具备 REMOVED 哨兵防抖，单实例仅投递一次）。
 	 *
 	 * @param f 发生故障的原始函数实例
 	 * @param e 捕获的链接错误异常
@@ -1091,14 +1102,7 @@ public class UpdateRef {
 		HotSwapAgent.info("[UpdateRef] NoSuchMethodError from " + (f == null ? "?" : f.getClass().getName())
 		                  + ": " + e.getMessage());
 		clearFn();
-		if (!removed) {
-			removed = true;
-			if (Core.app != null) {
-				Core.app.post(this::doRemove);
-			} else {
-				doRemove();
-			}
-		}
+		triggerRemove();
 	}
 
 }

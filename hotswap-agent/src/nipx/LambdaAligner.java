@@ -135,12 +135,12 @@ public class LambdaAligner {
 		 * <ul>
 		 *   <li>若由 {@link nipx.ref.UpdateRef} 发起（UI / 定时轮询 / 事件回调）：抛出 {@link NoSuchMethodError}，
 		 *       触发精准局部熔断（如 {@code element.update(null)}），彻底切断 60FPS 空转与死循环刷屏；</li>
-		 *   <li>若由普通业务代码发起（未受 UpdateRef 保护）：向 {@code System.err} 打印警告并返回默认值（0 / null / false），
-		 *       绝不抛出异常引发程序崩溃。</li>
+		 *   <li>若由普通业务代码发起（未受 UpdateRef 保护）：经 {@link HotSwapAgent#warn} 打印警告并返回默认值（0 / null / false），
+		 *       <b>不抛出异常</b>（指幽灵自身不抛；返回的 null / 0 在下游仍可能触发 NPE，需调用方自行判空）。</li>
 		 * </ul>
 		 */
 		SMART_ADAPTIVE,
-		/** 向 {@code System.err} 打印一条日志，并返回默认值（0 / null / false）。 */
+		/** 经 {@link HotSwapAgent#warn} 打印一条日志，并返回默认值（0 / null / false）。 */
 		LOG_AND_RETURN_DEFAULT,
 		/** 无条件抛出 {@link NoSuchMethodError}。 */
 		THROW_NO_SUCH_METHOD,
@@ -373,7 +373,7 @@ public class LambdaAligner {
 			//
 			// 与当初那个 save3 形状 bug 的关系：那个 bug 是**两侧算成同一个错值**，
 			// 任何等值校验都放行；它已被两处修复解决（shape 迭代到定稿、哨兵改用 null），
-			// 见 computeShapes 的说明。本校验防的是另一类失败（子归属错位）。
+			// 见 scan 末尾对子树形状的定点迭代。本校验防的是另一类失败（子归属错位）。
 			verifyRefConsistency(ctx);
 
 			// 【阶段二】未匹配的新方法统一处理
@@ -570,8 +570,7 @@ public class LambdaAligner {
 	 * 因为匹配是单调的：一旦子落定就不会再变，父可以安全地基于它做决定。</p>
 	 */
 	/**
-	 * 当双方都有子 lambda 时，检查"子的配对对象"是否与旧方法的子逐个吻合。
-	 *
+	 * 当双方都有子 lambda 时，检查"子的配对对象"是否与旧方法的子逐个吻合。	 *
 	 * <p>为什么需要：{@link #sameSemantics} 是递归语义指纹，后代一旦被编辑，祖先的语义
 	 * 指纹也会变，于是祖先拿不到任何候选（实测 save3 的 V2→V3：中层/外层因此被幽灵化，
 	 * 子被改体是 update 期最常见的动作）。子树等价这条证据在"后代被改"时必然失效，
@@ -784,11 +783,6 @@ public class LambdaAligner {
 	}
 
 	/**
-	 * Step 2：顺序回退 —— 只处理"指纹也对不上、仍无归宿"的新方法。
-	 *
-	 * @return 本趟是否至少配对了一个方法
-	 */
-	/**
 	 * Step 2 的 **A 趟**：只配"上行深度 + shape 都相等"的对。
 	 *
 	 * <p>必须在**全类**上先跑完 A 趟，再进 B 趟（见调用处的说明）—— 混在同一个单组循环里
@@ -833,6 +827,14 @@ public class LambdaAligner {
 		return progressed;
 	}
 
+	/**
+	 * Step 2：顺序回退 —— 只处理"指纹也对不上、仍无归宿"的新方法（B 趟）。
+	 *
+	 * <p>A 趟（{@link #step2PassA}）已先在**全类**上跑完并配掉"深度 + shape 都相等"的对，
+	 * 这里再用放宽的候选条件兜底。两趟分开的原因见 {@link #step2PassA}。</p>
+	 *
+	 * @return 本趟是否至少配对了一个方法
+	 */
 	private static boolean step2(MatchContext ctx, List<SyntheticInfo> newGroup, List<SyntheticInfo> oldGroup) {
 		boolean progressed = false;
 		for (SyntheticInfo ni : newGroup) {
@@ -895,8 +897,8 @@ public class LambdaAligner {
 				warnPositionalMismatch(ctx.currentClass, bestOld, ni.name, ni.desc);
 			}
 			recordRename(ctx, ni, bestOld.name);
-			// 与 pair() 保持一致：登记配对对象。否则 verifyShapeInvariant 看不到
-			// Step 2 的配对（它按 matchedWith 遍历），校验会漏掉这一批。
+			// 与 pair() 保持一致：登记配对对象。否则 align 末尾的引用一致性校验
+			// 看不到 Step 2 的配对（它按 matchedWith 遍历），校验会漏掉这一批。
 			ni.matchedWith = bestOld;
 			ni.matched = true;
 			bestOld.matched = true;
@@ -1445,8 +1447,6 @@ public class LambdaAligner {
 			for (SyntheticInfo info : g) {
 				if (info.children.isEmpty()) continue;
 
-				// 子树形状：由子形状串接而成（与内容无关）
-
 				// 新类侧额外登记"子名 -> SyntheticInfo"，供 calleesPairTo 查"子配给了谁"
 				if (!isOld) {
 					List<SyntheticInfo> cis = new ArrayList<>(info.children.size());
@@ -1461,16 +1461,16 @@ public class LambdaAligner {
 		// groups 的遍历顺序不确定，父可能先于子被处理；此时**读到未定稿的子就跳过本轮**，
 		// 绝不用哨兵值冒充叶子。收敛判据是"没有未定稿 且 无变化"。
 		//
-		// 性能：串接缓冲在**循环外**分配一次、每轮复用，且用项目既有的
-		// {@link LookupKey}（内嵌 StringBuilder + 缓存 hash + 支持与 CharSequence 比较）
-		// 代替原先每轮每方法的 `new ArrayList` + `String.join`。
+		// 性能：串接缓冲在**循环外**分配一次、每轮复用，代替原先每轮每方法的
+		// `new ArrayList` + `String.join`。
 		//
-		// 说明：子形状**必须排序**后才能比较（否则同一形状因子顺序不同而被判为不同），
-		// 因此排序无法跳过；能省的是"串接与 String 生成"—— 用 LookupKey 拼一次，
+		// 说明：子形状**必须排序**后才能比较（否则同一形状因子顺序不同而被判为不同，
+		// 收敛判据失效）；因此排序无法跳过，能省的是"串接与 String 生成"——
 		// 与既有值相同就**不生成 String**。
+		//
 		// 用 StringBuilder 而非 LookupKey：这里每次都要先 append 再比较，
 		// LookupKey 的缓存 hash 必然失效、用不上；它唯一多出的能力
-		//（equals 支持 CharSequence 比较）由 StringBuilder.contentEquals 提供。
+		//（equals 支持 CharSequence 比较）由 {@link String#contentEquals(CharSequence)} 提供。
 		// LookupKey 适合"稳定 key 反复查哈希表"的场景，不是这里。
 		StringBuilder shapeBuf = new StringBuilder(64);
 		for (int round = 0; round < 64; round++) {
@@ -2224,8 +2224,8 @@ public class LambdaAligner {
 		 *
 		 * <p>{@link #hash}（票据指纹）会把子 lambda 的名字屏蔽成 {@code #SYNTHETIC_METHOD#}，
 		 * 因此"整棵子树只差最深处叶子"的两个 lambda 会得到相同的 {@code hash} ——
-		 * 三层嵌套正是如此：两个中层同 hash、两个外层同 hash，{@code shape} 也退化成
-		 * 相等的集合，否决与正向选择同时失效。实测见 scratch/hstest/deep/。</p>
+		 * 三层嵌套正是如此：两个中层同 hash、两个外层同 hash，据此**无法区分谁是谁**
+		 * （否决与正向选择同时失效）。实测见 scratch/hstest/deep/。</p>
 		 *
 		 * <p>把子的语义指纹折进来后，差异会沿树<b>向上传播</b>：叶子不同 ⇒ 中层语义指纹不同
 		 * ⇒ 外层语义指纹也不同。匹配因此不需要知道深度、也不需要单独的正向选择。</p>

@@ -1322,8 +1322,10 @@ public class UpdateRef {
 		if (eventsMap != map) eventsMap = map;
 		flushDeferredRemovals();
 
-		Object key = listener instanceof EventCons<?> ec ? ec.getKey() : listener;
-		Seq<Cons<?>> seq = map.get(type, () -> new Seq<>(Cons.class));
+		if (listener instanceof EventCons) {
+			map.get(type, () -> new Seq<>(Cons.class)).add(listener);
+			return;
+		}
 
 		EventCons<T>[] box = (EventCons<T>[]) new EventCons[1];
 		Runnable onRemove = () -> {
@@ -1335,19 +1337,9 @@ public class UpdateRef {
 			}
 		};
 
-		EventCons<T> wrapper = (listener instanceof EventCons)
-			? (EventCons<T>) listener
-			: new EventCons<>(listener, onRemove);
+		EventCons<T> wrapper = new EventCons<>(listener, onRemove);
 		box[0] = wrapper;
-
-		for (int i = 0; i < seq.size; i++) {
-			Cons<?> item = seq.items[i];
-			if (item == key || (item instanceof EventCons<?> ec && Objects.equals(ec.getKey(), key))) {
-				seq.set(i, wrapper);
-				return;
-			}
-		}
-		seq.add(wrapper);
+		map.get(type, () -> new Seq<>(Cons.class)).add(wrapper);
 	}
 
 	/**
@@ -1366,8 +1358,10 @@ public class UpdateRef {
 		if (eventsMap != map) eventsMap = map;
 		flushDeferredRemovals();
 
-		Object key = listener instanceof EventRunnableCons erc ? erc.getKey() : listener;
-		Seq<Cons<?>> seq = map.get(type, () -> new Seq<>(Cons.class));
+		if (listener instanceof EventRunnableCons) {
+			map.get(type, () -> new Seq<>(Cons.class)).add((Cons) listener);
+			return;
+		}
 
 		EventRunnableCons[] box = new EventRunnableCons[1];
 		Runnable onRemove = () -> {
@@ -1379,19 +1373,9 @@ public class UpdateRef {
 			}
 		};
 
-		EventRunnableCons wrapper = (listener instanceof EventRunnableCons)
-			? (EventRunnableCons) listener
-			: new EventRunnableCons(listener, onRemove);
+		EventRunnableCons wrapper = new EventRunnableCons(listener, onRemove);
 		box[0] = wrapper;
-
-		for (int i = 0; i < seq.size; i++) {
-			Cons<?> item = seq.items[i];
-			if (item == key || (item instanceof EventRunnableCons erc && Objects.equals(erc.getKey(), key))) {
-				seq.set(i, (Cons) wrapper);
-				return;
-			}
-		}
-		seq.add((Cons) wrapper);
+		map.get(type, () -> new Seq<>(Cons.class)).add(wrapper);
 	}
 
 	/**

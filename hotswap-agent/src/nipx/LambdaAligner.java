@@ -1119,7 +1119,7 @@ public class LambdaAligner {
 				// 第二优先级：全类范围内指纹相同
 				if (bestOld == null) {
 					outer:
-					for (int k = oldGroups.nextEntry(-1); k != -1; k = oldGroups.nextEntry(k)) {
+					for (int k : groupOrder(oldGroups)) {
 						List<SyntheticInfo> g = oldGroups.valueAt(k);
 						if (g == null || g == sameGroup) continue;
 						SyntheticInfo oi = firstFingerprintMatch(ctx, g, ni, true);

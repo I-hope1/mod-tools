@@ -1702,18 +1702,28 @@ public class LambdaAligner {
 		mv.visitCode();
 		Type returnType = Type.getReturnType(desc);
 
-		// 1. 调用纯 Java 静态方法：统一处理策略分发、UpdateRef 栈探测（若命中抛出 NoSuchMethodError）及日志去重
-		mv.visitLdcInsn(className != null ? className : "");
-		mv.visitLdcInsn(name);
-		mv.visitLdcInsn(desc);
+		// 1. 调用纯 Java 静态方法：统一处理策略分发、UpdateRef 栈探测及日志去重。
+		//
+		// 传入的是**注入时就拼好的 location 常量**（单个 LDC），而不是类名/方法名/描述符三个。
+		// 这样运行时热路径上：
+		//   • 不分配任何 String（常量字符串的 hash 在 JVM 里已缓存）；
+		//   • 集合查找是 O(1) 哈希查找，而非线性扫描；
+		//   • 不需要 ThreadLocal 缓冲，也不需要 synchronized。
+		mv.visitLdcInsn(locationOf(className, name, desc));
 		mv.visitMethodInsn(Opcodes.INVOKESTATIC,
 			Type.getInternalName(LambdaAligner.class),
-			"onOrphanInvoked", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", false);
+			"onOrphanInvoked", "(Ljava/lang/String;)V", false);
 
 		// 2. 100% 线性无分支返回类型默认值（若上面抛出异常则直接展开调用栈，根本不会执行到此）
 		injectDefaultReturnValue(mv, returnType, desc);
 		mv.visitMaxs(0, 0);
 		mv.visitEnd();
+	}
+
+	/** location 文本：{@code com.example.Foo#lambda$build$0()V}。注入期算一次，写进字节码常量。 */
+	private static String locationOf(String className, String name, String desc) {
+		if (className == null || className.isEmpty()) return name + desc;
+		return className.replace('/', '.') + '#' + name + desc;
 	}
 
 	private static void injectDefaultReturnValue(MethodVisitor mv, Type returnType, String desc) {
@@ -1771,109 +1781,42 @@ public class LambdaAligner {
 
 	private static final String UPDATE_REF_CLASS = "nipx.ref.UpdateRef";
 	private static final String UPDATE_REF_CLASS_INNER_PREFIX = "nipx.ref.UpdateRef$";
-	private static final StringSet LOGGED_ORPHANS = new StringSet();
 
 	/**
-	 * 日志去重（按内容），命中时**零 String 分配**。
+	 * 已打印过日志的 location（并发安全）。
 	 *
-	 * <p>不能写成 {@code LOGGED_ORPHANS.add(key.copy())} —— {@code Set.add} 的参数
-	 * **无条件求值**，即使该 location 早已记录过也会先 copy 一份，
-	 * 等于在热路径上每次调用都分配一个 String。</p>
+	 * <p>用 {@code ConcurrentHashMap} 支撑：桩代码传来的 location 是**字符串常量**，
+	 * 其 hash 在 JVM 中已缓存，因此查找是 O(1)、**不分配**、且无需任何全局锁。</p>
 	 */
-	private static void logOrphanOnce(LookupKey key) {
-		// addIfAbsentKey 是原子的 check-then-add：并发下同一个 location 只会打一条日志。
-		if (!LOGGED_ORPHANS.addIfAbsentKey(key)) return;
-		String location = key.copy();
-		System.err.println("[LambdaAligner] orphaned lambda invoked: " + location
-			+ " (subsequent invocations will be muted)");
-	}
+	private static final Set<String> LOGGED_ORPHANS =
+		Collections.newSetFromMap(new ConcurrentHashMap<>());
 
-
-	/**
-	 * 按 {@code LookupKey} 内容查询的 {@code Set<String>}，**线程安全**。
-	 *
-	 * <p>元素存普通 {@code String}；查询时可传 {@link LookupKey} —— 此时
-	 * {@code String.equals(LookupKey)} 会返回 false，因此显式改走
-	 * {@link LookupKey#equals(Object)}（它支持与 String 比较），从而**零 String 分配**。</p>
-	 *
-	 * <p><b>为什么必须同步</b>：{@link #onOrphanInvoked} 会被**任意业务线程**并发调用，
-	 * 而两处用法都是 check-then-act（先 {@code containsKey} 再 {@code add}）。
-	 * 用带自身锁的 {@code synchronizedSet} 包住，并把整个判定放进同一临界区，
-	 * 避免并发下同一个 location 重复打日志/重复探测。</p>
-	 *
-	 * <p>未用 {@code ConcurrentHashMap.newKeySet()}：它保证元素是 {@code String} 类型，
-	 * 与 {@link LookupKey#equals(Object)} 的双向比较语义冲突。读远多于写（命中即返回），
-	 * 因此 synchronized 的粗粒度不构成实际瓶颈。</p>
-	 */
-	private static final class StringSet {
-		private final Set<String> delegate = Collections.synchronizedSet(new HashSet<>());
-
-		boolean add(String s) {
-			synchronized (delegate) {
-				return delegate.add(s);
-			}
-		}
-
-		void clear() {
-			synchronized (delegate) {
-				delegate.clear();
-			}
-		}
-
-		/** 按 LookupKey 内容查；与后续 add 构成 check-then-act，因此整体加锁。 */
-		synchronized boolean containsKey(LookupKey k) {
-			synchronized (delegate) {
-				for (String s : delegate) {
-					if (k.equals(s)) return true;
-				}
-				return false;
-			}
-		}
-
-		/** 内容不存在时加入；返回是否**新增**。原子操作，避免并发重复写。 */
-		synchronized boolean addIfAbsentKey(LookupKey k) {
-			synchronized (delegate) {
-				for (String s : delegate) {
-					if (k.equals(s)) return false;
-				}
-				return delegate.add(k.toString());
-			}
+	/** 日志去重。{@code add} 返回 true 表示本次是首次，才打印。 */
+	private static void logOrphanOnce(String location) {
+		if (LOGGED_ORPHANS.add(location)) {
+			System.err.println("[LambdaAligner] orphaned lambda invoked: " + location
+				+ " (subsequent invocations will be muted)");
 		}
 	}
-
-	/**
-	 * 复用的 location 构造缓冲，**每线程一份**。
-	 *
-	 * <p>必须用 {@link ThreadLocal} 包装：{@link #onOrphanInvoked} 是幽灵空壳的入口，
-	 * 可能被**任意业务线程**并发调用（回调、事件、线程池任务…）。
-	 * 若用静态共享缓冲，两个线程会互相覆盖 {@code StringBuilder} 内容，
-	 * 导致查错集合、打错日志，甚至把 location 写坏。</p>
-	 *
-	 * <p>（{@code GlTimerProfiler} 里同样用静态 {@code LookupKey}，但那里有明确的
-	 * "只在 GL 线程访问"前提；此处没有这种前提，不能照搬。）</p>
-	 */
-	private static final ThreadLocal<LookupKey> LOCATION_KEY = ThreadLocal.withInitial(() -> new LookupKey(128));
 
 	/**
 	 * 当热重载中被删除/孤立的空壳 Lambda 方法被调用时由生成的字节码调用。
 	 * <p>
 	 * 所有的策略判定、UpdateRef 栈探测、异常抛出与日志去重均下沉到此 Java 方法中执行，
-	 * 从而保证 ASM 生成的字节码 100% 线性无跳转分支，彻底杜绝 Java 7+ 下因缺少 StackMapTable 引发的 {@link VerifyError}。
+	 * 从而保证 ASM 生成的字节码 100% 线性无跳转分支，彻底杜绝缺少 StackMapTable 引发的 {@link VerifyError}。
 	 * </p>
 	 *
-	 * @param className 调用方类名（内部形式，形如 {@code com/example/Foo}）
-	 * @param name      方法名
-	 * @param desc      方法描述符
+	 * <p><b>入参是注入期就拼好的 location 字符串常量</b>（见 {@link #locationOf}），
+	 * 而不是类名/方法名/描述符三段：这样运行时热路径上不分配任何 String
+	 * （常量字符串的 hash 已被 JVM 缓存），集合查找是 O(1)，且无需 ThreadLocal 或锁。</p>
+	 *
+	 * <p><b>可见性要求</b>：桩代码通过 {@code INVOKESTATIC} 调用本方法，因此目标类的
+	 * 类加载器必须能看到 {@code nipx.LambdaAligner}。父委派正常时成立。</p>
+	 *
+	 * @param location 形如 {@code com.example.Foo#lambda$build$0()V} 的常量
 	 */
-	@SuppressWarnings("SuspiciousMethodCalls")
-	public static void onOrphanInvoked(String className, String name, String desc) {
+	public static void onOrphanInvoked(String location) {
 		OrphanPolicy policy = orphanPolicy;
-		// 用**本线程**的可复用 LookupKey 构造 location：日志去重路径上零 String 分配。
-		LookupKey key = LOCATION_KEY.get().reset();
-		if (className != null && !className.isEmpty()) {
-			key.append(className.replace('/', '.')).append('#');
-		}
-		key.append(name).append(desc);
 
 		if (policy == OrphanPolicy.SMART_ADAPTIVE) {
 			// ⚠️ 这里**不做"非 UpdateRef"的负缓存**。
@@ -1888,24 +1831,24 @@ public class LambdaAligner {
 			// 因此每次调用都必须真实探测。若将来要优化，正确方向是降低探测本身的成本，
 			// 而不是按 location 缓存一个上下文相关的判定。
 			if (isCalledByUpdateRef()) {
-				throw new NoSuchMethodError("Lambda removed by hot swap: " + key);
+				throw new NoSuchMethodError("Lambda removed by hot swap: " + location);
 			}
-			// 普通业务调用：去重后打印日志（命中时零 String 分配，见 logOrphanOnce）。
-			logOrphanOnce(key);
+			// 普通业务调用：去重后打印日志，随后返回默认值（由外部字节码线性返回）
+			logOrphanOnce(location);
 			return;
 		}
 
 		if (policy == OrphanPolicy.THROW_NO_SUCH_METHOD) {
-			throw new NoSuchMethodError("Lambda removed by hot swap: " + key);
+			throw new NoSuchMethodError("Lambda removed by hot swap: " + location);
 		}
 
 		if (policy == OrphanPolicy.THROW) {
-			throw new IllegalStateException("Lambda removed by hot swap: " + key);
+			throw new IllegalStateException("Lambda removed by hot swap: " + location);
 		}
 
 		if (policy == OrphanPolicy.LOG_AND_RETURN_DEFAULT) {
 			// 与 SMART_ADAPTIVE 同款：命中时零 String 分配（见 logOrphanOnce）。
-			logOrphanOnce(key);
+			logOrphanOnce(location);
 			return;
 		}
 

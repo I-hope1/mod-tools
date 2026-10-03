@@ -32,7 +32,7 @@ public class ConcurrencyCheck {
 				try { start.await(); } catch (InterruptedException ignored) { }
 				for (int i = 0; i < PER_THREAD; i++) {
 					// 每个线程有自己唯一的 name；同一 name 重复调用多次
-					LambdaAligner.onOrphanInvoked("t/Conc", "lambda$t" + tid + "$0", "()V");
+					LambdaAligner.onOrphanInvoked("t.Conc#lambda$t" + tid + "$0()V");
 				}
 			}));
 		}

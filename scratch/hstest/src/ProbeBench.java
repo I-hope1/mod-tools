@@ -40,7 +40,7 @@ public class ProbeBench {
 
 		long tNoop = bench(() -> { for (int i = 0; i < ITERS; i++) noop("t/F", "lambda$x$0", "()V"); });
 		long tOrphan = bench(() -> {
-			for (int i = 0; i < ITERS; i++) LambdaAligner.onOrphanInvoked("t/F", "lambda$x$0", "()V");
+			for (int i = 0; i < ITERS; i++) LambdaAligner.onOrphanInvoked("t.F#lambda$x$0()V");
 		});
 		long tProbe = bench(() -> {
 			for (int i = 0; i < ITERS; i++) sink += LambdaAligner.isCalledByUpdateRef() ? 1 : 0;
@@ -74,7 +74,7 @@ public class ProbeBench {
 		try {
 			LambdaAligner.setOrphanPolicy(LambdaAligner.OrphanPolicy.LOG_AND_RETURN_DEFAULT);
 			long tLog = bench(() -> {
-				for (int i = 0; i < ITERS; i++) LambdaAligner.onOrphanInvoked("t/F", "lambda$x$0", "()V");
+				for (int i = 0; i < ITERS; i++) LambdaAligner.onOrphanInvoked("t.F#lambda$x$0()V");
 			});
 			double perLog = (double) tLog / ITERS;
 			System.out.printf("   onOrphanInvoked(LOG_AND_RETURN_DEFAULT): %8.2f ns/次%n", perLog);

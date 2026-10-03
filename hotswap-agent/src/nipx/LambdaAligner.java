@@ -501,9 +501,19 @@ public class LambdaAligner {
 	/** 候选是否可接受：未匹配、非幽灵、指纹与签名一致、且处于同一嵌套层级。 */
 	private static boolean acceptCandidate(MatchContext ctx, SyntheticInfo ni, SyntheticInfo oi) {
 		if (oi.matched || oi.ghost) return false;
-		if (ni.hash != oi.hash) return false;
+		// 用递归语义指纹而非票据指纹：票据指纹屏蔽了子 lambda 的名字，
+		// 使"整棵树只差最深处叶子"的方法互相撞车（三层嵌套即如此）。
+		// 语义指纹一致 ⇔ 整棵子树等价，因此不会把两个不同的 lambda 配成一对。
+		if (!sameSemantics(ni, oi)) return false;
 		if (!isSignatureCompatible(ctx.currentClass, oi, ni)) return false;
 		return sameNestingLevel(ni, oi);
+	}
+
+	/** 两个方法的递归语义指纹是否一致（未定稿时退回票据指纹）。 */
+	private static boolean sameSemantics(SyntheticInfo a, SyntheticInfo b) {
+		long sa = a.semanticHash != 0 ? a.semanticHash : a.hash;
+		long sb = b.semanticHash != 0 ? b.semanticHash : b.hash;
+		return sa == sb;
 	}
 
 	/** 配对并登记：把 {@code ni} 改名为 {@code oi} 的名字。 */
@@ -674,14 +684,16 @@ public class LambdaAligner {
 
 		if (preferSameName) {
 			for (SyntheticInfo oi : group) {
-				if (oi.matched || oi.ghost || oi.hash != ni.hash) continue;
+				if (oi.matched || oi.ghost) continue;
+				if (!sameSemantics(ni, oi)) continue;
 				if (!isSignatureCompatible(owner, oi, ni)) continue;
 				if (!sameNestingLevel(ni, oi)) continue;
 				if (oi.name.equals(ni.name)) return oi;
 			}
 		}
 		for (SyntheticInfo oi : group) {
-			if (oi.matched || oi.ghost || oi.hash != ni.hash) continue;
+			if (oi.matched || oi.ghost) continue;
+			if (!sameSemantics(ni, oi)) continue;
 			if (!isSignatureCompatible(owner, oi, ni)) continue;
 			if (!sameNestingLevel(ni, oi)) continue;
 			return oi;
@@ -1094,6 +1106,31 @@ public class LambdaAligner {
 				}
 				info.childHashes = hs;
 			}
+		}
+
+		// 递归语义指纹：由下往上逐层折入子的语义指纹。每轮至少定稿一层，
+		// 最多嵌套深度轮即收敛（循环次数上限只是防御）。
+		for (int round = 0; round < 64; round++) {
+			boolean changed = false;
+			for (int idx = groups.nextEntry(-1); idx != -1; idx = groups.nextEntry(idx)) {
+				List<SyntheticInfo> g = groups.valueAt(idx);
+				if (g == null) continue;
+				for (SyntheticInfo info : g) {
+					long sem = info.hash;
+					for (String c : info.children) {
+						SyntheticInfo ci = infoByName(ctx, isOld, c);
+						if (ci == null) continue;
+						long cs = ci.semanticHash != 0 ? ci.semanticHash : ci.hash;
+						if (ci.semanticHash == 0 && !ci.children.isEmpty()) { sem = 0; break; }
+						sem = Utils.compositeHash(Long.toString(sem), Long.toString(cs));
+					}
+					if (sem != 0 && sem != info.semanticHash) {
+						info.semanticHash = sem;
+						changed = true;
+					}
+				}
+			}
+			if (!changed) break;
 		}
 
 		return cn;
@@ -1568,6 +1605,21 @@ public class LambdaAligner {
 		 * "父配到子"这种跨层错配，比推断嵌套深度稳健。</p>
 		 */
 		Set<Long> childHashes = Collections.emptySet();
+
+		/**
+		 * 递归语义指纹：{@link #hash} 再逐层折入每个子 lambda 的语义指纹。
+		 *
+		 * <p>{@link #hash}（票据指纹）会把子 lambda 的名字屏蔽成 {@code #SYNTHETIC_METHOD#}，
+		 * 因此"整棵子树只差最深处叶子"的两个 lambda 会得到相同的 {@code hash} ——
+		 * 三层嵌套正是如此：两个中层同 hash、两个外层同 hash，{@code childHashes} 也退化成
+		 * 相等的集合，否决与正向选择同时失效。实测见 scratch/hstest/deep/。</p>
+		 *
+		 * <p>把子的语义指纹折进来后，差异会沿树<b>向上传播</b>：叶子不同 ⇒ 中层语义指纹不同
+		 * ⇒ 外层语义指纹也不同。匹配因此不需要知道深度、也不需要单独的正向选择。</p>
+		 *
+		 * <p>{@code 0} 表示尚未定稿（子还没算完）。叶子没有子，语义指纹就等于票据指纹。</p>
+		 */
+		long semanticHash;
 
 		SyntheticInfo(String name, String desc, int access, long hash, String logicalName, boolean renameable) {
 			this.name        = name;

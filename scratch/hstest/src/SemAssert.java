@@ -128,6 +128,24 @@ public class SemAssert {
 				"alpha2 与 beta2 未落在同一名字");
 		}
 
+		// ---------- 4) 三层嵌套：删除变体（deep） ----------
+		//
+		// 这条是"原始票据指纹"解决不了的：两个中层同 hash、两个外层同 hash、
+		// childHashes 也退化成相等集合。靠递归语义指纹把叶子差异向上传播才分得开。
+		{
+			System.out.println("== deep 三层删除变体 ==");
+			Map<String, String> aliM = nameToSem(aligned(args[5], args[6], cl));
+			check("[[[doB]]]".equals(aliM.get("lambda$build$3")),
+				"活的外层落在旧名字 lambda$build$3");
+			check("[[doB]]".equals(aliM.get("lambda$build$4")),
+				"中层落在旧名字 lambda$build$4");
+			check("[doB]".equals(aliM.get("lambda$build$5")),
+				"叶子落在旧名字 lambda$build$5");
+			check("GHOST".equals(aliM.get("lambda$build$0")), "doA 外层变幽灵");
+			check("GHOST".equals(aliM.get("lambda$build$1")), "doA 中层变幽灵");
+			check("GHOST".equals(aliM.get("lambda$build$2")), "doA 叶子变幽灵");
+		}
+
 		System.out.println();
 		System.out.println(failed == 0 ? "ALL ASSERTIONS PASSED" : (failed + " ASSERTION(S) FAILED"));
 		if (failed != 0) System.exit(1);

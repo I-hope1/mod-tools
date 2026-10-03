@@ -455,3 +455,66 @@ MSYS2_ARG_CONV_EXCL='*' javac -nowarn -cp "$CP" -d s2outT src/SemCheck.java src/
 MSYS2_ARG_CONV_EXCL='*' java -cp "s2outT;s2out1b;s2out2b;$CP" SemCheck s2out1b/test16/Swap2Case.class s2out2b/test16/Swap2Case.class
 MSYS2_ARG_CONV_EXCL='*' java -cp "s2outT;s2out1b;s2out3;$CP"  SemCheck s2out1b/test16/Swap2Case.class s2out3/test16/Swap2Case.class
 ```
+
+## 三层嵌套：票据指纹、childHashes 同时失效（`deep/`、`DeepCase`）
+
+用户构造的三层用例，实测确认预测命中：
+
+```
+V1: run(() -> Time.run(10, () -> Time.run(5, () -> doA())))
+    run(() -> Time.run(10, () -> Time.run(5, () -> doB())))
+V2: 删掉第一个
+```
+
+修复前的结果：
+
+```
+旧 $0 ([[[doA]]]) -> [[[doB]]]   CHANGED   ← 老 O_A 的调用点去跑 doB
+旧 $3 ([[[doB]]]) -> GHOST                 ← 活着的 O_B 被误杀、走熔断
+旧 $4/$5          -> OK
+```
+
+**为什么 `childHashes` 也救不了**：中层的体完全同构（内层名被 `#SYNTHETIC_METHOD#` 抹掉），
+所以 `hash(M_A) == hash(M_B)`；于是两个外层的 `childHashes` 都退化成 `{hash(M)}` —— 集合相等，
+`sameNestingLevel` 的否决失效，父层退回同名优先。**深度也解决不了**：两个外层同深度，
+差异在最深处的叶子。
+
+### 修法：递归语义指纹（不是深度、也不是正向选择）
+
+`SyntheticInfo.semanticHash` = 方法自身的票据指纹，再逐层折入每个子 lambda 的语义指纹
+（`scan` 里整类扫完后由下往上迭代到定稿；叶子没有子，语义指纹就等于票据指纹）。
+
+差异因此沿树**向上传播**：叶子不同 ⇒ 中层语义指纹不同 ⇒ 外层语义指纹也不同。
+匹配把原来的 `hash` 比较换成 `sameSemantics`，于是：
+
+- 同深度、子集合相同、但子树不同的方法**不再撞车**；
+- 不需要知道嵌套深度，也不需要"正向选择"这一层单独逻辑。
+
+修复后：
+
+```
+旧 $0/$1/$2 (doA 整条链) -> GHOST        正确：确实被删了
+旧 $3 ([[[doB]]]) -> [[[doB]]]  OK
+旧 $4 ([[doB]]])  -> [[doB]]    OK
+旧 $5 ([doB])     -> [doB]      OK
+```
+
+### 走错的两版（记录，避免重走）
+
+1. **比"映射后 callees 的名字"**：新旧两侧的直接子恰好同名（都叫 `lambda$build$1`），
+   `oldChild.equals(newChild)` 直接通过，正向选择形同虚设。
+2. **比"子被配给了谁"（身份）**：太严 —— 外层受 `sameNestingLevel` 限制（它有两个子、
+   子有一个子），只能配到同构的另一侧，于是活着的 doB 整条链全部领不到名字。
+   根因是"只比直接子"无法表达"整棵子树"。
+
+递归语义指纹同时解决了这两个问题的反面：它既不比名字、也不止于直接子。
+
+### 三层断言（`SemAssert` 第 4 组）
+
+```
+== deep 三层删除变体 ==
+   PASS  活的外层落在旧名字 lambda$build$3
+   PASS  中层落在旧名字 lambda$build$4
+   PASS  叶子落在旧名字 lambda$build$5
+   PASS  doA 外层/中层/叶子 变幽灵
+```

@@ -155,7 +155,7 @@ public class LambdaAligner {
 	 */
 	public static void clearLoggedOrphans() {
 		LOGGED_ORPHANS.clear();
-		NOT_FROM_UPDATE_REF.clear();
+
 	}
 
 	//region 匹配上下文
@@ -695,6 +695,10 @@ public class LambdaAligner {
 	/** 候选是否可接受：未匹配、非幽灵、指纹与签名一致、且处于同一嵌套层级。 */
 	private static boolean acceptCandidate(MatchContext ctx, SyntheticInfo ni, SyntheticInfo oi) {
 		if (oi.matched || oi.ghost) return false;
+		// 旧候选也必须可改名 —— 与 ni 上的限制对称。
+		// scan 把 access$ / Kotlin $annotations 这类设为非 renameable，用意是不让它们参与改名；
+		// 若这里不查，一个空体新 lambda 仍可能认领空体旧 $annotations 的名字。
+		if (!oi.renameable) return false;
 		// 用递归语义指纹而非票据指纹：票据指纹屏蔽了子 lambda 的名字，
 		// 使"整棵树只差最深处叶子"的方法互相撞车（三层嵌套即如此）。
 		// 语义指纹一致 ⇔ 整棵子树等价，因此不会把两个不同的 lambda 配成一对。
@@ -941,6 +945,7 @@ public class LambdaAligner {
 		if (preferSameName) {
 			for (SyntheticInfo oi : group) {
 				if (oi.matched || oi.ghost) continue;
+				if (!oi.renameable) continue;                       // 与 ni 上的限制对称
 				if (ctx.usedOldNames.contains(oi.name)) continue;   // 旧名只能被占一次
 				if (!sameSemantics(ni, oi)) continue;
 				if (!isSignatureCompatible(owner, oi, ni)) continue;
@@ -950,6 +955,7 @@ public class LambdaAligner {
 		}
 		for (SyntheticInfo oi : group) {
 			if (oi.matched || oi.ghost) continue;
+			if (!oi.renameable) continue;                       // 与 ni 上的限制对称
 			if (ctx.usedOldNames.contains(oi.name)) continue;   // 旧名只能被占一次
 			if (!sameSemantics(ni, oi)) continue;
 			if (!isSignatureCompatible(owner, oi, ni)) continue;
@@ -1782,23 +1788,6 @@ public class LambdaAligner {
 			+ " (subsequent invocations will be muted)");
 	}
 
-	/**
-	 * 判定缓存：已确认**不是**由 {@code UpdateRef} 调用的 {@code location}。
-	 *
-	 * <p><b>为什么需要</b>：{@link #isCalledByUpdateRef()} 一次约 <b>1µs</b>
-	 * （实测：空调用基线 ~5ns，含 {@code StackWalker.walk} 的探测 ~1100–1600ns）。
-	 * 若某个幽灵 lambda 位于普通业务的高频循环中，10 万次/秒即约 10% CPU。</p>
-	 *
-	 * <p><b>为什么只缓存"否"</b>："是"会立即抛 {@link NoSuchMethodError} 驱动熔断，
-	 * 那次调用不会返回，无需缓存；只缓存"否"也避免让 {@code true} 的判定在本进程内
-	 * 被永久记住，对代理类判定的正确性更保守。</p>
-	 *
-	 * <p><b>为什么与 {@link #LOGGED_ORPHANS} 分开</b>：后者语义是"日志已打印过"，
-	 * 两者混用会把日志去重与探测短路绑在一起。</p>
-	 *
-	 * <p>每个 {@code location} 仍在**首次**触达时完整探测一次，因此正确性不变。</p>
-	 */
-	private static final StringSet NOT_FROM_UPDATE_REF = new StringSet();
 
 	/**
 	 * 按 {@code LookupKey} 内容查询的 {@code Set<String>}，**线程安全**。
@@ -1852,11 +1841,6 @@ public class LambdaAligner {
 		}
 	}
 
-	/** 该 location 是否已判定"非 UpdateRef 调用"。 */
-	private static boolean isMarkedNotFromUpdateRef(LookupKey key) {
-		return NOT_FROM_UPDATE_REF.containsKey(key);
-	}
-
 	/**
 	 * 复用的 location 构造缓冲，**每线程一份**。
 	 *
@@ -1884,7 +1868,7 @@ public class LambdaAligner {
 	@SuppressWarnings("SuspiciousMethodCalls")
 	public static void onOrphanInvoked(String className, String name, String desc) {
 		OrphanPolicy policy = orphanPolicy;
-		// 用**本线程**的可复用 LookupKey 构造 location：命中缓存的热路径上**零 String 分配**。
+		// 用**本线程**的可复用 LookupKey 构造 location：日志去重路径上零 String 分配。
 		LookupKey key = LOCATION_KEY.get().reset();
 		if (className != null && !className.isEmpty()) {
 			key.append(className.replace('/', '.')).append('#');
@@ -1892,14 +1876,19 @@ public class LambdaAligner {
 		key.append(name).append(desc);
 
 		if (policy == OrphanPolicy.SMART_ADAPTIVE) {
-			// 缓存短路：已判定"非 UpdateRef 调用"的 location 不再重复走栈探测
-			// （探测一次约 1µs，见 NOT_FROM_UPDATE_REF 的说明）。
-			// 命中时直接返回 —— 不生成 String、不 copy、不算 location 文本。
-			if (!isMarkedNotFromUpdateRef(key)) {
-				if (isCalledByUpdateRef()) {
-					throw new NoSuchMethodError("Lambda removed by hot swap: " + key);
-				}
-				NOT_FROM_UPDATE_REF.addIfAbsentKey(key);
+			// ⚠️ 这里**不做"非 UpdateRef"的负缓存**。
+			//
+			// 曾按 location 缓存"该调用点不是 UpdateRef 发起的"，以省下每次约 1µs 的栈探测。
+			// **该缓存不成立**：「是否由 UpdateRef 发起」是**调用上下文**的属性，
+			// 不是方法（location）的固有属性。同一个旧 CallSite 完全可能先被业务代码
+			// 直接调一次（如初始化期），之后才被注册进 UpdateRef 轮询：
+			// 首次判定为"否"后，后续由 UpdateRef 发起的调用会被短路成静默返回，
+			// **熔断永不触发** —— 恰好复现本机制要消灭的 60FPS 空转。
+			//
+			// 因此每次调用都必须真实探测。若将来要优化，正确方向是降低探测本身的成本，
+			// 而不是按 location 缓存一个上下文相关的判定。
+			if (isCalledByUpdateRef()) {
+				throw new NoSuchMethodError("Lambda removed by hot swap: " + key);
 			}
 			// 普通业务调用：去重后打印日志（命中时零 String 分配，见 logOrphanOnce）。
 			logOrphanOnce(key);

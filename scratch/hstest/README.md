@@ -1436,3 +1436,60 @@ XGROUP ASSERTIONS OK      exit=0
 
 因此下一步是：先把本用例固化为 expected-failure，再评估候选决胜规则
 （同名优先已存在；是否需要字典序、或 `declarationOrder` 距离）在既有夹具上是否回归。
+
+
+## 套件入口与数量基线（本轮进展，未完成）
+
+### 已完成
+
+1. **`suite.sh`**：套件唯一入口，取代已废弃的 `run.sh` 与手工命令行。
+   - **classpath 由 Gradle 解析后经命令行参数传入**（不用环境变量，实测 Exec 下不可靠），
+     脚本内**不手写 classpath**；
+   - 用三个真实 javac（8/17/21）编译夹具（一次性），运行期不再依赖 javac；
+   - 计数分离并**对比基线**：`通过 / 失败 / 已知限制`；
+   - **空绿防护**：`通过=0 且 已知=0` 时直接失败（就是 `:hotswap-agent:test` 空跑一秒那种失败）。
+
+2. **`expected-count.txt`**：基线 `4 0 2`（通过 4 / 失败 0 / 已知限制 2）。
+   **少于基线失败；多于基线也失败**，提示更新基线 —— 新增断言是有意识的操作。
+
+3. **`build.gradle` 的 `hstestRun` 任务**：`dependsOn hstestClasses`，并把
+   `hstestRun` **挂到 `check`**：
+
+   ```groovy
+   tasks.named("check") { dependsOn tasks.named("hstestRun") }
+   ```
+
+4. **直接运行 `bash suite.sh <cp>` 实测通过**：
+
+   ```
+   实际: 通过=4 失败=0 已知=2
+   基线: 通过=4 失败=0 已知=2
+   OK   数量与基线一致
+   HSTEST SUITE: ALL PASSED
+   ```
+
+### 未完成：Gradle 下夹具编译失败
+
+`./gradlew hstestRun` 报 10 个 `FAIL 编译 c*/x*`，而**同一脚本直接运行全部通过**。
+即"脚本相同、入口不同、结果不同"——与 `run.sh` 那次是同一类问题。
+
+已知线索：
+- Gradle daemon 由常驻进程启动，其 `PATH` 可能不包含 `javac`（本机 `javac` 在
+  `F:/files/java/jdks/jbrsdk_jcef-25.0.2/bin`，由 shell 环境提供）；
+- 我加的诊断（打印 `javac=$JC` 与实际错误）**在 Gradle 输出里没有出现**，
+  说明 Gradle 实际执行的可能是**旧版脚本**（进程/缓存问题），或输出被吞。
+
+### 下次接手的第一步（不要猜）
+
+```bash
+./gradlew hstestRun --info 2>&1 | grep -A20 'suite.sh'   # 看 Gradle 到底执行了什么
+HSTEST_JAVA=... bash scratch/hstest/suite.sh "<cp>"       # 与直接运行对比
+```
+
+**要点**：把三个 javac 的路径**在 Gradle 侧解析成绝对路径**后传入（与本机 PATH 解耦），
+并确认 Gradle 执行的是当前脚本而不是缓存副本。
+
+### 记账（未变）
+
+**目前仍没有任何一个套件结果受构建约束** —— `hstestRun` 已挂到 `check`，但它当前是红的，
+且红的原因是**夹具编译**而非断言。等它变绿并经过"故意失败"验证后，才可删除本句。

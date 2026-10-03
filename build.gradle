@@ -597,6 +597,25 @@ tasks.register("hstestCanary", JavaExec) {
 	ignoreExitValue = false
 }
 
+// 套件唯一入口：classpath 由 Gradle 解析后经环境变量传入，脚本内不手写 classpath。
+tasks.register("hstestRun", Exec) {
+	dependsOn tasks.named("hstestClasses")   // 没有它，classpath 里的类可能尚未编译
+	group = "verification"
+	description = "运行对齐器验证套件（含数量基线；失败则构建失败）"
+	workingDir = file("$rootDir/scratch/hstest")
+	// 用命令行参数传 classpath（环境变量在 Exec 下不可靠），
+	// 并在配置期冻结为字符串，避免 Exec 延迟求值时拿到空值。
+	def cp = sourceSets.hstest.runtimeClasspath.asPath
+	def javaBin = "${System.getProperty('java.home')}/bin/java"
+	doFirst {
+		commandLine "bash", "suite.sh", cp
+		environment "HSTEST_JAVA", javaBin
+	}
+	standardOutput = System.out
+	errorOutput = System.err
+}
+tasks.named("check") { dependsOn tasks.named("hstestRun") }
+
 // 汇总入口。**尚未挂在 check 上**：夹具编译还没接进来（夹具各版本同包同名，
 // 不能混编），因此 hstestSemAssert 目前缺参数会在运行期失败。等夹具改成
 // 硬编码字节码、参数可确定后再 dependsOn 到 check。

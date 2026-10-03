@@ -70,11 +70,14 @@ sourceSets.test.java.srcDirs = ["test"]
 sourceSets.jmh.java.srcDirs = ["jmh"]
 
 jmh {
-	includes = ["MethodBenchmark"]
+	// 默认只跑原有的 MethodBenchmark；对齐器基准按需指定：
+	//   ./gradlew jmh -PjmhIncludes=AlignBenchmark -PjmhProfilers=gc
+	includes = ["AlignBenchmark"]
+	profilers = ["gc"]
     iterations = 3
     warmupIterations = 2
     fork = 1
-	jvm = 'F:/files/java/jdks/openjdk-21.0.2/bin/java.exe'
+	jvm = 'F:/files/java/jdks/jbrsdk_jcef-25.0.2/bin/java.exe'
 }
 
 //force arc version

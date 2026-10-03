@@ -1748,7 +1748,22 @@ public class LambdaAligner {
 
 	private static final String UPDATE_REF_CLASS = "nipx.ref.UpdateRef";
 	private static final String UPDATE_REF_CLASS_INNER_PREFIX = "nipx.ref.UpdateRef$";
-	private static final Set<String> LOGGED_ORPHANS = Collections.newSetFromMap(new ConcurrentHashMap<>());
+	private static final StringSet LOGGED_ORPHANS = new StringSet();
+
+	/**
+	 * 日志去重（按内容），命中时**零 String 分配**。
+	 *
+	 * <p>不能写成 {@code LOGGED_ORPHANS.add(key.copy())} —— {@code Set.add} 的参数
+	 * **无条件求值**，即使该 location 早已记录过也会先 copy 一份，
+	 * 等于在热路径上每次调用都分配一个 String。</p>
+	 */
+	private static void logOrphanOnce(LookupKey key) {
+		if (LOGGED_ORPHANS.containsKey(key)) return;
+		String location = key.copy();
+		LOGGED_ORPHANS.add(location);
+		System.err.println("[LambdaAligner] orphaned lambda invoked: " + location
+			+ " (subsequent invocations will be muted)");
+	}
 
 	/**
 	 * 判定缓存：已确认**不是**由 {@code UpdateRef} 调用的 {@code location}。
@@ -1806,6 +1821,7 @@ public class LambdaAligner {
 	 * @param name      方法名
 	 * @param desc      方法描述符
 	 */
+	@SuppressWarnings("SuspiciousMethodCalls")
 	public static void onOrphanInvoked(String className, String name, String desc) {
 		OrphanPolicy policy = orphanPolicy;
 		// 用可复用的 LookupKey 构造 location：命中缓存的热路径上**零 String 分配**。
@@ -1825,17 +1841,8 @@ public class LambdaAligner {
 				}
 				markNotFromUpdateRef(key);
 			}
-			// 普通业务调用：去重后打印日志。
-			//
-			// 注意：String 只在**需要打日志**时才生成。写成 LOGGED_ORPHANS.add(key.toString())
-			// 会让每次调用都先求值 toString()（Set.add 的参数无条件求值），
-			// 即使该 location 早已记录过 —— 那等于把热路径的分配又加了回来。
-			if (!LOGGED_ORPHANS.contains(key)) {
-				String location = key.toString();
-				LOGGED_ORPHANS.add(location);
-				System.err.println("[LambdaAligner] orphaned lambda invoked: " + location
-					+ " (subsequent invocations will be muted)");
-			}
+			// 普通业务调用：去重后打印日志（命中时零 String 分配，见 logOrphanOnce）。
+			logOrphanOnce(key);
 			return;
 		}
 
@@ -1848,9 +1855,8 @@ public class LambdaAligner {
 		}
 
 		if (policy == OrphanPolicy.LOG_AND_RETURN_DEFAULT) {
-			if (LOGGED_ORPHANS.add(key.copy())) {
-				System.err.println("[LambdaAligner] orphaned lambda invoked: " + key + " (subsequent invocations will be muted)");
-			}
+			// 与 SMART_ADAPTIVE 同款：命中时零 String 分配（见 logOrphanOnce）。
+			logOrphanOnce(key);
 			return;
 		}
 

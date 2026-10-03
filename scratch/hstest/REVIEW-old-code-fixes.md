@@ -130,10 +130,9 @@ if (!NOT_FROM_UPDATE_REF.contains(location)) {
 - `NOT_FROM_UPDATE_REF` 仍是 `Set<String>`，用一个 `StringSet` 子类提供
   `containsKey(LookupKey)`（**不再**把 `LookupKey` 当集合条目 —— 那样会违反
   `Set<String>` 的契约）；
-- **`String` 只在需要打日志时才生成**。原先写成 `LOGGED_ORPHANS.add(key.copy())`
-  有两个问题：`Set.add` 的参数**无条件求值**，所以每次调用都 `copy()`；
-  而且该行在**已命中缓存**的调用上也会执行 —— 等于把热路径的分配又加了回来。
-  改成 `contains` 先判、只在未记录过时才 `toString()`。
+- **两条日志路径统一走 `logOrphanOnce(key)`**（`SMART_ADAPTIVE` 与
+  `LOG_AND_RETURN_DEFAULT`）：先按内容 `containsKey(LookupKey)` 判，未记录过才 `copy()`
+  成 String。命中时零分配。
 
 ### 三次测量的演进（都取多次最小值）
 

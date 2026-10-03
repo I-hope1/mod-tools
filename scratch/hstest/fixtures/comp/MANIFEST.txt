@@ -23,4 +23,10 @@ c21v1 / c21v2 : JDK 21 javac 的产物
   JDK 21 : lambda$build$N（统一编号）
 这本身就是"夹具版本决定结论"的直接证据。
 
-未覆盖：JDK 17（用户流水线常见）。本机 F:/files/java/jdks 下有 jdk-17.0.2，可补。
+c17v1 / c17v2 : JDK 17 javac 的产物
+  javac -version : javac 17.0.2
+  command        : <jdk17>/bin/javac -nowarn -encoding UTF-8 -d <out> comp/Time7.java comp/v2/test24/Compete.java
+  release        : 无
+  class major    : 61
+
+已覆盖 8 / 17 / 21 三个真实 javac。

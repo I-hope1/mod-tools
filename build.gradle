@@ -566,6 +566,27 @@ def hstestEntry = { String name, String cls, List<String> fixtureArgs ->
 
 hstestEntry("SemAssert", "SemAssert", [])
 
+// 自检：验证 "套件内断言失败 -> 进程非零退出" 的整条链。
+//
+// 为什么不是 hstestCanary：那是一个无条件失败的 Gradle 任务，只证明"Gradle 任务失败
+// 会让构建变红"，这件事本来就成立。这里要守的是 check() -> 失败计数 -> 退出码。
+//
+// selfCheckRun 以开关关闭运行（自检失败被记录后抵消），必须成功；
+// selfCheckExpose 以开关打开运行（保留那次失败），必须**失败** —— 后者才证明链是通的。
+tasks.register("hstestSelfCheckRun", JavaExec) {
+	group = "verification"
+	description = "自检（开关关闭）：应成功"
+	classpath = sourceSets.hstest.runtimeClasspath
+	mainClass = "SemAssertSelfCheck"
+}
+tasks.register("hstestSelfCheckExpose", JavaExec) {
+	group = "verification"
+	description = "自检（开关打开）：应失败，用于证明退出码链是通的（预期红）"
+	classpath = sourceSets.hstest.runtimeClasspath
+	mainClass = "SemAssertSelfCheck"
+	environment "HSTEST_SELFCHECK_EXPOSE", "1"
+}
+
 // 金丝雀：**不依赖任何源文件**的故意失败任务，用来证明"断言失败会变红"。
 // 已实测：> Task :hstestCanary FAILED / BUILD FAILED。
 tasks.register("hstestCanary", JavaExec) {

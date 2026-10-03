@@ -1191,3 +1191,64 @@ review 指出：`hstestCanary` 是一个**无条件失败**的任务，它只证
 5. 在 21 上存基线，然后做编号平移（用 `ClassRemapper`；注意核对没有 `$deserializeLambda$`），
    检验同名巧合假设；
 6. 最后才是上行深度两趟，先写红的验收。
+
+
+## 套件内自检：证明 `check()` → 退出码 整条链（已完成）
+
+review 指出 `hstestCanary` 测的是 Gradle 而不是套件 —— 它是一个**无条件失败**的 Gradle 任务，
+只证明"Gradle 任务失败会让构建变红"，这件事本来就成立。而 `hstestSemAssert` 缺参数失败
+是**异常路径**，不是**断言路径**。若 `SemAssert` 遇 FAIL 只打印、最后仍 `exit 0`，
+两者都发现不了 —— 那正是组 7 的形态。
+
+### 做法
+
+- `SemAssert.selfCheck()`：故意对已知输入断言一个**已知错误**的值（`1+1==3`），
+  要求 `check()` 把它**记为一次失败**，但**不让整体变红**（否则套件永远红）；
+- 开关 `HSTEST_SELFCHECK_EXPOSE`（环境变量）打开时**保留**那次失败，让它真正暴露；
+- 计数分离：`passed` / `failed` / `knownFailures`（**已知限制单独计数**，不混进通过数）。
+
+### 实测（在构建里，不在手工命令行）
+
+```
+./gradlew hstestSelfCheckRun     （开关关）-> BUILD SUCCESSFUL
+./gradlew hstestSelfCheckExpose  （开关开）-> > Task :hstestSelfCheckExpose FAILED / BUILD FAILED
+```
+
+**这证明的是"套件内断言失败 ⇒ 进程非零退出"，即 `check()` → 失败计数 → 退出码的整条链。**
+这是此前的金丝雀和"缺参数失败"都无法证明的。
+
+## 输入路径确认（review 第 3 点，读代码，未改代码）
+
+**结论：入口构造的输入与生产路径一致，这个缺口不存在。**
+
+```java
+// 1) 新旧字节码都先过 forceStaticLambdas（HOTSWAP_PLUS 开启时生产路径会过）
+static byte[] force(String path, ClassLoader cl) {
+    byte[] r = Files.readAllBytes(Paths.get(path));
+    String slash = new ClassReader(r).getClassName();
+    AnnotationTransformer.HierarchyTree.register(r);
+    return AnnotationTransformer.forceStaticLambdas(r, slash, cl);
+}
+static byte[] aligned(String v1, String v2, ClassLoader cl) {
+    return LambdaAligner.align(force(v1, cl), force(v2, cl));
+}
+
+// 2) 多轮用例的 oldBytes 是上一轮 align 的输出，不是重新编译的原始产物
+byte[] a2 = LambdaAligner.align(force(args[12], cl), force(args[13], cl));
+byte[] a3 = LambdaAligner.align(a2, force(args[14], cl));   // a2 = 上一轮输出
+```
+
+`CompeteTest`、`MethodOrderTest`、`LeakProbe` 同样都走 `force()`。
+
+**推论范围**：先前记录的"幂等三趟"覆盖的是 `forceStaticLambdas` 自身的幂等性；
+而"多轮 `oldBytes` 取上一轮输出"这一条，由 `SemAssert` 第 8 组（save3 三轮）与
+`LeakProbe` 的两轮序列直接覆盖。
+
+## 关于 major 52 的来源（只记事实）
+
+- 事实：同一份源码，`bin/main` 是 **69**，`build/` 与 `build/libs/*.jar` 是 **52**。
+- 线索：`options.compilerArgs += "-AtargetVersion=8"`。`-A` 前缀按惯例传给**注解处理器**，
+  因此脱糖可能是处理器或某个 Gradle 插件做的 —— **这是猜测，未追踪**。
+- 判据：只有当测试结果在 `bin/main`(69) 与 jar(52) 之间出现差异时，才值得追到机制。
+- **操作要求**：手动实验必须与 `hstest` 用**同一份 classpath**（即 `build/libs/*.jar`），
+  否则可能从 `bin/main` 加载那份 69 的产物，测的就不是生产代码。用 `./gradlew hstestCp` 取。

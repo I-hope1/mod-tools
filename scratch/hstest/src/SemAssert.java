@@ -24,10 +24,48 @@ import java.util.*;
 public class SemAssert {
 
 	static int failed = 0;
+	static int passed = 0;
+	/** 已知限制（expected-failure）：单独计数，不混进通过数。 */
+	static int knownFailures = 0;
 
 	static void check(boolean ok, String msg) {
 		System.out.println((ok ? "   PASS  " : "   FAIL  ") + msg);
-		if (!ok) failed++;
+		if (ok) passed++; else failed++;
+	}
+
+	/**
+	 * 已知限制专用断言：期望它**失败**。单独计数，不计入 failed。
+	 * 若某天它通过了，说明行为变了，必须有人有意识地来更新。
+	 */
+	static void checkKnownLimitation(boolean stillBroken, String msg) {
+		if (stillBroken) { knownFailures++; System.out.println("   KNOWN " + msg); }
+		else { failed++; System.out.println("   FAIL  [已知限制已变化] " + msg); }
+	}
+
+	/**
+	 * 自检：故意对一个已知输入断言一个已知错误的值。
+	 *
+	 * <p>用途是验证 <b>{@code check()} → 失败计数 → 退出码</b> 的整条链，
+	 * 而不是验证匹配逻辑。它必须被记成一次失败，但**不让整体变红**
+	 * （否则套件永远红）；开关打开时才真正暴露出来。</p>
+	 */
+	static void selfCheck() {
+		System.out.println("== 自检：check() → 退出码 的整条链 ==");
+		int before = failed;
+		// 已知输入是 1+1==2，这里故意断言错误的值 —— 必须被记为一次失败。
+		check(1 + 1 == 3, "自检（预期失败）：故意断言 1+1==3");
+		boolean recorded = (failed == before + 1);
+		System.out.println(recorded
+			? "   PASS  自检：错误断言确实被记为一次失败"
+			: "   FAIL  自检：错误断言没有被记为失败 —— check() 到计数这条链是断的");
+		// 把这次自检造成的失败抵消掉；开关打开时不抵消，让它真的暴露。
+		boolean expose = Boolean.getBoolean("hstest.selfcheck.expose")
+			|| "1".equals(System.getenv("HSTEST_SELFCHECK_EXPOSE"));
+		if (expose) {
+			System.out.println("   [自检暴露模式] 保留这次失败，用于验证退出码非零");
+		} else {
+			failed = before;
+		}
 	}
 
 	static ClassNode parse(byte[] b) {
@@ -309,7 +347,11 @@ public class SemAssert {
 			check(swapped.isEmpty(), "存活名字的子树形状跨轮不变（错绑=" + swapped + "）");
 		}
 
+		selfCheck();
+
 		System.out.println();
+		System.out.println("通过 " + passed + " 条；失败 " + failed + " 条；已知限制 "
+			+ knownFailures + " 条；合计 " + (passed + failed + knownFailures) + " 条");
 		System.out.println(failed == 0 ? "ALL ASSERTIONS PASSED" : (failed + " ASSERTION(S) FAILED"));
 		if (failed != 0) System.exit(1);
 	}

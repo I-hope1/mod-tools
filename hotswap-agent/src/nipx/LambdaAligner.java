@@ -272,6 +272,24 @@ public class LambdaAligner {
 			// 父 $1 排在子 $2 前面被处理，子尚未匹配 → 父被跳过；若 Step 2 只跑一遍，
 			// 父就再也没机会，只能去阶段二拿新名字，于是老 CallSite 命中幽灵 ——
 			// 活着的 lambda 被误杀。改成迭代之后，父会在下一轮（子已落定）重新参与。
+			// 【A 趟】先在全类范围内，只配"上行深度 + shape 都相等"的对。
+			//
+			// 必须**先跑完全类的 A 趟**，再进入 B 趟 —— 这正是"两趟"的含义。
+			// 把 A 趟放在 step2 内部的单组循环里是不够的（实测 scratch/hstest/UpDepthTest）：
+			// 同一次保存里插入的新叶子（upDepth=0）没有同深度的旧候选，会立刻落到 B 趟，
+			// 凭"先到先得"把旧叶子名抢走，而真正该拿那个名字的 doB2 叶子（upDepth=2）
+			// 是在同一轮稍后才被处理的。
+			boolean aProgressed;
+			do {
+				aProgressed = false;
+				for (int idx : groupOrder(newGroups)) {
+					List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
+					List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
+					if (newGroup == null || oldGroup == null) continue;
+					aProgressed |= step2PassA(ctx, newGroup, oldGroup);
+				}
+			} while (aProgressed);
+
 			boolean step2Progressed;
 			do {
 				step2Progressed = false;
@@ -657,6 +675,46 @@ public class LambdaAligner {
 	 *
 	 * @return 本趟是否至少配对了一个方法
 	 */
+	/**
+	 * Step 2 的 **A 趟**：只配"上行深度 + shape 都相等"的对。
+	 *
+	 * <p>必须在**全类**上先跑完 A 趟，再进 B 趟（见调用处的说明）—— 混在同一个单组循环里
+	 * 不够：没有同深度候选的新方法会立刻落到 B 趟，凭先到先得抢走本该属于别人的旧名字。</p>
+	 *
+	 * <p>只收窄、不做硬否决：B 趟仍会兜底，因此"把叶子用新 lambda 包一层"这类合法编辑
+	 * （深度变了）不会因此丢名字、被熔断。</p>
+	 *
+	 * <p>深度与 shape 都由两侧各自的 indy 关系算出、与匹配状态无关，所以这里对叶子可直接
+	 * 判定，不与 {@link #hasUnmatchedChild} 互等。</p>
+	 *
+	 * @return 本趟是否至少配成一对
+	 */
+	private static boolean step2PassA(MatchContext ctx, List<SyntheticInfo> newGroup,
+	                                  List<SyntheticInfo> oldGroup) {
+		boolean progressed = false;
+		for (SyntheticInfo ni : newGroup) {
+			if (ni.matched || !ni.renameable) continue;
+			if (ni.upDepth < 0) continue;                 // 未定稿：不参与
+			if (hasUnmatchedChild(ctx, ni)) continue;
+
+			SyntheticInfo bestOld = null;
+			for (SyntheticInfo oi : oldGroup) {
+				if (oi.matched || oi.ghost) continue;
+				if (ctx.usedOldNames.contains(oi.name)) continue;
+				if (oi.upDepth != ni.upDepth) continue;   // 深度必须相等
+				if (!sameNestingLevel(ni, oi)) continue;  // 形状必须相等
+				if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
+				if (oi.name.equals(ni.name)) { bestOld = oi; break; }   // 同名者优先
+				if (bestOld == null) bestOld = oi;
+			}
+			if (bestOld == null) continue;
+
+			pair(ctx, ni, bestOld);
+			progressed = true;
+		}
+		return progressed;
+	}
+
 	private static boolean step2(MatchContext ctx, List<SyntheticInfo> newGroup, List<SyntheticInfo> oldGroup) {
 		boolean progressed = false;
 		for (SyntheticInfo ni : newGroup) {
@@ -664,34 +722,6 @@ public class LambdaAligner {
 			if (hasUnmatchedChild(ctx, ni)) continue;
 
 			SyntheticInfo bestOld = null;
-
-			// 【A 趟】优先配"上行深度 + shape 都相等"的候选。
-			//
-			// 动机（实测 scratch/hstest/UpDepthTest）：同一次保存里插入新叶子 + 改另一条链的
-			// 叶子体时，两个新叶子都可能没有指纹证据，而旧侧只剩一个叶子名。
-			// 此时按组内顺序先到先得是错的 —— "被谁引用"是唯一可用的结构信号：
-			//   由 build() 直接引用的叶子，上行深度 0；
-			//   被嵌套链引用的叶子，上行深度 2。
-			// 二者形状都是 "()"，所以必须**同时**比深度与形状，只比深度会把同深度的
-			// 不同形状候选放进同一池子。
-			//
-			// A 趟只收窄、不做硬否决：B 趟仍按原逻辑兜底，因此"把叶子用新 lambda 包一层"
-			// 这类合法编辑（深度变了）不会因此丢名字、被熔断。
-			//
-			// 深度与 shape 都由两侧各自的 indy 关系算出、与匹配状态无关，所以这里对叶子
-			// 可以直接判定，不会与 hasUnmatchedChild 互等（A 趟里不应出现
-			// SKIP(parent has unmatched child)）。
-			if (ni.upDepth >= 0) {
-				for (SyntheticInfo oi : oldGroup) {
-					if (oi.matched || oi.ghost) continue;
-					if (ctx.usedOldNames.contains(oi.name)) continue;
-					if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
-					if (!sameNestingLevel(ni, oi)) continue;
-					if (oi.upDepth != ni.upDepth) continue;
-					if (oi.name.equals(ni.name)) { bestOld = oi; break; }   // 同名者优先
-					if (bestOld == null) bestOld = oi;
-				}
-			}
 
 			// 第一优先级：组内同名且签名逻辑等价
 			//

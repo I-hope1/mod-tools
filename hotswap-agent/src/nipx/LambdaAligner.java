@@ -1930,33 +1930,83 @@ public class LambdaAligner {
 	}
 
 	/**
-	 * 检查当前调用栈浅层中是否存在 {@link nipx.ref.UpdateRef}。
-	 * <p>
-	 * 优先使用 Java 9+ 的 {@link StackWalker} 进行高效的浅层流式遍历（limit(16) 即刻短路）；
-	 * 若当前运行环境缺少 StackWalker（如 Android Dalvik/ART 或 Java 8），则安全降级为 {@link Throwable#getStackTrace()}，
-	 * 保证在全平台环境下均能 100% 稳定运行。
-	 * </p>
+	 * 判断当前调用是否由 {@link nipx.ref.UpdateRef} 发起（决定是否熔断）。
 	 *
-	 * @return 若调用栈来自 UpdateRef 则返回 true，否则返回 false
+	 * <p><b>判据是"幽灵桩的直接调用者是否为 UpdateRef"</b>，而不是"调用栈上某处是否有
+	 * UpdateRef"：后者会被无关的同栈帧干扰（例如"业务代码 → UpdateRef → 另一个 lambda"
+	 * 这种情形，那个 lambda 其实不是受保护回调）。</p>
+	 *
+	 * <p><b>为什么不再用 {@code limit(16)} 扫描</b>：那是<b>深度相关</b>的判据 ——
+	 * 回调链路上只要夹了较深的用户代码或框架帧（例如嵌套的
+	 * {@code Time.run(10, () -> Time.run(5, () -> ...))}），UpdateRef 帧就会被截掉，
+	 * 于是误判为"非 UpdateRef"，<b>熔断静默失效</b>。改为"定位幽灵桩入口后取 +2 帧"
+	 * 与深度无关：栈有多深都能看到直接调用者。</p>
+	 *
+	 * <p>降级路径（无 StackWalker，如 Java 8/Android）同样按"定位 {@code onOrphanInvoked}，
+	 * 再取 +2 帧"处理，语义与 StackWalker 路径一致。</p>
+	 *
+	 * @return 若直接调用者为 UpdateRef 的 run 系方法（或兜底命中）则返回 true
 	 */
 	public static boolean isCalledByUpdateRef() {
 		try {
 			if (StackWalkerHolder.IS_SUPPORTED) {
-				return StackWalkerHolder.WALKER.walk(s -> s.limit(16)
-					.anyMatch(f -> isUpdateRefClass(f.getClassName())));
+				return StackWalkerHolder.WALKER.walk(s -> {
+					java.util.List<StackWalker.StackFrame> fs = s.toList();
+					int entry = -1;
+					for (int i = 0; i < fs.size(); i++) {
+						if (isOrphanEntry(fs.get(i))) { entry = i; break; }
+					}
+					if (entry < 0) return false;
+					// 首选：幽灵桩的**直接调用者**是否为 UpdateRef 的执行点
+					int caller = entry + 2;   // 跳过 onOrphanInvoked 自身与桩
+					if (caller < fs.size()) {
+						StackWalker.StackFrame f = fs.get(caller);
+						if (isUpdateRefInvoke(f.getClassName(), f.getMethodName())) return true;
+					}
+					// 兜底（深度无关）：调用栈上更深处存在 UpdateRef 的执行点。
+					// 覆盖"UpdateRef 经由中间层调用 lambda"的情形 —— 若只认直接调用者，
+					// 这种情况会**误判为非 UpdateRef**，熔断静默失效（本机制最该避免的后果）。
+					for (int i = caller; i < fs.size(); i++) {
+						StackWalker.StackFrame f = fs.get(i);
+						if (!f.getDeclaringClass().isHidden()
+							&& isUpdateRefInvoke(f.getClassName(), f.getMethodName())) {
+							return true;
+						}
+					}
+					return false;
+				});
 			}
 		} catch (Throwable ignored) {}
 
 		try {
-			StackTraceElement[] trace = new Throwable().getStackTrace();
-			int limit = Math.min(trace.length, 16);
-			for (int i = 1; i < limit; i++) {
-				if (isUpdateRefClass(trace[i].getClassName())) {
-					return true;
+			StackTraceElement[] t = new Throwable().getStackTrace();
+			int entry = -1;
+			for (int i = 0; i < t.length; i++) {
+				if (SELF.equals(t[i].getClassName()) && "onOrphanInvoked".equals(t[i].getMethodName())) {
+					entry = i;
+					break;
 				}
+			}
+			if (entry < 0) return false;
+			int caller = entry + 2;   // 跳过 onOrphanInvoked 自身与桩
+			for (int i = caller; i < t.length; i++) {
+				if (isUpdateRefInvoke(t[i].getClassName(), t[i].getMethodName())) return true;
 			}
 		} catch (Throwable ignored) {}
 		return false;
+	}
+
+	/** 本类的全限定名，用于在栈帧里定位幽灵桩入口。 */
+	private static final String SELF = LambdaAligner.class.getName();
+
+	/** 该帧是否为幽灵桩入口（本类的 {@code onOrphanInvoked}）。 */
+	private static boolean isOrphanEntry(StackWalker.StackFrame f) {
+		return SELF.equals(f.getClassName()) && "onOrphanInvoked".equals(f.getMethodName());
+	}
+
+	/** 该帧是否看起来是 UpdateRef 的回调执行点。 */
+	private static boolean isUpdateRefInvoke(String className, String methodName) {
+		return isUpdateRefClass(className) && methodName.startsWith("run");
 	}
 
 	/**

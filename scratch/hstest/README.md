@@ -1493,3 +1493,30 @@ HSTEST_JAVA=... bash scratch/hstest/suite.sh "<cp>"       # 与直接运行对�
 
 **目前仍没有任何一个套件结果受构建约束** —— `hstestRun` 已挂到 `check`，但它当前是红的，
 且红的原因是**夹具编译**而非断言。等它变绿并经过"故意失败"验证后，才可删除本句。
+
+---
+
+## 退出码链的反向验证（2026-02，已实测）
+
+**为什么需要**：空绿守卫（`通过=0 且 已知=0`）只能防"什么都没跑"，
+**防不住"跑了但失败被吞"**。若失败被吞，套件里所有断言都是不受约束的绿灯。
+
+**方法**：临时把 `XGroupTest` 的 KNOWN 分支改成恒不命中
+（`if (stillBroken)` → `if (false)`），使其从 KNOWN 变成 FAIL，跑 `./gradlew check`。
+
+**结果（实测）**：
+
+```
+1 FAILED                                   ← 断言确实失败
+   FAIL 数量与基线不符 —— 若是有意增删断言，请更新 expected-count.txt
+HSTEST SUITE: FAILED
+> Task :hstestRun FAILED
+BUILD FAILED in 12s                        ← ./gradlew check 确实变红
+```
+
+随后恢复文件，`HSTEST SUITE: ALL PASSED`，`git status` 显示与版本库一致。
+
+**结论**：失败会经 `suite.sh`(FAILED=1) → `exit 1` → `hstestRun` → `check` 逐级传播，
+**不是被吞掉的**。因此套件内的红/绿结论可信，可以作为后续验收的依据。
+
+此后新增任何断言，都应在**让它红一次**之后再依赖它的绿。

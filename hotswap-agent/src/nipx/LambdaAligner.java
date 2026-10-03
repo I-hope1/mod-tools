@@ -1,7 +1,6 @@
 package nipx;
 
 import nipx.util.*;
-import nipx.profiler.LookupKey;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.*;
 import org.objectweb.asm.tree.*;
@@ -1404,7 +1403,11 @@ public class LambdaAligner {
 		// 说明：子形状**必须排序**后才能比较（否则同一形状因子顺序不同而被判为不同），
 		// 因此排序无法跳过；能省的是"串接与 String 生成"—— 用 LookupKey 拼一次，
 		// 与既有值相同就**不生成 String**。
-		LookupKey shapeKey = new LookupKey(64);
+		// 用 StringBuilder 而非 LookupKey：这里每次都要先 append 再比较，
+		// LookupKey 的缓存 hash 必然失效、用不上；它唯一多出的能力
+		//（equals 支持 CharSequence 比较）由 StringBuilder.contentEquals 提供。
+		// LookupKey 适合"稳定 key 反复查哈希表"的场景，不是这里。
+		StringBuilder shapeBuf = new StringBuilder(64);
 		for (int round = 0; round < 64; round++) {
 			boolean changed = false, pending = false;
 			for (int idx = groups.nextEntry(-1); idx != -1; idx = groups.nextEntry(idx)) {
@@ -1422,14 +1425,18 @@ public class LambdaAligner {
 					if (!ready) { pending = true; continue; }
 					Collections.sort(shapes);
 
-					shapeKey.reset();
-					shapeKey.append('(');
-					for (int i = 0; i < shapes.size(); i++) shapeKey.append(shapes.get(i));
-					shapeKey.append(')');
+					shapeBuf.setLength(0);
+					shapeBuf.append('(');
+					for (int i = 0; i < shapes.size(); i++) shapeBuf.append(shapes.get(i));
+					shapeBuf.append(')');
 
-					// 轻量短路：与既有值相同则不生成 String（LookupKey.equals 支持 CharSequence）
-					if (shapeKey.equals(info.shape)) continue;
-					info.shape = shapeKey.copy();
+					// 轻量短路：与既有值相同则不生成 String。
+					// contentEquals 在 String 一侧调用，参数是 CharSequence（StringBuilder 满足）。
+					if (info.shape != null && info.shape.length() == shapeBuf.length()
+						&& info.shape.contentEquals(shapeBuf)) {
+						continue;
+					}
+					info.shape = shapeBuf.toString();
 					changed = true;
 				}
 			}

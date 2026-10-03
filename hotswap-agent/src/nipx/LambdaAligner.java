@@ -222,8 +222,7 @@ public class LambdaAligner {
 						SyntheticInfo oi = oldGroup.get(k);
 						if (!oi.matched
 							&& ni.hash == oi.hash
-							&& oi.isStatic() == ni.isStatic()
-							&& oi.desc.equals(ni.desc)
+							&& isSignatureCompatible(ctx.currentClass, oi, ni)
 							&& oi.name.equals(ni.name)) {
 							recordRename(ctx, ni, oi.name);
 							ni.matched = true;
@@ -242,8 +241,7 @@ public class LambdaAligner {
 						SyntheticInfo oi = oldGroup.get(k);
 						if (!oi.matched
 							&& ni.hash == oi.hash
-							&& oi.isStatic() == ni.isStatic()
-							&& oi.desc.equals(ni.desc)) {
+							&& isSignatureCompatible(ctx.currentClass, oi, ni)) {
 							recordRename(ctx, ni, oi.name);
 							ni.matched = true;
 							oi.matched = true;
@@ -253,26 +251,24 @@ public class LambdaAligner {
 					}
 				}
 
-				// Step 2：顺序对齐（static 与 desc 必须一致）
+				// Step 2：顺序对齐（签名逻辑等价即可：实例方法的隐式 this 与静态方法的显式 this 等价）
 				for (SyntheticInfo ni : newGroup) {
 					if (ni.matched || !ni.renameable) continue;
 
 					SyntheticInfo bestOld = null;
 
-					// 第一优先级：组内同名且 static / desc 一致
+					// 第一优先级：组内同名且签名逻辑等价
 					for (SyntheticInfo oi : oldGroup) {
 						if (oi.matched) continue;
-						if (oi.isStatic() != ni.isStatic()) continue;
-						if (!oi.desc.equals(ni.desc)) continue;
+						if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
 						if (oi.name.equals(ni.name)) { bestOld = oi; break; }
 					}
 
-					// 第二优先级：第一个 static / desc 一致的未匹配旧方法
+					// 第二优先级：第一个签名逻辑等价的未匹配旧方法
 					if (bestOld == null) {
 						for (SyntheticInfo oi : oldGroup) {
 							if (oi.matched) continue;
-							if (oi.isStatic() != ni.isStatic()) continue;
-							if (!oi.desc.equals(ni.desc)) continue;
+							if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
 							bestOld = oi;
 							break;
 						}
@@ -766,7 +762,7 @@ public class LambdaAligner {
 			boolean renameable  = !mn.name.startsWith("access$");
 			SyntheticInfo info  = new SyntheticInfo(
 				mn.name, mn.desc, mn.access, fp.getHash(), logicalName, renameable);
-			groupByLogic(isOld ? ctx.oldGroups : ctx.newGroups, info);
+			groupByLogic(isOld ? ctx.oldGroups : ctx.newGroups, info, cn.name);
 		}
 
 		return cn;
@@ -1037,6 +1033,57 @@ public class LambdaAligner {
 	//region 辅助方法
 
 	/**
+	 * 判断两个合成方法的签名是否<b>逻辑等价</b>。
+	 *
+	 * <p>背景：同一段 lambda 体，在不同编译/变换轮次里可能以两种形态出现——</p>
+	 * <ul>
+	 *   <li><b>实例方法</b>：{@code private void lambda$build$19(ScrollPane, Floatc, Cell)}，
+	 *       {@code this} 是隐式的接收者；</li>
+	 *   <li><b>静态方法</b>：{@code private static void lambda$build$19(Tester, ScrollPane, Floatc, Cell)}，
+	 *       {@code this} 变成显式的首参数（{@link AnnotationTransformer#forceStaticLambdas} 的产物）。</li>
+	 * </ul>
+	 *
+	 * <p>两者描述的<b>是同一件事</b>。若按“{@code static} 位必须相同 + 描述符必须逐字符相同”
+	 * 去比对，就会把同一个 lambda 判成“老方法消失、新方法新增”，进而在阶段二生成
+	 * {@code lambda$build$21} 这类避障名，让 JVM 里仍持有老 {@code CallSite} 的 UI 监听器
+	 * 抛出 {@link NoSuchMethodError}。</p>
+	 *
+	 * <p>因此这里把实例方法的隐式 {@code this} 前置成显式首参数后，再逐字符比对。注意比对
+	 * 使用的是<b>带 owner 的完整参数类型</b>，所以只有当静态版本的首参数恰好就是
+	 * {@code L<当前类>;}（即 {@code forceStaticLambdas} 的既定形态）时才判定等价，
+	 * 不会把“首参数恰好是别的类”的错误签名误判为等价。</p>
+	 *
+	 * <p><b>边界（诚实说明）</b>：本方法只抹平 {@code static} 位与 {@code this} 形态的差异，
+	 * 不抹平“捕获列表本身发生变化”导致的描述符差异（例如新版本少捕获了一个局部变量）。
+	 * 那种情况需要真正的方法适配器（老签名 → 新签名的桥接转发），属于独立议题；
+	 * 本方法至少保证“名字被保住”，不再退化成避障名。</p>
+	 *
+	 * @param owner 当前类的内部名（形如 {@code com/example/Foo}）
+	 * @param a     参与比对的方法信息
+	 * @param b     参与比对的方法信息
+	 * @return 两者签名逻辑等价时返回 {@code true}
+	 */
+	private static boolean isSignatureCompatible(String owner, SyntheticInfo a, SyntheticInfo b) {
+		boolean sa = a.isStatic();
+		boolean sb = b.isStatic();
+		if (sa == sb) return a.desc.equals(b.desc);
+		if (owner == null) return false;
+		return normalizeStaticShape(owner, sa, a.desc).equals(normalizeStaticShape(owner, sb, b.desc));
+	}
+
+	/**
+	 * 把描述符归一化到“{@code this} 显式前置”的统一形态：
+	 * 实例方法的 {@code (X)Y} → {@code (L<owner>;X)Y}，静态方法原样返回。
+	 *
+	 * <p>与 {@link AnnotationTransformer#forceStaticLambdas} 生成的描述符形态严格一致，
+	 * 以便分组（{@link #groupByLogic}）与匹配（{@link #isSignatureCompatible}）使用同一个口径。</p>
+	 */
+	private static String normalizeStaticShape(String owner, boolean isStatic, String desc) {
+		if (isStatic || owner == null || desc == null || desc.isEmpty() || desc.charAt(0) != '(') return desc;
+		return "(L" + owner + ";" + desc.substring(1);
+	}
+
+	/**
 	 * 从方法名中提取逻辑名称，用于分组匹配。
 	 *
 	 * <p>滑动去除字符串中所有“紧跟在 {@code $} 符号后面的纯数字”：</p>
@@ -1075,13 +1122,26 @@ public class LambdaAligner {
 
 	/**
 	 * 按逻辑名称和描述符对合成方法进行分组。
-	 * <p>分组键为 {@code compositeHash(logicalName, desc)}，保证“嵌套 lambda 序号
+	 *
+	 * <p>分组键为 {@code compositeHash(logicalName, normalizedDesc)}，保证“嵌套 lambda 序号
 	 * 整体位移”不会拆散同一逻辑组。</p>
+	 *
+	 * <p><b>为什么用归一化描述符</b>：分组是阶段一匹配的前置条件。若直接拿原始描述符做键，
+	 * “老版本是静态方法（{@code this} 显式首参数）、新版本是实例方法（{@code this} 隐式）”
+	 * 这一对<b>根本不会落进同一个组</b>，{@link #isSignatureCompatible} 再宽容也没有机会执行。
+	 * 归一化后两者同键，阶段一即可识别为同一 lambda，避免生成 {@code lambda$build$21}
+	 * 这类避障名。<b>注意</b>：分组是“放宽”，真正的取舍仍由
+	 * {@link #isSignatureCompatible} 决定：它比对带 owner 的完整参数类型，因此不会因为
+	 * 放宽分组而把不同逻辑的 lambda 凑成一对。</p>
+	 *
+	 * <p>分组键里同时含 {@code logicalName}，所以不同 lambda 体（不同逻辑名）天然隔离；
+	 * 描述符里含完整参数类型，所以同名但参数类型不同的重载也不会互相污染。</p>
 	 */
 	private static void groupByLogic(
-		LongObjectMap<List<SyntheticInfo>> target, SyntheticInfo info) {
-		long                key  = Utils.compositeHash(info.logicalName, info.desc);
-		List<SyntheticInfo> list = target.get(key);
+		LongObjectMap<List<SyntheticInfo>> target, SyntheticInfo info, String owner) {
+		String              normalizedDesc = normalizeStaticShape(owner, info.isStatic(), info.desc);
+		long                key            = Utils.compositeHash(info.logicalName, normalizedDesc);
+		List<SyntheticInfo> list           = target.get(key);
 		if (list == null) {
 			list = new ArrayList<>(8);
 			target.put(key, list);

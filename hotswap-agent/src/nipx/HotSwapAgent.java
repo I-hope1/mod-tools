@@ -270,6 +270,21 @@ public class HotSwapAgent {
 					// 执行 ASM Diff
 					if (oldBytecode != null) {
 						if (LAMBDA_ALIGN) {
+							// 【基线一致性】oldBytecode 来自 bytecodeCache，是"上一次 transform 之后
+							// JVM 里实际生效"的形态（若开了 HOTSWAP_PLUS，则其中的 lambda 已被
+							// forceStaticLambdas 转成"静态 + this 显式首参数"）。而 newBytecode 是刚
+							// 从磁盘读到的原始编译产物，还是"实例 lambda"。两者形态不一致时，
+							// LambdaAligner 会把同一个 lambda 判成"删除 + 新增"，生成
+							// lambda$build$21 这类避障名，随后 redefine 触发的 transform 又会把新类
+							// 强制成静态，于是 JVM 里仍持有老 CallSite 的 UI 监听器直接
+							// NoSuchMethodError。这里让 newBytecode 先过一遍同样的归一化，
+							// 保证比对双方是同一种形态。该方法幂等，即便随后的 transform 再跑一次
+							// 也不会二次前置 this。
+							if (HOTSWAP_PLUS) {
+								String slashClassName = className.replace('.', '/');
+								newBytecode = AnnotationTransformer.forceStaticLambdas(
+									newBytecode, slashClassName, targetClass.getClassLoader());
+							}
 							newBytecode = LambdaAligner.align(oldBytecode, newBytecode);
 						}
 					}

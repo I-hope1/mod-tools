@@ -1,9 +1,7 @@
 package nipx;
 
-import arc.Core;
 import nipx.annotation.*;
 import nipx.ref.InitFix;
-import nipx.uihook.CellPropertyRef;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.AdviceAdapter;
 import org.objectweb.asm.tree.*;
@@ -283,30 +281,52 @@ public class AnnotationTransformer implements ClassFileTransformer {
 
 	//region Lambda Transformations
 
-	private record ForceLambdaRef(MethodNode container, InvokeDynamicInsnNode indy, Handle impl, String implKey,
-	                              boolean isContainerInstance) { }
+	public record ForceLambdaRef(MethodNode container, InvokeDynamicInsnNode indy, Handle impl, String implKey,
+	                             boolean isContainerInstance) { }
+
+	@SuppressWarnings("unchecked")
+	private static List<AnnotationNode>[] prependNull(List<AnnotationNode>[] src) {
+		if (src == null) return null;
+		List<AnnotationNode>[] dst = new List[src.length + 1];
+		System.arraycopy(src, 0, dst, 1, src.length);
+		return dst;
+	}
 
 	private static void shiftLocals(MethodNode mn) {
 		for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn instanceof VarInsnNode varInsn) {
-				varInsn.var += 1;
-			} else if (insn instanceof IincInsnNode iincInsn) {
-				iincInsn.var += 1;
-			}
+			if (insn instanceof VarInsnNode v) v.var++;
+			else if (insn instanceof IincInsnNode i) i.var++;
 		}
 		if (mn.localVariables != null) {
-			for (LocalVariableNode lvn : mn.localVariables) {
-				lvn.index += 1;
-			}
+			for (LocalVariableNode lvn : mn.localVariables) lvn.index++;
 		}
-		mn.maxLocals += 1;
+		if (mn.parameters != null) {
+			mn.parameters.add(0, new ParameterNode("this$0", ACC_SYNTHETIC | ACC_FINAL));
+		}
+		mn.visibleParameterAnnotations   = prependNull(mn.visibleParameterAnnotations);
+		mn.invisibleParameterAnnotations = prependNull(mn.invisibleParameterAnnotations);
+		if (mn.visibleAnnotableParameterCount > 0)   mn.visibleAnnotableParameterCount++;
+		if (mn.invisibleAnnotableParameterCount > 0) mn.invisibleAnnotableParameterCount++;
+		mn.maxLocals++;
 	}
 
 	/**
 	 * <p>将当前类中所有实例 lambda 方法强制转为静态方法。<br>
 	 * 同时也对定义在实例方法中的静态 lambda（即未捕获 `this` 的 lambda）进行转换，强制其捕获 `this`。
+	 *
+	 * <p><b>幂等性（重要）</b>：本方法对同一份输入可以安全地重复调用——已经是
+	 * “静态 + this 显式首参数”形态的 lambda 会被立即识别并原样返回，不会二次前置 {@code this}。
+	 * 这是因为它在两条路径上都会被调用：{@link #transform} 拦截类加载/重定义时，
+	 * 以及热更调度层在送入 {@code LambdaAligner.align} 之前。两条路径必须得到<b>完全一致</b>
+	 * 的基线，否则“对齐时看到的字节码”和“JVM 里实际生效的字节码”会脱节，
+	 * 反而制造出新的 {@link NoSuchMethodError}。</p>
+	 *
+	 * @param bytes         输入字节码
+	 * @param slashClassName 当前类的内部名（形如 {@code com/example/Foo}）
+	 * @param targetLoader  用于计算 StackMapTable 的目标 ClassLoader（可为 {@code null}）
+	 * @return 变换后的字节码；无需变换或输入不可变换时，原样返回 {@code bytes}
 	 */
-	private static byte[] forceStaticLambdas(byte[] bytes, String slashClassName, ClassLoader targetLoader) {
+	public static byte[] forceStaticLambdas(byte[] bytes, String slashClassName, ClassLoader targetLoader) {
 		ClassNode cn = new ClassNode(ASM9);
 		try {
 			new ClassReader(bytes).accept(cn, ClassReader.EXPAND_FRAMES);
@@ -314,49 +334,91 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			return bytes;
 		}
 
-		final Set<String>          instanceSyntheticMethods = new HashSet<>();
-		final Set<String>          staticSyntheticMethods   = new HashSet<>();
-		final List<ForceLambdaRef> references               = new ArrayList<>();
-
-		// 收集所有合成（Lambda）方法
+		// 1. 序列化 lambda 会按 impl 签名字符串比对，改签名会破坏反序列化
 		for (MethodNode mn : cn.methods) {
-			boolean isInstance = (mn.access & ACC_STATIC) == 0;
-			if ((mn.access & ACC_SYNTHETIC) != 0) {
-				if (isInstance) {
-					instanceSyntheticMethods.add(mn.name + ":" + mn.desc);
-				} else {
-					staticSyntheticMethods.add(mn.name + ":" + mn.desc);
-				}
-			}
+			if ("$deserializeLambda$".equals(mn.name)) return bytes;
 		}
 
-		// 收集所有 invokedynamic 调用关系
+		final Set<String>          instanceSyntheticMethods = new HashSet<>();
+		final Set<String>          staticSyntheticMethods   = new HashSet<>();
+		final Set<String>          directlyCalled           = new HashSet<>();   // 被直接 invoke 的方法
+		final List<ForceLambdaRef> references               = new ArrayList<>();
+
 		for (MethodNode mn : cn.methods) {
-			if (mn.instructions == null) continue;
-			// 构造函数在调用 super() / this() 之前 this 是 uninitializedThis 状态，不能强制捕获，否则会触发 VerifyError
+			if ((mn.access & ACC_SYNTHETIC) == 0) continue;
+			String key = mn.name + ":" + mn.desc;
+			if ((mn.access & ACC_STATIC) == 0) instanceSyntheticMethods.add(key);
+			else staticSyntheticMethods.add(key);
+		}
+
+		for (MethodNode mn : cn.methods) {
+			// 排除构造函数，避免在 super() 之前访问 uninitializedThis 导致 VerifyError
 			boolean isInstance = (mn.access & ACC_STATIC) == 0 && !mn.name.equals("<init>");
 			for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (insn.getType() != AbstractInsnNode.INVOKE_DYNAMIC_INSN) continue;
-				InvokeDynamicInsnNode indy = (InvokeDynamicInsnNode) insn;
+				if (insn instanceof MethodInsnNode m && m.owner.equals(slashClassName)) {
+					directlyCalled.add(m.name + ":" + m.desc);
+					continue;
+				}
+				if (!(insn instanceof InvokeDynamicInsnNode indy)) continue;
 				if (!isLambdaMetafactory(indy.bsm)) continue;
 				if (indy.bsmArgs == null || indy.bsmArgs.length < 2) continue;
 				if (!(indy.bsmArgs[1] instanceof Handle impl)) continue;
 				if (!slashClassName.equals(impl.getOwner())) continue;
 
-				String key = impl.getName() + ":" + impl.getDesc();
-				references.add(new ForceLambdaRef(mn, indy, impl, key, isInstance));
+				references.add(new ForceLambdaRef(mn, indy, impl,
+				 impl.getName() + ":" + impl.getDesc(), isInstance));
 			}
 		}
+
+		// 按 key 分组后统一决策
+		Map<String, List<ForceLambdaRef>> byKey = new LinkedHashMap<>();
+		for (ForceLambdaRef r : references) byKey.computeIfAbsent(r.implKey, k -> new ArrayList<>()).add(r);
 
 		final Set<String> needConversionToStatic = new HashSet<>();
 		final Set<String> needForceCaptureThis   = new HashSet<>();
 
-		for (ForceLambdaRef ref : references) {
-			if (instanceSyntheticMethods.contains(ref.implKey)) {
-				needConversionToStatic.add(ref.implKey);
-			} else if (staticSyntheticMethods.contains(ref.implKey) && ref.isContainerInstance) {
-				needForceCaptureThis.add(ref.implKey);
+		for (var e : byKey.entrySet()) {
+			String key = e.getKey();
+			List<ForceLambdaRef> refs = e.getValue();
+			if (directlyCalled.contains(key)) continue;
+			if (refs.get(0).impl.getName().startsWith("<")) continue;
+
+			if (instanceSyntheticMethods.contains(key)
+			    && refs.stream().allMatch(r -> {
+			        int t = r.impl.getTag();
+			        return t == H_INVOKESPECIAL || t == H_INVOKEVIRTUAL || t == H_INVOKEINTERFACE;
+			    })) {
+				needConversionToStatic.add(key);
+			} else if (staticSyntheticMethods.contains(key)
+			           && refs.stream().allMatch(r -> r.impl.getTag() == H_INVOKESTATIC && r.isContainerInstance)) {
+				// 核心防护：必须所有引用点都在"可安全取 this"的实例方法里
+				needForceCaptureThis.add(key);
 			}
+		}
+
+		// 幂等护栏（关键）：本方法会在两条路径上被调用——transform() 拦截类加载/重定义时，
+		// 以及热更调度层在送入 LambdaAligner.align 之前。若第二次调用再往首参数前插一个
+		// `this`，描述符会变成 (LFoo;LFoo;...) 而 lambda 体只认原来的槽位，导致
+		// “对齐时看到的字节码”与“JVM 里实际生效的字节码”脱节，也让实参与形参错位。
+		// 这里统一兜底：凡是被判定“需要捕获 this”的 lambda 都已经是
+		// `... (L<owner>; <原描述符参数>) ...` 形态时，说明本方法此前跑过，直接原样返回。
+		if (needConversionToStatic.isEmpty()) {
+			boolean alreadyForced = true;
+			for (String key : needForceCaptureThis) {
+				if (!staticSyntheticMethods.contains(key)) continue;
+				int        colon     = key.indexOf(':');
+				String     name      = key.substring(0, colon);
+				String     forcedDesc = "(" + "L" + slashClassName + ";" + key.substring(colon + 2);
+				boolean    found     = false;
+				for (MethodNode mn : cn.methods) {
+					if (mn.name.equals(name) && mn.desc.equals(forcedDesc)) { found = true; break; }
+				}
+				if (!found) {
+					alreadyForced = false;
+					break;
+				}
+			}
+			if (alreadyForced) return bytes;
 		}
 
 		if (needConversionToStatic.isEmpty() && needForceCaptureThis.isEmpty()) {
@@ -390,6 +452,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			if (needConversionToStatic.contains(ref.implKey)) {
 				ref.indy.bsmArgs[1] = handle;
 			} else if (needForceCaptureThis.contains(ref.implKey)) {
+				if (!ref.isContainerInstance) continue; // 双重防御
 				ref.indy.bsmArgs[1] = handle;
 
 				Type[] captureTypes = Type.getArgumentTypes(ref.indy.desc);
@@ -397,10 +460,9 @@ public class AnnotationTransformer implements ClassFileTransformer {
 
 				InsnList wrapper = new InsnList();
 				if (captureCount > 0) {
-					// 寻找可用 LVT 偏移量以避免临时变量冲突
-					int baseLocal = getBaseLocal(ref);
+					// 直接采用容器方法原始的 maxLocals 作为临时槽起点，安全不冲突
+					int baseLocal = ref.container.maxLocals;
 
-					// 将原有已在栈上的捕获变量按原类型大小保存在临时局部变量槽中
 					int[] temps     = new int[captureCount];
 					int   nextLocal = baseLocal;
 					for (int i = 0; i < captureCount; i++) {
@@ -408,7 +470,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 						nextLocal += captureTypes[i].getSize();
 					}
 
-					// 倒序弹出
+					// 倒序弹出栈顶现有参数
 					for (int i = captureCount - 1; i >= 0; i--) {
 						Type ct = captureTypes[i];
 						wrapper.add(new VarInsnNode(ct.getOpcode(ISTORE), temps[i]));
@@ -442,31 +504,14 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			return bytes;
 		}
 	}
+	//endregion
 
-	private static int getBaseLocal(ForceLambdaRef ref) {
-		int baseLocal = 0;
-		if (ref.container.instructions != null) {
-			for (AbstractInsnNode ain = ref.container.instructions.getFirst(); ain != null; ain = ain.getNext()) {
-				if (ain instanceof VarInsnNode v) {
-					int size = (v.getOpcode() == LLOAD || v.getOpcode() == LSTORE ||
-					            v.getOpcode() == DLOAD || v.getOpcode() == DSTORE) ? 2 : 1;
-					baseLocal = Math.max(baseLocal, v.var + size);
-				}
-			}
-		}
-		if (ref.container.localVariables != null) {
-			for (LocalVariableNode lvn : ref.container.localVariables) {
-				int size = ("J".equals(lvn.desc) || "D".equals(lvn.desc)) ? 2 : 1;
-				baseLocal = Math.max(baseLocal, lvn.index + size);
-			}
-		}
-		return baseLocal;
-	}
-
+	//region Utils
 	private static boolean isLambdaMetafactory(Handle h) {
 		return "java/lang/invoke/LambdaMetafactory".equals(h.getOwner())
 		       && ("metafactory".equals(h.getName()) || "altMetafactory".equals(h.getName()));
 	}
+	@SuppressWarnings("ResultOfMethodCallIgnored")
 	private static void writeTo(String className, byte[] classfileBuffer) {
 		File file = new File("./classes/" + className + ".class");
 		file.getParentFile().mkdirs();

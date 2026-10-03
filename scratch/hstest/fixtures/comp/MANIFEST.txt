@@ -1,0 +1,26 @@
+# 竞争夹具（comp/）的字节码产物清单
+#
+# 目的：夹具不再依赖运行时 PATH 上的 javac，且"结论是在什么字节码上得出的"可复现。
+# 用法：把对应目录加入 classpath，把里面的 .class 路径作为参数传给 CompeteTest。
+
+fixture     : comp/v1/test24/Compete.java + comp/v2/test24/Compete.java
+source      : scratch/hstest/comp/（同目录树）
+
+c8v1 / c8v2 : JDK 8 javac 的产物（v1 基线 / v2 同保存插入+改体）
+  javac -version : javac 1.8.0_332
+  command        : <jdk8>/bin/javac -nowarn -encoding UTF-8 -d <out> comp/Time7.java comp/v1/test24/Compete.java
+  release        : 无（不使用 --release；由该 JDK 自己的 javac 编译）
+  class major    : 52
+
+c21v1 / c21v2 : JDK 21 javac 的产物
+  javac -version : javac 21.0.2
+  command        : <jdk21>/bin/javac -nowarn -encoding UTF-8 -d <out> comp/Time7.java comp/v2/test24/Compete.java
+  release        : 无
+  class major    : 65
+
+注意：JDK 8 与 JDK 21 对**嵌套 lambda** 的命名规则不同 ——
+  JDK 8  : lambda$build$N / lambda$null$N
+  JDK 21 : lambda$build$N（统一编号）
+这本身就是"夹具版本决定结论"的直接证据。
+
+未覆盖：JDK 17（用户流水线常见）。本机 F:/files/java/jdks 下有 jdk-17.0.2，可补。

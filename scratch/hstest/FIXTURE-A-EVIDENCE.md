@@ -93,3 +93,43 @@ lambda$null$0(I)V     ← 旧叶子名字被幽灵化
 本夹具里中层本来就走 A/B 趟（描述符/指纹已变），所以**可能被掩盖了**。
 要真正验证，需要一个"中层本应走 Step 1"的夹具。
 因此本结果**不构成"名字键索引没问题"的证明**，只排除了一种最直接的失稳表现。
+
+---
+
+## 第二轮路径观察：名字键索引问题**确认成立**（评审推演已验证）
+
+评审指出我先前"可能被 A/B 趟掩盖"的理由**只对 V1→V2 成立**：第二轮里旧侧是中层的自身等价物，
+票据指纹相同，**它本应有资格走 Step 1**。用零代码方法验证——看第二轮有没有 `A-PASS`：
+
+```
+24: PAIR lambda$null$0(shape=() depth=1) -> lambda$null$0(shape=() depth=1)      ← 叶子走了 Step 1
+25: A-PASS ni=lambda$build$1 depth=0 shape=(())
+        oldCandidates=[lambda$build$0:d0:(()), lambda$build$1:d-1:():G]
+26: PAIR lambda$build$1(shape=(()) depth=0) -> lambda$build$0(shape=(()) depth=0)
+```
+
+**中层走了 A 趟，Step 1 被挡** —— 与推演一致。
+
+### 决定性证据：`d-1:():G`
+
+候选列表里 `lambda$build$1:d-1:():G` 就是**幽灵**：
+- `:G` = ghost；
+- `d-1` = `upDepth == -1`（幽灵不参与 upDepth 计算）；
+- `shape=()` 而非真正的 `(())`。
+
+`infoByName(old, "lambda$build$1")` **解析到了幽灵**，证明 `oldNameIndex.put(name, info)`
+被后追加的幽灵**覆盖**了同名活方法。后果链条与推演完全一致：
+1. 活中层的 `children` 解析到幽灵；
+2. `computeSemanticHashes` 对幽灵 `continue`，旧中层的语义指纹没折入叶子；
+3. 新中层折入了新叶子 ⇒ `sameSemantics` 不成立 ⇒ Step 1 失败 ⇒ 退到 A 趟。
+
+**名字仍然保住了**（A 趟配上了 `lambda$build$0`），所以只看结果分不出来 ——
+这正是评审说"全绿与索引有问题完全兼容"的原因。
+
+### 结论与后续
+
+- 名字键索引问题**成立**，不是假设；
+- 应当作为**独立断言**单独记录："同名不同描述符的幽灵/活方法共存时，不变的中层仍应走 Step 1"，
+  先红后修，**不与 `settled` 混在同一个提交里**；
+- 修法方向：把 `children` 与 `oldNameIndex`/`newNameIndex` 等改成 `name+desc` 键
+  （indy 的 `Handle` 本身带描述符）。

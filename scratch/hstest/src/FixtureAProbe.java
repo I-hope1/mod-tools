@@ -19,9 +19,9 @@ import java.nio.file.*;
 public class FixtureAProbe {
 
 	public static void main(String[] args) throws Exception {
-		boolean debug = args.length > 0 && "debug".equals(args[0]);
-		String d1 = args.length > 1 ? args[1] : "compA/out1";
-		String d2 = args.length > 2 ? args[2] : "compA/out2";
+		boolean debug = args.length > 2 && "debug".equals(args[2]);
+		String d1 = args[0];
+		String d2 = args[1];
 
 		// 打开 DEBUG：dbg 读取的是 volatile 字段，直接赋值即可生效。
 		LambdaAligner.DEBUG = debug;

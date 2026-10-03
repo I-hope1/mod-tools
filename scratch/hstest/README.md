@@ -350,3 +350,69 @@ v1: lambda$carrierA$0 hash=4504391648418999158
 但**没能构造出实际错配**：内层 lambda 的名字由它自己那条路径独立重映射，外层名字即使被
 换掉，调用链最终仍指向正确的内层。因此这一条记为"真实存在的碰撞、当前无可复现症状"，
 未做改动 —— 用户的 `callees` 决胜方案只有在能证明症状后才值得引入。
+
+## 嵌套 lambda：父与子的指纹碰撞导致静默对调（`swap2/`、`SemCheck`）
+
+用户给出的链式用例（`run(() -> Time.run(10, () -> doA()))`）：
+
+```
+V1: run(() -> Time.run(10, () -> doA()));   O0 -> 内层 $1
+    run(() -> Time.run(10, () -> doB()));   O1 -> 内层 $3
+V2: run(() -> Time.run(10, () -> doB()));   N0 -> 内层 $1
+```
+
+实测确认两点：
+
+1. **hash 碰撞成立**：两个外层（以及两个内层）的指纹完全相同 ——
+   `lambda$build$0` 与 `lambda$build$2` 都是 `5e01dca6d610fd00`，
+   因为内层名被 `#SYNTHETIC_METHOD#` 屏蔽。跨独立编译稳定可复现。
+   （注意：外层与外层同 hash、内层与内层同 hash；外层与外层之间本来就不该同 hash，
+   我第一轮测量把内外层的值混着看了，是错的。）
+
+2. **失败点与用户推演不同**。真实轨迹（`SemCheck` + 决策追踪）：
+
+```
+[T] 1a MATCH lambda$build$0 <- lambda$build$0     ← 外层按同名配上了（推演里这步会错，实际没有）
+[T] CROSS lambda$build$1 <- lambda$build$3        ← 内层被改名走
+```
+
+   外层**保住了名字**，但它的**子节点被改名走了** —— 于是 `$0` 的方法体里那句指向
+   `$1` 的引用转而去调用别人。语义对拍：
+
+```
+旧:   lambda$build$0 -> [doA]
+对齐: lambda$build$0 -> [doB]     ← 同名方法语义被换掉
+```
+
+### 为什么用户的 `callees` 决胜条件无法修复它
+
+新旧外层的 callees **都是同一个内层 lambda 名**（旧 `$1` 与新 `$1` 同名），
+映射后完全一致，决胜条件不产生区分度。真正的区分信息是**嵌套层级**。
+
+### 落地的修法
+
+1. `SyntheticInfo.children` / `childHashes`：`scan` 收集方法体里引用的本类 lambda 名
+   及其指纹（整类扫完后再算，因为子信息要先存在）。
+2. `hasUnmatchedChild`：**父必须等子落定** —— 每轮匹配只处理"子已全部 matched"的方法，
+   整轮无进展才收敛（每轮至少确认一个方法，最多 n 轮）。
+3. `sameNestingLevel`：候选必须同层级。父有子、子是叶子，`childHashes` 必然不同，
+   据此否决"父配到子"或"子配到父"。不靠推断深度，只比集合。
+4. Step 1a 拆成"同名优先 + 不限名兜底"两趟，两者都带上上述护栏。
+5. 匹配改为按轮迭代：Step 1（同组）→ 跨组指纹 → Step 2（顺序），每轮重跑直到收敛。
+
+### 结果
+
+| 变体 | 修复前 | 修复后 |
+|---|---|---|
+| 删除变体（删 O0） | `$0` 语义被换成 doB（静默对调） | 旧外层全部安全变幽灵，无对调 |
+| 插入变体（开头插入同形外层） | 出现两处语义互换 | 原有两个外层/内层全部保住名字，新块拿新名字 |
+
+```bash
+mkdir -p s2out1b s2out2b s2out3 s2outT
+javac -d s2out1b swap2/Time.java swap2/v1/test16/Swap2Case.java
+javac -d s2out2b swap2/Time.java swap2/v2/test16/Swap2Case.java
+javac -d s2out3  swap2/Time.java swap2/v3/test16/Swap2Case.java
+MSYS2_ARG_CONV_EXCL='*' javac -nowarn -cp "$CP" -d s2outT src/SemCheck.java src/Swap2Test.java
+MSYS2_ARG_CONV_EXCL='*' java -cp "s2outT;s2out1b;s2out2b;$CP" SemCheck s2out1b/test16/Swap2Case.class s2out2b/test16/Swap2Case.class
+MSYS2_ARG_CONV_EXCL='*' java -cp "s2outT;s2out1b;s2out3;$CP"  SemCheck s2out1b/test16/Swap2Case.class s2out3/test16/Swap2Case.class
+```

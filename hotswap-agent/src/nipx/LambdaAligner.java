@@ -154,6 +154,12 @@ public class LambdaAligner {
 		final LongObjectMap<List<SyntheticInfo>> newGroups = new LongObjectMap<>(128);
 
 		/**
+		 * 新类里 {@code lambda 方法名 -> 信息} 的索引，供 {@code hasUnmatchedChild}
+		 * 判断"我的子 lambda 是否还没落定"。由 {@code scan} 填充。
+		 */
+		final Map<String, SyntheticInfo> childIndex = new HashMap<>(32);
+
+		/**
 		 * 重置上下文状态，为下一次匹配做准备。
 		 * <p>由 {@link #align} 在入口与 finally 中各调用一次。</p>
 		 */
@@ -169,6 +175,7 @@ public class LambdaAligner {
 			currentClass = null;
 			oldGroups.clear();
 			newGroups.clear();
+			childIndex.clear();
 		}
 	}
 	//endregion
@@ -203,126 +210,43 @@ public class LambdaAligner {
 			LongObjectMap<List<SyntheticInfo>> oldGroups = ctx.oldGroups;
 			LongObjectMap<List<SyntheticInfo>> newGroups = ctx.newGroups;
 
-			// 【阶段一】抢占 / 复用旧名
-			for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
-				List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
-				if (newGroup == null) continue;
-
-				List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
-				if (oldGroup == null) continue;
-
-				int newSize = newGroup.size();
-				int oldSize = oldGroup.size();
-
-				// Step 1a：hash 相同 && 同名 —— 首选，保持原名，避免“同指纹交叉夺舍”
-				for (int j = 0; j < newSize; j++) {
-					SyntheticInfo ni = newGroup.get(j);
-					if (!ni.renameable || ni.matched) continue;
-					for (int k = 0; k < oldSize; k++) {
-						SyntheticInfo oi = oldGroup.get(k);
-						if (!oi.matched
-							&& !oi.ghost
-							&& ni.hash == oi.hash
-							&& isSignatureCompatible(ctx.currentClass, oi, ni)
-							&& oi.name.equals(ni.name)) {
-							recordRename(ctx, ni, oi.name);
-							ni.matched = true;
-							oi.matched = true;
-							ctx.usedOldNames.add(oi.name);
-							break;
-						}
-					}
-				}
-
-				// Step 1b：hash 相同（不限名字）—— 次选
-				for (int j = 0; j < newSize; j++) {
-					SyntheticInfo ni = newGroup.get(j);
-					if (!ni.renameable || ni.matched) continue;
-					for (int k = 0; k < oldSize; k++) {
-						SyntheticInfo oi = oldGroup.get(k);
-						if (!oi.matched
-							&& !oi.ghost
-							&& ni.hash == oi.hash
-							&& isSignatureCompatible(ctx.currentClass, oi, ni)) {
-							recordRename(ctx, ni, oi.name);
-							ni.matched = true;
-							oi.matched = true;
-							ctx.usedOldNames.add(oi.name);
-							break;
-						}
-					}
-				}
-			}
-
-			// 【阶段一·中】全类跨组指纹匹配 —— 必须夹在 Step 1 与 Step 2 之间
+			// 【阶段一】三轮迭代：Step 1a（同组同 hash 同名）→ 跨组指纹 → Step 2（顺序回退）
 			//
-			// 顺序不是风格问题，而是正确性要求。反例（已实测，见 scratch/hstest/move/）：
-			//   v1: build1(){ r1 = () -> A }   build2(){ r2 = () -> Z }
-			//   v2: build1(){}                 build2(){ r2 = () -> A }   // A 换了承载方法，Z 被删
-			// 新类里 A 变成 lambda$build2$0。若先跑 Step 2 的顺序回退，它会以"同组同位置"的身份
-			// 配上旧 lambda$build2$0，把 Z 的名字占掉：
-			//   • 持有旧 Z 的 CallSite 悄悄去跑 A 的方法体（不抛异常，最难查）；
-			//   • 持有旧 A 的 CallSite 反而命中幽灵空壳。
-			// 把跨组指纹匹配提前，A 会先按指纹认回它自己的旧名 lambda$build1$0，
-			// Z 则干净地变成孤儿空壳 —— 旧 CallSite 各自回到正确归宿。
-			matchByFingerprintAcrossGroups(ctx);
+			// 为什么要反复跑同一个组：lambda 是**可以嵌套**的，而 hash 中内层 lambda 的名字被
+			// #SYNTHETIC_METHOD# 屏蔽掉了。于是"外层"和"内层"在指纹上可能完全等价 ——
+			// 最典型的是 `run(() -> Time.run(10, () -> doA()))`：外层就是"求值一个
+			// Time.run(10, 内层)"，而这个形状与内层自身完全同构。
+			//
+			// 如果让子先配对，父就可能被另一个同 hash 的方法抢走名字，接着父的方法体里
+			// 指向子的那句引用会跟着被重映射到别人的名字上 —— 父保住了名字、子却丢了，
+			// 语义静默对调。实测复现与决策轨迹见 scratch/hstest/swap2/。
+			//
+			// 因此这里做成"按层级由下往上"：hasUnmatchedChild 挡住尚未落定子节点的父，
+			// 每跑完一轮若仍有进展就再跑一轮，让父在下一轮基于已经稳定的子重新尝试。
+			// 每一轮至少确认一个方法，所以最多 n 轮收敛。
+			while (true) {
+				boolean progressed = false;
 
-			// 【阶段一·下】Step 2：顺序回退 —— 只处理"指纹也对不上、仍无归宿"的新方法
-			for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
-				List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
-				if (newGroup == null) continue;
-
-				List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
-				if (oldGroup == null) continue;
-
-				// Step 2：顺序对齐（签名逻辑等价即可：实例方法的隐式 this 与静态方法的显式 this 等价）
-				for (SyntheticInfo ni : newGroup) {
-					if (ni.matched || !ni.renameable) continue;
-
-					SyntheticInfo bestOld = null;
-
-					// 第一优先级：组内同名且签名逻辑等价
-					for (SyntheticInfo oi : oldGroup) {
-						if (oi.matched || oi.ghost) continue;
-						if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
-						if (oi.name.equals(ni.name)) { bestOld = oi; break; }
-					}
-
-					// 第二优先级：第一个签名逻辑等价的未匹配旧方法
-					if (bestOld == null) {
-						for (SyntheticInfo oi : oldGroup) {
-							if (oi.matched || oi.ghost) continue;
-							if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
-							bestOld = oi;
-							break;
-						}
-					}
-
-					if (bestOld != null) {
-						// （a）底线守护：真正的危险信号是"名字换了主人"，而不是"方法体变了"。
-						//
-						// 为什么用名字而不是指纹：
-						//   • 名字没变（ni.name == bestOld.name）⇒ 老 CallSite 依然指向它原本
-						//     要调的那个方法，无论内部怎么改都是原地更新，不构成故障。
-						//     典型：容器 lambda（体内挂着内层 lambda）——改一个内层 lambda
-						//     会连带改变外层的槽位布局，使外层指纹必然变化，但外层名字保住了，
-						//     老 CallSite 执行的就是"新容器 + 已重映射的内层"，行为正确。
-						//     若按指纹报警，这种正常编辑会天天刷屏，把真信号淹掉。
-						//   • 名字变了 ⇒ 组内同形候选之间发生了错位让位，老 CallSite 被绑到了
-						//     另一个方法体上——这才是需要人去看的情况。
-						//
-						// 判据不含"是不是容器"的推断：容器特征（体内含指向本类合成方法的
-						// invokedynamic）虽然能识别，但"名字是否保住"本身就是充分且更严的证据，
-						// 无需额外遍历指令。
-						if (!ni.name.equals(bestOld.name)) {
-							warnPositionalMismatch(ctx.currentClass, bestOld, ni.name, ni.desc);
-						}
-						recordRename(ctx, ni, bestOld.name);
-						ni.matched = true;
-						bestOld.matched = true;
-						ctx.usedOldNames.add(bestOld.name);
-					}
+				// —— Step 1a：同组、同 hash、同名
+				for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
+					List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
+					List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
+					if (newGroup == null || oldGroup == null) continue;
+					progressed |= step1a(ctx, newGroup, oldGroup);
 				}
+
+				// —— 跨组指纹匹配（必须在 Step 2 之前，理由见下）
+				progressed |= matchByFingerprintAcrossGroups(ctx);
+
+				// —— Step 2：顺序回退
+				for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
+					List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
+					List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
+					if (newGroup == null || oldGroup == null) continue;
+					progressed |= step2(ctx, newGroup, oldGroup);
+				}
+
+				if (!progressed) break;
 			}
 
 			// 【阶段二】未匹配的新方法统一处理
@@ -476,6 +400,188 @@ public class LambdaAligner {
 	}
 
 	/**
+	 * 收集方法体里<b>直接引用</b>的本类 lambda 系方法名（本方法的"子"lambda）。
+	 *
+	 * <p>数据来源两处，都指向方法本身而非名字：invokedynamic 的 implMethod 句柄
+	 * （内层 lambda 的定义），以及直接的方法调用（lambda 体里显式调用某个合成方法）。
+	 * 只收集本类的、命中 lambda 系命名模式的那些。</p>
+	 */
+	private static Set<String> collectChildLambdaNames(MethodNode mn, String owner) {
+		Set<String> children = null;
+		for (AbstractInsnNode n : mn.instructions) {
+			String callee = null;
+			if (n instanceof InvokeDynamicInsnNode i && i.bsmArgs != null && i.bsmArgs.length > 1
+			    && i.bsmArgs[1] instanceof Handle h && owner.equals(h.getOwner())) {
+				callee = h.getName();
+			} else if (n instanceof MethodInsnNode m && owner.equals(m.owner)) {
+				callee = m.name;
+			}
+			if (callee == null || !MethodFingerprinter.isSyntheticName(callee)) continue;
+			if (children == null) children = new HashSet<>(4);
+			children.add(callee);
+		}
+		return children == null ? Collections.emptySet() : children;
+	}
+
+	/**
+	 * 该新方法是否还有"尚未落定"的子 lambda（子仍是未匹配状态）。
+	 *
+	 * <p><b>为什么父必须等子</b>：lambda 可以嵌套，而指纹里内层 lambda 的名字被
+	 * {@code #SYNTHETIC_METHOD#} 屏蔽，于是"父"与"子"在指纹上可能完全等价 ——
+	 * 例如 {@code run(() -> Time.run(10, () -> doA()))}，父的体就是"求值一个
+	 * {@code Time.run(10, 子)}"，与子自身同构。此时若让子先被别处抢走名字，
+	 * 父的方法体里那句指向子的引用会被重映射到别人的名字上：父保住了名字、子却丢了，
+	 * 语义静默对调。</p>
+	 *
+	 * <p>实测复现与决策轨迹见 {@code scratch/hstest/swap2/}。判断只看"子是否已 matched"，
+	 * 因为匹配是单调的：一旦子落定就不会再变，父可以安全地基于它做决定。</p>
+	 */
+	private static boolean hasUnmatchedChild(MatchContext ctx, SyntheticInfo ni) {
+		if (ni.children.isEmpty()) return false;
+		for (String child : ni.children) {
+			SyntheticInfo ci = ctx.childIndex.get(child);
+			if (ci != null && !ci.matched) return true;
+		}
+		return false;
+	}
+
+	/**
+	 * 判断新方法 {@code ni} 与旧方法 {@code oi} 是否处在同一层级（都是叶子，或两者的
+	 * 子 lambda 指纹集合一致）。
+	 *
+	 * <p><b>为什么需要它</b>：嵌套 lambda 下"父"与"子"可能指纹完全相同 —— 父的体就是
+	 * "求值一个 {@code Time.run(10, 子)}"，与子自身同构，而子的名字又被
+	 * {@code #SYNTHETIC_METHOD#} 屏蔽。此时若只比指纹，父会配到子（或反之），
+	 * 造成"父保住名字、子丢了名字"的语义静默对调。</p>
+	 *
+	 * <p>区分办法不靠推断嵌套深度，而是比<b>子集合</b>：父有子、子是叶子，两者的
+	 * {@link SyntheticInfo#childHashes} 必然不同。指纹相同但层级不同的候选会被否决。</p>
+	 *
+	 * <p>实测场景见 {@code scratch/hstest/swap2/}（删除变体）：新旧外层同 hash、
+	 * 新旧内层也同 hash，仅凭 hash 无法区分谁是谁。</p>
+	 */
+	private static boolean sameNestingLevel(SyntheticInfo ni, SyntheticInfo oi) {
+		if (ni.children.isEmpty() && oi.children.isEmpty()) return true;
+		return ni.childHashes.equals(oi.childHashes);
+	}
+
+	/**
+	 * Step 1a：同组、同 hash、同名 —— 证据最强的一档。
+	 *
+	 * @return 本趟是否至少配对了一个方法（供层级迭代判断是否需要再跑一轮）
+	 */
+	private static boolean step1a(MatchContext ctx, List<SyntheticInfo> newGroup, List<SyntheticInfo> oldGroup) {
+		boolean progressed = false;
+
+		// 第一优先：同组、同 hash、**同名**（证据最强）
+		for (SyntheticInfo ni : newGroup) {
+			if (!ni.renameable || ni.matched) continue;
+			if (hasUnmatchedChild(ctx, ni)) continue;
+			for (SyntheticInfo oi : oldGroup) {
+				if (!acceptCandidate(ctx, ni, oi)) continue;
+				if (!oi.name.equals(ni.name)) continue;
+				pair(ctx, ni, oi);
+				progressed = true;
+				break;
+			}
+		}
+
+		// 第二优先：同组、同 hash，**不限名字** —— 负责"方法体一字未改、但编译期序号变了"。
+		// 之所以能安全地不限名字，是因为加了 hasUnmatchedChild 与 sameNestingLevel 两道护栏：
+		// 父与子可能指纹相同（父的体就是"求值一个子"），缺任何一道都会造成
+		// "父保住名字、子丢了名字"的静默对调。实测复现见 scratch/hstest/swap2/。
+		for (SyntheticInfo ni : newGroup) {
+			if (!ni.renameable || ni.matched) continue;
+			if (hasUnmatchedChild(ctx, ni)) continue;
+			for (SyntheticInfo oi : oldGroup) {
+				if (!acceptCandidate(ctx, ni, oi)) continue;
+				pair(ctx, ni, oi);
+				progressed = true;
+				break;
+			}
+		}
+
+		return progressed;
+	}
+
+	/** 候选是否可接受：未匹配、非幽灵、指纹与签名一致、且处于同一嵌套层级。 */
+	private static boolean acceptCandidate(MatchContext ctx, SyntheticInfo ni, SyntheticInfo oi) {
+		if (oi.matched || oi.ghost) return false;
+		if (ni.hash != oi.hash) return false;
+		if (!isSignatureCompatible(ctx.currentClass, oi, ni)) return false;
+		return sameNestingLevel(ni, oi);
+	}
+
+	/** 配对并登记：把 {@code ni} 改名为 {@code oi} 的名字。 */
+	private static void pair(MatchContext ctx, SyntheticInfo ni, SyntheticInfo oi) {
+		recordRename(ctx, ni, oi.name);
+		ni.matched = true;
+		oi.matched = true;
+		ctx.usedOldNames.add(oi.name);
+	}
+
+	/**
+	 * Step 2：顺序回退 —— 只处理"指纹也对不上、仍无归宿"的新方法。
+	 *
+	 * @return 本趟是否至少配对了一个方法
+	 */
+	private static boolean step2(MatchContext ctx, List<SyntheticInfo> newGroup, List<SyntheticInfo> oldGroup) {
+		boolean progressed = false;
+		for (SyntheticInfo ni : newGroup) {
+			if (ni.matched || !ni.renameable) continue;
+			if (hasUnmatchedChild(ctx, ni)) continue;
+
+			SyntheticInfo bestOld = null;
+
+			// 第一优先级：组内同名且签名逻辑等价
+			for (SyntheticInfo oi : oldGroup) {
+				if (oi.matched || oi.ghost) continue;
+				if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
+				if (!sameNestingLevel(ni, oi)) continue;
+				if (oi.name.equals(ni.name)) { bestOld = oi; break; }
+			}
+
+			// 第二优先级：第一个签名逻辑等价的未匹配旧方法
+			if (bestOld == null) {
+				for (SyntheticInfo oi : oldGroup) {
+					if (oi.matched || oi.ghost) continue;
+					if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
+					if (!sameNestingLevel(ni, oi)) continue;
+					bestOld = oi;
+					break;
+				}
+			}
+
+			if (bestOld == null) continue;
+
+			// （a）底线守护：真正的危险信号是"名字换了主人"，而不是"方法体变了"。
+			//
+			// 为什么用名字而不是指纹：
+			//   • 名字没变（ni.name == bestOld.name）⇒ 老 CallSite 依然指向它原本
+			//     要调的那个方法，无论内部怎么改都是原地更新，不构成故障。
+			//     典型：容器 lambda（体内挂着内层 lambda）——改一个内层 lambda
+			//     会连带改变外层的槽位布局，使外层指纹必然变化，但外层名字保住了，
+			//     老 CallSite 执行的就是"新容器 + 已重映射的内层"，行为正确。
+			//     若按指纹报警，这种正常编辑会天天刷屏，把真信号淹掉。
+			//   • 名字变了 ⇒ 组内同形候选之间发生了错位让位，老 CallSite 被绑到了
+			//     另一个方法体上——这才是需要人去看的情况。
+			//
+			// 判据不含"是不是容器"的推断：容器特征（体内含指向本类合成方法的
+			// invokedynamic）虽然能识别，但"名字是否保住"本身就是充分且更严的证据，
+			// 无需额外遍历指令。
+			if (!ni.name.equals(bestOld.name)) {
+				warnPositionalMismatch(ctx.currentClass, bestOld, ni.name, ni.desc);
+			}
+			recordRename(ctx, ni, bestOld.name);
+			ni.matched = true;
+			bestOld.matched = true;
+			ctx.usedOldNames.add(bestOld.name);
+			progressed = true;
+		}
+		return progressed;
+	}
+
+	/**
 	 * 跨逻辑组的指纹匹配：把"方法体一字未改、但逻辑组变了"的 lambda 认领回旧名。
 	 *
 	 * <p>这是对 {@link #align} 中 Step 2 顺序回退的根本性补强。逻辑组的分组键是
@@ -519,7 +625,8 @@ public class LambdaAligner {
 	 * <p>因此真正的风险区间是“多个 lambda 体相似但不相同、且承载同一个方法”，
 	 * 这时才会出现对调；该情形由 {@link #warnPositionalMismatch} 留痕。</p>
 	 */
-	private static void matchByFingerprintAcrossGroups(MatchContext ctx) {
+	private static boolean matchByFingerprintAcrossGroups(MatchContext ctx) {
+		boolean progressed = false;
 		var newGroups = ctx.newGroups;
 		var oldGroups = ctx.oldGroups;
 
@@ -529,6 +636,7 @@ public class LambdaAligner {
 
 			for (SyntheticInfo ni : newGroup) {
 				if (ni.matched || !ni.renameable) continue;
+				if (hasUnmatchedChild(ctx, ni)) continue;
 
 				SyntheticInfo bestOld = null;
 
@@ -553,8 +661,10 @@ public class LambdaAligner {
 				ni.matched = true;
 				bestOld.matched = true;
 				ctx.usedOldNames.add(bestOld.name);
+				progressed = true;
 			}
 		}
+		return progressed;
 	}
 
 	/**
@@ -572,12 +682,14 @@ public class LambdaAligner {
 			for (SyntheticInfo oi : group) {
 				if (oi.matched || oi.ghost || oi.hash != ni.hash) continue;
 				if (!isSignatureCompatible(owner, oi, ni)) continue;
+				if (!sameNestingLevel(ni, oi)) continue;
 				if (oi.name.equals(ni.name)) return oi;
 			}
 		}
 		for (SyntheticInfo oi : group) {
 			if (oi.matched || oi.ghost || oi.hash != ni.hash) continue;
 			if (!isSignatureCompatible(owner, oi, ni)) continue;
+			if (!sameNestingLevel(ni, oi)) continue;
 			return oi;
 		}
 		return null;
@@ -969,10 +1081,41 @@ public class LambdaAligner {
 			// 它必须留在 oldGroups 里供孤儿计算复现，但名字已经是"死名字"，
 			// 不能再被当成某个新 lambda 的目标 —— 否则会把它挤到别的名字上去。
 			info.ghost = isGhostMethod(mn);
+			info.children = collectChildLambdaNames(mn, cn.name);
+			if (!isOld) ctx.childIndex.put(mn.name, info);
 			groupByLogic(isOld ? ctx.oldGroups : ctx.newGroups, info, cn.name);
 		}
 
+		// 子指纹必须在整类扫描完之后再算：子方法的 SyntheticInfo 要先存在。
+		LongObjectMap<List<SyntheticInfo>> groups = isOld ? ctx.oldGroups : ctx.newGroups;
+		for (int idx = groups.nextEntry(-1); idx != -1; idx = groups.nextEntry(idx)) {
+			List<SyntheticInfo> g = groups.valueAt(idx);
+			if (g == null) continue;
+			for (SyntheticInfo info : g) {
+				if (info.children.isEmpty()) continue;
+				Set<Long> hs = new HashSet<>(info.children.size() * 2);
+				for (String c : info.children) {
+					SyntheticInfo ci = infoByName(ctx, isOld, c);
+					if (ci != null) hs.add(ci.hash);
+				}
+				info.childHashes = hs;
+			}
+		}
+
 		return cn;
+	}
+
+	/** 在已扫描的旧/新分组里按名字找 SyntheticInfo（供子指纹计算使用）。 */
+	private static SyntheticInfo infoByName(MatchContext ctx, boolean isOld, String name) {
+		LongObjectMap<List<SyntheticInfo>> groups = isOld ? ctx.oldGroups : ctx.newGroups;
+		for (int idx = groups.nextEntry(-1); idx != -1; idx = groups.nextEntry(idx)) {
+			List<SyntheticInfo> g = groups.valueAt(idx);
+			if (g == null) continue;
+			for (SyntheticInfo info : g) {
+				if (info.name.equals(name)) return info;
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -1414,6 +1557,23 @@ public class LambdaAligner {
 		 * {@code CallSite}，绝不该再被当成某个新 lambda 的匹配目标。</p>
 		 */
 		boolean ghost;
+
+		/**
+		 * 该方法体里<b>直接引用</b>的本类 lambda 系方法名集合（内层 lambda）。
+		 *
+		 * <p>用于把匹配排成"由下往上"：父 lambda 必须等子 lambda 落定后再配对，
+		 * 否则子被改名会让父的方法体指向别处（详见 {@link #hasUnmatchedChild} 的说明）。</p>
+		 */
+		Set<String> children = Collections.emptySet();
+
+		/**
+		 * 子 lambda 的指纹集合（由 {@code scan} 在收集 children 时一并算出）。
+		 *
+		 * <p>用途：把"父"和"子"分开。父与子可能指纹相同（父的体就是"求值一个子"），
+		 * 但它们的<b>子集合</b>必然不同 —— 父有子、子是叶子。用集合比对即可否决
+		 * "父配到子"这种跨层错配，比推断嵌套深度稳健。</p>
+		 */
+		Set<Long> childHashes = Collections.emptySet();
 
 		SyntheticInfo(String name, String desc, int access, long hash, String logicalName, boolean renameable) {
 			this.name        = name;

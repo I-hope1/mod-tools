@@ -257,6 +257,22 @@ public class LambdaAligner {
 				}
 			} while (step2Progressed);
 
+			// 【阶段一·校验】形状不变量运行时校验（兜底）
+			//
+			// 不变量：配对成功的 (新, 旧) 必须有相同的子树**形状** —— 形状只由 indy 引用
+			// 拓扑决定，与方法体内容无关。违反它意味着"跨层级错绑"：例如旧外层 ((())) 的
+			// 名字被配给了新中层 (())，持有该名字的老 CallSite 会静默改了语义（延迟、
+			// 嵌套层数都变，却不报错）。
+			//
+			// 这里不是新增启发式，而是对上面各步已经在用的不变量做一次收口校验：
+			// 违反的配对就地撤销，让旧方法走幽灵、新方法走阶段二拿避障名 ——
+			// 把"静默错位"变回"显式熔断"，至少不比之前更糟。
+			//
+			// 实测动机（scratch/hstest 的 LeakProbe）：save3 两轮序列里 $3/$4 互换，
+			// 而判别实验已排除状态残留（CONTEXT.remove() 后结果不变），根因尚未定位；
+			// 这道校验与根因无关，单轮/两轮都适用。
+			verifyShapeInvariant(ctx);
+
 			// 【阶段二】未匹配的新方法统一处理
 			int freshId = 0;
 			for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
@@ -480,6 +496,40 @@ public class LambdaAligner {
 			if (ci != null && !ci.matched) return true;
 		}
 		return false;
+	}
+
+	/**
+	 * 形状不变量校验：撤销所有"形状不等"的配对。
+	 *
+	 * <p>撤销后 {@code ni} 与 {@code oi} 都回到未匹配状态，旧名字也不再占用，
+	 * 于是新方法会在阶段二拿到避障名，旧名字由孤儿计算复活成幽灵 —— 老 CallSite
+	 * 从"静默执行别人的方法体"变成"显式熔断"。</p>
+	 *
+	 * @return 撤销的配对数（供日志与测试使用）
+	 */
+	private static int verifyShapeInvariant(MatchContext ctx) {
+		int undone = 0;
+		for (int idx = ctx.newGroups.nextEntry(-1); idx != -1; idx = ctx.newGroups.nextEntry(idx)) {
+			List<SyntheticInfo> newGroup = ctx.newGroups.valueAt(idx);
+			if (newGroup == null) continue;
+			for (SyntheticInfo ni : newGroup) {
+				SyntheticInfo oi = ni.matchedWith;
+				if (oi == null || ni.shape.equals(oi.shape)) continue;
+
+				// 撤销：清掉改名登记与双方的匹配状态
+				if (ctx.renameMap.get(ni.name + ni.desc) != null) {
+					ctx.renameMap.remove(ni.name + ni.desc);
+				}
+				ni.matchedWith = null;
+				ni.matched = false;
+				oi.matched = false;
+				ctx.usedOldNames.remove(oi.name);
+				undone++;
+				HotSwapAgent.warn("[LambdaAligner] 形状不变量被违反，撤销配对：" + ni.name + ni.shape
+					+ " !~ " + oi.name + oi.shape + "（跨层级错绑已降级为熔断）");
+			}
+		}
+		return undone;
 	}
 
 	/**
@@ -1182,13 +1232,6 @@ public class LambdaAligner {
 				info.childHashes = hs;
 
 				// 子树形状：由子形状串接而成（与内容无关）
-				List<String> shapes = new ArrayList<>(info.children.size());
-				for (String c : info.children) {
-					SyntheticInfo ci = infoByName(ctx, isOld, c);
-					shapes.add(ci == null ? "()" : ci.shape);
-				}
-				Collections.sort(shapes);
-				info.shape = "(" + String.join("", shapes) + ")";
 
 				// 新类侧额外登记"子名 -> SyntheticInfo"，供 calleesPairTo 查"子配给了谁"
 				if (!isOld) {
@@ -1196,6 +1239,34 @@ public class LambdaAligner {
 					for (String c : info.children) cis.add(ctx.childIndex.get(c));
 					info.childInfos = cis;
 				}
+			}
+		}
+
+		// 子树形状：由子形状串接而成（与内容无关）。
+		//
+		// **必须迭代到定稿**：groups 的遍历顺序不确定，父可能先于子被处理，
+		// 这时取到的是子的默认值 "()"，于是父的形状被算成 (()) 而不是 ((()))。
+		// 实测后果（save3 两轮序列）：新旧两侧的形状被算成同一个错误值，
+		// 既不变量校验说不出话，外层与中层也就无法被区分。
+		for (int round = 0; round < 64; round++) {
+			boolean changed = false;
+			for (int idx = groups.nextEntry(-1); idx != -1; idx = groups.nextEntry(idx)) {
+				List<SyntheticInfo> g = groups.valueAt(idx);
+				if (g == null) continue;
+				for (SyntheticInfo info : g) {
+					List<String> shapes = new ArrayList<>(info.children.size());
+					for (String c : info.children) {
+						SyntheticInfo ci = infoByName(ctx, isOld, c);
+						shapes.add(ci == null || ci.ghost ? "()" : ci.shape);
+					}
+					Collections.sort(shapes);
+					String ns = "(" + String.join("", shapes) + ")";
+					if (!ns.equals(info.shape)) { info.shape = ns; changed = true; }
+				}
+			}
+			if (!changed) break;
+			if (round == 63) {
+				HotSwapAgent.warn("[LambdaAligner] 子树形状在 " + isOld + " 侧 64 轮未收敛，沿用当前值");
 			}
 		}
 
@@ -1211,6 +1282,11 @@ public class LambdaAligner {
 					for (String c : info.children) {
 						SyntheticInfo ci = infoByName(ctx, isOld, c);
 						if (ci == null) continue;
+						// 幽灵是空壳，**没有语义**：不能把它的 hash 折进父的语义指纹。
+						// 折进去的后果（实测，save3 两轮序列）：旧的父拿到一个无意义的语义指纹，
+						// 于是能与"本不该配"的新方法碰巧等价，外层/中层被静默错绑。
+						// 幽灵仍留在 groups 里供孤儿计算复现，但语义指纹计算把它当"无此子"。
+						if (ci.ghost) continue;
 						long cs = ci.semanticHash != 0 ? ci.semanticHash : ci.hash;
 						if (ci.semanticHash == 0 && !ci.children.isEmpty()) { sem = 0; break; }
 						sem = Utils.compositeHash(Long.toString(sem), Long.toString(cs));

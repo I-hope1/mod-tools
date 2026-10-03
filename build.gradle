@@ -584,3 +584,10 @@ tasks.register("hstest") {
 	description = "运行对齐器验证套件（夹具接线中，暂为红）"
 	dependsOn tasks.named("hstestSemAssert")
 }
+
+// 打印 hstest 运行 classpath，供手工实验复用（唯一可信来源，避免手拼）
+tasks.register("hstestCp") {
+	doLast {
+		println sourceSets.hstest.runtimeClasspath.asPath
+	}
+}

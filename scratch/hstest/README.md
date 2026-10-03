@@ -1083,8 +1083,31 @@ for j in $CP; do unzip -l "$j" | grep -q 'asm/tree/ClassNode' && echo "$j"; done
 
 ### 记账（按 review 要求写明）
 
-**目前没有任何一个套件结果受构建约束。** 所有通过数、失败排列，都只是
-"**javac 25、class file major 69、手动运行**"下的观察。
+**目前没有任何一个套件结果受构建约束。** 所有通过数、失败排列都只是**手动运行**下的观察。
+
+### 夹具的字节码版本（review 指出的重要问题）
+
+用户指出：**本项目的脱糖目标是 Java 8**，看任意一个类的字节码即可确认：
+
+```
+hotswap-agent/build/classes/java/main/OnReload.class : major 52   (= Java 8)
+```
+
+而此前所有夹具都是 `--release 21`（major 65）编的 —— **不代表生产字节码**。
+（注意 `build.gradle` 里另写有 `sourceCompatibility = 25`，实际产物是 52，
+说明存在独立的脱糖流程；以**产物字节码**为准。）
+
+**已补做**：用 `--release 8`（major 52）重编竞争夹具并重跑 8 种排列：
+
+```
+新方法顺序: [lambda$build$1, $2, $3, $0]
+原序              PASS（叶子名 $2 承载 doB2）
+通过 4 个；失败 4 个 -> [倒序, seed=2, seed=7, seed=11]
+>>> 存在顺序敏感：旧叶子名被 noop 抢走
+```
+
+**结论**：顺序敏感性**在 Java 8 字节码上同样存在**，因此不再是"只在某个 JDK 的夹具上成立"的
+观察。后续夹具一律以 **Java 8（major 52）** 为准。
 
 以下两条**保持假设状态**，平移实验排在套件跑通之后：
 

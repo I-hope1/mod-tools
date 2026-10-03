@@ -1390,6 +1390,15 @@ public class LambdaAligner {
 		//
 		// groups 的遍历顺序不确定，父可能先于子被处理；此时**读到未定稿的子就跳过本轮**，
 		// 绝不用哨兵值冒充叶子。收敛判据是"没有未定稿 且 无变化"。
+		//
+		// 性能：串接缓冲在**循环外**分配一次、每轮复用，且用项目既有的
+		// {@link LookupKey}（内嵌 StringBuilder + 缓存 hash + 支持与 CharSequence 比较）
+		// 代替原先每轮每方法的 `new ArrayList` + `String.join`。
+		//
+		// 说明：子形状**必须排序**后才能比较（否则同一形状因子顺序不同而被判为不同），
+		// 因此排序无法跳过；能省的是"串接与 String 生成"—— 用 LookupKey 拼一次，
+		// 与既有值相同就**不生成 String**。
+		LookupKey shapeKey = new LookupKey(64);
 		for (int round = 0; round < 64; round++) {
 			boolean changed = false, pending = false;
 			for (int idx = groups.nextEntry(-1); idx != -1; idx = groups.nextEntry(idx)) {
@@ -1406,8 +1415,16 @@ public class LambdaAligner {
 					}
 					if (!ready) { pending = true; continue; }
 					Collections.sort(shapes);
-					String ns = "(" + String.join("", shapes) + ")";
-					if (!ns.equals(info.shape)) { info.shape = ns; changed = true; }
+
+					shapeKey.reset();
+					shapeKey.append('(');
+					for (int i = 0; i < shapes.size(); i++) shapeKey.append(shapes.get(i));
+					shapeKey.append(')');
+
+					// 轻量短路：与既有值相同则不生成 String（LookupKey.equals 支持 CharSequence）
+					if (shapeKey.equals(info.shape)) continue;
+					info.shape = shapeKey.copy();
+					changed = true;
 				}
 			}
 			if (!changed && !pending) break;

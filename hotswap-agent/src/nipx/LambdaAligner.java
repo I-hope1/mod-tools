@@ -218,6 +218,19 @@ public class LambdaAligner {
 		final Map<String, SyntheticInfo> childIndex = new HashMap<>(32);
 
 		/**
+		 * 名字 → SyntheticInfo 的完整索引（两侧各一份）。
+		 *
+		 * <p>替代 {@code infoByName} 的线性查找：后者要遍历所有 group 的所有成员
+		 * （双重循环），而它被**三个 64 轮定稿循环**按"每个方法 × 每个子"调用，
+		 * 单轮就是 O(N·children·N)，最坏合计 O(64·N²)。有了索引即为 O(1)。</p>
+		 *
+		 * <p><b>填充时机</b>：必须在 {@code scan} 建完该侧**全部** SyntheticInfo 之后，
+		 * 否则会查到 null（幽灵重注入也会改变方法表）。</p>
+		 */
+		final Map<String, SyntheticInfo> oldNameIndex = new HashMap<>(64);
+		final Map<String, SyntheticInfo> newNameIndex = new HashMap<>(64);
+
+		/**
 		 * 重置上下文状态，为下一次匹配做准备。
 		 * <p>由 {@link #align} 在入口与 finally 中各调用一次。</p>
 		 */
@@ -234,6 +247,8 @@ public class LambdaAligner {
 			oldGroups.clear();
 			newGroups.clear();
 			childIndex.clear();
+			oldNameIndex.clear();
+			newNameIndex.clear();
 		}
 	}
 	//endregion
@@ -1337,6 +1352,9 @@ public class LambdaAligner {
 			info.ghost = isGhostMethod(mn);
 			info.children = collectChildLambdaNames(mn, cn.name);
 			if (!isOld) ctx.childIndex.put(mn.name, info);
+			// 完整名字索引（两侧各一份），供 infoByName 做 O(1) 查找。
+			// 这里就地填充即可：scan 的循环体已经走完该名字对应的 SyntheticInfo 构建。
+			(isOld ? ctx.oldNameIndex : ctx.newNameIndex).put(mn.name, info);
 			groupByLogic(isOld ? ctx.oldGroups : ctx.newGroups, info, cn.name);
 		}
 
@@ -1508,15 +1526,10 @@ public class LambdaAligner {
 
 	/** 在已扫描的旧/新分组里按名字找 SyntheticInfo（供子指纹计算使用）。 */
 	private static SyntheticInfo infoByName(MatchContext ctx, boolean isOld, String name) {
-		LongObjectMap<List<SyntheticInfo>> groups = isOld ? ctx.oldGroups : ctx.newGroups;
-		for (int idx = groups.nextEntry(-1); idx != -1; idx = groups.nextEntry(idx)) {
-			List<SyntheticInfo> g = groups.valueAt(idx);
-			if (g == null) continue;
-			for (SyntheticInfo info : g) {
-				if (info.name.equals(name)) return info;
-			}
-		}
-		return null;
+		// O(1) 查索引。早先是"遍历所有 group 的所有成员"的双重循环，而本方法被
+		// **三个 64 轮定稿循环**按"每个方法 × 每个子"调用，最坏合计 O(64·N²)。
+		// 见 MatchContext.oldNameIndex / newNameIndex 的说明。
+		return (isOld ? ctx.oldNameIndex : ctx.newNameIndex).get(name);
 	}
 
 	/**
@@ -1712,7 +1725,26 @@ public class LambdaAligner {
 		}
 	}
 
-	private static final String UPDATE_REF_CLASS_PREFIX = "nipx.ref.UpdateRef";
+	/**
+	 * {@code UpdateRef} 的**精确**类名匹配。
+	 *
+	 * <p>早先用 {@code startsWith("nipx.ref.UpdateRef")}，它会连带匹配
+	 * {@code nipx.ref.UpdateRefLogger}、{@code UpdateRefUtils} 这类**非代理**类。</p>
+	 *
+	 * <p>后果不是"误判"本身，而是误判的代价：本方法返回 true 会让
+	 * {@link #onOrphanInvoked} 抛 {@link NoSuchMethodError}，从而驱动
+	 * {@code UpdateRef} 执行**精准局部熔断**并注销回调。若某个非代理类恰好位于调用栈上，
+	 * 回调会被**静默注销** —— 比崩溃更难排查：程序照常运行，只是不再响应。</p>
+	 *
+	 * <p>因此只认 {@code nipx.ref.UpdateRef} 本身及其**内部类**（{@code UpdateRef$...}）。</p>
+	 */
+	private static boolean isUpdateRefClass(String className) {
+		return UPDATE_REF_CLASS.equals(className)
+			|| className.startsWith(UPDATE_REF_CLASS_INNER_PREFIX);
+	}
+
+	private static final String UPDATE_REF_CLASS = "nipx.ref.UpdateRef";
+	private static final String UPDATE_REF_CLASS_INNER_PREFIX = "nipx.ref.UpdateRef$";
 	private static final Set<String> LOGGED_ORPHANS = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
 	/**
@@ -1773,7 +1805,7 @@ public class LambdaAligner {
 		try {
 			if (StackWalkerHolder.IS_SUPPORTED) {
 				return StackWalkerHolder.WALKER.walk(s -> s.limit(16)
-					.anyMatch(f -> f.getClassName().startsWith(UPDATE_REF_CLASS_PREFIX)));
+					.anyMatch(f -> isUpdateRefClass(f.getClassName())));
 			}
 		} catch (Throwable ignored) {}
 
@@ -1781,7 +1813,7 @@ public class LambdaAligner {
 			StackTraceElement[] trace = new Throwable().getStackTrace();
 			int limit = Math.min(trace.length, 16);
 			for (int i = 1; i < limit; i++) {
-				if (trace[i].getClassName().startsWith(UPDATE_REF_CLASS_PREFIX)) {
+				if (isUpdateRefClass(trace[i].getClassName())) {
 					return true;
 				}
 			}

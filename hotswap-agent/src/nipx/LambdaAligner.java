@@ -57,6 +57,32 @@ public class LambdaAligner {
 	public static final ThreadLocal<MatchContext> CONTEXT = ThreadLocal.withInitial(MatchContext::new);
 
 	/**
+	 * <b>测试钩子</b>：反转分组遍历顺序，用于检测"结果依赖遍历顺序"的缺陷。
+	 *
+	 * <p>本对齐器的结果**不应**依赖 {@code LongObjectMap} 的遍历顺序（那个顺序对同一输入
+	 * 是确定的，但会随输入变化而改变，因此不能作为正确性的依赖）。开启后所有分组遍历
+	 * 反向进行；若结果与正序不同，就说明存在隐性的顺序依赖。</p>
+	 *
+	 * <p>生产环境保持 {@code false}。</p>
+	 */
+	public static volatile boolean TEST_REVERSE_GROUP_ORDER = false;
+
+	/** 按当前测试钩子决定的方向，在 {@code groups} 上迭代（返回下标序列）。 */
+	private static int[] groupOrder(LongObjectMap<?> groups) {
+		int n = 0;
+		for (int idx = groups.nextEntry(-1); idx != -1; idx = groups.nextEntry(idx)) n++;
+		int[] order = new int[n];
+		int i = 0;
+		for (int idx = groups.nextEntry(-1); idx != -1; idx = groups.nextEntry(idx)) order[i++] = idx;
+		if (TEST_REVERSE_GROUP_ORDER) {
+			for (int l = 0, r = n - 1; l < r; l++, r--) {
+				int t = order[l]; order[l] = order[r]; order[r] = t;
+			}
+		}
+		return order;
+	}
+
+	/**
 	 * 孤儿 lambda 被复活为空壳时的处理策略。
 	 */
 	public enum OrphanPolicy {
@@ -226,7 +252,7 @@ public class LambdaAligner {
 			boolean progressed;
 			do {
 				progressed = false;
-				for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
+				for (int idx : groupOrder(newGroups)) {
 					List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
 					List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
 					if (newGroup == null || oldGroup == null) continue;
@@ -249,7 +275,7 @@ public class LambdaAligner {
 			boolean step2Progressed;
 			do {
 				step2Progressed = false;
-				for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
+				for (int idx : groupOrder(newGroups)) {
 					List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
 					List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
 					if (newGroup == null || oldGroup == null) continue;
@@ -275,7 +301,7 @@ public class LambdaAligner {
 
 			// 【阶段二】未匹配的新方法统一处理
 			int freshId = 0;
-			for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
+			for (int idx : groupOrder(newGroups)) {
 				List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
 				if (newGroup == null) continue;
 
@@ -509,7 +535,7 @@ public class LambdaAligner {
 	 */
 	private static int verifyShapeInvariant(MatchContext ctx) {
 		int undone = 0;
-		for (int idx = ctx.newGroups.nextEntry(-1); idx != -1; idx = ctx.newGroups.nextEntry(idx)) {
+		for (int idx : groupOrder(ctx.newGroups)) {
 			List<SyntheticInfo> newGroup = ctx.newGroups.valueAt(idx);
 			if (newGroup == null) continue;
 			for (SyntheticInfo ni : newGroup) {
@@ -747,7 +773,7 @@ public class LambdaAligner {
 		var newGroups = ctx.newGroups;
 		var oldGroups = ctx.oldGroups;
 
-		for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
+		for (int idx : groupOrder(newGroups)) {
 			List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
 			if (newGroup == null) continue;
 
@@ -1242,33 +1268,47 @@ public class LambdaAligner {
 			}
 		}
 
-		// 子树形状：由子形状串接而成（与内容无关）。
+		// 子树形状：由子形状串接而成（与内容无关），迭代到定稿。
 		//
-		// **必须迭代到定稿**：groups 的遍历顺序不确定，父可能先于子被处理，
-		// 这时取到的是子的默认值 "()"，于是父的形状被算成 (()) 而不是 ((()))。
-		// 实测后果（save3 两轮序列）：新旧两侧的形状被算成同一个错误值，
-		// 既不变量校验说不出话，外层与中层也就无法被区分。
+		// groups 的遍历顺序不确定，父可能先于子被处理；此时**读到未定稿的子就跳过本轮**，
+		// 绝不用哨兵值冒充叶子。收敛判据是"没有未定稿 且 无变化"。
 		for (int round = 0; round < 64; round++) {
-			boolean changed = false;
+			boolean changed = false, pending = false;
 			for (int idx = groups.nextEntry(-1); idx != -1; idx = groups.nextEntry(idx)) {
 				List<SyntheticInfo> g = groups.valueAt(idx);
 				if (g == null) continue;
 				for (SyntheticInfo info : g) {
 					List<String> shapes = new ArrayList<>(info.children.size());
+					boolean ready = true;
 					for (String c : info.children) {
 						SyntheticInfo ci = infoByName(ctx, isOld, c);
-						shapes.add(ci == null || ci.ghost ? "()" : ci.shape);
+						if (ci == null || ci.ghost) { shapes.add("()"); continue; }   // 幽灵 = 无子
+						if (ci.shape == null) { ready = false; break; }               // 子未定稿
+						shapes.add(ci.shape);
 					}
+					if (!ready) { pending = true; continue; }
 					Collections.sort(shapes);
 					String ns = "(" + String.join("", shapes) + ")";
 					if (!ns.equals(info.shape)) { info.shape = ns; changed = true; }
 				}
 			}
-			if (!changed) break;
+			if (!changed && !pending) break;
 			if (round == 63) {
-				HotSwapAgent.warn("[LambdaAligner] 子树形状在 " + isOld + " 侧 64 轮未收敛，沿用当前值");
+				// 明确区分"没算完"与"算完了"：这里留下的是**未定稿**（形状可能为 null），
+				// 而不是一个看似合法的错值。
+				HotSwapAgent.warn("[LambdaAligner] 子树形状在 " + (isOld ? "old" : "new")
+					+ " 侧 64 轮未收敛（存在环或异常引用），沿用当前值；未定稿者保持 null");
 			}
 		}
+		// 仍为 null 的（理论上只在成环时出现）退化为叶子形状，保证后续比较不 NPE。
+		for (int idx = groups.nextEntry(-1); idx != -1; idx = groups.nextEntry(idx)) {
+			List<SyntheticInfo> g = groups.valueAt(idx);
+			if (g == null) continue;
+			for (SyntheticInfo info : g) if (info.shape == null) info.shape = "()";
+		}
+
+		// 语义指纹同理：0 表示未定稿，但 0 不可能是合法指纹值（CRC64 结果），
+		// 因此这里不存在"哨兵与合法值撞车"的问题。
 
 		// 递归语义指纹：由下往上逐层折入子的语义指纹。每轮至少定稿一层，
 		// 最多嵌套深度轮即收敛（循环次数上限只是防御）。
@@ -1846,7 +1886,15 @@ public class LambdaAligner {
 		 * <p>形状与内容无关，所以"编辑叶子方法体"不会改变它（不会重现上一轮那个
 		 * "祖先因后代被编辑而失去证据"的问题），但它能区分外层与中层。</p>
 		 */
-		String shape = "()";
+		/**
+		 * 子树形状；{@code null} 表示<b>尚未定稿</b>。
+		 *
+		 * <p><b>为什么用 null 而不是 "()"</b>：{@code "()"} 本身就是叶子的合法形状。
+		 * 若用它兼作"未算完"的哨兵，父读到未定稿的子时无法与"真叶子"区分，会算出一个
+		 * <b>看似合法实则错误</b>的值 —— 这正是 save3 两轮互换那个 bug 的类别：
+		 * 新旧两侧同错，任何等值校验都说不出话。用 null 之后，"未算完"与"叶子"永远可分。</p>
+		 */
+		String shape;
 
 		SyntheticInfo(String name, String desc, int access, long hash, String logicalName, boolean renameable) {
 			this.name        = name;

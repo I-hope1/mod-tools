@@ -291,10 +291,14 @@ public class SemAssert {
 			check(B2chainIntact(a3), "V2→V3：B 链自洽（外层→中层→叶子 引用闭合）");
 			check(noDupOrShadow(a3), "V2→V3：最终类自洽");
 
-			// ---- KNOWN ISSUE：跨两轮出现"跨层级错绑" ----
+			// ---- 跨轮"形状不变"判据（已修复，普通断言）----
 			// 判据：旧基线里每个存活下来的名字，其**子树形状**（只由 indy 拓扑决定、
 			// 与方法体内容无关）必须保持不变。外层 ((())) 与中层 (()) 若互换，
 			// 持有旧名字的 UpdateRef 回调会静默改了语义（延迟、嵌套层数都变）。
+			//
+			// 这里曾经标为 KNOWN ISSUE（两侧 shape 被算成同一个错值，导致校验放行）；
+			// 根因是 scan 里 shape 只算一遍、父读到子的未定稿哨兵。改成迭代到定稿
+			// （且哨兵用 null 而非 "()"）后已修复，因此恢复为普通断言。
 			Map<String, String> s2 = shapeOfAll(a2), s3 = shapeOfAll(a3);
 			List<String> swapped = new ArrayList<>();
 			for (var e : s2.entrySet()) {
@@ -302,7 +306,7 @@ public class SemAssert {
 				if (now == null) continue;                 // 已消失可接受
 				if (!now.equals(e.getValue())) swapped.add(e.getKey() + " 旧=" + e.getValue() + " 现=" + now);
 			}
-			check(swapped.isEmpty(), "KNOWN ISSUE: 存活名字的子树形状跨轮不变（错绑=" + swapped + "）");
+			check(swapped.isEmpty(), "存活名字的子树形状跨轮不变（错绑=" + swapped + "）");
 		}
 
 		System.out.println();

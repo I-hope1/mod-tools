@@ -1451,7 +1451,7 @@ public class UpdateRef {
 	private static final Seq<Runnable> DEFERRED_REMOVALS = new Seq<>();
 	private static volatile boolean hasDeferredRemovals;
 	private static volatile boolean flushScheduled;
-	private static volatile boolean flushLoggedError;
+	private static volatile boolean flushFailLogged;
 
 	private static void deferRemoval(Runnable r) {
 		if (r == null || r == NOOP || r == REMOVED) return;
@@ -1479,14 +1479,12 @@ public class UpdateRef {
 		}
 		try {
 			Core.app.post(UpdateRef::flushDeferredRemovals);
-			flushLoggedError = false;
+			flushFailLogged = false;
 		} catch (Throwable t) {
-			synchronized (DEFERRED_REMOVALS) {
-				flushScheduled = false;
-				if (!flushLoggedError) {
-					flushLoggedError = true;
-					HotSwapAgent.error("[UpdateRef] Core.app.post failed: " + t.getMessage(), t);
-				}
+			flushScheduled = false;
+			if (!flushFailLogged) {
+				flushFailLogged = true;
+				HotSwapAgent.error("[UpdateRef] Core.app.post failed, will retry on next trigger: " + t.getMessage(), t);
 			}
 		}
 	}
@@ -1507,7 +1505,7 @@ public class UpdateRef {
 		synchronized (DEFERRED_REMOVALS) {
 			flushScheduled = false;
 			hasDeferredRemovals = false;
-			flushLoggedError = false;
+			flushFailLogged = false;
 			if (DEFERRED_REMOVALS.isEmpty()) return;
 			toRun = new Seq<>(DEFERRED_REMOVALS);
 			DEFERRED_REMOVALS.clear();

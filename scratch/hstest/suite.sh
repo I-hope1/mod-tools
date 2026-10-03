@@ -85,10 +85,31 @@ for v in 8 17 21; do
       || { echo "   FAIL 编译 fa${v}${ver}"; FAILED=1; }
   done
 done
+# 编译 SemAssert 15 组夹具（使用 host javac --release 21，产出 major 65 且符合顶向下编号）
+for dir in s2a s2b lf1 lf2 lf3 dp1 dp2 tw1 tw2 d21 d22 d23 sv1 sv2 sv3; do
+  mkdir -p "$dir"
+done
+JC_REL="javac --release 21 -nowarn -encoding UTF-8"
+$JC_REL -d s2a swap2/Time.java swap2/v1/test16/Swap2Case.java >/dev/null 2>&1 || FAILED=1
+$JC_REL -d s2b swap2/Time.java swap2/v2/test16/Swap2Case.java >/dev/null 2>&1 || FAILED=1
+$JC_REL -d lf1 leaf/v1/test17/LeafCase.java >/dev/null 2>&1 || FAILED=1
+$JC_REL -d lf2 leaf/v2/test17/LeafCase.java >/dev/null 2>&1 || FAILED=1
+$JC_REL -d lf3 leaf/v3/test17/LeafCase.java >/dev/null 2>&1 || FAILED=1
+$JC_REL -d dp1 deep/Time.java deep/v1/test18/DeepCase.java >/dev/null 2>&1 || FAILED=1
+$JC_REL -d dp2 deep/Time.java deep/v2/test18/DeepCase.java >/dev/null 2>&1 || FAILED=1
+$JC_REL -d tw1 two/Time2.java two/v1/test19/TwoLevel.java >/dev/null 2>&1 || FAILED=1
+$JC_REL -d tw2 two/Time2.java two/v2/test19/TwoLevel.java >/dev/null 2>&1 || FAILED=1
+$JC_REL -d d21 deep2/Time3.java deep2/v1/test20/Deep2.java >/dev/null 2>&1 || FAILED=1
+$JC_REL -d d22 deep2/Time3.java deep2/v2/test20/Deep2.java >/dev/null 2>&1 || FAILED=1
+$JC_REL -d d23 deep2/Time3.java deep2/v3/test20/Deep2.java >/dev/null 2>&1 || FAILED=1
+$JC_REL -d sv1 save3/Time4.java save3/v1/test21/Save3.java >/dev/null 2>&1 || FAILED=1
+$JC_REL -d sv2 save3/Time4.java save3/v2/test21/Save3.java >/dev/null 2>&1 || FAILED=1
+$JC_REL -d sv3 save3/Time4.java save3/v3/test21/Save3.java >/dev/null 2>&1 || FAILED=1
+
 [ $FAILED = 0 ] && echo "   OK   夹具编译完成" || { echo "夹具编译失败"; exit 1; }
 
 run() { # run <类> <参数...>
-  "$JAVA_BIN" -cp "fx;$HSTEST_CP" "$@"
+  "$JAVA_BIN" -cp "s2a;s2b;lf1;lf2;lf3;dp1;dp2;tw1;tw2;d21;d22;d23;sv1;sv2;sv3;fx;$HSTEST_CP" "$@"
 }
 
 # ---------- 套件入口 ----------
@@ -97,6 +118,15 @@ step "XGroupTest (JDK8 夹具)"  run XGroupTest "fx/x8v1/test25/XGroup.class" "f
 step "XGroupTest (JDK21 夹具)" run XGroupTest "fx/x21v1/test25/XGroup.class" "fx/x21v2/test25/XGroup.class"
 step "NameIndexTest (三 JDK + 正反序)" run NameIndexTest
 step "FixtureATest (三 JDK + 正反序)" run FixtureATest
+step "SemAssert (15 夹具 / 40 条断言)" run SemAssert \
+  s2a/test16/Swap2Case.class s2b/test16/Swap2Case.class \
+  lf1/test17/LeafCase.class lf2/test17/LeafCase.class lf3/test17/LeafCase.class \
+  dp1/test18/DeepCase.class dp2/test18/DeepCase.class \
+  tw1/test19/TwoLevel.class tw2/test19/TwoLevel.class \
+  d21/test20/Deep2.class d22/test20/Deep2.class d23/test20/Deep2.class \
+  sv1/test21/Save3.class sv2/test21/Save3.class sv3/test21/Save3.class
+step "PassBTest (验证 Pass B 计数器非零可达性)" run PassBTest
+step "CompeteDeleteTest (三层竞争夹具: 删 A 链 + B 叶子改捕获)" run CompeteDeleteTest
 
 # ---------- 数量基线 ----------
 echo "--- 数量基线 ---"

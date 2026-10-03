@@ -50,6 +50,9 @@ public class SemAssert {
 	 * （否则套件永远红）；开关打开时才真正暴露出来。</p>
 	 */
 	static void selfCheck() {
+		boolean run = Boolean.getBoolean("hstest.selfcheck.run")
+			|| "1".equals(System.getenv("HSTEST_SELFCHECK_RUN"));
+		if (!run) return;
 		System.out.println("== 自检：check() → 退出码 的整条链 ==");
 		int before = failed;
 		// 已知输入是 1+1==2，这里故意断言错误的值 —— 必须被记为一次失败。

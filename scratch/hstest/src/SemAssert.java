@@ -206,6 +206,13 @@ public class SemAssert {
 		return LambdaAligner.align(force(v1Path, cl), force(v2Path, cl));
 	}
 
+	static String findNameBySem(Map<String, String> map, String sem) {
+		for (Map.Entry<String, String> e : map.entrySet()) {
+			if (sem.equals(e.getValue())) return e.getKey();
+		}
+		throw new NoSuchElementException("未能在方法语义映射中找到: " + sem + "，现有映射: " + map);
+	}
+
 	public static void main(String[] args) throws Exception {
 		ClassLoader cl = SemAssert.class.getClassLoader();
 
@@ -215,19 +222,27 @@ public class SemAssert {
 			byte[] v1 = force(args[0], cl);
 			byte[] ali = LambdaAligner.align(v1, force(args[1], cl));
 			Map<String, String> oldM = nameToSem(v1), aliM = nameToSem(ali);
-			check("[[doB]]".equals(oldM.get("lambda$build$2")), "夹具前提：旧 $2 是 doB 外层");
-			check("[[doB]]".equals(aliM.get("lambda$build$2")), "doB 外层保住旧名 $2（活 lambda 未误杀）");
-			check("[doB]".equals(aliM.get("lambda$build$3")), "doB 内层保住旧名 $3");
-			check("GHOST".equals(aliM.get("lambda$build$0")), "doA 外层变幽灵");
-			check("GHOST".equals(aliM.get("lambda$build$1")), "doA 内层变幽灵");
+			String bOut = findNameBySem(oldM, "[[doB]]");
+			String bIn  = findNameBySem(oldM, "[doB]");
+			String aOut = findNameBySem(oldM, "[[doA]]");
+			String aIn  = findNameBySem(oldM, "[doA]");
+			check("[[doB]]".equals(oldM.get(bOut)), "夹具前提：旧类存在 doB 外层 (" + bOut + ")");
+			check("[[doB]]".equals(aliM.get(bOut)), "doB 外层保住旧名 " + bOut + "（活 lambda 未误杀）");
+			check("[doB]".equals(aliM.get(bIn)), "doB 内层保住旧名 " + bIn);
+			check("GHOST".equals(aliM.get(aOut)), "doA 外层变幽灵 (" + aOut + ")");
+			check("GHOST".equals(aliM.get(aIn)), "doA 内层变幽灵 (" + aIn + ")");
 		}
 
 		// ---------- 2) leaf 插入 ----------
 		{
 			System.out.println("== 2) leaf 插入（开头插 gamma）==");
+			byte[] v1 = force(args[2], cl);
+			Map<String, String> oldM = nameToSem(v1);
 			Map<String, String> aliM = nameToSem(aligned(args[2], args[3], cl));
-			check("[alpha]".equals(aliM.get("lambda$build$0")), "alpha 保住 $0");
-			check("[beta]".equals(aliM.get("lambda$build$1")), "beta 保住 $1");
+			String aName = findNameBySem(oldM, "[alpha]");
+			String bName = findNameBySem(oldM, "[beta]");
+			check("[alpha]".equals(aliM.get(aName)), "alpha 保住 " + aName);
+			check("[beta]".equals(aliM.get(bName)), "beta 保住 " + bName);
 			check(aliM.values().stream().filter(v -> v.equals("[gamma]")).count() == 1,
 				"gamma 拿独立名字（未被抢）");
 		}
@@ -245,13 +260,21 @@ public class SemAssert {
 		// ---------- 4) deep 三层删除变体 ----------
 		{
 			System.out.println("== 4) deep 三层删除变体 ==");
+			byte[] v1 = force(args[5], cl);
+			Map<String, String> oldM = nameToSem(v1);
 			Map<String, String> aliM = nameToSem(aligned(args[5], args[6], cl));
-			check("[[[doB]]]".equals(aliM.get("lambda$build$3")), "活的外层保住 $3");
-			check("[[doB]]".equals(aliM.get("lambda$build$4")), "中层保住 $4");
-			check("[doB]".equals(aliM.get("lambda$build$5")), "叶子保住 $5");
-			check("GHOST".equals(aliM.get("lambda$build$0"))
-			      && "GHOST".equals(aliM.get("lambda$build$1"))
-			      && "GHOST".equals(aliM.get("lambda$build$2")), "doA 整链变幽灵");
+			String bOut = findNameBySem(oldM, "[[[doB]]]");
+			String bMid = findNameBySem(oldM, "[[doB]]");
+			String bLeaf = findNameBySem(oldM, "[doB]");
+			String aOut = findNameBySem(oldM, "[[[doA]]]");
+			String aMid = findNameBySem(oldM, "[[doA]]");
+			String aLeaf = findNameBySem(oldM, "[doA]");
+			check("[[[doB]]]".equals(aliM.get(bOut)), "活的外层保住 " + bOut);
+			check("[[doB]]".equals(aliM.get(bMid)), "中层保住 " + bMid);
+			check("[doB]".equals(aliM.get(bLeaf)), "叶子保住 " + bLeaf);
+			check("GHOST".equals(aliM.get(aOut))
+			      && "GHOST".equals(aliM.get(aMid))
+			      && "GHOST".equals(aliM.get(aLeaf)), "doA 整链变幽灵");
 		}
 
 		// ---------- 5) two 两级链 Step 2 时序 ----------
@@ -270,37 +293,53 @@ public class SemAssert {
 		// 逐层传递，doB2 整条链仍能保住原有名字，不再被幽灵化。
 		{
 			System.out.println("== 6) deep2 只改叶子体 ==");
+			byte[] v1 = force(args[9], cl);
+			Map<String, String> oldM = nameToSem(v1);
 			byte[] ali = aligned(args[9], args[10], cl);
 			Map<String, String> aliM = nameToSem(ali);
-			check("[[[doA]]]".equals(aliM.get("lambda$build$0")), "doA 外层保住 $0");
-			check("[[doA]]".equals(aliM.get("lambda$build$1")), "doA 中层保住 $1");
-			check("[doA]".equals(aliM.get("lambda$build$2")), "doA 叶子保住 $2");
-			check("[[[doB2]]]".equals(aliM.get("lambda$build$3")), "doB2 外层保住 $3");
-			check("[[doB2]]".equals(aliM.get("lambda$build$4")), "doB2 中层保住 $4");
-			check("[doB2]".equals(aliM.get("lambda$build$5")), "doB2 叶子保住 $5");
+			String aOut = findNameBySem(oldM, "[[[doA]]]");
+			String aMid = findNameBySem(oldM, "[[doA]]");
+			String aLeaf = findNameBySem(oldM, "[doA]");
+			String bOut = findNameBySem(oldM, "[[[doB]]]");
+			String bMid = findNameBySem(oldM, "[[doB]]");
+			String bLeaf = findNameBySem(oldM, "[doB]");
+			check("[[[doA]]]".equals(aliM.get(aOut)), "doA 外层保住 " + aOut);
+			check("[[doA]]".equals(aliM.get(aMid)), "doA 中层保住 " + aMid);
+			check("[doA]".equals(aliM.get(aLeaf)), "doA 叶子保住 " + aLeaf);
+			check("[[[doB2]]]".equals(aliM.get(bOut)), "doB2 外层保住 " + bOut);
+			check("[[doB2]]".equals(aliM.get(bMid)), "doB2 中层保住 " + bMid);
+			check("[doB2]".equals(aliM.get(bLeaf)), "doB2 叶子保住 " + bLeaf);
 			check(noDupOrShadow(ali), "最终类自洽");
 		}
 
 		// ---------- 7) deep2 变体乙：删 A 链 + 改 B 叶子体（同时发生）----------
 		//
 		// 【KNOWN LIMITATION】钉住当前实际行为：整条新链一致地绑到**被删掉的 A 链**的名字
-		// （$0/$1/$2）上，A 链三个老调用点都静默执行 doB2 的逻辑 —— 没有熔断。
+		// （由 oldM 定位出 A 链各级名字）上，A 链三个老调用点都静默执行 doB2 的逻辑 —— 没有熔断。
 		//
 		// 这是"删 + 改同时发生"这一无证据场景的固有后果：叶子的方法体变了，没有任何指纹证据
-		// 能把它认回旧 doB 链，Step 2 的同名优先把它配给了位置相同的 $2；此后中层/外层顺着
+		// 能把它认回旧 doB 链，Step 2 的同名优先把它配给了位置相同的候选；此后中层/外层顺着
 		// "子配给了谁"逐层跟随，于是整条链一致地落在 A 的名字上（一致性本身是对的，错的是
 		// 落在了被删链的名字上）。写成 expected-failure：套件保持全绿，行为一变就会响。
 		{
 			System.out.println("== 7) deep2 删 A 链 + 改 B 叶子【已知限制/期望失败】==");
+			byte[] v1 = force(args[9], cl);
+			Map<String, String> oldM = nameToSem(v1);
 			byte[] ali = aligned(args[9], args[11], cl);
 			Map<String, String> aliM = nameToSem(ali);
+			String aOut = findNameBySem(oldM, "[[[doA]]]");
+			String aMid = findNameBySem(oldM, "[[doA]]");
+			String aLeaf = findNameBySem(oldM, "[doA]");
+			String bOut = findNameBySem(oldM, "[[[doB]]]");
+			String bMid = findNameBySem(oldM, "[[doB]]");
+			String bLeaf = findNameBySem(oldM, "[doB]");
 			check(noDupOrShadow(ali), "最终类自洽");
-			check("[[[doB2]]]".equals(aliM.get("lambda$build$0")), "KNOWN LIMITATION: 新外层落在 $0");
-			check("[[doB2]]".equals(aliM.get("lambda$build$1")), "KNOWN LIMITATION: 新中层落在 $1");
-			check("[doB2]".equals(aliM.get("lambda$build$2")), "KNOWN LIMITATION: 新叶子落在 $2");
-			check("GHOST".equals(aliM.get("lambda$build$3"))
-			      && "GHOST".equals(aliM.get("lambda$build$4"))
-			      && "GHOST".equals(aliM.get("lambda$build$5")), "KNOWN LIMITATION: 旧 doB 链变幽灵");
+			check("[[[doB2]]]".equals(aliM.get(aOut)), "KNOWN LIMITATION: 新外层落在 " + aOut);
+			check("[[doB2]]".equals(aliM.get(aMid)), "KNOWN LIMITATION: 新中层落在 " + aMid);
+			check("[doB2]".equals(aliM.get(aLeaf)), "KNOWN LIMITATION: 新叶子落在 " + aLeaf);
+			check("GHOST".equals(aliM.get(bOut))
+			      && "GHOST".equals(aliM.get(bMid))
+			      && "GHOST".equals(aliM.get(bLeaf)), "KNOWN LIMITATION: 旧 doB 链变幽灵");
 		}
 
 		// ---------- 8) save3 三次保存：先删 A 链，再改 B 叶子体 ----------
@@ -310,19 +349,27 @@ public class SemAssert {
 		// 因此这条路径是有效的缓解做法。
 		{
 			System.out.println("== 8) save3 三次保存：先删后改 ==");
-			byte[] a2 = LambdaAligner.align(force(args[12], cl), force(args[13], cl));
+			byte[] v1 = force(args[12], cl);
+			Map<String, String> oldM = nameToSem(v1);
+			String bOut = findNameBySem(oldM, "[[[doB]]]");
+			String bLeaf = findNameBySem(oldM, "[doB]");
+			String aOut = findNameBySem(oldM, "[[[doA]]]");
+			String aMid = findNameBySem(oldM, "[[doA]]");
+			String aLeaf = findNameBySem(oldM, "[doA]");
+
+			byte[] a2 = LambdaAligner.align(v1, force(args[13], cl));
 			byte[] a3 = LambdaAligner.align(a2, force(args[14], cl));
 
 			Map<String, String> sem2 = nameToSem(a2);
-			check("[[[doB]]]".equals(sem2.get("lambda$build$3")), "V1→V2：B 链外层保住 $3");
-			check("[doB]".equals(sem2.get("lambda$build$5")), "V1→V2：B 链叶子保住 $5");
-			check("GHOST".equals(sem2.get("lambda$build$0"))
-			      && "GHOST".equals(sem2.get("lambda$build$2")), "V1→V2：A 链成为幽灵");
+			check("[[[doB]]]".equals(sem2.get(bOut)), "V1→V2：B 链外层保住 " + bOut);
+			check("[doB]".equals(sem2.get(bLeaf)), "V1→V2：B 链叶子保住 " + bLeaf);
+			check("GHOST".equals(sem2.get(aOut))
+			      && "GHOST".equals(sem2.get(aLeaf)), "V1→V2：A 链成为幽灵");
 
 			Map<String, String> sem3 = nameToSem(a3);
-			check("GHOST".equals(sem3.get("lambda$build$0"))
-			      && "GHOST".equals(sem3.get("lambda$build$1"))
-			      && "GHOST".equals(sem3.get("lambda$build$2")),
+			check("GHOST".equals(sem3.get(aOut))
+			      && "GHOST".equals(sem3.get(aMid))
+			      && "GHOST".equals(sem3.get(aLeaf)),
 				"V2→V3：A 链幽灵被重新注入（老调用点仍熔断）");
 			// 不绑定具体编号：V2→V3 里外层/中层可能与上一轮互换编号（都是旧 doB 链的名字），
 			// 但只要链条自洽、叶子可达、且旧 A 链仍熔断，缓解就是有效的。

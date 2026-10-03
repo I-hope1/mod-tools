@@ -1520,3 +1520,28 @@ BUILD FAILED in 12s                        ← ./gradlew check 确实变红
 **不是被吞掉的**。因此套件内的红/绿结论可信，可以作为后续验收的依据。
 
 此后新增任何断言，都应在**让它红一次**之后再依赖它的绿。
+
+---
+
+## 未覆盖的降级与告警路径（盲区清单）
+
+以下为当前实现中包含但在测试套件中**尚未覆盖或不可达**的降级与告警路径，留痕防遗忘：
+
+1. **`settled` 循环 64 轮上限告警**：
+   - 位置：`LambdaAligner.java` 中的 `settleRound >= 64`
+   - 告警：`HotSwapAgent.warn("[LambdaAligner] settled 循环达到上限(64)仍未收敛 " + ctx.currentClass)`
+   - 现状：实际嵌套深度浅（通常 ≤ 3 轮即收敛），64 轮死循环防护属于未触发的防御性降级分支。
+2. **`upDepth` 64 轮未收敛告警**：
+   - 位置：`computeUpDepth` 中的 `round == 63`
+   - 告警：`HotSwapAgent.warn("[LambdaAligner] upDepth 未收敛: " + ...)`
+   - 现状：在树状拓扑下通常 2~3 轮收敛，未收敛告警未在夹具中测试。
+3. **`computeShapes` 64 轮未收敛告警**：
+   - 位置：`computeShapes` 中的 `round == 63`
+   - 告警：`HotSwapAgent.warn("[LambdaAligner] computeShapes 未收敛: " + ...)`
+   - 现状：同上，无环依赖下必然在深度步数内收敛。
+4. **`calleesPairTo` 的否决分支（`!ci.matchedWith.name.equals(want)`）**：
+   - 位置：`calleesPairTo` 中的第 599 行
+   - 现状：现有单/双链夹具中，子树不等价时已被 `sameSemantics` 提前拦截；仅在同构双链 cross-pairing 等极端边缘场景下可能进入，当前测试套件中属未覆盖路径（未验证不可直接断言死代码）。
+5. **JDK 8 上的 `StackWalker` / 调用栈回退路径**：
+   - 位置：孤儿熔断 `onOrphanInvoked` 的调用者查找逻辑
+   - 现状：在 JDK 8 运行时使用 `new Throwable().getStackTrace()` 回退分支，尚未做独立真实冒烟。

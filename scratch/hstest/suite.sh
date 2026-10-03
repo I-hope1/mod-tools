@@ -57,6 +57,9 @@ step() { # step <描述> <命令...>
 
 # ---------- 夹具：用三个真实 javac 编译（一次性，运行期不再依赖 javac）----------
 echo "--- 编译夹具（真实 javac 8 / 17 / 21）---"
+echo "   [javac-8]  $("$JAVAC_8" -version 2>&1 | grep -v "Picked up" | head -1 | tr -d '\r')"
+echo "   [javac-17] $("$JAVAC_17" -version 2>&1 | grep -v "Picked up" | head -1 | tr -d '\r')"
+echo "   [javac-21] $("$JAVAC_21" -version 2>&1 | grep -v "Picked up" | head -1 | tr -d '\r')"
 mkdir -p fx
 for v in 8 17 21; do
   case $v in 8) JC="$JAVAC_8";; 17) JC="$JAVAC_17";; 21) JC="$JAVAC_21";; esac
@@ -85,11 +88,11 @@ for v in 8 17 21; do
       || { echo "   FAIL 编译 fa${v}${ver}"; FAILED=1; }
   done
 done
-# 编译 SemAssert 15 组夹具（使用 host javac --release 21，产出 major 65 且符合顶向下编号）
+# 编译 SemAssert 15 组夹具（使用固定 JDK 21 编译器，解耦宿主 PATH）
 for dir in s2a s2b lf1 lf2 lf3 dp1 dp2 tw1 tw2 d21 d22 d23 sv1 sv2 sv3; do
   mkdir -p "$dir"
 done
-JC_REL="javac --release 21 -nowarn -encoding UTF-8"
+JC_REL="$JAVAC_21 -nowarn -encoding UTF-8"
 $JC_REL -d s2a swap2/Time.java swap2/v1/test16/Swap2Case.java >/dev/null 2>&1 || FAILED=1
 $JC_REL -d s2b swap2/Time.java swap2/v2/test16/Swap2Case.java >/dev/null 2>&1 || FAILED=1
 $JC_REL -d lf1 leaf/v1/test17/LeafCase.java >/dev/null 2>&1 || FAILED=1

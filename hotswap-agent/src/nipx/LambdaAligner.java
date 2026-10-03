@@ -557,20 +557,8 @@ public class LambdaAligner {
 	}
 
 	/**
-	 * 该新方法是否还有"尚未落定"的子 lambda（子仍是未匹配状态）。
+	 * 当双方都有子 lambda 时，检查"子的配对对象"是否与旧方法的子逐个吻合。
 	 *
-	 * <p><b>为什么父必须等子</b>：lambda 可以嵌套，而指纹里内层 lambda 的名字被
-	 * {@code #SYNTHETIC_METHOD#} 屏蔽，于是"父"与"子"在指纹上可能完全等价 ——
-	 * 例如 {@code run(() -> Time.run(10, () -> doA()))}，父的体就是"求值一个
-	 * {@code Time.run(10, 子)}"，与子自身同构。此时若让子先被别处抢走名字，
-	 * 父的方法体里那句指向子的引用会被重映射到别人的名字上：父保住了名字、子却丢了，
-	 * 语义静默对调。</p>
-	 *
-	 * <p>实测复现与决策轨迹见 {@code scratch/hstest/swap2/}。判断只看"子是否已 matched"，
-	 * 因为匹配是单调的：一旦子落定就不会再变，父可以安全地基于它做决定。</p>
-	 */
-	/**
-	 * 当双方都有子 lambda 时，检查"子的配对对象"是否与旧方法的子逐个吻合。	 *
 	 * <p>为什么需要：{@link #sameSemantics} 是递归语义指纹，后代一旦被编辑，祖先的语义
 	 * 指纹也会变，于是祖先拿不到任何候选（实测 save3 的 V2→V3：中层/外层因此被幽灵化，
 	 * 子被改体是 update 期最常见的动作）。子树等价这条证据在"后代被改"时必然失效，
@@ -597,6 +585,19 @@ public class LambdaAligner {
 		return true;
 	}
 
+	/**
+	 * 该新方法是否还有"尚未落定"的子 lambda（子仍是未匹配状态）。
+	 *
+	 * <p><b>为什么父必须等子</b>：lambda 可以嵌套，而指纹里内层 lambda 的名字被
+	 * {@code #SYNTHETIC_METHOD#} 屏蔽，于是"父"与"子"在指纹上可能完全等价 ——
+	 * 例如 {@code run(() -> Time.run(10, () -> doA()))}，父的体就是"求值一个
+	 * {@code Time.run(10, 子)}"，与子自身同构。此时若让子先被别处抢走名字，
+	 * 父的方法体里那句指向子的引用会被重映射到别人的名字上：父保住了名字、子却丢了，
+	 * 语义静默对调。</p>
+	 *
+	 * <p>实测复现与决策轨迹见 {@code scratch/hstest/swap2/}。判断只看"子是否已 matched"，
+	 * 因为匹配是单调的：一旦子落定就不会再变，父可以安全地基于它做决定。</p>
+	 */
 	private static boolean hasUnmatchedChild(MatchContext ctx, SyntheticInfo ni) {
 		if (ni.children.isEmpty()) return false;
 		for (String child : ni.children) {

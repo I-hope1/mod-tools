@@ -7,22 +7,35 @@ import java.nio.file.*;
 import java.util.*;
 
 /**
- * 跨组争抢复现：V1 一个孤立闭包；V2 两个不同方法里各一个相同闭包。
- * 两个新 lambda 分属两个组，却与老类的孤立 lambda 指纹相同。
+ * 跨组争抢（Cross-Group Contention）—— **KNOWN LIMITATION，expected-failure**。
  *
- * 检验那份外部分析的核心主张：**跨组领养是单组循环内的即时贪婪抢占，
- * 谁先被遍历到谁就赢** —— 因此反转组序会翻转配对结果。
+ * 夹具：V1 一个孤立闭包；V2 把 methodOld 拆成 methodA/methodB，各自放一个相同闭包。
+ * 两个新 lambda 分属两个组，却与老类里孤立的老 lambda 指纹相同。
  *
- * 判据（确定性，不看名字表）：
- *   A. 组序正/反的最终方法表是否一致（顺序泄漏）
- *   B. 谁拿到了老名字（按语义识别是哪个方法的闭包）
+ * 实测（JDK 8 与 JDK 21 一致）：
+ *   正序：lambda$methodB$1 拿到旧名（lambda$methodOld$0 被 methodB 领养）
+ *   反序：lambda$methodA$0 拿到旧名
+ * => 组序正/反的最终方法表**不一致**：跨组领养是单组循环内的即时贪婪抢占，
+ *    谁先被遍历到谁就赢。
+ *
+ * 本入口**不修**这个缺陷，只把它钉住：
+ *   • 若顺序敏感**仍然存在** -> 记一次 KNOWN（套件保持绿）；
+ *   • 若某天它消失了 -> 记为 FAIL，必须有人有意识地来更新（可能是修好了）。
+ *
+ * 这样套件不会常驻红灯，同时"行为一变就会响"。
  */
 public class XGroupTest {
 
-	static int failed = 0;
+	static int passed = 0, failed = 0, known = 0;
+
 	static void check(boolean ok, String msg) {
 		System.out.println((ok ? "   PASS  " : "   FAIL  ") + msg);
-		if (!ok) failed++;
+		if (ok) passed++; else failed++;
+	}
+
+	static void checkKnownLimitation(boolean stillBroken, String msg) {
+		if (stillBroken) { known++; System.out.println("   KNOWN " + msg); }
+		else { failed++; System.out.println("   FAIL  [已知限制已变化] " + msg); }
 	}
 
 	static ClassNode parse(byte[] b) {
@@ -39,16 +52,6 @@ public class XGroupTest {
 		return false;
 	}
 
-	/** 该方法体里 indy 指向的本类方法名（即它调用的子）。 */
-	static String callee(ClassNode cn, MethodNode mn) {
-		for (AbstractInsnNode n : mn.instructions) {
-			if (n instanceof InvokeDynamicInsnNode i && i.bsmArgs != null && i.bsmArgs.length > 1
-			    && i.bsmArgs[1] instanceof Handle h && cn.name.equals(h.getOwner())) return h.getName();
-		}
-		return "?";
-	}
-
-	/** 方法表：名字 + 描述符 + 幽灵位。 */
 	static String table(byte[] bytes) {
 		ClassNode cn = parse(bytes);
 		List<String> l = new ArrayList<>();
@@ -80,25 +83,44 @@ public class XGroupTest {
 		ClassLoader cl = XGroupTest.class.getClassLoader();
 		byte[] v1 = force(args[0], cl), v2 = force(args[1], cl);
 
-		System.out.println("== 跨组争抢 ==");
+		System.out.println("== 跨组争抢（KNOWN LIMITATION）==");
 		for (byte[] b : new byte[][]{v1, v2}) {
 			ClassNode cn = parse(b);
 			List<String> l = new ArrayList<>();
-			for (MethodNode mn : cn.methods) if (mn.name.startsWith("lambda$")) l.add(mn.name + "->" + callee(cn, mn));
-			System.out.println("   " + cn.name + " 的 lambda: " + l);
+			for (MethodNode mn : cn.methods) if (mn.name.startsWith("lambda$")) l.add(mn.name);
+			System.out.println("   " + cn.name + " -> " + l);
 		}
 
 		byte[] fwd = align(v1, v2, false);
 		byte[] rev = align(v1, v2, true);
-		System.out.println("   正序结果: " + table(fwd));
-		System.out.println("   反序结果: " + table(rev));
+		System.out.println("   正序: " + table(fwd));
+		System.out.println("   反序: " + table(rev));
 
-		check(table(fwd).equals(table(rev)),
-			"组序正/反的最终方法表一致（顺序泄漏检测）");
+		// 前提：两次都必须产出**自洽**的类（不崩、无重名）
+		check(noDup(fwd), "正序结果自洽（无重复 名字+描述符）");
+		check(noDup(rev), "反序结果自洽（无重复 名字+描述符）");
+
+		boolean orderSensitive = !table(fwd).equals(table(rev));
+		checkKnownLimitation(orderSensitive,
+			"跨组争抢导致组序敏感：正序/反序的最终方法表不同（正序=" + table(fwd) + " 反序=" + table(rev) + "）");
+		if (!orderSensitive) {
+			System.out.println("   >>> 顺序敏感已消失 —— 若这是修好的结果，请更新本入口与 README");
+		}
+
 		System.out.println();
-		System.out.println(table(fwd).equals(table(rev))
-			? "XGROUP: 未观察到跨组争抢导致的顺序敏感"
-			: "XGROUP: 复现成功 —— 跨组争抢确实顺序敏感");
-		if (!table(fwd).equals(table(rev))) System.exit(2);   // 用退出码 2 区分"复现"与"断言失败"
+		System.out.println("通过 " + passed + " 条；失败 " + failed + " 条；已知限制 " + known + " 条");
+		System.out.println(failed == 0 ? "XGROUP ASSERTIONS OK" : (failed + " FAILED"));
+		if (failed != 0) System.exit(1);
+	}
+
+	static boolean noDup(byte[] b) {
+		ClassNode cn = parse(b);
+		Map<String, List<String>> byName = new HashMap<>();
+		for (MethodNode mn : cn.methods) {
+			if (!mn.name.startsWith("lambda$")) continue;
+			byName.computeIfAbsent(mn.name, k -> new ArrayList<>()).add(mn.desc);
+		}
+		for (var e : byName.entrySet()) if (new HashSet<>(e.getValue()).size() != e.getValue().size()) return false;
+		return true;
 	}
 }

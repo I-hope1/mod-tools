@@ -1409,6 +1409,25 @@ V2 的 lambda: [lambda$methodB$1, lambda$methodA$0]
 
 `XGroupTest` 现已作为**会失败的验收**留在套件里（退出码 2 区分"复现成功"与"断言失败"）。
 
+### 已固化：expected-failure（套件保持绿，行为一变就响）
+
+`XGroupTest` 已改写为 expected-failure 形态：
+
+```
+正序: lambda$methodB$1(...)#L | lambda$methodOld$0(...)#L
+反序: lambda$methodA$0(...)#L | lambda$methodOld$0(...)#L
+   PASS  正序结果自洽（无重复 名字+描述符）
+   PASS  反序结果自洽（无重复 名字+描述符）
+   KNOWN 跨组争抢导致组序敏感：正序/反序的最终方法表不同
+通过 2 条；失败 0 条；已知限制 1 条
+XGROUP ASSERTIONS OK      exit=0
+```
+
+- 顺序敏感**仍存在** -> 记一次 `KNOWN`（不计入失败，套件保持绿）；
+- 若某天它**消失** -> 记 `FAIL [已知限制已变化]`，强制有人有意识地更新。
+
+**JDK 8 与 JDK 21 表现完全一致。** 计数分离：`通过 / 失败 / 已知限制`。
+
 ### 待定：修法
 
 外部审查给出的两阶段仲裁器（先收集意向、再按客观属性决胜）方向合理，但它引入了

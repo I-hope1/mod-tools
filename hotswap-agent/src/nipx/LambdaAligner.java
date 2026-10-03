@@ -1544,7 +1544,7 @@ public class LambdaAligner {
 				}
 			}
 			for (int round = 0; round < 64; round++) {
-				boolean changed = false;
+				boolean changed = false, pending = false;
 				for (int idx = groups.nextEntry(-1); idx != -1; idx = groups.nextEntry(idx)) {
 					List<SyntheticInfo> g = groups.valueAt(idx);
 					if (g == null) continue;
@@ -1565,13 +1565,16 @@ public class LambdaAligner {
 								if (ri.upDepth < 0) { pendingRef = true; continue; }
 								if (ri.upDepth > max) max = ri.upDepth;
 							}
-							if (pendingRef) continue;               // 引用者未定稿 -> 本轮跳过
+							if (pendingRef) { pending = true; continue; }   // 引用者未定稿 -> 本轮跳过
 							nd = max + 1;
 						}
 						if (nd != info.upDepth) { info.upDepth = nd; changed = true; }
 					}
 				}
-				if (!changed) break;
+				// 与 computeShapes 一致：收敛判据是"没有未定稿 且 无变化"。
+				// 原先只判 changed，于是"引用者未定稿"（成环等）时第一轮即静默 break，
+				// upDepth 停在 -1，而那行告警**永远打不出来** —— 未收敛被完全静默。
+				if (!changed && !pending) break;
 				if (round == 63) {
 					HotSwapAgent.warn("[LambdaAligner] 上行深度在 " + (isOld ? "old" : "new")
 						+ " 侧 64 轮未收敛（可能存在环），未定稿者保持 -1");
@@ -1942,13 +1945,16 @@ public class LambdaAligner {
 	public static boolean isCalledByUpdateRef() {
 		try {
 			if (StackWalkerHolder.IS_SUPPORTED) {
-				return StackWalkerHolder.WALKER.walk(s -> s
-					.dropWhile(f -> !isOrphanEntry(f))        // 定位幽灵桩入口
-					.skip(2)                                  // 跳过 onOrphanInvoked 自身与桩
-					.filter(f -> !isTransparentFrame(f.getClassName()))  // 穿透代理/隐藏帧
-					.findFirst()
-					.map(f -> isUpdateRefInvoke(f.getClassName(), f.getMethodName()))
-					.orElse(false));
+				// 定位幽灵桩入口
+				// 跳过 onOrphanInvoked 自身与桩
+				// 穿透代理/隐藏帧
+				return Boolean.TRUE.equals(StackWalkerHolder.WALKER.walk(s -> s
+				 .dropWhile(f -> !isOrphanEntry(f))        // 定位幽灵桩入口
+				 .skip(2)                                  // 跳过 onOrphanInvoked 自身与桩
+				 .filter(f -> !isTransparentFrame(f.getClassName()))  // 穿透代理/隐藏帧
+				 .findFirst()
+				 .map(f -> isUpdateRefInvoke(f.getClassName(), f.getMethodName()))
+				 .orElse(false)));
 			}
 		} catch (Throwable ignored) {}
 

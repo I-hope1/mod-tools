@@ -111,7 +111,9 @@ public class FpProbe extends MethodVisitor {
 	public static void main(String[] args) throws Exception {
 		byte[] v1 = Files.readAllBytes(Paths.get(args[0]));
 		byte[] v2 = Files.readAllBytes(Paths.get(args[1]));
-		dump("v1", v1, "lambda$build$0");
-		dump("v2", v2, "lambda$build$0");
+		String m1 = args.length > 2 ? args[2] : "lambda$build$0";
+		String m2 = args.length > 3 ? args[3] : m1;
+		dump("v1", v1, m1);
+		dump("v2", v2, m2);
 	}
 }

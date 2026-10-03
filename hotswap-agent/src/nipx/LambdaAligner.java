@@ -949,8 +949,20 @@ public class LambdaAligner {
 			mn.accept(fp);
 
 			String  logicalName = extractLogicalName(mn.name);
-			// access$ 是跨类引用，本对齐器只做“保名不改名”
-			boolean renameable  = !mn.name.startsWith("access$");
+			// access$ 是跨类引用，本对齐器只做“保名不改名”。
+			//
+			// 这里进一步收窄为"必须命中 lambda 系名字模式"，而不只是"带 ACC_SYNTHETIC"。
+			// 原因：本对齐器改名字时只重写**本类内部**对它的引用（见 applyTransform 的
+			// mapMethodName），别的类里对该方法的调用不会跟着改。而 ACC_SYNTHETIC 覆盖的
+			// 远不止 lambda —— Kotlin 的 foo$default / getX$annotations、编译器生成的各种
+			// 桥接桩都带这个标志，它们经常体相同（例如一堆空体的 $annotations）。
+			// 一旦让它们参与匹配，跨组指纹匹配就会把"新增的那个同体合成方法"改名成
+			// "被删的那个的名字"，而外部调用点仍指向新名字 —— 直接 NoSuchMethodError。
+			// 实测复现见 scratch/hstest/kt/：getBaz$annotations 被改成了 getFoo$annotations。
+			//
+			// 收窄后这些方法只登记进避障集（scan 开头无条件登记 name / name+desc），
+			// 阶段二生成避障名时仍会避开它们，但不再参与任何匹配与改名。
+			boolean renameable  = matchesPattern && !mn.name.startsWith("access$");
 			SyntheticInfo info  = new SyntheticInfo(
 				mn.name, mn.desc, mn.access, fp.getHash(), logicalName, renameable);
 			// 幽灵空壳（上一轮为兜住老 CallSite 而注入的空方法）标记为"不参与匹配"：

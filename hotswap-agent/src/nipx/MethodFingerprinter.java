@@ -572,7 +572,21 @@ public final class MethodFingerprinter extends MethodVisitor {
 		public AnnotationVisitor visitArray(String name) {
 			updateString(name);
 			updateString("array");
+			updateString("[");
 			return this;
+		}
+
+		/**
+		 * 数组/注解的结束标记。
+		 *
+		 * <p>没有它，扁平形式 {@code [a,b]} 与嵌套形式 {@code [[a,b]]} 会算出同一个指纹
+		 * （分隔符缺失导致两次 {@code "array"} 与四个元素无法区分边界）。
+		 * 本访问器只服务于 {@link #visitAnnotationDefault}，而 lambda 不会有注解默认值，
+		 * 因此这个修正不会改变任何现有 lambda 的指纹。</p>
+		 */
+		@Override
+		public void visitEnd() {
+			updateString("]");
 		}
 	}
 	//endregion

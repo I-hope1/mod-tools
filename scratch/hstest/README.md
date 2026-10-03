@@ -309,3 +309,44 @@ javac -d dout3 del/v3/test10/DelCase.java
 MSYS2_ARG_CONV_EXCL='*' javac -nowarn -cp "$CP" -d doutT src/DelTest.java
 MSYS2_ARG_CONV_EXCL='*' java -cp "doutT;dout1;dout2;dout3;$CP" DelTest dout1/test10/DelCase.class dout2/test10/DelCase.class dout3/test10/DelCase.class
 ```
+
+## 非 lambda 合成方法被跨组污染（`kt/`、`KtTest`）
+
+`scan` 的准入是 `ACC_SYNTHETIC || 名字命中 lambda 系模式`，而 `ACC_SYNTHETIC` 覆盖的远不止
+lambda —— Kotlin 的 `foo$default` / `getX$annotations` 也带这个标志，且常常体相同（一堆空体）。
+跨组指纹匹配不受逻辑名约束，于是"删掉一个、新增一个同体的"会把新增的改名成被删的那个名字：
+
+```
+v1:      getBar$annotations  getFoo$annotations
+v2:      getBar$annotations  getBaz$annotations     (Foo 删、Baz 增)
+aligned: getBar$annotations  getBaz$annotations  getFoo$annotations(幽灵)
+                      ^^ 修复后保住自己的名字
+修复前:  getBar$annotations  getFoo$annotations      ← Baz 被改名，外部类调用点不会跟着改 -> NoSuchMethodError
+```
+
+修法：`renameable = matchesPattern && !name.startsWith("access$")`，即**只有 lambda 系名字**
+参与匹配与改名；其它合成方法仍被无条件登记进避障集（`existingNewNames` / `oldNameDescSet`），
+阶段二生成避障名时照样避开它们。
+
+```bash
+MSYS2_ARG_CONV_EXCL='*' javac -nowarn -cp "$CP" -d ktout src/KtTest.java
+MSYS2_ARG_CONV_EXCL='*' java -cp "ktout;$CP" KtTest
+```
+
+## 外层 lambda 指纹确实会碰撞（`nest4/`、`Nest4Test`）
+
+`#SYNTHETIC_METHOD#` 会把本类 lambda 系方法名替换掉，于是"体外层只是求值一个内层 lambda"时，
+两个外层指纹完全相同 —— 实测确认：
+
+```
+v1: lambda$carrierA$0 hash=4504391648418999158
+    lambda$carrierB$0 hash=4504391648418999158   ← 同一个值
+>>> 两个外层 lambda 指纹相同？ true
+```
+
+（注意区分：若外层直接调用的是**普通方法** `handleA()`，名字不会被屏蔽，指纹自然不同 ——
+`nest2/`、`nest3/` 两个夹具证明了这个区别。）
+
+但**没能构造出实际错配**：内层 lambda 的名字由它自己那条路径独立重映射，外层名字即使被
+换掉，调用链最终仍指向正确的内层。因此这一条记为"真实存在的碰撞、当前无可复现症状"，
+未做改动 —— 用户的 `callees` 决胜方案只有在能证明症状后才值得引入。

@@ -67,6 +67,38 @@ public class LambdaAligner {
 	 */
 	public static volatile boolean TEST_REVERSE_GROUP_ORDER = false;
 
+	/**
+	 * 诊断开关：打开后打印配对决策的细节（谁在哪个阶段拿了哪个旧名字）。
+	 *
+	 * <p><b>为什么做成常设开关</b>：排查本对齐器的顺序问题时，临时插
+	 * {@code System.err.println} 是必需的；但临时探针有两个反复出现的代价 ——
+	 * 忘了移除（污染生产日志），以及 <b>改了没生效却察觉不到</b>
+	 * （曾因 hstest 加载陈旧 jar，数轮结论都建立在旧字节码上）。
+	 * 做成开关后，排查只需设属性/环境变量，<b>不必改代码</b>。</p>
+	 *
+	 * <p>开启方式（任一）：</p>
+	 * <pre>
+	 *   -Dnipx.lambdaAligner.debug=true          系统属性
+	 *   NIPX_LAMBDA_ALIGNER_DEBUG=1              环境变量
+	 *   LambdaAligner.DEBUG = true               代码/测试直接赋值
+	 * </pre>
+	 *
+	 * <p>生产环境默认关闭。</p>
+	 */
+	public static volatile boolean DEBUG = initDebug();
+
+	private static boolean initDebug() {
+		String p = System.getProperty("nipx.lambdaAligner.debug");
+		if (p != null) return Boolean.parseBoolean(p) || "1".equals(p);
+		String e = System.getenv("NIPX_LAMBDA_ALIGNER_DEBUG");
+		return e != null && (Boolean.parseBoolean(e) || "1".equals(e));
+	}
+
+	/** 诊断输出：仅在 {@link #DEBUG} 打开时打印，统一前缀便于 grep。 */
+	static void dbg(java.util.function.Supplier<String> msg) {
+		if (DEBUG) System.err.println("[LambdaAligner] " + msg.get());
+	}
+
 	/** 按当前测试钩子决定的方向，在 {@code groups} 上迭代（返回下标序列）。 */
 	private static int[] groupOrder(LongObjectMap<?> groups) {
 		int n = 0;
@@ -663,6 +695,8 @@ public class LambdaAligner {
 
 	/** 配对并登记：把 {@code ni} 改名为 {@code oi} 的名字。 */
 	private static void pair(MatchContext ctx, SyntheticInfo ni, SyntheticInfo oi) {
+		dbg(() -> "PAIR " + ni.name + "(shape=" + ni.shape + " depth=" + ni.upDepth + ")"
+			+ " -> " + oi.name + "(shape=" + oi.shape + " depth=" + oi.upDepth + ")");
 		recordRename(ctx, ni, oi.name);
 		ni.matchedWith = oi;
 		ni.matched = true;
@@ -709,6 +743,10 @@ public class LambdaAligner {
 			}
 			if (bestOld == null) continue;
 
+			dbg(() -> "A-PASS ni=" + ni.name + " depth=" + ni.upDepth + " shape=" + ni.shape
+				+ " oldCandidates=" + oldGroup.stream()
+					.map(o -> o.name + ":d" + o.upDepth + ":" + o.shape
+						+ (o.matched ? ":M" : "") + (o.ghost ? ":G" : "")).toList());
 			pair(ctx, ni, bestOld);
 			progressed = true;
 		}

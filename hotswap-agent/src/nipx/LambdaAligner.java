@@ -1543,11 +1543,21 @@ public class LambdaAligner {
 			}
 		}
 
-		// 语义指纹同理：0 表示未定稿，但 0 不可能是合法指纹值（CRC64 结果），
-		// 因此这里不存在"哨兵与合法值撞车"的问题。
+		computeSemanticHashes(ctx, groups, isOld, cn.name);
 
-		// 递归语义指纹：由下往上逐层折入子的语义指纹。每轮至少定稿一层，
-		// 最多嵌套深度轮即收敛（循环次数上限只是防御）。
+		return cn;
+	}
+
+	/**
+	 * 递归语义指纹：{@link SyntheticInfo#hash} 再逐层折入子的语义指纹。每轮至少定稿一层，
+	 * 最多嵌套深度轮即收敛（循环次数上限只是防御）。
+	 *
+	 * <p>{@code 0} 表示未定稿，而 {@code 0} 不可能是合法指纹值（CRC64 结果），
+	 * 因此不存在"哨兵与合法值撞车"的问题。</p>
+	 */
+	private static void computeSemanticHashes(MatchContext ctx,
+	                                          LongObjectMap<List<SyntheticInfo>> groups,
+	                                          boolean isOld, String className) {
 		for (int round = 0; round < 64; round++) {
 			boolean changed = false;
 			for (int idx = groups.nextEntry(-1); idx != -1; idx = groups.nextEntry(idx)) {
@@ -1579,12 +1589,10 @@ public class LambdaAligner {
 				// 正常 javac 产物不会成环（lambda 的构造关系是 DAG），这里只是防御：
 				// 真出现环时，宁可让少数方法按当前（可能不完整的）语义指纹参与匹配，
 				// 也不能让整次热更失败。
-				HotSwapAgent.warn("[LambdaAligner] 递归语义指纹在 " + cn.name
+				HotSwapAgent.warn("[LambdaAligner] 递归语义指纹在 " + className
 					+ " 上 64 轮未收敛，沿用当前值继续（结果可能不够精确，但不影响可用性）");
 			}
 		}
-
-		return cn;
 	}
 
 	/** 在已扫描的旧/新分组里按名字找 SyntheticInfo（供子指纹计算使用）。 */
@@ -1726,7 +1734,7 @@ public class LambdaAligner {
 	 * <b>关键设计（100% 线性无跳转分支，彻底杜绝 VerifyError）</b>：<br>
 	 * 字节码中完全不使用任何 {@code IFEQ} / {@code GOTO} 等分支跳转指令和 {@link Label}。
 	 * 所有的策略判定、UpdateRef 栈探测、异常抛出与日志去重均下沉到纯 Java 静态方法
-	 * {@link #onOrphanInvoked(String, String, String)} 中执行。<br>
+	 * {@link #onOrphanInvoked(String)} 中执行。<br>
 	 * <ul>
 	 *   <li>若为 UpdateRef 保护的调用：Java 静态方法直接抛出 {@link NoSuchMethodError} 展开栈中断执行；</li>
 	 *   <li>若为普通业务调用：Java 静态方法去重打印警告日志后正常返回，随后由生成的字节码 100% 线性返回类型默认值（0 / null / false）。</li>

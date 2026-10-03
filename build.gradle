@@ -74,7 +74,7 @@ jmh {
 	//   ./gradlew jmh -PjmhIncludes=AlignBenchmark -PjmhProfilers=gc
 	includes = ["AlignBenchmark"]
 	profilers = ["gc"]
-    iterations = 3
+    iterations = 2
     warmupIterations = 2
     fork = 1
 	jvm = 'F:/files/java/jdks/jbrsdk_jcef-25.0.2/bin/java.exe'

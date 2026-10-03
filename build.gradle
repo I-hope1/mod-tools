@@ -514,3 +514,22 @@ class Reflect {
 		jdkExports0 = jdkExports
 	}
 }
+
+// ---------------------------------------------------------------
+// 对齐器验证套件（scratch/hstest）接入构建。
+//
+// 背景：这些断言原先完全在构建之外，`BUILD SUCCESSFUL` 对它们没有任何约束
+// （断言组 7 曾长期是红的而构建一直是绿的）。这里把它们接成构建的一部分：
+// 套件脚本任何一步失败 -> 本任务失败 -> 构建变红。
+//
+// 用法：./gradlew hstest
+// ---------------------------------------------------------------
+task hstest(type: Exec) {
+	group = "verification"
+	description = "运行 scratch/hstest 的对齐器验证套件（失败则构建失败）"
+	workingDir = file("$rootDir/scratch/hstest")
+	commandLine "bash", "run.sh"
+	// 便于定位：把套件输出直接透到构建日志
+	standardOutput = System.out
+	errorOutput = System.err
+}

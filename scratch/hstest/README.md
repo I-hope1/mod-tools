@@ -956,3 +956,57 @@ A 趟候选池更小，位置兜底的范围也随之缩小。
 2. 动 Step 2 之前先**加一行追踪**，确认 `noop` 在 A 趟里确实没有同深度的旧候选 ——
    这样"位置证据被排除"就有追踪支撑，而不只是靠夹具通过来推断；
 3. 再实现两趟（A 趟配 `(上行深度, shape)` 相等者，B 趟按现有逻辑兜底，**不做硬否决**）。
+
+
+## 严重缺口：断言此前完全在构建之外（已部分修复，未完成）
+
+用户指出：`MethodOrderTest` 在 HEAD 里只证明**文件被提交**，不证明**构建会执行它**。
+核实结果 —— 用户是对的，而且缺口比预想更大：
+
+```
+顶层 build.gradle:  sourceSets.test.java.srcDirs = ["test"]   → 只含 test/ 下 5 个文件
+scratch/hstest/src/ 不在任何 source set 里
+:hotswap-agent:test → BUILD SUCCESSFUL in 1s（什么都没跑）
+```
+
+**因此此前所有 `BUILD SUCCESSFUL` 对本套件的断言毫无约束**，`SemAssert` 的 41 条、
+`CompeteTest`、`MethodOrderTest` 全是构建之外的手工入口。断言组 7 曾长期是红的而构建一直绿，
+正是这个原因。
+
+### 已做
+
+- 新增 `run.sh`：统一入口，任一步失败即非零退出；
+- 顶层 `build.gradle` 新增 `task hstest(type: Exec)`（`group = "verification"`），
+  **已验证接线有效**：
+
+  ```
+  > Task :hstest FAILED
+  BUILD FAILED
+  ```
+
+  即套件失败会让构建变红，这正是此前缺失的约束。
+
+### 未完成（下次接手的第一件事）
+
+`run.sh` 里的测试入口编译仍失败（`exit=1`）。**根因已定位**：脚本早先用
+`"$ROOT"/*.jar` 通配把工作区根部的所有 jar 塞进 classpath，其中的旧版 ASM 遮蔽了 9.9.1，
+表现为假的 `找不到符号 ClassNode`。已改为"跳过名字含 asm 的 jar + 只取 `_libs/*.jar`"，
+但**新的一轮运行仍报同一个错误**，说明遮蔽源不止一个（还需逐项打印实际 `-cp` 定位）。
+
+### 另一个必须记录的事实：夹具与构建的 JDK 不一致
+
+- 构建配置用的是 **JDK 21**（`build.gradle` 里 `jvm = '.../openjdk-21.0.2/bin/java.exe'`，
+  且本机 `PATH` 上的 `javac` 是 **25.0.2**）；
+- 此前所有夹具都是用 **JDK 25** 编的（class file major version **69**），而 ASM 9.9.1 不认，
+  这本身就会让套件在 JDK 21 下崩；
+- `run.sh` 现用 `--release 21` 编夹具（字节码版本 65），用 `-source/-target 21` 编测试入口
+  （`--release` 不接受 classpath）。
+
+**这带来一个必须写明的边界**：竞争夹具的**顺序敏感性是编译器/JDK 相关的** ——
+javac 25 下有 4/8 排列失败，javac 21 下 **8/8 全部通过**。因此 README 中"顺序敏感"的结论
+**只在 javac 25 上得到过验证**，不能写成普遍结论。`CompeteTest` 已改为**不 pin 具体种子**，
+而是 pin 行为（默认排列必须通过、统计自洽、若出现失败排列则打印出来），
+以免把测试绑死在某个 JDK 上。
+
+**同时意味着：此前汇报的 `SemAssert` 41 PASS / `CompeteTest` 全绿，都是 JDK 25 下的结果。**
+在构建所用的 JDK 21 下，套件的通过状态尚未确认。

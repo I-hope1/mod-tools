@@ -1106,8 +1106,34 @@ hotswap-agent/build/classes/java/main/OnReload.class : major 52   (= Java 8)
 >>> 存在顺序敏感：旧叶子名被 noop 抢走
 ```
 
-**结论**：顺序敏感性**在 Java 8 字节码上同样存在**，因此不再是"只在某个 JDK 的夹具上成立"的
-观察。后续夹具一律以 **Java 8（major 52）** 为准。
+**修正（此前说法过强）**：`javac --release 8` 只固定目标 major 与 API，
+**不固定 javac 的行为** —— 方法表顺序、lambda 编号由 javac 内部实现决定。
+用 JDK 21 的 javac 加 `--release 8`，与真正的 JDK 8 javac 产出不一定相同。
+
+因此准确的说法是：**在 JDK 21 javac `--release 8` 产物上观察到**。
+它排除了"只和 major 65 有关"这一解释，但**不等于"在生产同版本字节码上存在"**。
+**真正的 JDK 8 javac 产物仍未验证**；若本机没有 JDK 8，就在此处标注"未覆盖"。
+
+另：夹具的 major 只影响 ASM 能否读；**被热更的目标类是用户代码**，由用户的编译器产出、
+不经过本项目的构建后处理。因此夹具覆盖的应是"用户的编译器"，而非"本项目的产物版本"。
+
+### 关于"测试跑的是哪份产物"（review 第 2 点，已核实）
+
+**结论：跑的正是生产产物，这个缺口不存在。**
+
+```
+hstest classpath: hotswap-agent/build/libs/hotswap-agent-1.6.0.jar
+  该 jar 内 nipx/LambdaAligner.class : major 52
+  build/classes/java/main/nipx/LambdaAligner.class : major 52   （同一时间戳）
+  hotswap-agent/bin/main/nipx/annotation/OnReload.class : major 69  ← IDE 原始编译
+```
+
+- `hstest` 通过 `project(":hotswap-agent")` 取到的是 `build/libs/*.jar`（major 52），
+  **不是**源码编译版，也**不是** IDE 的 `bin/main`（major 69）。
+- 同一份源码在 `bin/main` 是 69、在 `build/` 是 52，说明 **52 来自构建的后处理**，
+  不是 javac 的直接产出。`build.gradle` 里 `sourceCompatibility/targetCompatibility = 25`
+  与该后处理并存（相关线索：`options.compilerArgs += "-AtargetVersion=8"`）。
+  **具体机制未追踪**，此处只记录"产物是 52"这一事实与上述线索。
 
 以下两条**保持假设状态**，平移实验排在套件跑通之后：
 

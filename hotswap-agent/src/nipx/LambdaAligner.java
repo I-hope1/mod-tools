@@ -330,70 +330,35 @@ public class LambdaAligner {
 			LongObjectMap<List<SyntheticInfo>> oldGroups = ctx.oldGroups;
 			LongObjectMap<List<SyntheticInfo>> newGroups = ctx.newGroups;
 
-			// 【阶段一】先只做"有证据"的匹配：Step 1（同组同 hash）+ 跨组指纹。
+			// 【阶段一】多轮迭代匹配（含 settled 定稿机制）：
 			//
-			// 为什么要反复跑：lambda 可以嵌套，而指纹里内层 lambda 的名字被
-			// #SYNTHETIC_METHOD# 屏蔽，于是"父"与"子"在指纹上可能完全等价 ——
-			// 例如 `run(() -> Time.run(10, () -> doA()))`，父的体就是"求值一个
-			// Time.run(10, 子)"，与子自身同构。hasUnmatchedChild 挡住尚未落定子节点的父，
-			// 让匹配按"由下往上"推进；每轮至少确认一个方法，最多 n 轮收敛。
+			// 解决"祖先链被 hasUnmatchedChild 死锁"问题：
+			// 当子 lambda 因描述符变动等原因在旧侧完全没有候选时，它在所有趟里都无法配对（matched == false）。
+			// 若只看 matched，父 lambda 的 hasUnmatchedChild 会在所有趟中永远返回 true，导致父及其整条祖先链
+			// 全部被挡住，最终在阶段二被迫全部拿 fresh name、旧名全幽灵化（即使祖先方法体与结构完全没变）。
 			//
-			// 顺序上刻意**先排除无证据的 Step 2**：Step 2 完全不看指纹，若让它参与中间轮次，
-			// 某个叶子可能被"按位置"占走，而那个旧方法本该由后面某轮的精确指纹认领。
-			// hasUnmatchedChild 只挡得住父，挡不住叶子之间的这种抢占。
-			// 因此这里收敛的是"证据匹配"，Step 2 只在最后兜底跑一次。
-			// 实测对照见 scratch/hstest/swap2/ 与 step2preempt 夹具。
-			boolean progressed;
-			do {
-				progressed = false;
-				for (int idx : groupOrder(newGroups)) {
-					List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
-					List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
-					if (newGroup == null || oldGroup == null) continue;
-					progressed |= step1a(ctx, newGroup, oldGroup);
-				}
-				progressed |= matchByFingerprintAcrossGroups(ctx);
-			} while (progressed);
+			// settled 机制将"未落定"与"确定无候选"分开：
+			// 跑完全部趟（Step 1 -> Pass A -> Pass B）后，对仍未配对的方法，若其子节点已全部落定（已配对或已 settled），
+			// 说明该方法已用尽所有候选机会，将其标记为 settled = true。
+			// hasUnmatchedChild 忽略已 settled 的子节点，解除对父节点的阻塞，
+			// 随后整体重跑各趟，使祖先能够保住旧名。
+			while (true) {
+				matchAllPasses(ctx);
 
-			// 【阶段一·末】Step 2：顺序回退 —— 只处理"指纹也对不上、仍无归宿"的新方法。
-			//
-			// 这里必须迭代到无进展，不能只跑一遍：Step 2 内部同样受 hasUnmatchedChild 约束
-			// （父必须等子落定），而组内遍历顺序并不保证叶子在前。实测反例（scratch/hstest/two/）：
-			//
-			//   [T] step2 SKIP(parent has unmatched child) lambda$build$1 kids=[lambda$build$2]
-			//   [T] step2 try lambda$build$2 kids=[]
-			//
-			// 父 $1 排在子 $2 前面被处理，子尚未匹配 → 父被跳过；若 Step 2 只跑一遍，
-			// 父就再也没机会，只能去阶段二拿新名字，于是老 CallSite 命中幽灵 ——
-			// 活着的 lambda 被误杀。改成迭代之后，父会在下一轮（子已落定）重新参与。
-			// 【A 趟】先在全类范围内，只配"上行深度 + shape 都相等"的对。
-			//
-			// 必须**先跑完全类的 A 趟**，再进入 B 趟 —— 这正是"两趟"的含义。
-			// 把 A 趟放在 step2 内部的单组循环里是不够的（实测 scratch/hstest/UpDepthTest）：
-			// 同一次保存里插入的新叶子（upDepth=0）没有同深度的旧候选，会立刻落到 B 趟，
-			// 凭"先到先得"把旧叶子名抢走，而真正该拿那个名字的 doB2 叶子（upDepth=2）
-			// 是在同一轮稍后才被处理的。
-			boolean aProgressed;
-			do {
-				aProgressed = false;
+				boolean newlySettled = false;
 				for (int idx : groupOrder(newGroups)) {
-					List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
-					List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
-					if (newGroup == null || oldGroup == null) continue;
-					aProgressed |= step2PassA(ctx, newGroup, oldGroup);
+					List<SyntheticInfo> g = newGroups.valueAt(idx);
+					if (g == null) continue;
+					for (SyntheticInfo ni : g) {
+						if (!ni.matched && !ni.settled && !ni.ghost && !hasUnmatchedChild(ctx, ni)) {
+							ni.settled = true;
+							newlySettled = true;
+							dbg(() -> "SETTLED " + ni.name + " desc=" + ni.desc);
+						}
+					}
 				}
-			} while (aProgressed);
-
-			boolean step2Progressed;
-			do {
-				step2Progressed = false;
-				for (int idx : groupOrder(newGroups)) {
-					List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
-					List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
-					if (newGroup == null || oldGroup == null) continue;
-					step2Progressed |= step2(ctx, newGroup, oldGroup);
-				}
-			} while (step2Progressed);
+				if (!newlySettled) break;
+			}
 
 			// 【阶段一·校验】配对后的引用一致性校验（收口防线）。
 			//
@@ -645,12 +610,11 @@ public class LambdaAligner {
 		if (ni.children.isEmpty()) return false;
 		for (String child : ni.children) {
 			SyntheticInfo ci = ctx.childIndex.get(child);
-			if (ci != null && !ci.matched) {
-				// 这是"祖先链被死锁"那类问题的唯一现场证据：父被未落定的子挡住，
-				// 而该子若最终无候选（描述符不兼容等），父会在所有趟里一直被挡住，
-				// 最后与子一起走幽灵。DEBUG 下打印，便于区分"父被挡"与"父无候选"。
+			if (ci != null && !ci.matched && !ci.settled) {
+				// 这是"祖先链被死锁"那类问题的现场证据：父被未落定的子挡住。
+				// 若子已确认无候选被标为 settled，则不再阻挡父，允许父保住名字。
 				dbg(() -> "SKIP(parent has unmatched child) parent=" + ni.name
-					+ " child=" + child + " childMatched=false");
+					+ " child=" + child + " (childMatched=false, settled=false)");
 				return true;
 			}
 		}
@@ -730,7 +694,7 @@ public class LambdaAligner {
 				String blockedBy = null;
 				for (String c : ni.children) {
 					SyntheticInfo ci = ctx.childIndex.get(c);
-					if (ci != null && !ci.matched) { blockedBy = c; break; }
+					if (ci != null && !ci.matched && !ci.settled) { blockedBy = c; break; }
 				}
 				long cand = countCompatCandidates(ctx, ni);
 				long leafCand = blockedBy != null ? countCompatCandidates(ctx,
@@ -822,6 +786,59 @@ public class LambdaAligner {
 		//     （实测 save3 两轮序列：$3 与 $4 互换，老回调静默改了语义）。
 		// 形状同时解决两者：与内容无关、但能区分外层/中层/叶子。
 		return ni.shape.equals(oi.shape);
+	}
+
+	/**
+	 * 执行阶段一的全部匹配趟（Step 1 证据匹配 -> Step 2 A 趟形状深度匹配 -> Step 2 B 趟顺序兜底）。
+	 *
+	 * @return 本轮是否至少产生了一次新配对
+	 */
+	private static boolean matchAllPasses(MatchContext ctx) {
+		LongObjectMap<List<SyntheticInfo>> oldGroups = ctx.oldGroups;
+		LongObjectMap<List<SyntheticInfo>> newGroups = ctx.newGroups;
+		boolean anyProgressed = false;
+
+		// 1. Step 1（同组同 hash）+ 跨组指纹（证据匹配，迭代至收敛）
+		boolean progressed;
+		do {
+			progressed = false;
+			for (int idx : groupOrder(newGroups)) {
+				List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
+				List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
+				if (newGroup == null || oldGroup == null) continue;
+				progressed |= step1a(ctx, newGroup, oldGroup);
+			}
+			progressed |= matchByFingerprintAcrossGroups(ctx);
+			anyProgressed |= progressed;
+		} while (progressed);
+
+		// 2. A 趟：全类范围配对"上行深度 + shape 都相等"的对（迭代至收敛）
+		boolean aProgressed;
+		do {
+			aProgressed = false;
+			for (int idx : groupOrder(newGroups)) {
+				List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
+				List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
+				if (newGroup == null || oldGroup == null) continue;
+				aProgressed |= step2PassA(ctx, newGroup, oldGroup);
+			}
+			anyProgressed |= aProgressed;
+		} while (aProgressed);
+
+		// 3. B 趟：顺序回退兜底（迭代至收敛）
+		boolean step2Progressed;
+		do {
+			step2Progressed = false;
+			for (int idx : groupOrder(newGroups)) {
+				List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
+				List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
+				if (newGroup == null || oldGroup == null) continue;
+				step2Progressed |= step2(ctx, newGroup, oldGroup);
+			}
+			anyProgressed |= step2Progressed;
+		} while (step2Progressed);
+
+		return anyProgressed;
 	}
 
 	/**
@@ -2350,6 +2367,11 @@ public class LambdaAligner {
 		long    hash;
 		/** 是否已被匹配。 */
 		boolean matched;
+		/**
+		 * 当该方法在所有趟中均未找到任何匹配候选时，被标为 settled。
+		 * 其父方法在 {@link #hasUnmatchedChild} 中不再被该子方法阻挡（跳过未匹配且 settled 的子）。
+		 */
+		boolean settled;
 		/** 是否参与重命名（{@code access$} 系列为 false）。 */
 		boolean renameable;
 		/**
@@ -2438,6 +2460,7 @@ public class LambdaAligner {
 			this.logicalName = logicalName;
 			this.renameable  = renameable;
 			this.matched     = false;
+			this.settled     = false;
 			this.ghost       = false;
 		}
 

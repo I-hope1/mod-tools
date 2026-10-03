@@ -128,9 +128,17 @@ public class FixtureATest {
 		}
 	}
 
+	static Path findPath(String rel) {
+		Path p = Paths.get(rel);
+		if (Files.exists(p)) return p;
+		Path p2 = Paths.get("scratch/hstest", rel);
+		if (Files.exists(p2)) return p2;
+		return p;
+	}
+
 	static void testOne(String label, String v1Path, String v2Path, boolean reverse) throws Exception {
-		byte[] v1 = Files.readAllBytes(Paths.get(v1Path));
-		byte[] v2 = Files.readAllBytes(Paths.get(v2Path));
+		byte[] v1 = Files.readAllBytes(findPath(v1Path));
+		byte[] v2 = Files.readAllBytes(findPath(v2Path));
 
 		ClassNode cn1 = parse(v1);
 		ClassNode cn2 = parse(v2);
@@ -228,21 +236,22 @@ public class FixtureATest {
 		System.out.println("=== 夹具 A 期望版断言验证 ===");
 
 		// 1. JDK 8 产物测试（正序 + 反序）
-		testOne("JDK8", "scratch/hstest/fx/fa8v1/FixtureA.class", "scratch/hstest/fx/fa8v2/FixtureA.class", false);
-		testOne("JDK8", "scratch/hstest/fx/fa8v1/FixtureA.class", "scratch/hstest/fx/fa8v2/FixtureA.class", true);
+		testOne("JDK8", "fx/fa8v1/FixtureA.class", "fx/fa8v2/FixtureA.class", false);
+		testOne("JDK8", "fx/fa8v1/FixtureA.class", "fx/fa8v2/FixtureA.class", true);
 
 		// 2. JDK 17 产物测试（正序 + 反序）
-		testOne("JDK17", "scratch/hstest/fx/fa17v1/FixtureA.class", "scratch/hstest/fx/fa17v2/FixtureA.class", false);
-		testOne("JDK17", "scratch/hstest/fx/fa17v1/FixtureA.class", "scratch/hstest/fx/fa17v2/FixtureA.class", true);
+		testOne("JDK17", "fx/fa17v1/FixtureA.class", "fx/fa17v2/FixtureA.class", false);
+		testOne("JDK17", "fx/fa17v1/FixtureA.class", "fx/fa17v2/FixtureA.class", true);
 
 		// 3. JDK 21 产物测试（正序 + 反序）
-		testOne("JDK21", "scratch/hstest/fx/fa21v1/FixtureA.class", "scratch/hstest/fx/fa21v2/FixtureA.class", false);
-		testOne("JDK21", "scratch/hstest/fx/fa21v1/FixtureA.class", "scratch/hstest/fx/fa21v2/FixtureA.class", true);
+		testOne("JDK21", "fx/fa21v1/FixtureA.class", "fx/fa21v2/FixtureA.class", false);
+		testOne("JDK21", "fx/fa21v1/FixtureA.class", "fx/fa21v2/FixtureA.class", true);
 
 		System.out.println("----------------------------------------");
 		System.out.println("汇总: 通过 " + passed + " 条；失败 " + failed + " 条");
 		if (failed != 0) {
 			System.out.println("EXPECTED-ASSERTION RED (符合当前未修状态的预期)");
+			System.exit(1);
 		} else {
 			System.out.println("EXPECTED-ASSERTION GREEN (已修复)");
 		}

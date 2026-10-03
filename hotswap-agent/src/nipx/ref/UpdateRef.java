@@ -64,6 +64,7 @@ public class UpdateRef {
 	 */
 	public static class CompositeAction implements Runnable {
 		final Seq<Runnable> actions = new Seq<>(2);
+		private volatile boolean executed;
 
 		public CompositeAction(Runnable first) {
 			if (first != null && first != NOOP && first != REMOVED) {
@@ -90,6 +91,11 @@ public class UpdateRef {
 
 		@Override
 		public void run() {
+			if (executed) return;
+			synchronized (this) {
+				if (executed) return;
+				executed = true;
+			}
 			for (int i = 0; i < actions.size; i++) {
 				executeRemove(actions.get(i));
 			}
@@ -167,6 +173,11 @@ public class UpdateRef {
 
 	/**
 	 * 获取当前配置的熔断清理动作。
+	 * <p>
+	 * <b>重要说明：</b>此方法返回值仅供调试与诊断观测使用，<b>绝对严禁外部手动调用 {@link Runnable#run()}</b>。<br>
+	 * 包装引用的熔断清理具有严格的状态机与幂等生命周期管理，手动调用将绕过内部熔断流转，
+	 * 破坏清理状态一致性。
+	 * </p>
 	 * @return 当前绑定的清理动作，若已熔断或未设置则返回 null
 	 */
 	public Runnable getOnRemove() {
@@ -1321,15 +1332,21 @@ public class UpdateRef {
 	/**
 	 * 包装 {@link Cell#tooltip(Cons)} 浮动提示构建回调。
 	 * <p>
-	 * <b>关于形参说明：</b>保留形参 {@code cell} 是为了保持与字节码注入器（Injector）在拦截 {@code Cell.tooltip(Cons)} 时的调用签名一致；
-	 * 转发至 {@link #wrapCellUpdate(Cell, Cons)} 执行静默熔断，避免调用 {@code cell.tooltip(null)} 重新实例化空 Tooltip 监听器。
+	 * <b>关于形参与设计说明：</b><br>
+	 * 1) 保留形参 {@code cell} 是为了保持与字节码注入器（Injector）在拦截 {@code Cell.tooltip(Cons)} 时的调用签名一致；<br>
+	 * 2) 复用静默熔断逻辑，直接构造具备静默保护的代理实例（{@code new WrappedCons<>(new UpdateRef(original, NOOP))}），
+	 *    发生 {@link LinkageError} 时仅内部引用置空静默失效，绝不调用 {@code cell.tooltip(null)} 避免重新实例化空 Tooltip 监听器。
 	 * </p>
 	 * @param cell     目标表格单元（仅用于注入签名协议兼容，不被持有）
 	 * @param original 原始提示构建回调
 	 * @return 具备局部熔断保护的代理 Cons
 	 */
 	public static Cons<?> wrapCellTooltip(Cell<?> cell, Cons<?> original) {
-		return wrapCellUpdate(null, original);
+		if (original == null) return null;
+		if (original instanceof WrappedRef) {
+			return original;
+		}
+		return new WrappedCons<>(new UpdateRef(original, NOOP));
 	}
 
 	/**
@@ -1430,6 +1447,7 @@ public class UpdateRef {
 
 	private static final Seq<Runnable> DEFERRED_REMOVALS = new Seq<>();
 	private static volatile boolean hasDeferredRemovals;
+	private static volatile boolean flushScheduled;
 	private static volatile int flushFailCount;
 
 	private static void deferRemoval(Runnable r) {
@@ -1437,7 +1455,6 @@ public class UpdateRef {
 		synchronized (DEFERRED_REMOVALS) {
 			DEFERRED_REMOVALS.add(r);
 			hasDeferredRemovals = true;
-			flushFailCount = 0;
 		}
 		tryScheduleDeferredFlush();
 	}
@@ -1445,23 +1462,21 @@ public class UpdateRef {
 	/**
 	 * 若当前处于主循环环境（{@code Core.app != null}）且存在暂存的熔断注销动作，
 	 * 通过 {@link Core#app} 的 {@link Application#post} 方法向主线程安全点投递清理任务。
-	 * 采用 double-check 快速短路，在无暂存动作时 100% 零锁竞争与零开销。
-	 * 若投递连续失败达到上限（5次），将暂停在热路径上反复调度，防止异常刷屏。
+	 * 采用 {@code flushScheduled} 标志位与 double-check 快速短路：
+	 * 1) 无暂存动作或已有投递任务在等待主线程执行时 100% 零锁竞争与零开销，杜绝重复投递导致的空转 post；
+	 * 2) 若投递连续失败达到上限（5次），将暂停在热路径上反复调度，防止异常刷屏。
 	 */
 	public static void tryScheduleDeferredFlush() {
-		if (!hasDeferredRemovals || Core.app == null || flushFailCount >= 5) return;
+		if (!hasDeferredRemovals || flushScheduled || Core.app == null || flushFailCount >= 5) return;
 		synchronized (DEFERRED_REMOVALS) {
-			if (!hasDeferredRemovals || DEFERRED_REMOVALS.isEmpty() || flushFailCount >= 5) return;
-			hasDeferredRemovals = false;
+			if (!hasDeferredRemovals || flushScheduled || DEFERRED_REMOVALS.isEmpty() || flushFailCount >= 5) return;
+			flushScheduled = true;
 		}
 		try {
 			Core.app.post(UpdateRef::flushDeferredRemovals);
-			synchronized (DEFERRED_REMOVALS) {
-				flushFailCount = 0;
-			}
 		} catch (Throwable t) {
 			synchronized (DEFERRED_REMOVALS) {
-				hasDeferredRemovals = true;
+				flushScheduled = false;
 				flushFailCount++;
 				if (flushFailCount == 5) {
 					HotSwapAgent.error("[UpdateRef] Core.app.post failed 5 times continuously, suspending retries until new removals added: " + t.getMessage(), t);
@@ -1471,12 +1486,13 @@ public class UpdateRef {
 	}
 
 	/**
-	 * 清理在无主循环环境（如 Core.app == null）下暂存的熔断注销动作。
+	 * 清理在无主循环环境（如 Core.app == null）下暂存或主线程安全点投递的熔断注销动作。
 	 * 在监视器锁外执行回调，彻底消除持有锁调用外部代码与死锁风险。
 	 */
 	public static void flushDeferredRemovals() {
 		Seq<Runnable> toRun;
 		synchronized (DEFERRED_REMOVALS) {
+			flushScheduled = false;
 			hasDeferredRemovals = false;
 			flushFailCount = 0;
 			if (DEFERRED_REMOVALS.isEmpty()) return;
@@ -1489,77 +1505,39 @@ public class UpdateRef {
 	}
 
 	/**
-	 * 包装 {@link Cons} 的事件监听器容器，支持与原始被代理引用的等价比较与注销。
+	 * 包装 {@link Cons} 或 {@link Runnable} 的事件监听器容器，支持与原始被代理引用的等价比较与注销。
 	 */
 	public static class EventCons<T> implements Cons<T>, WrappedRef {
-		public final UpdateRef ref;
+		public final  UpdateRef ref;
+		private final boolean   isRunnable;
 
 		public EventCons(Cons<T> original, Runnable onRemove) {
 			this.ref = new UpdateRef(original, onRemove);
+			this.isRunnable = false;
+		}
+
+		public EventCons(Runnable original, Runnable onRemove) {
+			this.ref = new UpdateRef(original, onRemove);
+			this.isRunnable = true;
+		}
+
+		public EventCons(UpdateRef ref) {
+			this.ref = ref;
+			this.isRunnable = ref != null && ref.getOriginal() instanceof Runnable;
 		}
 
 		@Override
 		public void get(T t) {
-			ref.runCons(t);
+			if (isRunnable) {
+				ref.run();
+			} else {
+				ref.runCons(t);
+			}
 		}
 
 		@Override
 		public UpdateRef getUpdateRef() {
 			return ref;
-		}
-
-		@SuppressWarnings("unchecked")
-		public Cons<T> getKey() {
-			return (Cons<T>) getOriginal();
-		}
-
-		@Override
-		public boolean equals(Object o) {
-			return WrappedRef.equals(this, o);
-		}
-
-		@Override
-		public int hashCode() {
-			return getOriginalHash();
-		}
-	}
-
-	/**
-	 * 包装 {@link Runnable} 的事件监听器容器（将 Runnable 适配为 Cons<Object> 以供 Events 内部注册表存储），
-	 * 并在熔断时通过私有注册表将自身精准注销。同时实现 {@link Runnable} 以支持双向多态解包与比较。
-	 */
-	public static class EventRunnableCons implements Runnable, Cons<Object>, WrappedRef {
-		public final UpdateRef ref;
-
-		public EventRunnableCons(Runnable original, Runnable onRemove) {
-			this.ref = new UpdateRef(original, onRemove);
-		}
-
-		public EventRunnableCons(UpdateRef ref) {
-			this.ref = ref;
-		}
-
-		public EventRunnableCons(UpdateRef ref, Object key) {
-			this.ref = ref;
-		}
-
-		@Override
-		public void run() {
-			ref.run();
-		}
-
-		@Override
-		public void get(Object param) {
-			ref.run();
-		}
-
-		@Override
-		public UpdateRef getUpdateRef() {
-			return ref;
-		}
-
-		public Object getKey() {
-			return getOriginal();
 		}
 
 		@Override
@@ -1633,7 +1611,7 @@ public class UpdateRef {
 	 * @param listener 运行回调
 	 * @param map      Events 内部私有事件注册表（100% 零反射原生自举传入）
 	 */
-	@SuppressWarnings("rawtypes")
+	@SuppressWarnings("unchecked")
 	public static void eventsRun(Object type, Runnable listener, ObjectMap<Object, Seq<Cons<?>>> map) {
 		if (listener == null) return;
 		if (map == null) {
@@ -1643,13 +1621,13 @@ public class UpdateRef {
 		if (eventsMap != map) eventsMap = map;
 		tryScheduleDeferredFlush();
 
-		if (listener instanceof EventRunnableCons erc) {
-			if (erc.getUpdateRef() != null && erc.getUpdateRef().isRemoved()) return;
-			map.get(type, () -> new Seq<>(Cons.class)).add((Cons) listener);
+		if (listener instanceof EventCons ec) {
+			if (ec.getUpdateRef() != null && ec.getUpdateRef().isRemoved()) return;
+			map.get(type, () -> new Seq<>(Cons.class)).add(ec);
 			return;
 		}
 
-		EventRunnableCons[] box = new EventRunnableCons[1];
+		EventCons<Object>[] box = (EventCons<Object>[]) new EventCons[1];
 		Runnable onRemove = () -> {
 			if (box[0] != null) {
 				Seq<Cons<?>> s = map.get(type);
@@ -1659,7 +1637,7 @@ public class UpdateRef {
 			}
 		};
 
-		EventRunnableCons wrapper;
+		EventCons<Object> wrapper;
 		if (listener instanceof WrappedRef wr) {
 			UpdateRef ref = wr.getUpdateRef();
 			if (ref != null && ref.isRemoved()) return;
@@ -1667,9 +1645,9 @@ public class UpdateRef {
 			if (ref != null) {
 				ref.addOnRemove(onRemove);
 			}
-			wrapper = new EventRunnableCons(ref);
+			wrapper = new EventCons<>(ref);
 		} else {
-			wrapper = new EventRunnableCons(listener, onRemove);
+			wrapper = new EventCons<>(listener, onRemove);
 		}
 		box[0] = wrapper;
 		map.get(type, () -> new Seq<>(Cons.class)).add(wrapper);

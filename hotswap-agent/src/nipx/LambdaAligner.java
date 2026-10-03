@@ -360,29 +360,21 @@ public class LambdaAligner {
 				}
 			} while (step2Progressed);
 
-			// 【阶段一·校验】形状不变量运行时校验（兜底）
+			// 【阶段一·校验】配对后的引用一致性校验（收口防线）。
 			//
-			// 不变量：配对成功的 (新, 旧) 必须有相同的子树**形状** —— 形状只由 indy 引用
-			// 拓扑决定，与方法体内容无关。违反它意味着"跨层级错绑"：例如旧外层 ((())) 的
-			// 名字被配给了新中层 (())，持有该名字的老 CallSite 会静默改了语义（延迟、
-			// 嵌套层数都变，却不报错）。
+			// 不变量：配对成功的 (新, 旧) 必须"子归属一致" —— 新方法体内的每个子 lambda
+			// 最终所属的旧名字，必须与旧方法体引用的那些名字吻合。违反它意味着
+			// "父保住名字、子丢了名字"这类静默错位：老 CallSite 拿到了父，
+			// 但父内部指向的已经换人。
 			//
-			// 这里不是新增启发式，而是对上面各步已经在用的不变量做一次收口校验：
-			// 违反的配对就地撤销，让旧方法走幽灵、新方法走阶段二拿避障名 ——
-			// 把"静默错位"变回"显式熔断"，至少不比之前更糟。
+			// 曾用"shape 是否相等"做这道校验，但那是**恒真**的：shape 在 scan 里定稿后不再变，
+			// 而所有配对路径都已强制 sameNestingLevel（shape 相等），因此它永不触发，
+			// 只提供虚假的安全感。改为引用归属后是独立信息。
 			//
-			// 实测动机（scratch/hstest 的 LeakProbe）：save3 两轮序列里 $3/$4 互换。
-			// 判别实验已排除**跨调用状态残留**（CONTEXT.remove() 后结果不变）。
-			//
-			// 根因后来已定位并修复，两处都在 scan 内：
-			//   • 子树形状只算了一遍 ⇒ 父可能先于子被处理、读到子的哨兵默认值，
-			//     于是新旧两侧被算成**同一个错值**，等值校验反而放行。
-			//     现改为迭代到定稿。
-			//   • 形状哨兵曾用 "()"（本身是叶子的合法形状）⇒ 与"未定稿"撞车。
-			//     现用 null 表示未定稿。
-			// 因此这道校验现在是纯粹的**收口防线**，正常情况下不触发；
-			// 若它真的触发，说明又出现了新的形状计算问题，值得查。
-			verifyShapeInvariant(ctx);
+			// 与当初那个 save3 形状 bug 的关系：那个 bug 是**两侧算成同一个错值**，
+			// 任何等值校验都放行；它已被两处修复解决（shape 迭代到定稿、哨兵改用 null），
+			// 见 computeShapes 的说明。本校验防的是另一类失败（子归属错位）。
+			verifyRefConsistency(ctx);
 
 			// 【阶段二】未匹配的新方法统一处理
 			int freshId = 0;
@@ -616,33 +608,37 @@ public class LambdaAligner {
 	}
 
 	/**
-	 * 形状不变量校验：撤销所有"形状不等"的配对。
+	 * 配对后的<b>引用一致性</b>校验（对已有不变量的收口，非启发式）。
 	 *
-	 * <p>撤销后 {@code ni} 与 {@code oi} 都回到未匹配状态，旧名字也不再占用，
-	 * 于是新方法会在阶段二拿到避障名，旧名字由孤儿计算复活成幽灵 —— 老 CallSite
-	 * 从"静默执行别人的方法体"变成"显式熔断"。</p>
+	 * <p>不变量：若新方法 {@code ni} 与旧方法 {@code oi} 配成一对，则 {@code ni} 体内的
+	 * 每个子 lambda，其<b>最终归属</b>必须与 {@code oi} 体内引用的那些旧名字一致 ——
+	 * 否则就是"父保住了名字、子丢了名字"那类静默错位：老 CallSite 拿到了父，
+	 * 但父内部指向的已经换人。</p>
 	 *
-	 * @return 撤销的配对数（供日志与测试使用）
+	 * <p><b>为什么不用 shape 校验</b>：`shape` 在 {@code scan} 里算完就不再变，而所有配对路径
+	 * 都已强制 {@link #sameNestingLevel}（即 shape 相等），因此"检查 shape 是否相等"恒真、
+	 * 永不触发，只会给人虚假的安全感。本校验改用<b>引用归属</b>，是独立信息。</p>
+	 *
+	 * <p>违反时撤销该配对：旧方法走幽灵、新方法走阶段二拿避障名，把静默错位降级为显式熔断。</p>
+	 *
+	 * @return 撤销的配对数
 	 */
-	private static int verifyShapeInvariant(MatchContext ctx) {
+	private static int verifyRefConsistency(MatchContext ctx) {
 		int undone = 0;
 		for (int idx : groupOrder(ctx.newGroups)) {
 			List<SyntheticInfo> newGroup = ctx.newGroups.valueAt(idx);
 			if (newGroup == null) continue;
 			for (SyntheticInfo ni : newGroup) {
 				SyntheticInfo oi = ni.matchedWith;
-				if (oi == null || ni.shape.equals(oi.shape)) continue;
+				if (oi == null) continue;
+				if (sameChildOwnership(ctx, ni, oi)) continue;
 
 				// 撤销：清掉改名登记与双方的匹配状态。
-				//
 				// 注意**不回滚** simpleNameWitness / renameBySimpleName：那两张表记录的是
-				// "同一 simpleName 的唯一目标"，本轮撤销并不会抹掉"曾经见证过"这一事实。
-				// 后果偏保守 —— 该名字仍可能被见证为已使用/歧义，从而少做一次
-				// 字符串常量反查，**不会产生错误映射**。
-				//
-				// 之所以不尝试回滚：witnessSimpleName 未记录"本次调用是否插入/改写了该条目"，
-				// 盲目 remove 会把**别的配对**写入的见证一并删掉，反而制造不一致。
-				// 若将来要支持回滚，需要先让见证记录来源。
+				// "同一 simpleName 的唯一目标"，撤销配对并不会抹掉"曾经见证过"这一事实。
+				// 后果偏保守（该名字仍可能被判已使用/歧义），不会产生错误映射。
+				// 不尝试回滚的原因：witnessSimpleName 未记录"本次调用是否插入/改写了该条目"，
+				// 盲目 remove 会把别的配对写入的见证一并删掉，反而制造不一致。
 				if (ctx.renameMap.get(ni.name + ni.desc) != null) {
 					ctx.renameMap.remove(ni.name + ni.desc);
 				}
@@ -651,11 +647,34 @@ public class LambdaAligner {
 				oi.matched = false;
 				ctx.usedOldNames.remove(oi.name);
 				undone++;
-				HotSwapAgent.warn("[LambdaAligner] 形状不变量被违反，撤销配对：" + ni.name + ni.shape
-					+ " !~ " + oi.name + oi.shape + "（跨层级错绑已降级为熔断）");
+				HotSwapAgent.warn("[LambdaAligner] 引用一致性被违反，撤销配对：" + ni.name
+					+ " 的子 " + ni.children + " 与 " + oi.name + " 的子 " + oi.children
+					+ " 不一致（静默错位已降级为熔断）");
 			}
 		}
 		return undone;
+	}
+
+	/**
+	 * {@code ni} 体内的子 lambda 最终归属的旧名字集合，是否与 {@code oi} 体内引用的旧名字集合一致。
+	 *
+	 * <p>子尚未配对时退回比较"新名字是否仍等于旧名字"（即该子保住了名字）。
+	 * 两边都按<b>多重集</b>比较：同一个旧名字被子重复引用时数量必须吻合。</p>
+	 */
+	private static boolean sameChildOwnership(MatchContext ctx, SyntheticInfo ni, SyntheticInfo oi) {
+		if (ni.children.isEmpty() && oi.children.isEmpty()) return true;
+		if (ni.children.size() != oi.children.size()) return false;
+
+		List<String> newOwned = new ArrayList<>(ni.children.size());
+		for (String c : ni.children) {
+			SyntheticInfo ci = infoByName(ctx, false, c);
+			if (ci == null) return false;                       // 信息不足：不判违规
+			newOwned.add(ci.matchedWith != null ? ci.matchedWith.name : ci.name);
+		}
+		List<String> oldOwned = new ArrayList<>(oi.children);
+		Collections.sort(newOwned);
+		Collections.sort(oldOwned);
+		return newOwned.equals(oldOwned);
 	}
 
 	/**
@@ -789,6 +808,7 @@ public class LambdaAligner {
 			SyntheticInfo bestOld = null;
 			for (SyntheticInfo oi : oldGroup) {
 				if (oi.matched || oi.ghost) continue;
+				if (!oi.renameable) continue;             // 与 ni 上的限制对称
 				if (ctx.usedOldNames.contains(oi.name)) continue;
 				if (oi.upDepth != ni.upDepth) continue;   // 深度必须相等
 				if (!sameNestingLevel(ni, oi)) continue;  // 形状必须相等
@@ -829,6 +849,7 @@ public class LambdaAligner {
 			if (bestOld == null)
 			for (SyntheticInfo oi : oldGroup) {
 				if (oi.matched || oi.ghost) continue;
+				if (!oi.renameable) continue;   // 与 ni 上的限制对称
 				if (ctx.usedOldNames.contains(oi.name)) continue;
 				if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
 				if (!sameNestingLevel(ni, oi)) continue;
@@ -839,6 +860,7 @@ public class LambdaAligner {
 			if (bestOld == null) {
 				for (SyntheticInfo oi : oldGroup) {
 					if (oi.matched || oi.ghost) continue;
+					if (!oi.renameable) continue;   // 与 ni 上的限制对称
 					if (ctx.usedOldNames.contains(oi.name)) continue;
 					if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
 					if (!sameNestingLevel(ni, oi)) continue;
@@ -1114,13 +1136,6 @@ public class LambdaAligner {
 			}
 		}
 		return remapped;
-	}
-
-	/** 读出字节码里所有方法的方法名（用于判断幽灵名字是否已被占用）。 */
-	private static List<MethodNode> newCnMethods(byte[] bytes) {
-		ClassNode cn = new ClassNode();
-		new ClassReader(bytes).accept(cn, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-		return cn.methods;
 	}
 
 	/** 把 {@link ClassNode} 序列化为字节码。 */

@@ -1371,3 +1371,49 @@ byte[] a3 = LambdaAligner.align(a2, force(args[14], cl));   // a2 = 上一轮输
 
 `TEST_REVERSE_GROUP_ORDER` / `groupOrder` 仍在 `LambdaAligner` 里（8 处）。
 它们是我早先加的测试钩子；无论后续决定是否采纳那份分析，都应清理或明确标注为测试专用。
+
+
+## 跨组争抢：**复现成功**（外部审查的核心主张成立，我先前的结论被推翻）
+
+### 夹具与结果（`xgroup/`、`XGroupTest`）
+
+```java
+// V1：一个孤立闭包
+void methodOld() { runR(() -> shared()); }
+
+// V2：methodOld 拆成两个方法，体内各放一个**完全相同**的闭包
+void methodA() { runR(() -> shared()); }
+void methodB() { runR(() -> shared()); }
+```
+
+两个新 lambda 分属 `methodA$` / `methodB$` **两个组**，却与老类里孤立的老 lambda 指纹相同。
+
+```
+V1 的 lambda: [lambda$methodOld$0]
+V2 的 lambda: [lambda$methodB$1, lambda$methodA$0]
+
+正序结果: lambda$methodB$1(...)#L | lambda$methodOld$0(...)#L
+反序结果: lambda$methodA$0(...)#L | lambda$methodOld$0(...)#L
+=> 组序正/反的最终方法表**不一致** —— 顺序敏感复现成功
+```
+
+**JDK 8 与 JDK 21 上表现完全一致**，且与外部审查给出的输出形态
+（`lambda$methodA$0()V` / `lambda$methodB$1()V`）吻合。
+
+### 我先前结论的错误
+
+上一轮我用**竞争夹具（`comp/`）**做组序反转实验，得到"泄漏数=0"，并写进 README 说
+"未观察到组序反转导致的分歧"。现在看，那个夹具**不构成跨组争抢**：
+它的新类只有一个组（JDK 21）或两个组但**没有两个新方法争抢同一个旧名字**的情形。
+**要用能产生"多组争抢同一旧方法"的夹具，才能触达这条路径。**
+
+`XGroupTest` 现已作为**会失败的验收**留在套件里（退出码 2 区分"复现成功"与"断言失败"）。
+
+### 待定：修法
+
+外部审查给出的两阶段仲裁器（先收集意向、再按客观属性决胜）方向合理，但它引入了
+**新的决胜规则**（`logicalName` 字典序 → `name` 字典序）。按既定标准，这种新规则需要
+先用夹具验证它选出的 winner 是**正确**的，而不只是**确定**的 —— 字典序最小未必语义最对。
+
+因此下一步是：先把本用例固化为 expected-failure，再评估候选决胜规则
+（同名优先已存在；是否需要字典序、或 `declarationOrder` 距离）在既有夹具上是否回归。

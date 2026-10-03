@@ -346,7 +346,10 @@ public class AnnotationTransformer implements ClassFileTransformer {
 
 		for (MethodNode mn : cn.methods) {
 			if ((mn.access & ACC_SYNTHETIC) == 0) continue;
-			String key = mn.name + ":" + mn.desc;
+			// 统一用"未捕获 this"的规范化描述符做键，保证本方法对同一份输入幂等：
+			// 若这里直接用 mn.desc，第二轮拿到的就是已被前置 this 的描述符，
+			// 与 invokedynamic 侧的键对不上，护栏与决策都会失效。
+			String key = mn.name + ":" + stripThisParam(mn.desc, slashClassName);
 			if ((mn.access & ACC_STATIC) == 0) instanceSyntheticMethods.add(key);
 			else staticSyntheticMethods.add(key);
 		}
@@ -356,7 +359,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			boolean isInstance = (mn.access & ACC_STATIC) == 0 && !mn.name.equals("<init>");
 			for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
 				if (insn instanceof MethodInsnNode m && m.owner.equals(slashClassName)) {
-					directlyCalled.add(m.name + ":" + m.desc);
+					directlyCalled.add(m.name + ":" + stripThisParam(m.desc, slashClassName));
 					continue;
 				}
 				if (!(insn instanceof InvokeDynamicInsnNode indy)) continue;
@@ -366,7 +369,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 				if (!slashClassName.equals(impl.getOwner())) continue;
 
 				references.add(new ForceLambdaRef(mn, indy, impl,
-				 impl.getName() + ":" + impl.getDesc(), isInstance));
+				 impl.getName() + ":" + stripThisParam(impl.getDesc(), slashClassName), isInstance));
 			}
 		}
 
@@ -376,6 +379,8 @@ public class AnnotationTransformer implements ClassFileTransformer {
 
 		final Set<String> needConversionToStatic = new HashSet<>();
 		final Set<String> needForceCaptureThis   = new HashSet<>();
+		/** 进入转换循环之前，各 lambda 方法是否已经带有 {@code L<owner>;} 首参数（幂等护栏依据）。 */
+		final Map<String, Boolean> preExistingThis = new HashMap<>();
 
 		for (var e : byKey.entrySet()) {
 			String key = e.getKey();
@@ -393,6 +398,12 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			           && refs.stream().allMatch(r -> r.impl.getTag() == H_INVOKESTATIC && r.isContainerInstance)) {
 				// 核心防护：必须所有引用点都在"可安全取 this"的实例方法里
 				needForceCaptureThis.add(key);
+
+				// 记录决策时刻该方法"已经带没带 this 首参数"。必须在这里（改动 mn.desc 之前）
+				// 采样，因为下面的转换循环会把 mn.desc 改掉；一旦改掉，
+				// "本来就有 this" 与 "刚被我们加上 this" 就再也分不出来了。
+				MethodNode target = findMethodByName(cn, refs.get(0).impl.getName());
+				preExistingThis.put(key, target != null && hasThisPrefix(target.desc, slashClassName));
 			}
 		}
 
@@ -400,20 +411,17 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		// 以及热更调度层在送入 LambdaAligner.align 之前。若第二次调用再往首参数前插一个
 		// `this`，描述符会变成 (LFoo;LFoo;...) 而 lambda 体只认原来的槽位，导致
 		// “对齐时看到的字节码”与“JVM 里实际生效的字节码”脱节，也让实参与形参错位。
-		// 这里统一兜底：凡是被判定“需要捕获 this”的 lambda 都已经是
-		// `... (L<owner>; <原描述符参数>) ...` 形态时，说明本方法此前跑过，直接原样返回。
+		//
+		// 判定口径：凡是被判定"需要捕获 this"的方法，在本次进入转换循环之前就已经带上了
+		// `L<owner>;` 首参数 ⇒ 本方法此前跑过 ⇒ 原样返回。
+		//
+		// 注意这里特意不去反推 key 的描述符：key 走的是 stripThisParam 规范化口径，
+		// 拿它去拼 forcedDesc 会得到 "(Lowner;Lowner;...)" 这种畸形串（第一版实现的 bug），
+		// 或者因为多轮 strip 而失去区分能力。直接检查方法自身的 desc 才是有依据的。
 		if (needConversionToStatic.isEmpty()) {
 			boolean alreadyForced = true;
 			for (String key : needForceCaptureThis) {
-				if (!staticSyntheticMethods.contains(key)) continue;
-				int        colon     = key.indexOf(':');
-				String     name      = key.substring(0, colon);
-				String     forcedDesc = "(" + "L" + slashClassName + ";" + key.substring(colon + 2);
-				boolean    found     = false;
-				for (MethodNode mn : cn.methods) {
-					if (mn.name.equals(name) && mn.desc.equals(forcedDesc)) { found = true; break; }
-				}
-				if (!found) {
+				if (!Boolean.TRUE.equals(preExistingThis.get(key))) {
 					alreadyForced = false;
 					break;
 				}
@@ -510,6 +518,33 @@ public class AnnotationTransformer implements ClassFileTransformer {
 	private static boolean isLambdaMetafactory(Handle h) {
 		return "java/lang/invoke/LambdaMetafactory".equals(h.getOwner())
 		       && ("metafactory".equals(h.getName()) || "altMetafactory".equals(h.getName()));
+	}
+
+	/**
+	 * 若描述符的首参数恰好是 {@code L<owner>;}（即本类实例，说明已被强行捕获 this），
+	 * 则去掉它，返回"未捕获 this"的规范化描述符；否则原样返回。
+	 *
+	 * <p>用途：让 {@code forceStaticLambdas} 内部所有以"名字 + 描述符"为键的集合与查找
+	 * 都使用同一个规范口径，从而保证本方法对同一份输入幂等 —— 否则第二轮读进来的
+	 * 描述符已经带上了 {@code this} 参数，键对不上，幂等护栏与转换决策都会失效。</p>
+	 */
+	private static String stripThisParam(String desc, String slashClassName) {
+		if (desc == null || desc.isEmpty() || desc.charAt(0) != '(') return desc;
+		String prefix = "(L" + slashClassName + ";";
+		return desc.startsWith(prefix) ? "(" + desc.substring(prefix.length()) : desc;
+	}
+
+	/** 描述符首参数是否恰好是 {@code L<owner>;}（说明已被强行捕获 this）。 */
+	private static boolean hasThisPrefix(String desc, String slashClassName) {
+		return desc != null && desc.startsWith("(L" + slashClassName + ";");
+	}
+
+	/** 按名字查找类中的方法（用于在改写 {@code mn.desc} 之前采样其原始形态）。 */
+	private static MethodNode findMethodByName(ClassNode cn, String name) {
+		for (MethodNode mn : cn.methods) {
+			if (mn.name.equals(name)) return mn;
+		}
+		return null;
 	}
 	@SuppressWarnings("ResultOfMethodCallIgnored")
 	private static void writeTo(String className, byte[] classfileBuffer) {

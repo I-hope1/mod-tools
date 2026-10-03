@@ -73,6 +73,41 @@ MSYS2_ARG_CONV_EXCL='*' java -cp "coutT;cout1;cout2;$CP" RawHandoffTest  cout1/t
    `forceStaticLambdas` 改过描述符的字节码。实测 `rename 落地了？ false`（改用 forced 描述符
    做键则 `true`）。即 rename 会被静默丢弃，除非另加"描述符无关回退"。
 
+## 顺序回退告警 (a) 与跨组指纹匹配 (c)
+
+`pair/v1`、`pair/v2` 是同一方法内两个"同形"lambda（描述符相同），`v2` 只改第一个的方法体。
+
+```bash
+mkdir -p pout1 pout2 poutT
+javac -d pout1 pair/v1/test3/PairCase.java
+javac -d pout2 pair/v2/test3/PairCase.java
+MSYS2_ARG_CONV_EXCL='*' javac -nowarn -cp "$CP" -d poutT src/PairTest.java
+MSYS2_ARG_CONV_EXCL='*' java -cp "poutT;pout1;pout2;$CP" PairTest pout1/test3/PairCase.class pout2/test3/PairCase.class
+```
+
+实测结果：
+
+```
+[NIPX] [WARN] [LambdaAligner] 顺序回退配对但方法体不一致 test3/PairCase：
+        旧 lambda$build$0(Ltest3/PairCase;)V <- 新 lambda$build$0(Ltest3/PairCase;)V ...
+
+old:      lambda$build$0 -> [ctx, a]      lambda$build$1 -> [ctx, b]
+new:      lambda$build$0 -> [ctx, sb]     lambda$build$1 -> [ctx, b]
+aligned:  lambda$build$0 -> [ctx, sb]     lambda$build$1 -> [ctx, b]     ← 未被对调
+```
+
+- **(a) 告警**：改动的那个 lambda 指纹对不上，只能顺序回退 → 触发告警，指明"旧 <- 新"是哪一对。
+- **(c) 跨组指纹匹配**：没改动的那个 lambda 指纹仍然吻合 → 在顺序回退之前就被认领回旧名，
+  因此不会被顺序回退对调。
+
+`IdemDebug` 用于验证 `forceStaticLambdas` 的幂等性（`pass1 == pass2`）：
+
+```bash
+MSYS2_ARG_CONV_EXCL='*' javac -nowarn -cp "$CP" -d outT src/IdemDebug.java
+MSYS2_ARG_CONV_EXCL='*' java -cp "outT;out1;$CP" IdemDebug out1/test/Case.class
+# 期望：pass1 == pass2 ? true / pass2 == pass3 ? true
+```
+
 ## 断言要点（对应修复点）
 
 - `forceStaticLambdas IDEMPOTENT = true`

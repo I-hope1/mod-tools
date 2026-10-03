@@ -275,6 +275,16 @@ public class LambdaAligner {
 					}
 
 					if (bestOld != null) {
+						// （a）底线守护：这里已经不看方法体指纹了。若连指纹都对不上，
+						// 说明这次配对完全靠“组内出现顺序”，一旦顺序发生位移，
+						// 同一组里两个同形 lambda 就会被对调 —— 老 CallSite 会去执行
+						// 另一个回调的方法体，而且不报错、只是行为悄悄变了。
+						// 这里不阻止配对（绝大多数情况是“只改了方法体”，本就该保名），
+						// 只留一条可定位的告警。名字要在 recordRename 之前取，
+						// 否则 ni.name 已经被改成旧名，告警里两边同名、失去定位价值。
+						if (ni.hash != bestOld.hash) {
+							warnPositionalMismatch(ctx.currentClass, bestOld, ni.name, ni.desc);
+						}
 						recordRename(ctx, ni, bestOld.name);
 						ni.matched = true;
 						bestOld.matched = true;
@@ -282,6 +292,28 @@ public class LambdaAligner {
 					}
 				}
 			}
+
+			// 【阶段一·补】跨逻辑组指纹匹配（根本解法）
+			//
+			// 前面 Step 1a/1b/2 全部被限制在"同一个逻辑组"内，而逻辑组键里含
+			// logicalName —— 也就是承载 lambda 的那个方法名（`lambda$build$19` → `build`）。
+			// 这带来两个必须正视的后果：
+			//
+			//   1) 在 build() 开头插入一个新 lambda，会把后面所有 lambda 的编译期序号
+			//      整体推移（$0→$1、$1→$2）。它们同属 build 组、归一化描述符又相同，
+			//      Step 2 只能按组内顺序配对 —— 结果两个 lambda 的方法体被对调，
+			//      老 CallSite 静默地去执行了另一个回调的逻辑（不抛异常，最难查）。
+			//   2) 把一个 lambda 从旧方法挪到新方法（含重命名承载方法），逻辑组变了，
+			//      哪怕方法体一个字节都没动，Step 1 也永远找不到它，照样走顺序回退。
+			//
+			// 所以在动用顺序回退之前，先做一次全类跨组指纹匹配：只要方法体指纹一致，
+			// 就是同一个 lambda，直接认领旧名。因为指纹只由方法体指令序列决定，
+			// "插入"对未改动 lambda 的指纹毫无影响，正是这一刀切开顺序依赖。
+			//
+			// 为什么安全：指纹相同 ⇒ 方法体逐条指令等价 ⇒ 认领旧名只是让"调用方"
+			// 与"被调方"重新对上，不改变任何行为。指纹不同则完全不参与，缺口仍由
+			// Step 2 兜底（并留下 (a) 的告警）。
+			matchByFingerprintAcrossGroups(ctx);
 
 			// 【阶段二】未匹配的新方法统一处理
 			int freshId = 0;
@@ -431,6 +463,130 @@ public class LambdaAligner {
 				}
 			}
 		}
+	}
+
+	/**
+	 * 跨逻辑组的指纹匹配：把"方法体一字未改、但逻辑组变了"的 lambda 认领回旧名。
+	 *
+	 * <p>这是对 {@link #align} 中 Step 2 顺序回退的根本性补强。逻辑组的分组键是
+	 * {@code compositeHash(logicalName, normalizedDesc)}，而 {@code logicalName} 来自
+	 * <b>承载 lambda 的那个方法名</b>。因此下面两种完全无害的操作会打散分组：</p>
+	 * <ul>
+	 *   <li>在承载方法开头插入一个新的 lambda —— 后续 lambda 的编译期序号整体推移，
+	 *       组内出现"多个同形候选"，Step 2 按顺序配对 → <b>方法体对调</b>；</li>
+	 *   <li>把 lambda 挪到另一个方法（或给承载方法改名）—— 逻辑组直接变了，
+	 *       即使方法体一个字节都没动也匹配不上。</li>
+	 * </ul>
+	 *
+	 * <p>本方法在进入顺序回退之前，先做一次全类扫描：新方法若与某个未匹配的旧方法
+	 * <b>指纹完全相同</b>，直接认领其旧名。指纹只由方法体指令序列决定（行号、局部
+	 * 变量表都被 {@link MethodFingerprinter} 忽略），插入新 lambda 对它没有任何影响，
+	 * 顺序依赖由此被切断。</p>
+	 *
+	 * <p><b>为什么安全</b>：指纹相同意味着方法体逐条指令等价，认领旧名只是让老
+	 * {@code CallSite} 与它原本要调用的方法体重新对上，不改变任何行为。指纹不同则
+	 * 完全不参与匹配（缺口仍由顺序回退处理，并触发 {@link #warnPositionalMismatch}）。
+	 * 因为只认领"指纹吻合"的旧方法，也不存在"劫持别人名字"的风险。</p>
+	 *
+	 * <p><b>选择顺序</b>：先在<b>同组</b>里找指纹相同的未匹配旧方法（最大限度保留
+	 * 原有配对倾向），再退到全类范围。全类范围内遇到多个同指纹候选时，优先同名，
+	 * 否则取分组遍历顺序里的第一个。</p>
+	 */
+	private static void matchByFingerprintAcrossGroups(MatchContext ctx) {
+		var newGroups = ctx.newGroups;
+		var oldGroups = ctx.oldGroups;
+
+		for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
+			List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
+			if (newGroup == null) continue;
+
+			for (SyntheticInfo ni : newGroup) {
+				if (ni.matched || !ni.renameable) continue;
+
+				SyntheticInfo bestOld = null;
+
+				// 第一优先级：同组内指纹相同（保持 Step 1 之外的原配对倾向）
+				List<SyntheticInfo> sameGroup = oldGroups.get(newGroups.keyAt(idx));
+				if (sameGroup != null) {
+					bestOld = firstFingerprintMatch(sameGroup, ni, true);
+				}
+				// 第二优先级：全类范围内指纹相同
+				if (bestOld == null) {
+					outer:
+					for (int k = oldGroups.nextEntry(-1); k != -1; k = oldGroups.nextEntry(k)) {
+						List<SyntheticInfo> g = oldGroups.valueAt(k);
+						if (g == null || g == sameGroup) continue;
+						SyntheticInfo oi = firstFingerprintMatch(g, ni, true);
+						if (oi != null) { bestOld = oi; break outer; }
+					}
+				}
+				if (bestOld == null) continue;
+
+				recordRename(ctx, ni, bestOld.name);
+				ni.matched = true;
+				bestOld.matched = true;
+				ctx.usedOldNames.add(bestOld.name);
+			}
+		}
+	}
+
+	/**
+	 * 在 {@code group} 中找第一个与 {@code ni} 指纹相同且未被匹配的旧方法。
+	 *
+	 * @param preferSameName 是否优先命中与 {@code ni} 同名的候选（同名意味着
+	 *                       "编译期序号都没变"，是更强的证据）
+	 * @return 命中的旧方法信息；没有则返回 {@code null}
+	 */
+	private static SyntheticInfo firstFingerprintMatch(List<SyntheticInfo> group, SyntheticInfo ni,
+	                                                   boolean preferSameName) {
+		if (group == null) return null;
+
+		if (preferSameName) {
+			for (SyntheticInfo oi : group) {
+				if (oi.matched || oi.hash != ni.hash) continue;
+				if (oi.name.equals(ni.name)) return oi;
+			}
+		}
+		for (SyntheticInfo oi : group) {
+			if (oi.matched || oi.hash != ni.hash) continue;
+			return oi;
+		}
+		return null;
+	}
+
+	/** 顺序回退告警去重缓存：同一处错配只报一次。 */
+	private static final Set<String> WARNED_REALIGNMENTS =
+		Collections.newSetFromMap(new ConcurrentHashMap<>());
+
+	/** 清空顺序回退告警去重缓存（与 {@link #clearLoggedOrphans()} 同步调用）。 */
+	public static void clearLoggedWarnings() {
+		WARNED_REALIGNMENTS.clear();
+	}
+
+	/**
+	 * 底线守护：顺序回退发生且两边方法体指纹不一致时留痕。
+	 *
+	 * <p>这条告警对应最难排查的一类故障：<b>行为悄悄改变而不抛异常</b>。当同一逻辑组里
+	 * 出现多个"归一化描述符完全相同"的 lambda（典型成因：把若干 lambda 都写在一个方法里，
+	 * 且它们的捕获列表形状一致）时，{@link #align} 的顺序回退只能按组内出现顺序配对。
+	 * 此时若在承载方法开头插入一个新的 lambda，后续 lambda 的整体位移会让两个回调
+	 * <b>互相对调</b>，老 {@code CallSite} 去执行另一个回调的方法体。</p>
+	 *
+	 * <p>不阻断配对的原因："只改了方法体"是最常见的开发动作，而它本来就该保住名字；
+	 * 因此这里只报告。<b>根治办法</b>是把身份交给结构而不是位置：让每个 lambda 有
+	 * 独立的承载方法（例如各自一个私有方法），逻辑组自然隔离，顺序回退不再参与。</p>
+	 *
+	 * <p>去重键为 {@code 类名 + 新方法名 + 旧方法名}，同一处错配只打印一次。</p>
+	 */
+	private static void warnPositionalMismatch(String owner, SyntheticInfo oi, String newName, String newDesc) {
+		String key = owner + "#" + newName + "<-" + oi.name;
+		if (!WARNED_REALIGNMENTS.add(key)) return;
+
+		HotSwapAgent.warn("[LambdaAligner] 顺序回退配对但方法体不一致 " + owner
+			+ "：旧 " + oi.name + oi.desc + " <- 新 " + newName + newDesc
+			+ "。同一逻辑组内存在多个同形 lambda 时，插入/删除会使其序号整体位移，"
+			+ "老 CallSite 可能去执行另一个回调的方法体。"
+			+ "建议把每个 lambda 放进独立的私有方法，让身份由结构而非位置决定。");
 	}
 	//endregion
 

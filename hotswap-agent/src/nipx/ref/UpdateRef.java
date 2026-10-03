@@ -45,7 +45,7 @@ public class UpdateRef {
 	public static final Runnable NOOP = () -> { };
 
 	/** 标记熔断清理已被触发的哨兵对象，替代原有的 boolean removed 标志，兼顾状态判定与闭包引用释放 */
-	public static final Runnable REMOVED = () -> {
+	private static final Runnable REMOVED = () -> {
 		throw new UnsupportedOperationException();
 	};
 
@@ -111,10 +111,14 @@ public class UpdateRef {
 
 	/**
 	 * 动态设置或替换当前包装引用的熔断清理动作。
-	 * 若当前已处于熔断状态（{@code onRemove == REMOVED}），则忽略此设置。
+	 * 若当前已处于熔断状态（{@code onRemove == REMOVED}），则忽略此设置；
+	 * 严禁传入内部哨兵对象伪造已熔断状态。
 	 * @param onRemove 新的清理动作
 	 */
 	public void setOnRemove(Runnable onRemove) {
+		if (onRemove == REMOVED) {
+			throw new IllegalArgumentException("Cannot manually set onRemove to REMOVED sentinel");
+		}
 		synchronized (this) {
 			if (this.onRemove != REMOVED) {
 				this.onRemove = onRemove;
@@ -211,11 +215,9 @@ public class UpdateRef {
 		@Override
 		public boolean equals(Object o) {
 			if (this == o) return true;
-			if (o == null) return false;
-			Object orig = getOriginal();
-			if (o == orig) return true;
-			if (o instanceof WrappedRef wr) return Objects.equals(orig, wr.getOriginal());
-			return Objects.equals(orig, o);
+			if (o == null || getClass() != o.getClass()) return false;
+			WrappedRunnable other = (WrappedRunnable) o;
+			return Objects.equals(getOriginal(), other.getOriginal());
 		}
 
 		@Override
@@ -245,11 +247,9 @@ public class UpdateRef {
 		@Override
 		public boolean equals(Object o) {
 			if (this == o) return true;
-			if (o == null) return false;
-			Object orig = getOriginal();
-			if (o == orig) return true;
-			if (o instanceof WrappedRef wr) return Objects.equals(orig, wr.getOriginal());
-			return Objects.equals(orig, o);
+			if (o == null || getClass() != o.getClass()) return false;
+			WrappedProv<?> other = (WrappedProv<?>) o;
+			return Objects.equals(getOriginal(), other.getOriginal());
 		}
 
 		@Override
@@ -285,11 +285,9 @@ public class UpdateRef {
 		@Override
 		public boolean equals(Object o) {
 			if (this == o) return true;
-			if (o == null) return false;
-			Object orig = getOriginal();
-			if (o == orig) return true;
-			if (o instanceof WrappedRef wr) return Objects.equals(orig, wr.getOriginal());
-			return Objects.equals(orig, o);
+			if (o == null || getClass() != o.getClass()) return false;
+			WrappedBoolp other = (WrappedBoolp) o;
+			return Objects.equals(getOriginal(), other.getOriginal());
 		}
 
 		@Override
@@ -319,11 +317,9 @@ public class UpdateRef {
 		@Override
 		public boolean equals(Object o) {
 			if (this == o) return true;
-			if (o == null) return false;
-			Object orig = getOriginal();
-			if (o == orig) return true;
-			if (o instanceof WrappedRef wr) return Objects.equals(orig, wr.getOriginal());
-			return Objects.equals(orig, o);
+			if (o == null || getClass() != o.getClass()) return false;
+			WrappedCons<?> other = (WrappedCons<?>) o;
+			return Objects.equals(getOriginal(), other.getOriginal());
 		}
 
 		@Override
@@ -359,11 +355,9 @@ public class UpdateRef {
 		@Override
 		public boolean equals(Object o) {
 			if (this == o) return true;
-			if (o == null) return false;
-			Object orig = getOriginal();
-			if (o == orig) return true;
-			if (o instanceof WrappedRef wr) return Objects.equals(orig, wr.getOriginal());
-			return Objects.equals(orig, o);
+			if (o == null || getClass() != o.getClass()) return false;
+			WrappedBoolf<?> other = (WrappedBoolf<?>) o;
+			return Objects.equals(getOriginal(), other.getOriginal());
 		}
 
 		@Override
@@ -399,11 +393,9 @@ public class UpdateRef {
 		@Override
 		public boolean equals(Object o) {
 			if (this == o) return true;
-			if (o == null) return false;
-			Object orig = getOriginal();
-			if (o == orig) return true;
-			if (o instanceof WrappedRef wr) return Objects.equals(orig, wr.getOriginal());
-			return Objects.equals(orig, o);
+			if (o == null || getClass() != o.getClass()) return false;
+			WrappedValidator other = (WrappedValidator) o;
+			return Objects.equals(getOriginal(), other.getOriginal());
 		}
 
 		@Override
@@ -433,11 +425,9 @@ public class UpdateRef {
 		@Override
 		public boolean equals(Object o) {
 			if (this == o) return true;
-			if (o == null) return false;
-			Object orig = getOriginal();
-			if (o == orig) return true;
-			if (o instanceof WrappedRef wr) return Objects.equals(orig, wr.getOriginal());
-			return Objects.equals(orig, o);
+			if (o == null || getClass() != o.getClass()) return false;
+			WrappedFloatc other = (WrappedFloatc) o;
+			return Objects.equals(getOriginal(), other.getOriginal());
 		}
 
 		@Override
@@ -467,11 +457,9 @@ public class UpdateRef {
 		@Override
 		public boolean equals(Object o) {
 			if (this == o) return true;
-			if (o == null) return false;
-			Object orig = getOriginal();
-			if (o == orig) return true;
-			if (o instanceof WrappedRef wr) return Objects.equals(orig, wr.getOriginal());
-			return Objects.equals(orig, o);
+			if (o == null || getClass() != o.getClass()) return false;
+			WrappedFloatc2 other = (WrappedFloatc2) o;
+			return Objects.equals(getOriginal(), other.getOriginal());
 		}
 
 		@Override
@@ -501,11 +489,9 @@ public class UpdateRef {
 		@Override
 		public boolean equals(Object o) {
 			if (this == o) return true;
-			if (o == null) return false;
-			Object orig = getOriginal();
-			if (o == orig) return true;
-			if (o instanceof WrappedRef wr) return Objects.equals(orig, wr.getOriginal());
-			return Objects.equals(orig, o);
+			if (o == null || getClass() != o.getClass()) return false;
+			WrappedEventListener other = (WrappedEventListener) o;
+			return Objects.equals(getOriginal(), other.getOriginal());
 		}
 
 		@Override

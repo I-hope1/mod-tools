@@ -656,25 +656,30 @@ public class LambdaAligner {
 	}
 
 	/**
-	 * {@code ni} 体内的子 lambda 最终归属的旧名字集合，是否与 {@code oi} 体内引用的旧名字集合一致。
+	 * {@code ni} 体内**已配对**的子 lambda，其归属是否与 {@code oi} 引用的旧名字一致。
 	 *
-	 * <p>子尚未配对时退回比较"新名字是否仍等于旧名字"（即该子保住了名字）。
-	 * 两边都按<b>多重集</b>比较：同一个旧名字被子重复引用时数量必须吻合。</p>
+	 * <p>只比较**已配对**的子：未配对的子还没有最终名字，用它的编译名去比旧名是无效推断
+	 * （同一次保存里前面插入一个 lambda 会让编译名整体位移，一个仅仅签名变了、尚未配对的
+	 * 子，编译名就不等于旧名），据此撤销会把**合法的父配对**误撤成幽灵。</p>
+	 *
+	 * <p>同时这也把两类结果区分开：
+	 * "子丢了名字"（走幽灵/熔断）是**设计内的降级**，不判违规；
+	 * "子被换成了别人"（已配对的子归到了 {@code oi.children} 之外的名字）才是**静默错位**。
+	 * 只有后者需要撤销。</p>
+	 *
+	 * <p>不比较未配对子还顺带消除了对遍历顺序的依赖：撤销某个配对会改变其祖先看到的
+	 * 归属关系，若把未配对子也算进来，结果就取决于先处理谁 —— 这与
+	 * {@code TEST_REVERSE_GROUP_ORDER} 想守住的性质相悖。</p>
 	 */
 	private static boolean sameChildOwnership(MatchContext ctx, SyntheticInfo ni, SyntheticInfo oi) {
-		if (ni.children.isEmpty() && oi.children.isEmpty()) return true;
-		if (ni.children.size() != oi.children.size()) return false;
-
-		List<String> newOwned = new ArrayList<>(ni.children.size());
 		for (String c : ni.children) {
 			SyntheticInfo ci = infoByName(ctx, false, c);
-			if (ci == null) return false;                       // 信息不足：不判违规
-			newOwned.add(ci.matchedWith != null ? ci.matchedWith.name : ci.name);
+			if (ci == null) return true;                       // 信息不足：不判违规
+			if (ci.matchedWith == null) continue;              // 未配对：无从判断，跳过
+			// 已配对的子必须归到对方引用过的旧名字上
+			if (!oi.children.contains(ci.matchedWith.name)) return false;
 		}
-		List<String> oldOwned = new ArrayList<>(oi.children);
-		Collections.sort(newOwned);
-		Collections.sort(oldOwned);
-		return newOwned.equals(oldOwned);
+		return true;
 	}
 
 	/**
@@ -1835,26 +1840,7 @@ public class LambdaAligner {
 		}
 	}
 
-	/**
-	 * {@code UpdateRef} 的**精确**类名匹配。
-	 *
-	 * <p>早先用 {@code startsWith("nipx.ref.UpdateRef")}，它会连带匹配
-	 * {@code nipx.ref.UpdateRefLogger}、{@code UpdateRefUtils} 这类**非代理**类。</p>
-	 *
-	 * <p>后果不是"误判"本身，而是误判的代价：本方法返回 true 会让
-	 * {@link #onOrphanInvoked} 抛 {@link NoSuchMethodError}，从而驱动
-	 * {@code UpdateRef} 执行**精准局部熔断**并注销回调。若某个非代理类恰好位于调用栈上，
-	 * 回调会被**静默注销** —— 比崩溃更难排查：程序照常运行，只是不再响应。</p>
-	 *
-	 * <p>因此只认 {@code nipx.ref.UpdateRef} 本身及其**内部类**（{@code UpdateRef$...}）。</p>
-	 */
-	private static boolean isUpdateRefClass(String className) {
-		return UPDATE_REF_CLASS.equals(className)
-			|| className.startsWith(UPDATE_REF_CLASS_INNER_PREFIX);
-	}
-
 	private static final String UPDATE_REF_CLASS = "nipx.ref.UpdateRef";
-	private static final String UPDATE_REF_CLASS_INNER_PREFIX = "nipx.ref.UpdateRef$";
 
 	/**
 	 * 已打印过日志的 location（并发安全）。
@@ -1950,31 +1936,13 @@ public class LambdaAligner {
 	public static boolean isCalledByUpdateRef() {
 		try {
 			if (StackWalkerHolder.IS_SUPPORTED) {
-				return StackWalkerHolder.WALKER.walk(s -> {
-					java.util.List<StackWalker.StackFrame> fs = s.toList();
-					int entry = -1;
-					for (int i = 0; i < fs.size(); i++) {
-						if (isOrphanEntry(fs.get(i))) { entry = i; break; }
-					}
-					if (entry < 0) return false;
-					// 判据：幽灵桩的**直接调用者**是否为 UpdateRef 的执行点。
-					//
-					// 只看直接调用者，**不做整栈兜底扫描**。曾经的兜底（"直接调用者不是
-					// UpdateRef 时继续往下找"）等于把判据退回成"栈上某处有 UpdateRef"，
-					// 只是去掉了帧数上限，反而更宽：形如
-					//   UpdateRef.run → A(活 lambda) → helper → 孤儿桩
-					// 时会把 A 一并熔断 —— 而这里的正确语义是"**lambda 本身被 UpdateRef 持有**
-					// 才熔断"，那种情形应当静默。
-					//
-					// 不需要兜底的原因：UpdateRef.run() 里是直接 `f.run()` 调用原始回调
-					// （见 UpdateRef#run），包装帧（WrappedRunnable.run 等）在它**之上**，
-					// 不落在 run() 与桩之间；两者之间只有旧 CallSite 的隐藏代理帧，
-					// StackWalker 默认跳过、getStackTrace 也不显示。
-					int caller = entry + 2;   // 跳过 onOrphanInvoked 自身与桩
-					if (caller >= fs.size()) return false;
-					StackWalker.StackFrame f = fs.get(caller);
-					return isUpdateRefInvoke(f.getClassName(), f.getMethodName());
-				});
+				return StackWalkerHolder.WALKER.walk(s -> s
+					.dropWhile(f -> !isOrphanEntry(f))        // 定位幽灵桩入口
+					.skip(2)                                  // 跳过 onOrphanInvoked 自身与桩
+					.filter(f -> !isTransparentFrame(f.getClassName()))  // 穿透代理/隐藏帧
+					.findFirst()
+					.map(f -> isUpdateRefInvoke(f.getClassName(), f.getMethodName()))
+					.orElse(false));
 			}
 		} catch (Throwable ignored) {}
 
@@ -1988,10 +1956,11 @@ public class LambdaAligner {
 				}
 			}
 			if (entry < 0) return false;
-			// 同 StackWalker 路径：只看直接调用者，不做整栈兜底。
-			int caller = entry + 2;   // 跳过 onOrphanInvoked 自身与桩
-			if (caller >= t.length) return false;
-			return isUpdateRefInvoke(t[caller].getClassName(), t[caller].getMethodName());
+			// 与 StackWalker 路径同构：桩之后跳过透明帧，取第一个真实调用者。
+			int skip = entry + 2;   // 跳过 onOrphanInvoked 自身与桩
+			while (skip < t.length && isTransparentFrame(t[skip].getClassName())) skip++;
+			if (skip >= t.length) return false;
+			return isUpdateRefInvoke(t[skip].getClassName(), t[skip].getMethodName());
 		} catch (Throwable ignored) {}
 		return false;
 	}
@@ -2004,9 +1973,38 @@ public class LambdaAligner {
 		return SELF.equals(f.getClassName()) && "onOrphanInvoked".equals(f.getMethodName());
 	}
 
-	/** 该帧是否看起来是 UpdateRef 的回调执行点。 */
+	/**
+	 * 透明帧：桩与真实调用者之间由 {@code invokedynamic} 生成的代理类帧。
+	 *
+	 * <p>必须穿透，否则"固定 +2"在两种环境下会静默失效，而后果正是本机制要消灭的
+	 * （熔断不触发）：</p>
+	 * <ul>
+	 *   <li>开了 {@code -XX:+ShowHiddenFrames} 时，{@code Foo$$Lambda/0x...} 会出现在栈里；</li>
+	 *   <li>Android/desugar 之后的 {@code -$$Lambda$} 类不是隐藏类，在
+	 *       {@code getStackTrace} 里本来就是可见帧。</li>
+	 * </ul>
+	 *
+	 * <p>这是<b>针对性放行</b>，不是通用扫描：只认类名里带 lambda 代理标记的帧，
+	 * 不会把"lambda 本身被 UpdateRef 持有"的严格判据放宽。</p>
+	 */
+	private static boolean isTransparentFrame(String className) {
+		if (className == null || className.isEmpty()) return false;
+		// 刻意只用**类名**（不取 Class 对象），因此无需 RETAIN_CLASS_REFERENCE，
+		// 也避免为判断而触发类加载。
+		return className.indexOf("$$Lambda") >= 0
+			|| className.indexOf("$$$Lambda") >= 0
+			|| className.startsWith("jdk.internal.reflect.");
+	}
+
+	/**
+	 * 该帧是否看起来是 UpdateRef 的回调执行点。
+	 *
+	 * <p>只做<b>精确</b>类名匹配：直接调用者必然是 {@code UpdateRef} 自己的方法，
+	 * 不存在内部类的场景，因此不需要内部类前缀匹配 —— 那会连带匹配
+	 * {@code UpdateRef$...}，属于不必要的放宽。</p>
+	 */
 	private static boolean isUpdateRefInvoke(String className, String methodName) {
-		return isUpdateRefClass(className) && methodName.startsWith("run");
+		return UPDATE_REF_CLASS.equals(className) && methodName.startsWith("run");
 	}
 
 	/**
@@ -2020,7 +2018,7 @@ public class LambdaAligner {
 			boolean     supported = false;
 			StackWalker walker    = null;
 			try {
-				walker = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
+				walker = StackWalker.getInstance();
 				supported = true;
 			} catch (Throwable ignored) {}
 			IS_SUPPORTED = supported;

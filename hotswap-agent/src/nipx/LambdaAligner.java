@@ -338,26 +338,37 @@ public class LambdaAligner {
 			// 全部被挡住，最终在阶段二被迫全部拿 fresh name、旧名全幽灵化（即使祖先方法体与结构完全没变）。
 			//
 			// settled 机制将"未落定"与"确定无候选"分开：
-			// 跑完全部趟（Step 1 -> Pass A -> Pass B）后，对仍未配对的方法，若其子节点已全部落定（已配对或已 settled），
-			// 说明该方法已用尽所有候选机会，将其标记为 settled = true。
-			// hasUnmatchedChild 忽略已 settled 的子节点，解除对父节点的阻塞，
-			// 随后整体重跑各趟，使祖先能够保住旧名。
+			// 跑完全部趟（Step 1 -> Pass A -> Pass B）后，基于快照收集本轮应标为 settled 的方法：
+			// 必须一轮只推进一层，不能在遍历中边查边标，否则在同一轮里叶子先被标为 settled 后，
+			// 排在其后的中层会立刻被判断为 !hasUnmatchedChild 并一并标为 settled，
+			// 导致中层尚未在 matchAllPasses 中尝试配对就被提前判定为无归宿。
+			// 被标记的方法仅代表"不再阻塞父"，在后续轮次中若候选解锁仍可正常配对。
+			int settleRound = 0;
 			while (true) {
 				matchAllPasses(ctx);
 
-				boolean newlySettled = false;
+				List<SyntheticInfo> toSettle = new ArrayList<>();
 				for (int idx : groupOrder(newGroups)) {
 					List<SyntheticInfo> g = newGroups.valueAt(idx);
 					if (g == null) continue;
 					for (SyntheticInfo ni : g) {
 						if (!ni.matched && !ni.settled && !ni.ghost && !hasUnmatchedChild(ctx, ni)) {
-							ni.settled = true;
-							newlySettled = true;
-							dbg(() -> "SETTLED " + ni.name + " desc=" + ni.desc);
+							toSettle.add(ni);
 						}
 					}
 				}
-				if (!newlySettled) break;
+
+				if (toSettle.isEmpty()) break;
+
+				for (SyntheticInfo ni : toSettle) {
+					ni.settled = true;
+					dbg(() -> "SETTLED " + ni.name + " desc=" + ni.desc);
+				}
+
+				if (++settleRound >= 64) {
+					HotSwapAgent.warn("[LambdaAligner] settled 循环达到上限(64)仍未收敛 " + ctx.currentClass);
+					break;
+				}
 			}
 
 			// 【阶段一·校验】配对后的引用一致性校验（收口防线）。

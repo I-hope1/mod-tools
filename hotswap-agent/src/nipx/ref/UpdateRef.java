@@ -50,7 +50,16 @@ public class UpdateRef {
 		throw new UnsupportedOperationException();
 	};
 
-	/** 复合清理动作容器，自动去除重复动作 */
+	/**
+	 * 复合清理动作容器，通过 {@link #actions} 维护清理链并在追加时自动基于 {@link Object#equals} 去重。
+	 * <p>
+	 * <b>关于动作去重行为说明：</b><br>
+	 * 由于各类 {@code Wrapped*} 代理包装器（如 {@link WrappedRunnable}）以及具体动作 Record（如 {@code RemoveListenerAction}）
+	 * 的 {@code equals} 均以底层委托实例或属性值为依据，若向同一包装引用或上下文追加多个等价动作（例如针对同一 element 和 wrapper
+	 * 重复构造的清理 Record），合并后将仅保留首个动作。此设计有效防止了重复包装造成的闭包堆积；
+	 * 但若业务代码显式依赖于“两个等价动作均被独立执行”（例如为了统计或日志完整性），需注意等价实例会被去重合并。
+	 * </p>
+	 */
 	public static class CompositeAction implements Runnable {
 		final Seq<Runnable> actions = new Seq<>(2);
 
@@ -937,7 +946,7 @@ public class UpdateRef {
 	private record RemoveUpdateAction(Element element, Runnable target) implements Runnable {
 		@Override
 		public void run() {
-			if (element != null && (ELEMENT_UPDATE_FIELD == null || getElementUpdate(element) == target)) {
+			if (element != null && ELEMENT_UPDATE_FIELD != null && getElementUpdate(element) == target) {
 				element.update(null);
 			}
 		}
@@ -964,7 +973,7 @@ public class UpdateRef {
 	private record RemoveButtonDisabledAction(Element element, Boolp target) implements Runnable {
 		@Override
 		public void run() {
-			if (element instanceof Button b && (BUTTON_DISABLED_PROVIDER_FIELD == null || getButtonDisabledProvider(b) == target)) {
+			if (element instanceof Button b && BUTTON_DISABLED_PROVIDER_FIELD != null && getButtonDisabledProvider(b) == target) {
 				b.setDisabled((Boolp) null);
 			}
 		}
@@ -1368,11 +1377,13 @@ public class UpdateRef {
 	}
 
 	private static final Seq<Runnable> DEFERRED_REMOVALS = new Seq<>();
+	private static volatile boolean hasDeferredRemovals;
 
 	private static void deferRemoval(Runnable r) {
 		if (r == null || r == NOOP || r == REMOVED) return;
 		synchronized (DEFERRED_REMOVALS) {
 			DEFERRED_REMOVALS.add(r);
+			hasDeferredRemovals = true;
 		}
 		tryScheduleDeferredFlush();
 	}
@@ -1380,16 +1391,18 @@ public class UpdateRef {
 	/**
 	 * 若当前处于主循环环境（{@code Core.app != null}）且存在暂存的熔断注销动作，
 	 * 通过 {@link Core.Application#post} 向主线程安全点投递清理任务。
+	 * 采用 double-check 快速短路，在无暂存动作时 100% 零锁竞争与零开销。
 	 */
 	public static void tryScheduleDeferredFlush() {
-		if (Core.app != null) {
-			synchronized (DEFERRED_REMOVALS) {
-				if (DEFERRED_REMOVALS.isEmpty()) return;
-			}
-			try {
-				Core.app.post(UpdateRef::flushDeferredRemovals);
-			} catch (Throwable ignored) {
-			}
+		if (!hasDeferredRemovals || Core.app == null) return;
+		synchronized (DEFERRED_REMOVALS) {
+			if (!hasDeferredRemovals || DEFERRED_REMOVALS.isEmpty()) return;
+			hasDeferredRemovals = false;
+		}
+		try {
+			Core.app.post(UpdateRef::flushDeferredRemovals);
+		} catch (Throwable ignored) {
+			hasDeferredRemovals = true;
 		}
 	}
 
@@ -1400,6 +1413,7 @@ public class UpdateRef {
 	public static void flushDeferredRemovals() {
 		Seq<Runnable> toRun;
 		synchronized (DEFERRED_REMOVALS) {
+			hasDeferredRemovals = false;
 			if (DEFERRED_REMOVALS.isEmpty()) return;
 			toRun = new Seq<>(DEFERRED_REMOVALS);
 			DEFERRED_REMOVALS.clear();
@@ -1593,6 +1607,19 @@ public class UpdateRef {
 		map.get(type, () -> new Seq<>(Cons.class)).add(wrapper);
 	}
 
+	private static Object unwrapTargetKey(Object obj) {
+		if (obj instanceof EventCons<?> ec) return ec.getKey();
+		if (obj instanceof EventRunnableCons erc) return erc.getKey();
+		if (obj instanceof WrappedRef wr) return wr.getOriginal();
+		return obj;
+	}
+
+	private static boolean matchListener(Cons<?> item, Object listener, Object targetKey) {
+		if (item == listener || item == targetKey) return true;
+		Object itemKey = unwrapTargetKey(item);
+		return itemKey == targetKey || (itemKey != null && Objects.equals(itemKey, targetKey));
+	}
+
 	/**
 	 * 代理 {@link Events#remove(Class, Cons)}，支持解包匹配并注销已被包装的事件监听器。
 	 * @param type     事件类型 Class
@@ -1609,29 +1636,9 @@ public class UpdateRef {
 		Seq<Cons<?>> seq = map.get(type);
 		if (seq == null) return false;
 
-		Object targetKey = listener instanceof EventCons<?> ec ? ec.getKey() :
-		                   (listener instanceof EventRunnableCons erc ? erc.getKey() :
-		                   (listener instanceof WrappedRef wr ? wr.getOriginal() : listener));
-
+		Object targetKey = unwrapTargetKey(listener);
 		for (int i = 0; i < seq.size; i++) {
-			Cons<?> item = seq.items[i];
-			if (item == listener || item == targetKey) {
-				seq.remove(i);
-				return true;
-			}
-			if (item instanceof EventCons<?> ec && (ec.getKey() == targetKey || Objects.equals(ec.getKey(), targetKey))) {
-				seq.remove(i);
-				return true;
-			}
-			if (item instanceof EventRunnableCons erc && (erc.getKey() == targetKey || Objects.equals(erc.getKey(), targetKey))) {
-				seq.remove(i);
-				return true;
-			}
-			if (item instanceof WrappedRef wr && (wr.getOriginal() == targetKey || Objects.equals(wr.getOriginal(), targetKey))) {
-				seq.remove(i);
-				return true;
-			}
-			if (Objects.equals(item, targetKey)) {
+			if (matchListener(seq.items[i], listener, targetKey)) {
 				seq.remove(i);
 				return true;
 			}
@@ -1653,28 +1660,9 @@ public class UpdateRef {
 		Seq<Cons<?>> seq = map.get(type);
 		if (seq == null) return false;
 
-		Object targetKey = listener instanceof EventRunnableCons erc ? erc.getKey() :
-		                   (listener instanceof WrappedRef wr ? wr.getOriginal() : listener);
-
+		Object targetKey = unwrapTargetKey(listener);
 		for (int i = 0; i < seq.size; i++) {
-			Cons<?> item = seq.items[i];
-			if (item == listener || item == targetKey) {
-				seq.remove(i);
-				return true;
-			}
-			if (item instanceof EventRunnableCons erc && (erc.getKey() == targetKey || Objects.equals(erc.getKey(), targetKey))) {
-				seq.remove(i);
-				return true;
-			}
-			if (item instanceof EventCons<?> ec && (ec.getKey() == targetKey || Objects.equals(ec.getKey(), targetKey))) {
-				seq.remove(i);
-				return true;
-			}
-			if (item instanceof WrappedRef wr && (wr.getOriginal() == targetKey || Objects.equals(wr.getOriginal(), targetKey))) {
-				seq.remove(i);
-				return true;
-			}
-			if (Objects.equals(item, targetKey)) {
+			if (matchListener(seq.items[i], listener, targetKey)) {
 				seq.remove(i);
 				return true;
 			}

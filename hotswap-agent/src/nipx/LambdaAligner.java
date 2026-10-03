@@ -966,6 +966,9 @@ public class LambdaAligner {
 				+ " oldCandidates=" + oldGroup.stream()
 					.map(o -> o.name + ":d" + o.upDepth + ":" + o.shape
 						+ (o.matched ? ":M" : "") + (o.ghost ? ":G" : "")).toList());
+			if (!ni.name.equals(bestOld.name) && ni.hash != bestOld.hash) {
+				warnPositionalMismatch(ctx.currentClass, bestOld, ni.name, ni.desc);
+			}
 			pair(ctx, ni, bestOld, "PASS_A");
 			ctx.passAPairs++;
 			progressed = true;
@@ -1042,13 +1045,7 @@ public class LambdaAligner {
 			if (!ni.name.equals(bestOld.name)) {
 				warnPositionalMismatch(ctx.currentClass, bestOld, ni.name, ni.desc);
 			}
-			recordRename(ctx, ni, bestOld.name);
-			// 与 pair() 保持一致：登记配对对象。否则 align 末尾的引用一致性校验
-			// 看不到 Step 2 的配对（它按 matchedWith 遍历），校验会漏掉这一批。
-			ni.matchedWith = bestOld;
-			ni.matched = true;
-			bestOld.matched = true;
-			ctx.usedOldNames.add(bestOld.name);
+			pair(ctx, ni, bestOld, "PASS_B");
 			ctx.passBPairs++;
 			progressed = true;
 		}

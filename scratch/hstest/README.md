@@ -1055,3 +1055,38 @@ for j in $CP; do unzip -l "$j" | grep -q 'asm/tree/ClassNode' && echo "$j"; done
 此前所有通过数、失败排列，**一律标注"javac 25，class file major 69"**。
 构建用的是 JDK 21，但**用户的编译器不代表是 JDK 21** —— 若流水线是 JDK 8/17，
 两个夹具都不代表他们。这个问题只能靠"硬编码字节码夹具"解决。
+
+
+## 进展：套件已部分接入构建（按 review 改用 source set，不再手写 classpath）
+
+### 已做并实测
+
+| 项 | 证据 |
+|---|---|
+| **手写 classpath 的问题消失** | 新增 `hstest` source set（只放测试入口）+ `project(":hotswap-agent")` 传递 ASM ⇒ `:hstestClasses` **BUILD SUCCESSFUL**，不再列 jar、不受宿主 `CLASSPATH` 泄漏影响 |
+| **toolchain 固定 21** | `javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }`，不依赖 `PATH` 上是哪个 javac |
+| **"断言失败 ⇒ 构建变红"实测成立** | `hstestCanary`（不依赖任何源文件的故意失败任务）：`> Task :hstestCanary FAILED` / `BUILD FAILED` |
+| **区分了"编译失败"与"运行失败"** | `hstestSemAssert` 失败在**运行期**（缺夹具参数），不是编译期 —— 此前那次红是编译失败，只证明了一半 |
+
+`hstestCanary` 保留在 `build.gradle` 里作为可复用的金丝雀（故意失败，预期红）。
+
+### 未完成
+
+1. **夹具编译尚未接入 Gradle**：各版本夹具**同包同名**（`Time6.java`、`test23/Ablate2.java`
+   各有多个版本），不能混编进一个 source set。目前仍靠 `run.sh` 按版本编到各自目录。
+   `run.sh` 在直接 `bash` 下曾跑通（13 项 OK），在 gradle `Exec` 下失败，根因未定
+   （候选：宿主 `CLASSPATH` 泄漏、`_libs/asm-9.5.jar` 遮蔽、两种入口的 bash 不是同一个）。
+   **按 review 建议，不再修 `run.sh`**，改为把夹具做成**硬编码字节码 / ASM 直接生成**，
+   这一步同时消掉 JDK 漂移。
+2. **数量下限金丝雀**（防"套件被改成什么都不跑、构建照样绿"）尚未生效。
+3. `hstest` 聚合任务**尚未挂到 `check`**，原因见上（夹具接线中）。
+
+### 记账（按 review 要求写明）
+
+**目前没有任何一个套件结果受构建约束。** 所有通过数、失败排列，都只是
+"**javac 25、class file major 69、手动运行**"下的观察。
+
+以下两条**保持假设状态**，平移实验排在套件跑通之后：
+
+- "叶子归属对组内顺序敏感" —— 仅在 javac 25 上观察到 4/8 失败；
+- "JDK 21 下 8/8 通过是同名巧合掩盖" —— 未追踪、未验证。

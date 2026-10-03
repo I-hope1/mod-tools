@@ -518,18 +518,58 @@ class Reflect {
 // ---------------------------------------------------------------
 // 对齐器验证套件（scratch/hstest）接入构建。
 //
-// 背景：这些断言原先完全在构建之外，`BUILD SUCCESSFUL` 对它们没有任何约束
-// （断言组 7 曾长期是红的而构建一直是绿的）。这里把它们接成构建的一部分：
-// 套件脚本任何一步失败 -> 本任务失败 -> 构建变红。
+// 背景：这些断言原先完全在构建之外（scratch/hstest 不在任何 source set 里），
+// `BUILD SUCCESSFUL` 对它们没有任何约束 —— 断言组 7 曾长期是红的而构建一直绿。
 //
-// 用法：./gradlew hstest
+// 设计（按 review 建议，不再用 shell 手写 classpath）：
+//   • hstest source set 只放**测试入口**（同名 fixture 分属不同版本，不能混编）；
+//   • ASM 等依赖由 project(":hotswap-agent") 传递，不列 jar；
+//   • toolchain 固定为 21，不依赖 PATH 上恰好是什么 javac；
+//   • 夹具仍由脚本按版本编到各自目录（它们同包同名），之后应改为硬编码字节码。
 // ---------------------------------------------------------------
-task hstest(type: Exec) {
+sourceSets {
+	hstest {
+		java.srcDirs = ["scratch/hstest/src"]
+		compileClasspath += sourceSets.main.output + configurations.compileClasspath
+	}
+}
+
+dependencies {
+	hstestImplementation project(":hotswap-agent")
+	hstestImplementation project(":jni-agent")
+}
+
+// 每个入口一个任务；断言失败 => 非零退出 => 构建变红。
+def hstestEntry = { String name, String cls, List<String> fixtureArgs ->
+	tasks.register("hstest" + name, JavaExec) {
+		group = "verification"
+		description = "运行 " + cls
+		dependsOn tasks.named("hstestClasses")
+		classpath = sourceSets.hstest.runtimeClasspath
+		mainClass = cls
+		javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+		// 夹具目录由 run.sh 按版本编译；此处只跑入口
+		args = fixtureArgs
+	}
+}
+
+hstestEntry("SemAssert", "SemAssert", [])
+
+// 金丝雀：**不依赖任何源文件**的故意失败任务，用来证明"断言失败会变红"。
+// 已实测：> Task :hstestCanary FAILED / BUILD FAILED。
+tasks.register("hstestCanary", JavaExec) {
 	group = "verification"
-	description = "运行 scratch/hstest 的对齐器验证套件（失败则构建失败）"
-	workingDir = file("$rootDir/scratch/hstest")
-	commandLine "bash", "run.sh"
-	// 便于定位：把套件输出直接透到构建日志
-	standardOutput = System.out
-	errorOutput = System.err
+	description = "金丝雀：故意失败，验证构建对断言失败有约束（预期红）"
+	classpath = sourceSets.hstest.runtimeClasspath
+	mainClass = "java.util.logging.ConsoleHandler"   // 无 main，必然非零退出
+	ignoreExitValue = false
+}
+
+// 汇总入口。**尚未挂在 check 上**：夹具编译还没接进来（夹具各版本同包同名，
+// 不能混编），因此 hstestSemAssert 目前缺参数会在运行期失败。等夹具改成
+// 硬编码字节码、参数可确定后再 dependsOn 到 check。
+tasks.register("hstest") {
+	group = "verification"
+	description = "运行对齐器验证套件（夹具接线中，暂为红）"
+	dependsOn tasks.named("hstestSemAssert")
 }

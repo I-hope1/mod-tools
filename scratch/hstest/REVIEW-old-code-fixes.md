@@ -78,3 +78,53 @@ private static SyntheticInfo infoByName(MatchContext ctx, boolean isOld, String 
 
 形状定稿环里**每轮每个方法都 `new ArrayList<>(info.children.size())`**（64 轮 × N 次分配）。
 定稿后可以复用缓冲，或先判 `ready` 再建列表。未验证收益，未改。
+
+---
+
+## ① 热循环栈探测 → 按 location 缓存"否"（已做，先测量后改）
+
+### 先测量（`ProbeBench`）
+
+**不先测就不改** —— 按既定标准，没有可感知的问题就不加缓存。实测：
+
+| 项 | 耗时 |
+|---|---|
+| 空调用基线 | 7.3 ns/次 |
+| `isCalledByUpdateRef()`（每次真探测） | **1095.7 ns/次** |
+| `onOrphanInvoked`（**加缓存前**） | 约 **1350 ns/次** |
+
+折算：若幽灵 lambda 处在每秒 10 万次调用的高频循环中，**约 97ms/秒 ≈ 9.7% CPU**。
+**结论：可感知，值得加缓存。**
+
+### 改动
+
+```java
+// 只缓存"否"：判定"是"会立即抛 NoSuchMethodError 驱动熔断，那次调用不会返回，无需缓存
+if (!NOT_FROM_UPDATE_REF.contains(location)) {
+    if (isCalledByUpdateRef()) throw new NoSuchMethodError(...);
+    NOT_FROM_UPDATE_REF.add(location);
+}
+```
+
+- **与 `LOGGED_ORPHANS` 分开**：后者语义是"日志已打印过"，混用会把日志去重与探测短路绑在一起；
+- 每个 `location` 仍在**首次**触达时完整探测一次，**正确性不变**；
+- 在 `clearLoggedWarnings()` 里一并清理。
+
+### 改后实测
+
+| 项 | 加缓存前 | 加缓存后 |
+|---|---|---|
+| `onOrphanInvoked` | ~1350 ns/次 | **88–149 ns/次** |
+| 每秒 10 万次占 CPU | ~9.7% | **~0.9%** |
+
+**约 9–15× 改善。** 剩余开销主要是 `location` 字符串拼接与 `ConcurrentHashMap` 查询。
+
+### 验证
+
+`./gradlew check` → `HSTEST SUITE: ALL PASSED`（行为未变）。
+
+### 失误记录
+
+基准最初设成 5,000,000 次 × 5 轮 × 3 项，**跑了几分钟没结束**，是我把探测成本（~1µs）
+低估了两个数量级。改成 1,000 次 × 2 轮后秒级完成。**测量工具本身也要先估量级。**
+

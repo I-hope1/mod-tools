@@ -1108,12 +1108,12 @@ public class UpdateRef {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
 			if (element != null) {
-				wr.getUpdateRef().addOnRemove(new RemoveValidatorAction(element, (TextFieldValidator) original));
+				wr.getUpdateRef().addOnRemove(new RemoveValidatorAction(element, original));
 			}
 			return original;
 		}
 		UpdateRef ref = new UpdateRef(original, null);
-		WrappedValidator wrapper = new WrappedValidator(ref, text -> element instanceof TextField tf && tf.isValid());
+		WrappedValidator wrapper = new WrappedValidator(ref, text -> true);
 		ref.addOnRemove(new RemoveValidatorAction(element, wrapper));
 		return wrapper;
 	}

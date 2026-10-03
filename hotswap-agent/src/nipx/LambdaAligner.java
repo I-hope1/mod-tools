@@ -221,6 +221,7 @@ public class LambdaAligner {
 					for (int k = 0; k < oldSize; k++) {
 						SyntheticInfo oi = oldGroup.get(k);
 						if (!oi.matched
+							&& !oi.ghost
 							&& ni.hash == oi.hash
 							&& isSignatureCompatible(ctx.currentClass, oi, ni)
 							&& oi.name.equals(ni.name)) {
@@ -240,6 +241,7 @@ public class LambdaAligner {
 					for (int k = 0; k < oldSize; k++) {
 						SyntheticInfo oi = oldGroup.get(k);
 						if (!oi.matched
+							&& !oi.ghost
 							&& ni.hash == oi.hash
 							&& isSignatureCompatible(ctx.currentClass, oi, ni)) {
 							recordRename(ctx, ni, oi.name);
@@ -281,7 +283,7 @@ public class LambdaAligner {
 
 					// 第一优先级：组内同名且签名逻辑等价
 					for (SyntheticInfo oi : oldGroup) {
-						if (oi.matched) continue;
+						if (oi.matched || oi.ghost) continue;
 						if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
 						if (oi.name.equals(ni.name)) { bestOld = oi; break; }
 					}
@@ -289,7 +291,7 @@ public class LambdaAligner {
 					// 第二优先级：第一个签名逻辑等价的未匹配旧方法
 					if (bestOld == null) {
 						for (SyntheticInfo oi : oldGroup) {
-							if (oi.matched) continue;
+							if (oi.matched || oi.ghost) continue;
 							if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
 							bestOld = oi;
 							break;
@@ -568,13 +570,13 @@ public class LambdaAligner {
 
 		if (preferSameName) {
 			for (SyntheticInfo oi : group) {
-				if (oi.matched || oi.hash != ni.hash) continue;
+				if (oi.matched || oi.ghost || oi.hash != ni.hash) continue;
 				if (!isSignatureCompatible(owner, oi, ni)) continue;
 				if (oi.name.equals(ni.name)) return oi;
 			}
 		}
 		for (SyntheticInfo oi : group) {
-			if (oi.matched || oi.hash != ni.hash) continue;
+			if (oi.matched || oi.ghost || oi.hash != ni.hash) continue;
 			if (!isSignatureCompatible(owner, oi, ni)) continue;
 			return oi;
 		}
@@ -951,6 +953,10 @@ public class LambdaAligner {
 			boolean renameable  = !mn.name.startsWith("access$");
 			SyntheticInfo info  = new SyntheticInfo(
 				mn.name, mn.desc, mn.access, fp.getHash(), logicalName, renameable);
+			// 幽灵空壳（上一轮为兜住老 CallSite 而注入的空方法）标记为"不参与匹配"：
+			// 它必须留在 oldGroups 里供孤儿计算复现，但名字已经是"死名字"，
+			// 不能再被当成某个新 lambda 的目标 —— 否则会把它挤到别的名字上去。
+			info.ghost = isGhostMethod(mn);
 			groupByLogic(isOld ? ctx.oldGroups : ctx.newGroups, info, cn.name);
 		}
 
@@ -1222,6 +1228,36 @@ public class LambdaAligner {
 	//region 辅助方法
 
 	/**
+	 * 识别"幽灵空壳"方法：上一轮为兜住被删除 lambda 的老 {@code CallSite} 而注入的空方法。
+	 *
+	 * <p>它调用 {@link #onOrphanInvoked} 来完成策略分发，所以只凭这一个特征就能认出，
+	 * 不需要自定义 attribute。识别出的方法会：
+	 * <ul>
+	 *   <li><b>保留</b>在 {@link MatchContext#oldGroups} 里 —— 孤儿计算要靠它继续复现注入，
+	 *       否则下一轮它就从类里消失了，老 {@code CallSite} 会变成 {@link NoSuchMethodError} 之外的
+	 *       更糟形态；</li>
+	 *   <li><b>不参与任何匹配</b>（见 {@link SyntheticInfo#ghost}）—— 它的名字是死名字，
+	 *       只能被兜住，不能被某个新 lambda "认领"，否则会把本该活着的 lambda 挤到别的名字上。</li>
+	 * </ul>
+	 *
+	 * <p>实测动机（{@code scratch/hstest/del/}）：V1 两个 lambda、V2 删掉第一个（留下幽灵
+	 * {@code $0}）、V3 改剩下那个的方法体。修复前 V3 会对齐成
+	 * {@code $0=[新体]}、{@code $1=幽灵} —— 活着的 lambda 丢了它自己的名字 {@code $1}，
+	 * 持有 {@code $1} 的调用点转而执行新代码。幽灵退出匹配后，它会稳定保持在
+	 * {@code $1} 这个名字下继续当空壳。</p>
+	 */
+	private static boolean isGhostMethod(MethodNode mn) {
+		for (AbstractInsnNode n : mn.instructions) {
+			if (n instanceof MethodInsnNode mi
+				&& mi.owner.equals(Type.getInternalName(LambdaAligner.class))
+				&& mi.name.equals("onOrphanInvoked")) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * 判断两个合成方法的签名是否<b>逻辑等价</b>。
 	 *
 	 * <p>背景：同一段 lambda 体，在不同编译/变换轮次里可能以两种形态出现——</p>
@@ -1360,6 +1396,12 @@ public class LambdaAligner {
 		boolean matched;
 		/** 是否参与重命名（{@code access$} 系列为 false）。 */
 		boolean renameable;
+		/**
+		 * 是否"只用于参与孤儿计算、不参与任何匹配"。
+		 * <p>用于上一轮注入的<b>幽灵空壳</b>：它的名字是"死名字"，只能用来兜住老
+		 * {@code CallSite}，绝不该再被当成某个新 lambda 的匹配目标。</p>
+		 */
+		boolean ghost;
 
 		SyntheticInfo(String name, String desc, int access, long hash, String logicalName, boolean renameable) {
 			this.name        = name;
@@ -1369,6 +1411,7 @@ public class LambdaAligner {
 			this.logicalName = logicalName;
 			this.renameable  = renameable;
 			this.matched     = false;
+			this.ghost       = false;
 		}
 
 		boolean isStatic() {

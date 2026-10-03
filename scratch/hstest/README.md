@@ -277,3 +277,35 @@ MSYS2_ARG_CONV_EXCL='*' java -cp "outT;out1;$CP" IdemDebug out1/test/Case.class
   老 `CallSite` 稳定命中。
 - 运行期验证：把对齐后的字节码写盘、`URLClassLoader` 加载 + 反射调用 `run()` / `r1()`，
   确认 `COMPUTE_FRAMES` 产物可验证、可执行（无 `VerifyError`）。
+
+## 幽灵空壳必须退出匹配（`del/`、`DelTest`）
+
+链式场景（review 第 3 条的复现）：
+
+```
+V1: build(){ run(()->a()); run(()->b()); }   -> $0=[a]  $1=[b]
+V2: build(){ run(()->b()); }                 -> 删掉第一个，b 从 $1 变 $0
+V3: build(){ run(()->b2()); }                -> 改 b 的方法体
+```
+
+V2 对齐后：`$0`=幽灵（兜住被删的 a）、`$1`=[b]。此时若幽灵仍参与匹配，V3 会变成：
+
+```
+修复前 V3 aligned:  $0=[b2]   $1=幽灵    build()->[$0]
+                    ^^ 活着的 lambda 丢了自己的名字 $1，持有 $1 的调用点去跑 b2
+修复后 V3 aligned:  $0=幽灵   $1=[b2]    build()->[$1]
+                    ^^ 名字保住了，幽灵稳定留在 $0 继续兜老调用点
+```
+
+`LambdaAligner.scan` 通过"方法体里调用了 `onOrphanInvoked`"识别幽灵，标记
+`SyntheticInfo.ghost`；幽灵**保留**在 `oldGroups` 里供孤儿计算复现注入，但**不参与**
+Step 1a/1b、Step 2 与 `firstFingerprintMatch` 的任何候选选择。
+
+```bash
+mkdir -p dout1 dout2 dout3 doutT
+javac -d dout1 del/v1/test10/DelCase.java
+javac -d dout2 del/v2/test10/DelCase.java
+javac -d dout3 del/v3/test10/DelCase.java
+MSYS2_ARG_CONV_EXCL='*' javac -nowarn -cp "$CP" -d doutT src/DelTest.java
+MSYS2_ARG_CONV_EXCL='*' java -cp "doutT;dout1;dout2;dout3;$CP" DelTest dout1/test10/DelCase.class dout2/test10/DelCase.class dout3/test10/DelCase.class
+```

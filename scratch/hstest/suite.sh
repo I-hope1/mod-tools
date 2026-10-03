@@ -96,6 +96,7 @@ echo "--- 套件入口 ---"
 step "XGroupTest (JDK8 夹具)"  run XGroupTest "fx/x8v1/test25/XGroup.class" "fx/x8v2/test25/XGroup.class"
 step "XGroupTest (JDK21 夹具)" run XGroupTest "fx/x21v1/test25/XGroup.class" "fx/x21v2/test25/XGroup.class"
 step "NameIndexTest (三 JDK + 正反序)" run NameIndexTest
+step "FixtureAKnownTest (三 JDK + 正反序)" run FixtureAKnownTest
 
 # ---------- 数量基线 ----------
 echo "--- 数量基线 ---"

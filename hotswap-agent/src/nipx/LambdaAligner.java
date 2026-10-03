@@ -80,6 +80,34 @@ public class LambdaAligner {
 	public static volatile boolean TEST_REVERSE_GROUP_ORDER = false;
 
 	/**
+	 * 最近一次 align 的配对来源统计（由证据驱动的指纹配对 vs A/B 趟降级配对）。
+	 *
+	 * <p><b>警告：全进程共享静态变量，仅供单线程测试断言使用，生产业务逻辑严禁引用。</b></p>
+	 */
+	public static final class AlignmentStats {
+		/** 通过同组 Step 1a 或跨组指纹证据完成配对的数量。 */
+		public final int step1Pairs;
+		/** 通过 Step 2 A 趟（同上行深度 + 同 shape）完成配对的数量。 */
+		public final int passAPairs;
+		/** 通过 Step 2 B 趟（放宽条件兜底）完成配对的数量。 */
+		public final int passBPairs;
+
+		public AlignmentStats(int step1Pairs, int passAPairs, int passBPairs) {
+			this.step1Pairs = step1Pairs;
+			this.passAPairs = passAPairs;
+			this.passBPairs = passBPairs;
+		}
+
+		@Override
+		public String toString() {
+			return "Stats{step1=" + step1Pairs + ", passA=" + passAPairs + ", passB=" + passBPairs + "}";
+		}
+	}
+
+	/** 仅供单线程测试断言读取的最近一次对齐统计。测试调用前请先置 null。 */
+	public static volatile AlignmentStats LAST_STATS;
+
+	/**
 	 * 诊断开关：打开后打印配对决策的细节（谁在哪个阶段拿了哪个旧名字）。
 	 *
 	 * <p><b>为什么做成常设开关</b>：排查本对齐器的顺序问题时，临时插
@@ -242,6 +270,10 @@ public class LambdaAligner {
 		final Map<String, SyntheticInfo> oldNameIndex = new HashMap<>(64);
 		final Map<String, SyntheticInfo> newNameIndex = new HashMap<>(64);
 
+		int step1Pairs;
+		int passAPairs;
+		int passBPairs;
+
 		/**
 		 * 重置上下文状态，为下一次匹配做准备。
 		 * <p>由 {@link #align} 在入口与 finally 中各调用一次。</p>
@@ -261,6 +293,9 @@ public class LambdaAligner {
 			childIndex.clear();
 			oldNameIndex.clear();
 			newNameIndex.clear();
+			step1Pairs = 0;
+			passAPairs = 0;
+			passBPairs = 0;
 		}
 	}
 	//endregion
@@ -376,6 +411,13 @@ public class LambdaAligner {
 			// 见 scan 末尾对子树形状的定点迭代。本校验防的是另一类失败（子归属错位）。
 			verifyRefConsistency(ctx);
 
+			// 【阶段二前】诊断摘要：只在 DEBUG 下，且每个未配对方法**只打一行**。
+			//
+			// 为什么不直接在 hasUnmatchedChild 里 dbg：它在 Step 1a、跨组、A 趟、B 趟、
+			// 外层 do-while 里都会被调用，逐次打印会把真正的信号淹掉。这里在**全部趟收敛后**
+			// 汇总一次，于是"中层被叶子挡住 / 叶子本身无候选"是两行直接证据。
+			dbgBlockedSummary(ctx);
+
 			// 【阶段二】未匹配的新方法统一处理
 			int freshId = 0;
 			for (int idx : groupOrder(newGroups)) {
@@ -424,6 +466,7 @@ public class LambdaAligner {
 			// 从 alignedCn 直接收集 presentKeys，避免 resurrectOrphanedLambdas 再读一遍
 			Set<String> presentKeys = collectMethodKeys(alignedCn);
 
+			LAST_STATS = new AlignmentStats(ctx.step1Pairs, ctx.passAPairs, ctx.passBPairs);
 			// 传入 oldCn（已解析过一次）—— 避免 resurrectOrphanedLambdas 二次读 oldBytes
 			return resurrectOrphanedLambdas(oldCn, alignedBytes, presentKeys, ctx);
 		} catch (Exception e) {
@@ -663,6 +706,70 @@ public class LambdaAligner {
 	}
 
 	/**
+	 * DEBUG 诊断摘要：在全部趟收敛后、阶段二之前，对每个**仍未配对的可改名新方法**打印一行，
+	 * 区分两种完全不同的处境。
+	 *
+	 * <ul>
+	 *   <li>{@code BLOCKED parent=X by child=Y} —— 子未落定，父被 {@link #hasUnmatchedChild}
+	 *       挡住。若该子最终无候选，父会在所有趟里一直被挡住，与子一起走幽灵。</li>
+	 *   <li>{@code NO-CANDIDATE X} —— 没有被挡，是自己找不到合适旧方法。</li>
+	 * </ul>
+	 *
+	 * <p><b>候选数是近似计数</b>：只按 {@link #isSignatureCompatible} + {@link #sameNestingLevel}
+	 * 计，<b>不调用 {@code acceptCandidate}</b> —— 后者要求 {@code sameSemantics}，而后代被编辑时
+	 * 祖先的语义指纹必然变化，用它计数会把"结构上可用"的候选误算成 0，反而掩盖真相。</p>
+	 */
+	private static void dbgBlockedSummary(MatchContext ctx) {
+		if (!DEBUG) return;
+		for (int idx : groupOrder(ctx.newGroups)) {
+			List<SyntheticInfo> g = ctx.newGroups.valueAt(idx);
+			if (g == null) continue;
+			for (SyntheticInfo ni : g) {
+				if (ni.matched || !ni.renameable || ni.ghost) continue;
+
+				String blockedBy = null;
+				for (String c : ni.children) {
+					SyntheticInfo ci = ctx.childIndex.get(c);
+					if (ci != null && !ci.matched) { blockedBy = c; break; }
+				}
+				long cand = countCompatCandidates(ctx, ni);
+				long leafCand = blockedBy != null ? countCompatCandidates(ctx,
+					ctx.childIndex.get(blockedBy)) : -1;
+
+				if (blockedBy != null) {
+					String b = blockedBy;
+					long lc = leafCand;
+					dbg(() -> "BLOCKED parent=" + ni.name + " by child=" + b
+						+ "(childMatched=false, 旧侧候选数=" + lc + ")"
+						+ " parentHash=" + ni.hash + " parentSem=" + ni.semanticHash
+						+ " parentCand=" + cand);
+				} else {
+					dbg(() -> "NO-CANDIDATE " + ni.name
+						+ " hash=" + ni.hash + " sem=" + ni.semanticHash
+						+ " 旧侧候选数=" + cand);
+				}
+			}
+		}
+	}
+
+	/** 旧侧与 {@code ni} 结构上兼容（签名 + 层级）的未匹配候选数，仅供诊断。 */
+	private static long countCompatCandidates(MatchContext ctx, SyntheticInfo ni) {
+		if (ni == null) return -1;
+		long n = 0;
+		for (int idx : groupOrder(ctx.oldGroups)) {
+			List<SyntheticInfo> g = ctx.oldGroups.valueAt(idx);
+			if (g == null) continue;
+			for (SyntheticInfo oi : g) {
+				if (oi.matched || oi.ghost || !oi.renameable) continue;
+				if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
+				if (!sameNestingLevel(ni, oi)) continue;
+				n++;
+			}
+		}
+		return n;
+	}
+
+	/**
 	 * {@code ni} 体内**已配对**的子 lambda，其归属是否与 {@code oi} 引用的旧名字一致。
 	 *
 	 * <p>只比较**已配对**的子：未配对的子还没有最终名字，用它的编译名去比旧名是无效推断
@@ -732,7 +839,8 @@ public class LambdaAligner {
 			for (SyntheticInfo oi : oldGroup) {
 				if (!acceptCandidate(ctx, ni, oi)) continue;
 				if (!oi.name.equals(ni.name)) continue;
-				pair(ctx, ni, oi);
+				pair(ctx, ni, oi, "STEP1");
+				ctx.step1Pairs++;
 				progressed = true;
 				break;
 			}
@@ -747,7 +855,8 @@ public class LambdaAligner {
 			if (hasUnmatchedChild(ctx, ni)) continue;
 			for (SyntheticInfo oi : oldGroup) {
 				if (!acceptCandidate(ctx, ni, oi)) continue;
-				pair(ctx, ni, oi);
+				pair(ctx, ni, oi, "STEP1");
+				ctx.step1Pairs++;
 				progressed = true;
 				break;
 			}
@@ -780,8 +889,8 @@ public class LambdaAligner {
 	}
 
 	/** 配对并登记：把 {@code ni} 改名为 {@code oi} 的名字。 */
-	private static void pair(MatchContext ctx, SyntheticInfo ni, SyntheticInfo oi) {
-		dbg(() -> "PAIR " + ni.name + "(shape=" + ni.shape + " depth=" + ni.upDepth + ")"
+	private static void pair(MatchContext ctx, SyntheticInfo ni, SyntheticInfo oi, String pass) {
+		dbg(() -> "[" + pass + "] PAIR " + ni.name + "(shape=" + ni.shape + " depth=" + ni.upDepth + ")"
 			+ " -> " + oi.name + "(shape=" + oi.shape + " depth=" + oi.upDepth + ")");
 		recordRename(ctx, ni, oi.name);
 		ni.matchedWith = oi;
@@ -829,7 +938,8 @@ public class LambdaAligner {
 				+ " oldCandidates=" + oldGroup.stream()
 					.map(o -> o.name + ":d" + o.upDepth + ":" + o.shape
 						+ (o.matched ? ":M" : "") + (o.ghost ? ":G" : "")).toList());
-			pair(ctx, ni, bestOld);
+			pair(ctx, ni, bestOld, "PASS_A");
+			ctx.passAPairs++;
 			progressed = true;
 		}
 		return progressed;
@@ -911,6 +1021,7 @@ public class LambdaAligner {
 			ni.matched = true;
 			bestOld.matched = true;
 			ctx.usedOldNames.add(bestOld.name);
+			ctx.passBPairs++;
 			progressed = true;
 		}
 		return progressed;
@@ -992,11 +1103,8 @@ public class LambdaAligner {
 				}
 				if (bestOld == null) continue;
 
-				recordRename(ctx, ni, bestOld.name);
-				ni.matchedWith = bestOld;
-				ni.matched = true;
-				bestOld.matched = true;
-				ctx.usedOldNames.add(bestOld.name);
+				pair(ctx, ni, bestOld, "STEP1_CROSS");
+				ctx.step1Pairs++;
 				progressed = true;
 			}
 		}
@@ -1440,10 +1548,10 @@ public class LambdaAligner {
 			// 不能再被当成某个新 lambda 的目标 —— 否则会把它挤到别的名字上去。
 			info.ghost = isGhostMethod(mn);
 			info.children = collectChildLambdaNames(mn, cn.name);
-			if (!isOld) ctx.childIndex.put(mn.name, info);
+			if (!isOld) putNameIndex(ctx, ctx.childIndex, info);
 			// 完整名字索引（两侧各一份），供 infoByName 做 O(1) 查找。
 			// 这里就地填充即可：scan 的循环体已经走完该名字对应的 SyntheticInfo 构建。
-			(isOld ? ctx.oldNameIndex : ctx.newNameIndex).put(mn.name, info);
+			putNameIndex(ctx, isOld ? ctx.oldNameIndex : ctx.newNameIndex, info);
 			groupByLogic(isOld ? ctx.oldGroups : ctx.newGroups, info, cn.name);
 		}
 
@@ -1638,6 +1746,33 @@ public class LambdaAligner {
 				HotSwapAgent.warn("[LambdaAligner] 递归语义指纹在 " + className
 					+ " 上 64 轮未收敛，沿用当前值继续（结果可能不够精确，但不影响可用性）");
 			}
+		}
+	}
+
+	/**
+	 * 向名字索引中登记 SyntheticInfo。
+	 *
+	 * <p><b>活方法优先于幽灵</b>：同名不同描述符的幽灵与活方法共存时（如上一轮对齐注入的幽灵），
+	 * 活方法必须优先占住名字索引，不能被后追加的幽灵覆盖；若幽灵先被扫描到，后来的活方法也必须覆盖它。
+	 * 这保证 {@link #infoByName} 与子引用解析始终拿到真正的活方法，避免语义指纹计算漏折入子节点。</p>
+	 *
+	 * <p>两个都是活方法的同名不同描述符：仍后写覆盖，并在 DEBUG 下留痕。</p>
+	 */
+	private static void putNameIndex(MatchContext ctx, Map<String, SyntheticInfo> index, SyntheticInfo info) {
+		SyntheticInfo prev = index.get(info.name);
+		if (prev == null) {
+			index.put(info.name, info);
+		} else if (prev.ghost && !info.ghost) {
+			// 已有幽灵，后遇到活方法：活方法覆盖幽灵
+			index.put(info.name, info);
+		} else if (!prev.ghost && info.ghost) {
+			// 已有活方法，后遇到幽灵：保留活方法，不被幽灵覆盖
+		} else {
+			if (!prev.ghost && !info.ghost && !prev.desc.equals(info.desc)) {
+				dbg(() -> "COLLISION: same-name live methods with different desc: " + info.name
+					+ " " + prev.desc + " vs " + info.desc);
+			}
+			index.put(info.name, info);
 		}
 	}
 

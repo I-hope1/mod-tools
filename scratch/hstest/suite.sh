@@ -76,6 +76,15 @@ for v in 8 21; do
       || { echo "   FAIL 编译 x${v}${ver}"; FAILED=1; }
   done
 done
+for v in 8 17 21; do
+  case $v in 8) JC="$JAVAC_8";; 17) JC="$JAVAC_17";; 21) JC="$JAVAC_21";; esac
+  for ver in v1 v2; do
+    out="fx/fa${v}${ver}"; rm -rf "$out"; mkdir -p "$out"
+    if [ "$ver" = v1 ]; then SRC="compA/v1/FixtureA.java"; else SRC="compA/v2/FixtureA.java"; fi
+    "$JC" -nowarn -encoding UTF-8 -d "$out" compA/Time.java "$SRC" >/dev/null 2>&1 \
+      || { echo "   FAIL 编译 fa${v}${ver}"; FAILED=1; }
+  done
+done
 [ $FAILED = 0 ] && echo "   OK   夹具编译完成" || { echo "夹具编译失败"; exit 1; }
 
 run() { # run <类> <参数...>
@@ -86,6 +95,7 @@ run() { # run <类> <参数...>
 echo "--- 套件入口 ---"
 step "XGroupTest (JDK8 夹具)"  run XGroupTest "fx/x8v1/test25/XGroup.class" "fx/x8v2/test25/XGroup.class"
 step "XGroupTest (JDK21 夹具)" run XGroupTest "fx/x21v1/test25/XGroup.class" "fx/x21v2/test25/XGroup.class"
+step "NameIndexTest (三 JDK + 正反序)" run NameIndexTest
 
 # ---------- 数量基线 ----------
 echo "--- 数量基线 ---"

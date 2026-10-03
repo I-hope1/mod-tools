@@ -1957,23 +1957,23 @@ public class LambdaAligner {
 						if (isOrphanEntry(fs.get(i))) { entry = i; break; }
 					}
 					if (entry < 0) return false;
-					// 首选：幽灵桩的**直接调用者**是否为 UpdateRef 的执行点
+					// 判据：幽灵桩的**直接调用者**是否为 UpdateRef 的执行点。
+					//
+					// 只看直接调用者，**不做整栈兜底扫描**。曾经的兜底（"直接调用者不是
+					// UpdateRef 时继续往下找"）等于把判据退回成"栈上某处有 UpdateRef"，
+					// 只是去掉了帧数上限，反而更宽：形如
+					//   UpdateRef.run → A(活 lambda) → helper → 孤儿桩
+					// 时会把 A 一并熔断 —— 而这里的正确语义是"**lambda 本身被 UpdateRef 持有**
+					// 才熔断"，那种情形应当静默。
+					//
+					// 不需要兜底的原因：UpdateRef.run() 里是直接 `f.run()` 调用原始回调
+					// （见 UpdateRef#run），包装帧（WrappedRunnable.run 等）在它**之上**，
+					// 不落在 run() 与桩之间；两者之间只有旧 CallSite 的隐藏代理帧，
+					// StackWalker 默认跳过、getStackTrace 也不显示。
 					int caller = entry + 2;   // 跳过 onOrphanInvoked 自身与桩
-					if (caller < fs.size()) {
-						StackWalker.StackFrame f = fs.get(caller);
-						if (isUpdateRefInvoke(f.getClassName(), f.getMethodName())) return true;
-					}
-					// 兜底（深度无关）：调用栈上更深处存在 UpdateRef 的执行点。
-					// 覆盖"UpdateRef 经由中间层调用 lambda"的情形 —— 若只认直接调用者，
-					// 这种情况会**误判为非 UpdateRef**，熔断静默失效（本机制最该避免的后果）。
-					for (int i = caller; i < fs.size(); i++) {
-						StackWalker.StackFrame f = fs.get(i);
-						if (!f.getDeclaringClass().isHidden()
-							&& isUpdateRefInvoke(f.getClassName(), f.getMethodName())) {
-							return true;
-						}
-					}
-					return false;
+					if (caller >= fs.size()) return false;
+					StackWalker.StackFrame f = fs.get(caller);
+					return isUpdateRefInvoke(f.getClassName(), f.getMethodName());
 				});
 			}
 		} catch (Throwable ignored) {}
@@ -1988,10 +1988,10 @@ public class LambdaAligner {
 				}
 			}
 			if (entry < 0) return false;
+			// 同 StackWalker 路径：只看直接调用者，不做整栈兜底。
 			int caller = entry + 2;   // 跳过 onOrphanInvoked 自身与桩
-			for (int i = caller; i < t.length; i++) {
-				if (isUpdateRefInvoke(t[i].getClassName(), t[i].getMethodName())) return true;
-			}
+			if (caller >= t.length) return false;
+			return isUpdateRefInvoke(t[caller].getClassName(), t[caller].getMethodName());
 		} catch (Throwable ignored) {}
 		return false;
 	}

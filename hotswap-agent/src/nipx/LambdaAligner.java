@@ -1156,6 +1156,7 @@ public class LambdaAligner {
 				if (!sameSemantics(ni, oi)) continue;
 				if (!isSignatureCompatible(owner, oi, ni)) continue;
 				if (!sameNestingLevel(ni, oi)) continue;
+				if (!calleesPairTo(ni, oi)) continue;
 				if (oi.name.equals(ni.name)) return oi;
 			}
 		}
@@ -1166,6 +1167,7 @@ public class LambdaAligner {
 			if (!sameSemantics(ni, oi)) continue;
 			if (!isSignatureCompatible(owner, oi, ni)) continue;
 			if (!sameNestingLevel(ni, oi)) continue;
+			if (!calleesPairTo(ni, oi)) continue;
 			return oi;
 		}
 		return null;

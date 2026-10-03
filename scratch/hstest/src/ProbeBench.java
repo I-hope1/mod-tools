@@ -16,8 +16,8 @@ import nipx.LambdaAligner;
  */
 public class ProbeBench {
 
-	static final int WARMUP = 200;
-	static final int ITERS = 1_000;
+	static final int WARMUP = 1_000;
+	static final int ITERS = 5_000;
 
 	/** 空基线：调用一个什么都不做的方法。 */
 	static volatile int sink;
@@ -28,7 +28,7 @@ public class ProbeBench {
 		// 热身
 		for (int i = 0; i < WARMUP; i++) r.run();
 		long best = Long.MAX_VALUE;
-		for (int rep = 0; rep < 2; rep++) {
+		for (int rep = 0; rep < 4; rep++) {
 			long t0 = System.nanoTime();
 			r.run();
 			long dt = System.nanoTime() - t0;

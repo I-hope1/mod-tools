@@ -112,12 +112,31 @@ if (!NOT_FROM_UPDATE_REF.contains(location)) {
 
 ### 改后实测
 
-| 项 | 加缓存前 | 加缓存后 |
-|---|---|---|
-| `onOrphanInvoked` | ~1350 ns/次 | **88–149 ns/次** |
-| 每秒 10 万次占 CPU | ~9.7% | **~0.9%** |
+| 项 | 加缓存前 | 加缓存后（String 版） | 改用 `LookupKey` 后 |
+|---|---|---|---|
+| `onOrphanInvoked` | ~1350 ns/次 | 88–149 ns/次 | **88.6 ns/次** |
+| 每秒 10 万次占 CPU | ~9.7% | ~0.9% | **~0.8%** |
 
-**约 9–15× 改善。** 剩余开销主要是 `location` 字符串拼接与 `ConcurrentHashMap` 查询。
+**约 15× 改善。** 相对基线的净开销约 **84 ns/次**。
+
+### 改用 `LookupKey`（用户建议）
+
+`location` 原先每次调用都要拼一个 String。改用项目既有的
+[`LookupKey`](../../hotswap-agent/src/nipx/profiler/LookupKey.java)（内嵌 `StringBuilder` +
+缓存 hash + 同时支持与 `String` 比较）：
+
+- **查找零分配**：`LookupKey.equals` 支持与 `String` 比较，因此把它当作
+  `Set` 的**条目**时，`contains` 无需生成 String 即可命中（复用静态缓冲，仅做 hash 查找）；
+- 只有**首次触达**（需要打日志/抛异常）才 `copy()` 成 String —— 非热路径；
+- `LOGGED_ORPHANS.add(key.copy())`：存一份拷贝，避免别名。
+
+**测量教训（重要）**：改用 `LookupKey` 后第一次测到 **207.6 ns/次**，比 String 版还慢，
+我差点据此判定"这个改动没收益"。把迭代数从 1,000 提到 5,000、重复轮数从 2 提到 4 后，
+实测为 **88.6 ns/次** —— **原来的结论是噪声**。
+
+这与本会话反复出现的模式同源：**装置不可靠时不能解读结果**。
+微基准的迭代数太小（1,000 次 × 2 轮）在 ~100ns 量级上完全淹没在 JIT/GC 抖动里。
+另外注意：**首次**触达仍会分配（`key.copy()`），但那条路径本就要打日志。
 
 ### 验证
 

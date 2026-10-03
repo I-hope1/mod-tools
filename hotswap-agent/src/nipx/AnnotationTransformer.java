@@ -334,6 +334,21 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			return bytes;
 		}
 
+		// 0. 幂等标记：本方法必须能被安全地重复调用。
+		//
+		// 为什么不能靠"描述符形状"推断是否已处理过：强转本身就是在首参数前插一个
+		// `L<owner>;`，而 lambda 完全可能**本来就有**一个类型为 owner 的显式首参数
+		// （例如 `void observe(Foo other) { run(() -> this.y + other.x); }` 编译出
+		// `lambda$observe$0(LFoo;)V`）。这两种形态在字节码里一模一样，任何基于形状的
+		// 判断都会把"本来就长这样"误判成"已经转换过"，或者反过来把真参数当成幻影 this
+		// 剥掉，从而产出指向不存在方法的 indy（BootstrapMethodError）。
+		//
+		// 也试过用"传入的 byte[] 实例身份"做标记：实测 redefineClasses 会让 transformer
+		// 收到字节码的**副本**（同一实例假设不成立），故不可用。
+		//
+		// 因此改用显式标记字段：它跟着字节码走，不依赖任何推断，且对所有调用路径统一生效。
+		if (hasForcedMarker(cn)) return bytes;
+
 		// 1. 序列化 lambda 会按 impl 签名字符串比对，改签名会破坏反序列化
 		for (MethodNode mn : cn.methods) {
 			if ("$deserializeLambda$".equals(mn.name)) return bytes;
@@ -346,10 +361,17 @@ public class AnnotationTransformer implements ClassFileTransformer {
 
 		for (MethodNode mn : cn.methods) {
 			if ((mn.access & ACC_SYNTHETIC) == 0) continue;
-			// 统一用"未捕获 this"的规范化描述符做键，保证本方法对同一份输入幂等：
-			// 若这里直接用 mn.desc，第二轮拿到的就是已被前置 this 的描述符，
-			// 与 invokedynamic 侧的键对不上，护栏与决策都会失效。
-			String key = mn.name + ":" + stripThisParam(mn.desc, slashClassName);
+			// 一律使用"方法名 + 该类里真实的原始描述符"作为键。
+			//
+			// 曾有版本在这里把首参数（若等于 owner 类型）剥掉，想用它消除"幻影 this"带来的
+			// 形态差异。那是错的：剥掉之后键就不再唯一对应一个方法，一个**本来就带**
+			// `L<owner>;` 显式首参数的真 lambda 会被误剥。例如
+			//   void observe(Foo other) { run(() -> this.y + other.x); }   ->  lambda$observe$0(LFoo;)V
+			// 决策时键变成 `lambda$observe$0:()V`，而下面改写句柄用的是 impl 的原始描述符，
+			// 结果句柄被改成 `(LFoo;LFoo;)V` 而方法定义仍是 `(LFoo;)V` —— 链接期直接
+			// BootstrapMethodError，恰是本方案要消除的错误。幂等性现在由标记字段负责，
+			// 键不需要再承担这个职责。
+			String key = mn.name + ":" + mn.desc;
 			if ((mn.access & ACC_STATIC) == 0) instanceSyntheticMethods.add(key);
 			else staticSyntheticMethods.add(key);
 		}
@@ -359,7 +381,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			boolean isInstance = (mn.access & ACC_STATIC) == 0 && !mn.name.equals("<init>");
 			for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
 				if (insn instanceof MethodInsnNode m && m.owner.equals(slashClassName)) {
-					directlyCalled.add(m.name + ":" + stripThisParam(m.desc, slashClassName));
+					directlyCalled.add(m.name + ":" + m.desc);
 					continue;
 				}
 				if (!(insn instanceof InvokeDynamicInsnNode indy)) continue;
@@ -369,7 +391,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 				if (!slashClassName.equals(impl.getOwner())) continue;
 
 				references.add(new ForceLambdaRef(mn, indy, impl,
-				 impl.getName() + ":" + stripThisParam(impl.getDesc(), slashClassName), isInstance));
+				 impl.getName() + ":" + impl.getDesc(), isInstance));
 			}
 		}
 
@@ -379,8 +401,6 @@ public class AnnotationTransformer implements ClassFileTransformer {
 
 		final Set<String> needConversionToStatic = new HashSet<>();
 		final Set<String> needForceCaptureThis   = new HashSet<>();
-		/** 进入转换循环之前，各 lambda 方法是否已经带有 {@code L<owner>;} 首参数（幂等护栏依据）。 */
-		final Map<String, Boolean> preExistingThis = new HashMap<>();
 
 		for (var e : byKey.entrySet()) {
 			String key = e.getKey();
@@ -398,42 +418,21 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			           && refs.stream().allMatch(r -> r.impl.getTag() == H_INVOKESTATIC && r.isContainerInstance)) {
 				// 核心防护：必须所有引用点都在"可安全取 this"的实例方法里
 				needForceCaptureThis.add(key);
-
-				// 记录决策时刻该方法"已经带没带 this 首参数"。必须在这里（改动 mn.desc 之前）
-				// 采样，因为下面的转换循环会把 mn.desc 改掉；一旦改掉，
-				// "本来就有 this" 与 "刚被我们加上 this" 就再也分不出来了。
-				MethodNode target = findMethodByName(cn, refs.get(0).impl.getName());
-				preExistingThis.put(key, target != null && hasThisPrefix(target.desc, slashClassName));
 			}
-		}
-
-		// 幂等护栏（关键）：本方法会在两条路径上被调用——transform() 拦截类加载/重定义时，
-		// 以及热更调度层在送入 LambdaAligner.align 之前。若第二次调用再往首参数前插一个
-		// `this`，描述符会变成 (LFoo;LFoo;...) 而 lambda 体只认原来的槽位，导致
-		// “对齐时看到的字节码”与“JVM 里实际生效的字节码”脱节，也让实参与形参错位。
-		//
-		// 判定口径：凡是被判定"需要捕获 this"的方法，在本次进入转换循环之前就已经带上了
-		// `L<owner>;` 首参数 ⇒ 本方法此前跑过 ⇒ 原样返回。
-		//
-		// 注意这里特意不去反推 key 的描述符：key 走的是 stripThisParam 规范化口径，
-		// 拿它去拼 forcedDesc 会得到 "(Lowner;Lowner;...)" 这种畸形串（第一版实现的 bug），
-		// 或者因为多轮 strip 而失去区分能力。直接检查方法自身的 desc 才是有依据的。
-		if (needConversionToStatic.isEmpty()) {
-			boolean alreadyForced = true;
-			for (String key : needForceCaptureThis) {
-				if (!Boolean.TRUE.equals(preExistingThis.get(key))) {
-					alreadyForced = false;
-					break;
-				}
-			}
-			if (alreadyForced) return bytes;
 		}
 
 		if (needConversionToStatic.isEmpty() && needForceCaptureThis.isEmpty()) {
 			return bytes;
 		}
 
-		// 修改目标 lambda 方法定义
+		// 修改目标 lambda 方法定义。
+		//
+		// 注意查找方式：不再拿 key 去拼期望描述符（那正是上面注释里那类 bug 的来源），
+		// 而是拿"该类里真实声明的名字 + 原始描述符"直接定位。这样：
+		//   • 它一定命中真实存在的方法，不可能拼出一个不存在的方法；
+		//   • 是否已经前置过 this，用"当前描述符是否等于原始描述符"判断 —— 这是无歧义的，
+		//     因为原始描述符就是从这颗 ClassNode 上读出来的。标记字段是第一重幂等保证，
+		//     这里是第二重。
 		for (MethodNode mn : cn.methods) {
 			String key = mn.name + ":" + mn.desc;
 			if (needConversionToStatic.contains(key)) {
@@ -446,6 +445,11 @@ public class AnnotationTransformer implements ClassFileTransformer {
 				shiftLocals(mn);
 			}
 		}
+
+		// 幂等护栏（第二重，第一重是入口处的标记字段）：方法定义刚刚才改过 desc，
+		// 所以这里不可能再重复前置 this —— 上面的判断用的是"当前描述符 == 原始描述符"。
+		// 保留 needConversionToStatic.isEmpty() && needForceCaptureThis.isEmpty() 的提前返回，
+		// 让"无需转换"的类不产生任何字段/标记副作用。
 
 		// 修改 invokedynamic 站点和入栈代码
 		for (ForceLambdaRef ref : references) {
@@ -503,6 +507,10 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			}
 		}
 
+		// 打上幂等标记：务必在真正改写之后、写盘之前添加，
+		// 这样"本轮什么都没改"的类不会平白多出一个字段。
+		addForcedMarker(cn);
+
 		MyClassWriter cw = new MyClassWriter(targetLoader, ClassWriter.COMPUTE_FRAMES);
 		try {
 			cn.accept(cw);
@@ -515,37 +523,38 @@ public class AnnotationTransformer implements ClassFileTransformer {
 	//endregion
 
 	//region Utils
+
+	/**
+	 * 幂等标记字段名。带 {@code $nipx$} 前缀是为了避开与业务字段重名的可能。
+	 * <p>声明为 {@code private static final synthetic} 且<b>不</b>赋值：{@code InitFix}
+	 * 对"在 {@code <clinit>} 里找不到安全初始化表达式"的新增字段一律弃权（见
+	 * {@code InitFix.buildPatch}），因此不会产生初始化代码；它也不参与任何语义。
+	 * 之所以不用自定义 class attribute：那需要额外的读写与兼容处理，而字段在所有
+	 * ASM 路径上天然可见，判断只需一次遍历。</p>
+	 */
+	private static final String FORCED_MARKER = "$nipx$lambdasForced";
+
+	/** 判断该类是否已被 {@link #forceStaticLambdas} 处理过。 */
+	private static boolean hasForcedMarker(ClassNode cn) {
+		for (FieldNode f : cn.fields) {
+			if (FORCED_MARKER.equals(f.name)) return true;
+		}
+		return false;
+	}
+
+	/** 给类打上幂等标记（已存在则不重复添加）。 */
+	private static void addForcedMarker(ClassNode cn) {
+		if (hasForcedMarker(cn)) return;
+		cn.fields.add(new FieldNode(
+			ACC_PRIVATE | ACC_STATIC | ACC_FINAL | ACC_SYNTHETIC,
+			FORCED_MARKER, "Z", null, null));
+	}
+
 	private static boolean isLambdaMetafactory(Handle h) {
 		return "java/lang/invoke/LambdaMetafactory".equals(h.getOwner())
 		       && ("metafactory".equals(h.getName()) || "altMetafactory".equals(h.getName()));
 	}
 
-	/**
-	 * 若描述符的首参数恰好是 {@code L<owner>;}（即本类实例，说明已被强行捕获 this），
-	 * 则去掉它，返回"未捕获 this"的规范化描述符；否则原样返回。
-	 *
-	 * <p>用途：让 {@code forceStaticLambdas} 内部所有以"名字 + 描述符"为键的集合与查找
-	 * 都使用同一个规范口径，从而保证本方法对同一份输入幂等 —— 否则第二轮读进来的
-	 * 描述符已经带上了 {@code this} 参数，键对不上，幂等护栏与转换决策都会失效。</p>
-	 */
-	private static String stripThisParam(String desc, String slashClassName) {
-		if (desc == null || desc.isEmpty() || desc.charAt(0) != '(') return desc;
-		String prefix = "(L" + slashClassName + ";";
-		return desc.startsWith(prefix) ? "(" + desc.substring(prefix.length()) : desc;
-	}
-
-	/** 描述符首参数是否恰好是 {@code L<owner>;}（说明已被强行捕获 this）。 */
-	private static boolean hasThisPrefix(String desc, String slashClassName) {
-		return desc != null && desc.startsWith("(L" + slashClassName + ";");
-	}
-
-	/** 按名字查找类中的方法（用于在改写 {@code mn.desc} 之前采样其原始形态）。 */
-	private static MethodNode findMethodByName(ClassNode cn, String name) {
-		for (MethodNode mn : cn.methods) {
-			if (mn.name.equals(name)) return mn;
-		}
-		return null;
-	}
 	@SuppressWarnings("ResultOfMethodCallIgnored")
 	private static void writeTo(String className, byte[] classfileBuffer) {
 		File file = new File("./classes/" + className + ".class");

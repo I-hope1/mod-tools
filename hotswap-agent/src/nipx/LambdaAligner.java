@@ -250,6 +250,28 @@ public class LambdaAligner {
 						}
 					}
 				}
+			}
+
+			// 【阶段一·中】全类跨组指纹匹配 —— 必须夹在 Step 1 与 Step 2 之间
+			//
+			// 顺序不是风格问题，而是正确性要求。反例（已实测，见 scratch/hstest/move/）：
+			//   v1: build1(){ r1 = () -> A }   build2(){ r2 = () -> Z }
+			//   v2: build1(){}                 build2(){ r2 = () -> A }   // A 换了承载方法，Z 被删
+			// 新类里 A 变成 lambda$build2$0。若先跑 Step 2 的顺序回退，它会以"同组同位置"的身份
+			// 配上旧 lambda$build2$0，把 Z 的名字占掉：
+			//   • 持有旧 Z 的 CallSite 悄悄去跑 A 的方法体（不抛异常，最难查）；
+			//   • 持有旧 A 的 CallSite 反而命中幽灵空壳。
+			// 把跨组指纹匹配提前，A 会先按指纹认回它自己的旧名 lambda$build1$0，
+			// Z 则干净地变成孤儿空壳 —— 旧 CallSite 各自回到正确归宿。
+			matchByFingerprintAcrossGroups(ctx);
+
+			// 【阶段一·下】Step 2：顺序回退 —— 只处理"指纹也对不上、仍无归宿"的新方法
+			for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
+				List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
+				if (newGroup == null) continue;
+
+				List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
+				if (oldGroup == null) continue;
 
 				// Step 2：顺序对齐（签名逻辑等价即可：实例方法的隐式 this 与静态方法的显式 this 等价）
 				for (SyntheticInfo ni : newGroup) {
@@ -300,28 +322,6 @@ public class LambdaAligner {
 					}
 				}
 			}
-
-			// 【阶段一·补】跨逻辑组指纹匹配（根本解法）
-			//
-			// 前面 Step 1a/1b/2 全部被限制在"同一个逻辑组"内，而逻辑组键里含
-			// logicalName —— 也就是承载 lambda 的那个方法名（`lambda$build$19` → `build`）。
-			// 这带来两个必须正视的后果：
-			//
-			//   1) 在 build() 开头插入一个新 lambda，会把后面所有 lambda 的编译期序号
-			//      整体推移（$0→$1、$1→$2）。它们同属 build 组、归一化描述符又相同，
-			//      Step 2 只能按组内顺序配对 —— 结果两个 lambda 的方法体被对调，
-			//      老 CallSite 静默地去执行了另一个回调的逻辑（不抛异常，最难查）。
-			//   2) 把一个 lambda 从旧方法挪到新方法（含重命名承载方法），逻辑组变了，
-			//      哪怕方法体一个字节都没动，Step 1 也永远找不到它，照样走顺序回退。
-			//
-			// 所以在动用顺序回退之前，先做一次全类跨组指纹匹配：只要方法体指纹一致，
-			// 就是同一个 lambda，直接认领旧名。因为指纹只由方法体指令序列决定，
-			// "插入"对未改动 lambda 的指纹毫无影响，正是这一刀切开顺序依赖。
-			//
-			// 为什么安全：指纹相同 ⇒ 方法体逐条指令等价 ⇒ 认领旧名只是让"调用方"
-			// 与"被调方"重新对上，不改变任何行为。指纹不同则完全不参与，缺口仍由
-			// Step 2 兜底（并留下 (a) 的告警）。
-			matchByFingerprintAcrossGroups(ctx);
 
 			// 【阶段二】未匹配的新方法统一处理
 			int freshId = 0;
@@ -533,7 +533,7 @@ public class LambdaAligner {
 				// 第一优先级：同组内指纹相同（保持 Step 1 之外的原配对倾向）
 				List<SyntheticInfo> sameGroup = oldGroups.get(newGroups.keyAt(idx));
 				if (sameGroup != null) {
-					bestOld = firstFingerprintMatch(sameGroup, ni, true);
+					bestOld = firstFingerprintMatch(sameGroup, ni, ctx.currentClass, true);
 				}
 				// 第二优先级：全类范围内指纹相同
 				if (bestOld == null) {
@@ -541,7 +541,7 @@ public class LambdaAligner {
 					for (int k = oldGroups.nextEntry(-1); k != -1; k = oldGroups.nextEntry(k)) {
 						List<SyntheticInfo> g = oldGroups.valueAt(k);
 						if (g == null || g == sameGroup) continue;
-						SyntheticInfo oi = firstFingerprintMatch(g, ni, true);
+						SyntheticInfo oi = firstFingerprintMatch(g, ni, ctx.currentClass, true);
 						if (oi != null) { bestOld = oi; break outer; }
 					}
 				}
@@ -563,17 +563,19 @@ public class LambdaAligner {
 	 * @return 命中的旧方法信息；没有则返回 {@code null}
 	 */
 	private static SyntheticInfo firstFingerprintMatch(List<SyntheticInfo> group, SyntheticInfo ni,
-	                                                   boolean preferSameName) {
+	                                                   String owner, boolean preferSameName) {
 		if (group == null) return null;
 
 		if (preferSameName) {
 			for (SyntheticInfo oi : group) {
 				if (oi.matched || oi.hash != ni.hash) continue;
+				if (!isSignatureCompatible(owner, oi, ni)) continue;
 				if (oi.name.equals(ni.name)) return oi;
 			}
 		}
 		for (SyntheticInfo oi : group) {
 			if (oi.matched || oi.hash != ni.hash) continue;
+			if (!isSignatureCompatible(owner, oi, ni)) continue;
 			return oi;
 		}
 		return null;

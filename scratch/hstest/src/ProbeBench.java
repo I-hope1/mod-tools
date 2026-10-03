@@ -1,31 +1,28 @@
 import nipx.LambdaAligner;
 
 /**
- * ① 的测量：幽灵方法在"高频循环"中的栈探测成本。
+ * ① 与「日志路径零分配」的测量。
  *
- * 要回答的问题：`isCalledByUpdateRef()` 的栈探测成本，在每秒数万次调用量级下
- * **是否可感知**？若不可感知，按既定标准（没有失败用例就不改）不加缓存。
+ * 要回答的问题：
+ *   (a) `isCalledByUpdateRef()` 的栈探测成本，在每秒数万次调用量级下是否可感知？
+ *   (b) 两条日志路径（SMART_ADAPTIVE / LOG_AND_RETURN_DEFAULT）在"已记录过"之后
+ *       是否仍然每次分配 String？
  *
- * 方法：分别测量
- *   (a) 一次热身后，反复调用 onOrphanInvoked（走完整路径，含栈探测）
- *   (b) 同样次数的空调用（基线开销）
- * 取多次运行的最小值（少受 JIT/GC 抖动影响），再算每次调用的纳秒数。
+ * 方法：分别测量，取多次运行的最小值（少受 JIT/GC 抖动影响），换算成每次调用的纳秒数。
  *
- * 注意：本基准只测**探测成本**，不构造真实的幽灵字节码 —— 那部分已由
- * XGroupTest / DelTest 覆盖。这里要的是"每次调用的额外开销"这一个数。
+ * 迭代数说明：早期用 1,000 次 × 2 轮测出过与实际相反的结论（~100ns 量级被抖动淹没），
+ * 因此这里用 5,000 × 4。**测量工具本身也要先估量级。**
  */
 public class ProbeBench {
 
 	static final int WARMUP = 1_000;
 	static final int ITERS = 5_000;
 
-	/** 空基线：调用一个什么都不做的方法。 */
 	static volatile int sink;
 
 	static void noop(String a, String b, String c) { sink++; }
 
 	static long bench(Runnable r) {
-		// 热身
 		for (int i = 0; i < WARMUP; i++) r.run();
 		long best = Long.MAX_VALUE;
 		for (int rep = 0; rep < 4; rep++) {
@@ -38,41 +35,58 @@ public class ProbeBench {
 	}
 
 	public static void main(String[] args) {
-		System.out.println("== 栈探测成本基准 ==");
-		System.out.println("   迭代次数: " + ITERS + "（取 5 次最小值）");
+		System.out.println("== 栈探测 / 日志路径成本基准 ==");
+		System.out.println("   迭代次数: " + ITERS + "（取 4 次最小值）");
 
-		// (a) 空基线
 		long tNoop = bench(() -> { for (int i = 0; i < ITERS; i++) noop("t/F", "lambda$x$0", "()V"); });
-
-		// (b) 完整 onOrphanInvoked（含栈探测 + 日志去重）
 		long tOrphan = bench(() -> {
 			for (int i = 0; i < ITERS; i++) LambdaAligner.onOrphanInvoked("t/F", "lambda$x$0", "()V");
 		});
-
-		// (c) 只测栈探测本身
-		long tProbe = bench(() -> { for (int i = 0; i < ITERS; i++) sink += LambdaAligner.isCalledByUpdateRef() ? 1 : 0; });
+		long tProbe = bench(() -> {
+			for (int i = 0; i < ITERS; i++) sink += LambdaAligner.isCalledByUpdateRef() ? 1 : 0;
+		});
 
 		double perNoop   = (double) tNoop   / ITERS;
 		double perOrphan = (double) tOrphan / ITERS;
 		double perProbe  = (double) tProbe  / ITERS;
 
-		System.out.printf("   空调用基线      : %8.2f ns/次%n", perNoop);
-		System.out.printf("   isCalledByUpdateRef（每次真探测）: %8.2f ns/次%n", perProbe);
-		System.out.printf("   onOrphanInvoked（已加缓存）     : %8.2f ns/次%n", perOrphan);
 		System.out.println();
-		// 关键指标是 onOrphanInvoked 本身：加缓存前约 1350ns/次，加后约 149ns/次。
-		// 它与基线的差即高频路径的实际开销（含 location 字符串拼接 + ConcurrentHashMap 查询）。
-		System.out.printf("   onOrphanInvoked 相对基线开销 : %8.2f ns/次%n", perOrphan - perNoop);
+		System.out.printf("   空调用基线                    : %8.2f ns/次%n", perNoop);
+		System.out.printf("   isCalledByUpdateRef（真探测） : %8.2f ns/次%n", perProbe);
+		System.out.printf("   onOrphanInvoked(SMART_ADAPTIVE，已缓存): %8.2f ns/次%n", perOrphan);
+		System.out.printf("   相对基线净开销                : %8.2f ns/次%n", perOrphan - perNoop);
 		System.out.println();
-		System.out.printf("   折算：若每秒调用 %,d 次，占 CPU 时间约 %.3f ms/秒（%.2f%%）%n",
-			100_000, (perOrphan - perNoop) * 100_000 / 1_000_000, (perOrphan - perNoop) * 100_000 / 10_000_000);
+		System.out.printf("   折算：每秒 10 万次调用时，该路径占 CPU 约 %.2f%%%n",
+			(perOrphan - perNoop) * 100_000 / 10_000_000);
 		System.out.println();
 		double net = perOrphan - perNoop;
 		if (net < 500) {
-			System.out.printf("   >>> 结论：高频路径约 %.0f ns/次（加缓存前实测约 1350 ns/次）。%n", net);
-			System.out.println("       缓存有效；剩余开销主要是 location 字符串拼接与 ConcurrentHashMap 查询。");
+			System.out.printf("   >>> SMART_ADAPTIVE：高频路径约 %.0f ns/次（加缓存前实测约 1350 ns/次），"
+				+ "且命中后零 String 分配%n", net);
 		} else {
-			System.out.printf("   >>> 结论：高频路径仍有 %.0f ns/次，值得进一步优化（如缓存 location 字符串）。%n", net);
+			System.out.printf("   >>> SMART_ADAPTIVE：仍有 %.0f ns/次，值得进一步优化%n", net);
+		}
+
+		// ── LOG_AND_RETURN_DEFAULT 路径（用户指出的第二处）──
+		System.out.println();
+		System.out.println("== LOG_AND_RETURN_DEFAULT 路径 ==");
+		LambdaAligner.OrphanPolicy saved = LambdaAligner.getOrphanPolicy();
+		try {
+			LambdaAligner.setOrphanPolicy(LambdaAligner.OrphanPolicy.LOG_AND_RETURN_DEFAULT);
+			long tLog = bench(() -> {
+				for (int i = 0; i < ITERS; i++) LambdaAligner.onOrphanInvoked("t/F", "lambda$x$0", "()V");
+			});
+			double perLog = (double) tLog / ITERS;
+			System.out.printf("   onOrphanInvoked(LOG_AND_RETURN_DEFAULT): %8.2f ns/次%n", perLog);
+			System.out.printf("   相对基线净开销                        : %8.2f ns/次%n", perLog - perNoop);
+			if (perLog - perNoop < 500) {
+				System.out.printf("   >>> 该路径同样零分配（命中后不生成 String），净开销约 %.0f ns/次%n",
+					perLog - perNoop);
+			} else {
+				System.out.printf("   >>> 该路径仍有 %.0f ns/次，需检查%n", perLog - perNoop);
+			}
+		} finally {
+			LambdaAligner.setOrphanPolicy(saved);
 		}
 	}
 }

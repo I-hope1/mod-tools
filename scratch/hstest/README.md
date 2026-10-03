@@ -121,6 +121,39 @@ raw 方法表：<init> build create delete save     ← 没有 lambda$
 >>> 有 lambda$ 合成方法吗？ false
 ```
 
+## 容器 lambda 与告警判据（`CarrierProbe`）
+
+用户提出：容器 lambda（体内挂着内层 lambda）的槽位微调不该刷 WARN。`CarrierProbe` 量了判据：
+
+```bash
+MSYS2_ARG_CONV_EXCL='*' javac -nowarn -cp "$CP" -d soutT src/CarrierProbe.java
+MSYS2_ARG_CONV_EXCL='*' java -cp "soutT;$CP" CarrierProbe nout1/test6/NestCase.class boutL/test4/BtnCase.class out1/test/Case.class
+```
+
+```
+NestCase: lambda$build$0  indy=1 其中指向本类合成=1  -> 容器
+          lambda$build$1  indy=0                     -> 普通业务 lambda
+BtnCase:  三个都 indy=0                              -> 普通（不会误判）
+Case:     lambda$run$0    indy=1 其中指向本类合成=0   -> 普通（forEach 之类不算容器）
+```
+
+**要点**：判据必须是"体内含 invokedynamic，且其 impl 句柄指向本类的合成方法"，
+不能只数 indy —— `list.forEach(x -> ...)` 也有 indy，但它指向 JDK，不是容器。
+
+不过最终实现采用了**更便宜且更严的等价判据**：`ni.name != bestOld.name`
+（即"旧名字换了主人"）。理由：
+
+| 情况 | 名字保住？ | 老 CallSite 的行为 | 该不该 WARN |
+|---|---|---|---|
+| 普通 body 编辑 | ✅ | 原地更新，正确 | ❌ 不是故障 |
+| **容器 lambda 内层改动/插入** | ✅ | 新容器 + 已重映射的内层，正确 | ❌ 不是故障 |
+| 组内同形候选错位让位 | ❌ | 被绑到别的方法体上 | ✅ 真信号 |
+
+"名字是否保住"本身就是充分证据，不需要额外遍历指令判断容器；
+按指纹报警则会把上表前两行（日常编辑）全部刷出来，淹没第三行。
+
+实测（三个场景 WARN 计数）：改动前嵌套场景每次都报，改动后全为 0，且对齐结果不变。
+
 ## 嵌套 lambda 与 #SYNTHETIC_METHOD# 占位（`nest/`、`swap/`、`NestTest`、`SwapTest`、`FpProbe`、`PlaceholderTest`）
 
 ### 结论一：嵌套 lambda 的身份由指纹恢复，不会被对调

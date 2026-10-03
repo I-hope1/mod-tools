@@ -1751,39 +1751,49 @@ public class LambdaAligner {
 	private static final Set<String> LOGGED_ORPHANS = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
 	/**
-	 * {@link LookupKey} 版的 location 判定集合：<b>查找零分配</b>。
+	 * 判定缓存：已确认**不是**由 {@code UpdateRef} 调用的 {@code location}。
 	 *
-	 * <p>{@link LookupKey#equals(Object)} 同时支持与 {@code String} 比较，因此把
-	 * {@code LookupKey} 作为集合**条目**时，{@code set.contains(someLookupKey)}
-	 * 无需生成 String 即可命中（复用 {@link #LOCATION_KEY}，仅做 hash 查找）。
-	 * 命中失败（首次触达）才把 key **拷贝**一份存进去，那次本就要打日志、不是热路径。</p>
+	 * <p><b>为什么需要</b>：{@link #isCalledByUpdateRef()} 一次约 <b>1µs</b>
+	 * （实测：空调用基线 ~5ns，含 {@code StackWalker.walk} 的探测 ~1100–1600ns）。
+	 * 若某个幽灵 lambda 位于普通业务的高频循环中，10 万次/秒即约 10% CPU。</p>
 	 *
-	 * <p>与 {@link #LOGGED_ORPHANS} 分开：后者语义是"日志已打印过"，
-	 * 混用会把日志去重与探测短路绑在一起。</p>
+	 * <p><b>为什么只缓存"否"</b>："是"会立即抛 {@link NoSuchMethodError} 驱动熔断，
+	 * 那次调用不会返回，无需缓存；只缓存"否"也避免让 {@code true} 的判定在本进程内
+	 * 被永久记住，对代理类判定的正确性更保守。</p>
+	 *
+	 * <p><b>为什么与 {@link #LOGGED_ORPHANS} 分开</b>：后者语义是"日志已打印过"，
+	 * 两者混用会把日志去重与探测短路绑在一起。</p>
+	 *
+	 * <p>每个 {@code location} 仍在**首次**触达时完整探测一次，因此正确性不变。</p>
 	 */
-	private static final Set<LookupKey> NOT_FROM_UPDATE_REF = new LookupKeySet();
-
-	/** 复用的 location 构造缓冲。幽灵调用点通常在固定线程上，与 GlTimerProfiler 的用法一致。 */
-	private static final LookupKey LOCATION_KEY = new LookupKey(128);
+	private static final Set<String> NOT_FROM_UPDATE_REF = new StringSet();
 
 	/**
-	 * {@code Set<LookupKey>}，且在"以 String 查询"时按内容比较。
+	 * 按 {@code LookupKey} 内容查询的 {@code Set<String>}。
 	 *
-	 * <p>{@code HashSet.contains(String)} 会走 {@code String.equals(LookupKey)} → false，
-	 * 因此这里覆写 {@link #contains(Object)}：显式持 {@code LookupKey} 去匹配条目。</p>
+	 * <p>元素存的是普通 {@code String}；但查询时可传 {@link LookupKey} ——
+	 * 此时 {@code String.equals(LookupKey)} 会返回 false，因此显式改走
+	 * {@link LookupKey#equals(Object)}（它支持与 String 比较），从而**零 String 分配**。</p>
 	 */
-	private static final class LookupKeySet extends HashSet<LookupKey> {
-		@Override
-		public boolean contains(Object o) {
-			if (o instanceof String) {
-				// 临时复用缓冲构造一个 key 再查；调用方已保证不并发使用同一缓冲。
-				LOCATION_KEY.reset();
-				LOCATION_KEY.append((String) o);
-				return super.contains(LOCATION_KEY);
+	private static final class StringSet extends HashSet<String> {
+		boolean containsKey(LookupKey k) {
+			for (String s : this) {
+				if (k.equals(s)) return true;
 			}
-			return super.contains(o);
+			return false;
 		}
 	}
+
+	private static boolean isMarkedNotFromUpdateRef(LookupKey key) {
+		return ((StringSet) NOT_FROM_UPDATE_REF).containsKey(key);
+	}
+
+	private static void markNotFromUpdateRef(LookupKey key) {
+		NOT_FROM_UPDATE_REF.add(key.toString());   // 只在此 location 首次触达时执行
+	}
+
+	/** 复用的 location 构造缓冲（与 {@code GlTimerProfiler} 的用法一致）。 */
+	private static final LookupKey LOCATION_KEY = new LookupKey(128);
 
 	/**
 	 * 当热重载中被删除/孤立的空壳 Lambda 方法被调用时由生成的字节码调用。
@@ -1798,8 +1808,7 @@ public class LambdaAligner {
 	 */
 	public static void onOrphanInvoked(String className, String name, String desc) {
 		OrphanPolicy policy = orphanPolicy;
-		// 用可复用的 LookupKey 构造 location：高频路径上不再每次分配 StringBuilder/String。
-		// 只有"需要打日志 / 抛异常"的路径才 copy() 成 String（首次触达，非热路径）。
+		// 用可复用的 LookupKey 构造 location：命中缓存的热路径上**零 String 分配**。
 		LookupKey key = LOCATION_KEY.reset();
 		if (className != null && !className.isEmpty()) {
 			key.append(className.replace('/', '.')).append('#');
@@ -1809,16 +1818,22 @@ public class LambdaAligner {
 		if (policy == OrphanPolicy.SMART_ADAPTIVE) {
 			// 缓存短路：已判定"非 UpdateRef 调用"的 location 不再重复走栈探测
 			// （探测一次约 1µs，见 NOT_FROM_UPDATE_REF 的说明）。
-			// contains/add 均支持 LookupKey，查找零分配。
-			if (!NOT_FROM_UPDATE_REF.contains(key)) {
+			// 命中时直接返回 —— 不生成 String、不 copy、不算 location 文本。
+			if (!isMarkedNotFromUpdateRef(key)) {
 				if (isCalledByUpdateRef()) {
 					throw new NoSuchMethodError("Lambda removed by hot swap: " + key);
 				}
-				NOT_FROM_UPDATE_REF.add(new LookupKey(key));   // 存一份拷贝，避免别名
+				markNotFromUpdateRef(key);
 			}
-			// 普通业务调用：去重后打印日志，随后正常返回，由外部字节码线性返回默认值
-			if (LOGGED_ORPHANS.add(key.copy())) {
-				System.err.println("[LambdaAligner] orphaned lambda invoked: " + key
+			// 普通业务调用：去重后打印日志。
+			//
+			// 注意：String 只在**需要打日志**时才生成。写成 LOGGED_ORPHANS.add(key.toString())
+			// 会让每次调用都先求值 toString()（Set.add 的参数无条件求值），
+			// 即使该 location 早已记录过 —— 那等于把热路径的分配又加了回来。
+			if (!LOGGED_ORPHANS.contains(key)) {
+				String location = key.toString();
+				LOGGED_ORPHANS.add(location);
+				System.err.println("[LambdaAligner] orphaned lambda invoked: " + location
 					+ " (subsequent invocations will be muted)");
 			}
 			return;

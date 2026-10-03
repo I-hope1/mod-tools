@@ -125,18 +125,30 @@ if (!NOT_FROM_UPDATE_REF.contains(location)) {
 [`LookupKey`](../../hotswap-agent/src/nipx/profiler/LookupKey.java)（内嵌 `StringBuilder` +
 缓存 hash + 同时支持与 `String` 比较）：
 
-- **查找零分配**：`LookupKey.equals` 支持与 `String` 比较，因此把它当作
-  `Set` 的**条目**时，`contains` 无需生成 String 即可命中（复用静态缓冲，仅做 hash 查找）；
-- 只有**首次触达**（需要打日志/抛异常）才 `copy()` 成 String —— 非热路径；
-- `LOGGED_ORPHANS.add(key.copy())`：存一份拷贝，避免别名。
+- **命中缓存的热路径零 String 分配**：集合元素仍存普通 `String`，但查询时传 `LookupKey`，
+  走 `LookupKey.equals(String)` 比较内容；
+- `NOT_FROM_UPDATE_REF` 仍是 `Set<String>`，用一个 `StringSet` 子类提供
+  `containsKey(LookupKey)`（**不再**把 `LookupKey` 当集合条目 —— 那样会违反
+  `Set<String>` 的契约）；
+- **`String` 只在需要打日志时才生成**。原先写成 `LOGGED_ORPHANS.add(key.copy())`
+  有两个问题：`Set.add` 的参数**无条件求值**，所以每次调用都 `copy()`；
+  而且该行在**已命中缓存**的调用上也会执行 —— 等于把热路径的分配又加了回来。
+  改成 `contains` 先判、只在未记录过时才 `toString()`。
+
+### 三次测量的演进（都取多次最小值）
+
+| 版本 | `onOrphanInvoked` | 相对基线净开销 |
+|---|---|---|
+| 无缓存 | ~1350 ns/次 | — |
+| 缓存 + String location | 88–149 ns/次 | ~84 ns/次 |
+| 缓存 + `LookupKey`（含无条件 `copy()`） | 88.6 ns/次 | ~84 ns/次 |
+| **缓存 + `LookupKey` + 去掉无条件 `copy()`** | **70 ns/次** | **~65 ns/次** |
 
 **测量教训（重要）**：改用 `LookupKey` 后第一次测到 **207.6 ns/次**，比 String 版还慢，
-我差点据此判定"这个改动没收益"。把迭代数从 1,000 提到 5,000、重复轮数从 2 提到 4 后，
-实测为 **88.6 ns/次** —— **原来的结论是噪声**。
+我差点据此判定"这个改动没收益"。把迭代数从 1,000 提到 5,000、轮数 2 提到 4 后，
+稳定在 **88.6**，去掉无条件 `copy()` 后 **70**。
 
-这与本会话反复出现的模式同源：**装置不可靠时不能解读结果**。
-微基准的迭代数太小（1,000 次 × 2 轮）在 ~100ns 量级上完全淹没在 JIT/GC 抖动里。
-另外注意：**首次**触达仍会分配（`key.copy()`），但那条路径本就要打日志。
+**装置不可靠时不能解读结果** —— 本会话反复出现的模式，这次是我的微基准迭代数太小。
 
 ### 验证
 

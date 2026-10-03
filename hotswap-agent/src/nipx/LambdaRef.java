@@ -1,6 +1,7 @@
 package nipx;
 
 import arc.Core;
+import arc.Events;
 import arc.func.*;
 import arc.input.KeyCode;
 import arc.scene.*;
@@ -49,6 +50,7 @@ public class LambdaRef {
 
 		redefineCell();
 		CellPropertyRef.redefineCellProperties();
+		redefineEvents();
 
 		// 子类在前面，父类在后
 		Injector.redefineTask(Button.class, "setDisabled", "(" + boolpNative + ")V", boolpType, 1, "wrapButtonDisabled");
@@ -84,6 +86,74 @@ public class LambdaRef {
 
 		// redefineTable();
 	}
+	//region Events
+	private static void redefineEvents() {
+		try {
+			var bytes = fetchCurrentBytecode(Events.class);
+			bytes = injectEvents(bytes);
+			Injector.redefineOneClass(Events.class, bytes);
+			HotSwapAgent.info("[LambdaRef] Successfully hooked arc.Events (on/run/remove)");
+		} catch (Throwable t) {
+			HotSwapAgent.error("[LambdaRef] Failed to hook arc.Events: " + t.getMessage(), t);
+		}
+	}
+
+	private static byte[] injectEvents(byte[] bytes) {
+		ClassReader cr = new ClassReader(bytes);
+		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
+		ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
+			@Override
+			public MethodVisitor visitMethod(int access, String name, String descriptor,
+			                                 String signature, String[] exceptions) {
+				// 拦截 on(Class, Cons)
+				if ("on".equals(name) && "(Ljava/lang/Class;Larc/func/Cons;)V".equals(descriptor)) {
+					MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
+					mv.visitCode();
+					mv.visitVarInsn(Opcodes.ALOAD, 0); // type (Class)
+					mv.visitVarInsn(Opcodes.ALOAD, 1); // listener (Cons)
+					mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+						AnnotationTransformer.internalName(UpdateRef.class),
+						"eventsOn", "(Ljava/lang/Class;Larc/func/Cons;)V", false);
+					mv.visitInsn(Opcodes.RETURN);
+					mv.visitMaxs(2, 2);
+					mv.visitEnd();
+					return null;
+				}
+				// 拦截 run(Object, Runnable)
+				if ("run".equals(name) && "(Ljava/lang/Object;Ljava/lang/Runnable;)V".equals(descriptor)) {
+					MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
+					mv.visitCode();
+					mv.visitVarInsn(Opcodes.ALOAD, 0); // type (Object)
+					mv.visitVarInsn(Opcodes.ALOAD, 1); // listener (Runnable)
+					mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+						AnnotationTransformer.internalName(UpdateRef.class),
+						"eventsRun", "(Ljava/lang/Object;Ljava/lang/Runnable;)V", false);
+					mv.visitInsn(Opcodes.RETURN);
+					mv.visitMaxs(2, 2);
+					mv.visitEnd();
+					return null;
+				}
+				// 拦截 remove(Class, Cons)
+				if ("remove".equals(name) && "(Ljava/lang/Class;Larc/func/Cons;)Z".equals(descriptor)) {
+					MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
+					mv.visitCode();
+					mv.visitVarInsn(Opcodes.ALOAD, 0); // type (Class)
+					mv.visitVarInsn(Opcodes.ALOAD, 1); // listener (Cons)
+					mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+						AnnotationTransformer.internalName(UpdateRef.class),
+						"eventsRemove", "(Ljava/lang/Class;Larc/func/Cons;)Z", false);
+					mv.visitInsn(Opcodes.IRETURN);
+					mv.visitMaxs(2, 2);
+					mv.visitEnd();
+					return null;
+				}
+				return super.visitMethod(access, name, descriptor, signature, exceptions);
+			}
+		};
+		cr.accept(cv, ClassReader.EXPAND_FRAMES);
+		return cw.toByteArray();
+	}
+	//endregion
 	//region Cell
 	private static void redefineCell() {
 		var bytes = fetchCurrentBytecode(Cell.class);
@@ -109,7 +179,7 @@ public class LambdaRef {
 					return new CellAdviceAdapter(mv, access, name, descriptor, "Larc/func/Cons;", "wrapCellUpdate");
 				}
 				// 拦截 disabled(Larc/func/Boolf;)Larc/scene/ui/layout/Cell;
-				if ("disabled".equals(name) && "(Larc/func/Boolf;)Larc/scene/ui/layout/Cell;".equals(descriptor)) {
+				if ("disabled".equals(name) && "(Larc/fusnc/Boolf;)Larc/scene/ui/layout/Cell;".equals(descriptor)) {
 					return new CellAdviceAdapter(mv, access, name, descriptor, "Larc/func/Boolf;", "wrapCellDisabled");
 				}
 				// 拦截 tooltip(Larc/func/Cons;)Larc/scene/ui/layout/Cell;

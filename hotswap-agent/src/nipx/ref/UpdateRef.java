@@ -1,6 +1,7 @@
 package nipx.ref;
 
 import arc.Core;
+import arc.Events;
 import arc.func.*;
 import arc.scene.Element;
 import arc.scene.event.*;
@@ -9,8 +10,11 @@ import arc.scene.ui.Button;
 import arc.scene.ui.TextField;
 import arc.scene.ui.TextField.TextFieldValidator;
 import arc.scene.ui.layout.Cell;
+import arc.struct.ObjectMap;
+import arc.struct.Seq;
 import nipx.HotSwapAgent;
 
+import java.lang.reflect.Field;
 import java.util.*;
 
 /**
@@ -26,6 +30,8 @@ import java.util.*;
  *   <li><b>动态代理：</b>在方法调用入口处代理原始函数式接口，透明捕获所有 {@link LinkageError}。</li>
  *   <li><b>精准局部熔断：</b>通过 {@link #onRemove} 提供细粒度的资源注销与置空（例如 {@code el.update(null)}、{@code el.removeListener(ref)}），
  *       确保故障仅在局部隔离，绝不波及宿主组件的正常渲染与展示。</li>
+ *   <li><b>Events 事件总线熔断：</b>底层重构 {@link arc.Events#on} / {@link arc.Events#run}，监听器失效时通过反射
+ *       {@code Events.events} 私有注册表将失效监听器即刻注销，阻断 60FPS 高频事件（如 {@code Trigger.update}）死循环与泄漏。</li>
  *   <li><b>无 Element 强绑定：</b>类内部仅维护 {@code fn} 与 {@code onRemove} 两个轻量引用，不直接持有 UI 节点，
  *       生命周期结束后即刻切断闭包引用，对 GC 极度友好。</li>
  *   <li><b>静默降级（Silent）：</b>对于点击、鼠标悬停、弹窗生命周期等瞬时事件，采用 {@link #wrapSilent}，异常时仅将内部引用置空静音。</li>
@@ -669,6 +675,233 @@ public class UpdateRef {
 
 	//endregion
 
+	//region Events 事件总线包装支持
+
+	private static volatile ObjectMap<Object, Seq<Cons<?>>> eventsMap;
+	private static volatile boolean                         eventsFieldFailed;
+
+	/**
+	 * 反射获取 {@link Events#events} 私有事件注册表。
+	 *
+	 * @return Events 内部维护的事件映射表，若反射失败则返回 null
+	 */
+	@SuppressWarnings("unchecked")
+	public static ObjectMap<Object, Seq<Cons<?>>> getEventsMap() {
+		if (eventsMap == null && !eventsFieldFailed) {
+			synchronized (UpdateRef.class) {
+				if (eventsMap == null && !eventsFieldFailed) {
+					try {
+						Field f = Events.class.getDeclaredField("events");
+						f.setAccessible(true);
+						eventsMap = (ObjectMap<Object, Seq<Cons<?>>>) f.get(null);
+					} catch (Throwable t) {
+						eventsFieldFailed = true;
+						HotSwapAgent.error("[UpdateRef] Failed to reflect Events.events: " + t.getMessage(), t);
+					}
+				}
+			}
+		}
+		return eventsMap;
+	}
+
+	/**
+	 * 包装 {@link Cons} 的事件监听器容器，支持与原始被代理引用的等价比较与反射注销。
+	 */
+	public static class EventCons<T> implements Cons<T> {
+		public final UpdateRef ref;
+
+		public EventCons(Cons<T> original, Runnable onRemove) {
+			this.ref = new UpdateRef(original, onRemove);
+		}
+
+		@Override
+		public void get(T t) {
+			ref.runCons(t);
+		}
+
+		public Object getOriginal() {
+			return ref.fn;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (o == ref.fn) return true;
+			if (o instanceof EventCons<?> other) return Objects.equals(ref.fn, other.ref.fn);
+			return false;
+		}
+
+		@Override
+		public int hashCode() {
+			Object f = ref.fn;
+			return f != null ? f.hashCode() : 0;
+		}
+	}
+
+	/**
+	 * 包装 {@link Runnable} 的事件监听器容器（将 Runnable 适配为 Cons<Object> 以供 Events 内部注册表存储），
+	 * 并在熔断时通过私有注册表将自身精准注销。
+	 */
+	public static class EventRunnableCons implements Cons<Object> {
+		public final UpdateRef ref;
+
+		public EventRunnableCons(Runnable original, Runnable onRemove) {
+			this.ref = new UpdateRef(original, onRemove);
+		}
+
+		@Override
+		public void get(Object param) {
+			ref.run();
+		}
+
+		public Object getOriginal() {
+			return ref.fn;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (o == ref.fn) return true;
+			if (o instanceof EventRunnableCons other) return Objects.equals(ref.fn, other.ref.fn);
+			return false;
+		}
+
+		@Override
+		public int hashCode() {
+			Object f = ref.fn;
+			return f != null ? f.hashCode() : 0;
+		}
+	}
+
+	/**
+	 * 代理 {@link Events#on(Class, Cons)}，为事件监听器提供热重载异常自动熔断与注销支持。
+	 *
+	 * @param type     事件类型 Class
+	 * @param listener 事件消费回调
+	 * @param <T>      事件类型
+	 */
+	@SuppressWarnings("unchecked")
+	public static <T> void eventsOn(Class<T> type, Cons<T> listener) {
+		if (listener == null) return;
+		ObjectMap<Object, Seq<Cons<?>>> map = getEventsMap();
+		if (map == null || returnOriginal(listener)) {
+			if (map != null) {
+				map.get(type, () -> new Seq<>(Cons.class)).add(listener);
+			}
+			return;
+		}
+
+		EventCons<T>[] box = (EventCons<T>[]) new EventCons[1];
+		Runnable outer = CONTEXT_ON_REMOVE.get();
+		Runnable onRemove = () -> {
+			ObjectMap<Object, Seq<Cons<?>>> m = getEventsMap();
+			if (m != null && box[0] != null) {
+				Seq<Cons<?>> seq = m.get(type);
+				if (seq != null) {
+					seq.remove(box[0], true);
+				}
+			}
+			if (outer != null) outer.run();
+		};
+
+		EventCons<T> wrapper = new EventCons<>(listener, onRemove);
+		box[0] = wrapper;
+		map.get(type, () -> new Seq<>(Cons.class)).add((Cons) wrapper);
+	}
+
+	/**
+	 * 代理 {@link Events#run(Object, Runnable)}，为运行监听器提供热重载异常自动熔断与注销支持。
+	 *
+	 * @param type     事件类型（Class 或 Enum Trigger 等）
+	 * @param listener 运行回调
+	 */
+	@SuppressWarnings("unchecked")
+	public static void eventsRun(Object type, Runnable listener) {
+		if (listener == null) return;
+		ObjectMap<Object, Seq<Cons<?>>> map = getEventsMap();
+		if (map == null || returnOriginal(listener)) {
+			if (map != null) {
+				map.get(type, () -> new Seq<>(Cons.class)).add(e -> listener.run());
+			}
+			return;
+		}
+
+		EventRunnableCons[] box = new EventRunnableCons[1];
+		Runnable outer = CONTEXT_ON_REMOVE.get();
+		Runnable onRemove = () -> {
+			ObjectMap<Object, Seq<Cons<?>>> m = getEventsMap();
+			if (m != null && box[0] != null) {
+				Seq<Cons<?>> seq = m.get(type);
+				if (seq != null) {
+					seq.remove(box[0], true);
+				}
+			}
+			if (outer != null) outer.run();
+		};
+
+		EventRunnableCons wrapper = new EventRunnableCons(listener, onRemove);
+		box[0] = wrapper;
+		map.get(type, () -> new Seq<>(Cons.class)).add(wrapper);
+	}
+
+	/**
+	 * 代理 {@link Events#remove(Class, Cons)}，支持解包匹配并注销已被包装的事件监听器。
+	 *
+	 * @param type     事件类型 Class
+	 * @param listener 待注销的监听器（可以是原始 listener，也可以是 EventCons 代理实例）
+	 * @param <T>      事件类型
+	 * @return 若成功找到并注销返回 true，否则返回 false
+	 */
+	public static <T> boolean eventsRemove(Class<T> type, Cons<T> listener) {
+		if (listener == null) return false;
+		ObjectMap<Object, Seq<Cons<?>>> map = getEventsMap();
+		if (map == null) return false;
+		Seq<Cons<?>> seq = map.get(type);
+		if (seq == null) return false;
+
+		for (int i = 0; i < seq.size; i++) {
+			Cons<?> item = seq.items[i];
+			if (item == listener || listener.equals(item)) {
+				seq.remove(i);
+				return true;
+			}
+			if (item instanceof EventCons<?> ec && (ec.getOriginal() == listener || Objects.equals(ec.getOriginal(), listener))) {
+				seq.remove(i);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 注销通过 {@link Events#run(Object, Runnable)} 注册的监听器。
+	 * <p>
+	 * 由于 Arc 原生未提供按 Runnable 注销的接口，此方法通过反射遍历注册表实现解绑注销。
+	 * </p>
+	 *
+	 * @param type     事件类型
+	 * @param listener 原始 Runnable 实例
+	 * @return 若成功找到并注销返回 true，否则返回 false
+	 */
+	public static boolean removeEventRun(Object type, Runnable listener) {
+		if (listener == null) return false;
+		ObjectMap<Object, Seq<Cons<?>>> map = getEventsMap();
+		if (map == null) return false;
+		Seq<Cons<?>> seq = map.get(type);
+		if (seq == null) return false;
+
+		for (int i = 0; i < seq.size; i++) {
+			Cons<?> item = seq.items[i];
+			if (item instanceof EventRunnableCons rc && (rc.getOriginal() == listener || Objects.equals(rc.getOriginal(), listener))) {
+				seq.remove(i);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	//endregion
+
 	private static boolean returnOriginal(Object original) {
 		if (original == null) return true;
 		if (original.getClass().getName().startsWith(UpdateRef.class.getName())) return true;
@@ -688,7 +921,11 @@ public class UpdateRef {
 			// fn 已被清空（HotSwap 删除或 NoSuchMethodError 兜底），若尚未投递熔断动作则仅触发一次
 			if (!removed) {
 				removed = true;
-				Core.app.post(this::doRemove);
+				if (Core.app != null) {
+					Core.app.post(this::doRemove);
+				} else {
+					doRemove();
+				}
 			}
 			return true;
 		}
@@ -866,7 +1103,11 @@ public class UpdateRef {
 		clearFn();
 		if (!removed) {
 			removed = true;
-			Core.app.post(this::doRemove);
+			if (Core.app != null) {
+				Core.app.post(this::doRemove);
+			} else {
+				doRemove();
+			}
 		}
 	}
 

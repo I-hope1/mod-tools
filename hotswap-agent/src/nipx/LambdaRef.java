@@ -255,24 +255,7 @@ public class LambdaRef {
 
 
 	public static void beforeClassRedefined(String slashClassName, byte[] newBytecode) {
-		/* int cleared = 0;
-		for (var ref : UpdateRef.getAll()) {
-			UpdateRef updateRef = ref.get();
-			if (updateRef != null && updateRef.clearIfFromClass(dotClassName)) {
-				cleared++;
-			}
-		} */
-		/* String dotClassName = slashClassName.replace('/', '.');
-		int    cleared      = 0;
-		for (UpdateRef ref : UpdateRef.snapshot()) {
-			if (ref.clearIfFromClass(dotClassName)) cleared++;
-		}
-		if (cleared > 0) {
-			info("[LambdaRef] Cleared " + cleared + " UpdateRef lambda(s) from " + dotClassName);
-		} */
-		// if (Core.app != null && Core.scene != null) {
-		// 	Core.app.post(() -> reloadAffectedTables(Collections.singleton(dotClassName)));
-		// }
+		// no-op: see javadoc
 	}
 
 	//region ReloadTable

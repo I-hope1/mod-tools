@@ -29,6 +29,9 @@ import java.util.Objects;
  *       确保故障仅在局部隔离，绝不波及宿主组件的正常渲染与展示。</li>
  *   <li><b>Events 事件总线熔断：</b>底层重写 {@link arc.Events#on} / {@link arc.Events#run}，通过原生字节码自举直传私有注册表；
  *       监听器失效时通过注册表将失效监听器即刻注销，阻断 60FPS 高频事件（如 {@code Trigger.update}）死循环与泄漏，且异步解绑保护内部遍历安全。</li>
+ *   <li><b>统一延迟清理队列：</b>所有熔断动作统一收敛至线程安全的入队排重队列（{@code DEFERRED_REMOVALS}），
+ *       通过门闩标志位向主线程安全点（{@code Core.app.post}）进行单次批处理调度，杜绝并发冲突、遍历中修改与空转 post 开销；
+ *       同时配合生命周期交接点（如 {@code ClientLoadEvent}）主动保底冲刷，防止引擎启动期暂存的任务滞留。</li>
  *   <li><b>细粒度闭包释放：</b>针对局部熔断捕获的 UI 节点与回调闭包，在触发熔断时通过将 {@code fn} 与 {@code original} 一并置空，
  *       瞬时切断对原始闭包的强引用，零额外对象开销，对 GC 极度友好。</li>
  *   <li><b>静默降级（Silent）：</b>对于点击、鼠标悬停、弹窗生命周期等瞬时事件，采用 {@link #wrapSilent}，异常时仅将内部引用置空静音。</li>
@@ -1453,8 +1456,10 @@ public class UpdateRef {
 	private static void deferRemoval(Runnable r) {
 		if (r == null || r == NOOP || r == REMOVED) return;
 		synchronized (DEFERRED_REMOVALS) {
-			DEFERRED_REMOVALS.add(r);
-			hasDeferredRemovals = true;
+			if (!DEFERRED_REMOVALS.contains(r, true)) {
+				DEFERRED_REMOVALS.add(r);
+				hasDeferredRemovals = true;
+			}
 		}
 		tryScheduleDeferredFlush();
 	}
@@ -1507,7 +1512,7 @@ public class UpdateRef {
 	/**
 	 * 包装 {@link Cons} 或 {@link Runnable} 的事件监听器容器，支持与原始被代理引用的等价比较与注销。
 	 */
-	public static class EventCons<T> implements Cons<T>, WrappedRef {
+	public static class EventCons<T> implements Cons<T>, Runnable, WrappedRef {
 		public final  UpdateRef ref;
 		private final boolean   isRunnable;
 
@@ -1524,6 +1529,15 @@ public class UpdateRef {
 		public EventCons(UpdateRef ref) {
 			this.ref = ref;
 			this.isRunnable = ref != null && ref.getOriginal() instanceof Runnable;
+		}
+
+		@Override
+		public void run() {
+			if (isRunnable) {
+				ref.run();
+			} else {
+				ref.runCons(null);
+			}
 		}
 
 		@Override
@@ -1728,7 +1742,6 @@ public class UpdateRef {
 			triggerRemove();
 			return true;
 		}
-		tryScheduleDeferredFlush();
 		return false;
 	}
 
@@ -1945,14 +1958,6 @@ public class UpdateRef {
 			this.onRemove = REMOVED;
 		}
 		if (r != null && r != NOOP) {
-			if (Core.app != null) {
-				try {
-					Core.app.post(() -> executeRemove(r));
-					return;
-				} catch (Throwable t) {
-					HotSwapAgent.error("[UpdateRef] Core.app.post failed, fallback to deferred removal: " + t.getMessage(), t);
-				}
-			}
 			deferRemoval(r);
 		}
 	}

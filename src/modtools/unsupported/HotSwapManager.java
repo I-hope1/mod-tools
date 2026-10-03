@@ -1,7 +1,9 @@
 package modtools.unsupported;
 
+import arc.Events;
 import arc.files.Fi;
 import arc.util.OS;
+import mindustry.game.EventType.ClientLoadEvent;
 import modtools.IntVars;
 import modtools.events.E_Hook;
 import modtools.jsfunc.reflect.UNSAFE;
@@ -9,6 +11,7 @@ import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.ClassUtils;
 import nipx.HotSwapAgent;
 import nipx.jni.helper.MasterKey;
+import nipx.ref.UpdateRef;
 import nipx.util.LibTool;
 
 import java.io.File;
@@ -40,6 +43,8 @@ public class HotSwapManager {
 			initialized = true;
 		}
 		hotswap(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator));
+		UpdateRef.flushDeferredRemovals();
+		Events.on(ClientLoadEvent.class, _ -> UpdateRef.flushDeferredRemovals());
 		try {
 			Fi lib = IntVars.libs.child(mapLibraryName("tool"));
 			System.setProperty("nipx.path.libtool", FileUtils.copyToTmp(lib).absolutePath());

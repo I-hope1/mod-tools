@@ -15,6 +15,13 @@ import java.util.*;
  */
 public class NameCheck {
 
+	static int failed = 0;
+
+	static void check(boolean ok, String msg) {
+		System.out.println((ok ? "   PASS  " : "   FAIL  ") + msg);
+		if (!ok) failed++;
+	}
+
 	static ClassNode parse(byte[] b) {
 		ClassNode cn = new ClassNode();
 		new ClassReader(b).accept(cn, 0);
@@ -96,5 +103,30 @@ public class NameCheck {
 			else verdict = "CHANGED  (语义被换成 " + now + ")";
 			System.out.println("   " + e.getKey() + " 旧=" + e.getValue() + " 现在=" + now + "   " + verdict);
 		}
+
+		// ---------- 最终类自洽性检查（比"名字归属"更硬的判据）----------
+		System.out.println();
+		System.out.println("== 最终类自洽性 ==");
+		ClassNode acn = parse(aligned);
+		Map<String, List<String>> byName = new TreeMap<>();
+		for (MethodNode mn : acn.methods) {
+			if (!mn.name.startsWith("lambda$")) continue;
+			byName.computeIfAbsent(mn.name, k -> new ArrayList<>()).add(mn.desc);
+		}
+		boolean dupSig = false, shadow = false;
+		for (var e : byName.entrySet()) {
+			Set<String> sigs = new HashSet<>(e.getValue());
+			if (sigs.size() != e.getValue().size()) {
+				dupSig = true;
+				System.out.println("   ✗ 重复定义: " + e.getKey() + e.getValue());
+			}
+			if (e.getValue().size() > 1) {
+				shadow = true;
+				System.out.println("   ! 同名多定义(幽灵遮蔽): " + e.getKey() + e.getValue());
+			}
+		}
+		check(!dupSig, "没有重复的 名字+描述符");
+		check(!shadow, "没有 同名不同描述符 的遮蔽现象");
+		if (failed != 0) System.exit(1);
 	}
 }

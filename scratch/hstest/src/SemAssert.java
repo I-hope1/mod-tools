@@ -57,6 +57,45 @@ public class SemAssert {
 		return m;
 	}
 
+
+
+	/** 新方法（按描述符取）在最终类里的语义；desc 用于区分同名的幽灵与活方法。 */
+	static String semByDesc(byte[] aligned, String desc) {
+		ClassNode cn = parse(aligned);
+		for (MethodNode mn : cn.methods) {
+			if (!mn.name.startsWith("lambda$") || !mn.desc.equals(desc)) continue;
+			return sem(cn, mn, 0);
+		}
+		return "<none>";
+	}
+
+
+	/** 最终类里是否存在某个语义（不关心它落在哪个名字上）。 */
+	static boolean aliSemContains(byte[] aligned, String want) {
+		ClassNode cn = parse(aligned);
+		for (MethodNode mn : cn.methods) {
+			if (!mn.name.startsWith("lambda$")) continue;
+			if (sem(cn, mn, 0).equals(want)) return true;
+		}
+		return false;
+	}
+
+	/** 最终类是否自洽：无重复的 名字+描述符，且无"同名不同描述符"的幽灵遮蔽。 */
+	static boolean noDupOrShadow(byte[] aligned) {
+		ClassNode cn = parse(aligned);
+		Map<String, List<String>> byName = new HashMap<>();
+		for (MethodNode mn : cn.methods) {
+			if (!mn.name.startsWith("lambda$")) continue;
+			byName.computeIfAbsent(mn.name, k -> new ArrayList<>()).add(mn.desc);
+		}
+		for (var e : byName.entrySet()) {
+			// 同名只允许一种描述符，且不得重复出现
+			if (new HashSet<>(e.getValue()).size() != e.getValue().size()) return false;
+			if (e.getValue().size() > 1) return false;
+		}
+		return true;
+	}
+
 	static byte[] aligned(String v1Path, String v2Path, ClassLoader cl) throws Exception {
 		byte[] r1 = Files.readAllBytes(Paths.get(v1Path));
 		byte[] r2 = Files.readAllBytes(Paths.get(v2Path));
@@ -144,6 +183,43 @@ public class SemAssert {
 			check("GHOST".equals(aliM.get("lambda$build$0")), "doA 外层变幽灵");
 			check("GHOST".equals(aliM.get("lambda$build$1")), "doA 中层变幽灵");
 			check("GHOST".equals(aliM.get("lambda$build$2")), "doA 叶子变幽灵");
+		}
+
+		// ---------- 5) 两级链 + Step 2 时序（two） ----------
+		//
+		// 骨架：新类的 (LTwoLevel;)V 有"外层"和"插入的普通 lambda"两个，用描述符区分。
+		// 父排在子之前被处理时，hasUnmatchedChild 会让父在 Step 2 里被跳过；
+		// 若 Step 2 只跑一遍，父就永远拿不到名字。修好后父必须拿到一个可用名字。
+		{
+			System.out.println("== two 两级链：Step 2 时序 ==");
+			byte[] ali = aligned(args[7], args[8], cl);
+			check(noDupOrShadow(ali), "最终类无重复定义/幽灵遮蔽");
+			// 新外层的体是"求值一个 lambda"，语义应为两层；新内层为 [doY]
+			check(aliSemContains(ali, "[[doY]]"), "新外层的语义 [[doY]] 在最终类里存在（父没被丢掉）");
+			check(aliSemContains(ali, "[doY]"), "新内层的语义 [doY] 在最终类里存在");
+		}
+
+		// ---------- 6) 三层链：只改叶子体（deep2 变体甲） ----------
+		{
+			System.out.println("== deep2 变体甲：只改 doB 叶子体 ==");
+			Map<String, String> aliM = nameToSem(aligned(args[9], args[10], cl));
+			check("[[[doA]]]".equals(aliM.get("lambda$build$0")), "doA 外层保住名字");
+			check("[[doA]]".equals(aliM.get("lambda$build$1")), "doA 中层保住名字");
+			check("[doA]".equals(aliM.get("lambda$build$2")), "doA 叶子保住名字");
+			check(aliM.containsValue("[[[doB2]]]"), "doB2 外层仍存在");
+			check(noDupOrShadow(aligned(args[9], args[10], cl)), "最终类无重复定义/幽灵遮蔽");
+		}
+
+		// ---------- 7) 三层链：删一条链 + 改另一条叶子（deep2 变体乙）----------
+		//
+		// 这是"确实没有证据可用"的情形，作为已知限制把行为钉住：
+		// 关键不是名字怎么分配，而是最终类必须自洽（不得有幽灵与活方法同名遮蔽）。
+		{
+			System.out.println("== deep2 变体乙：删 doA 链 + 改 doB 叶子（已知限制）==");
+			byte[] ali = aligned(args[9], args[11], cl);
+			check(noDupOrShadow(ali), "最终类无重复定义/幽灵遮蔽（不得让老调用点静默跑到别人身上）");
+			Map<String, String> aliM = nameToSem(ali);
+			check(aliM.containsValue("[[[doB2]]]"), "新的 doB2 链在最终类里完整存在");
 		}
 
 		System.out.println();

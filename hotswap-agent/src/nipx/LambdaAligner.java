@@ -235,13 +235,27 @@ public class LambdaAligner {
 				progressed |= matchByFingerprintAcrossGroups(ctx);
 			} while (progressed);
 
-			// 【阶段一·末】Step 2：顺序回退 —— 只处理"指纹也对不上、仍无归宿"的新方法
-			for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
-				List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
-				List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
-				if (newGroup == null || oldGroup == null) continue;
-				step2(ctx, newGroup, oldGroup);
-			}
+			// 【阶段一·末】Step 2：顺序回退 —— 只处理"指纹也对不上、仍无归宿"的新方法。
+			//
+			// 这里必须迭代到无进展，不能只跑一遍：Step 2 内部同样受 hasUnmatchedChild 约束
+			// （父必须等子落定），而组内遍历顺序并不保证叶子在前。实测反例（scratch/hstest/two/）：
+			//
+			//   [T] step2 SKIP(parent has unmatched child) lambda$build$1 kids=[lambda$build$2]
+			//   [T] step2 try lambda$build$2 kids=[]
+			//
+			// 父 $1 排在子 $2 前面被处理，子尚未匹配 → 父被跳过；若 Step 2 只跑一遍，
+			// 父就再也没机会，只能去阶段二拿新名字，于是老 CallSite 命中幽灵 ——
+			// 活着的 lambda 被误杀。改成迭代之后，父会在下一轮（子已落定）重新参与。
+			boolean step2Progressed;
+			do {
+				step2Progressed = false;
+				for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
+					List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
+					List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
+					if (newGroup == null || oldGroup == null) continue;
+					step2Progressed |= step2(ctx, newGroup, oldGroup);
+				}
+			} while (step2Progressed);
 
 			// 【阶段二】未匹配的新方法统一处理
 			int freshId = 0;
@@ -538,8 +552,18 @@ public class LambdaAligner {
 			SyntheticInfo bestOld = null;
 
 			// 第一优先级：组内同名且签名逻辑等价
+			//
+			// 两道约束缺一不可：
+			//   • oi.matched    —— 旧方法只能被用一次；
+			//   • usedOldNames  —— 旧**名字**只能被占一次。
+			// 第二道是必需的：不同的新方法可以各自选中同一个未被 matched 的旧方法
+			// （同一个 oldGroup 里按位置找，很容易撞到同一个候选），于是同一个旧名字
+			// 会被登记给两个不同描述符的新方法，renameMap 里一个键覆盖另一个，
+			// 结果新方法内部对被改名的子的引用指向了别处。实测见 scratch/hstest/deep2/ 变体乙：
+			// 新的叶子占了旧 $2，而新外层内部引用的 $2 实际指向新的中层。
 			for (SyntheticInfo oi : oldGroup) {
 				if (oi.matched || oi.ghost) continue;
+				if (ctx.usedOldNames.contains(oi.name)) continue;
 				if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
 				if (!sameNestingLevel(ni, oi)) continue;
 				if (oi.name.equals(ni.name)) { bestOld = oi; break; }
@@ -549,6 +573,7 @@ public class LambdaAligner {
 			if (bestOld == null) {
 				for (SyntheticInfo oi : oldGroup) {
 					if (oi.matched || oi.ghost) continue;
+					if (ctx.usedOldNames.contains(oi.name)) continue;
 					if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
 					if (!sameNestingLevel(ni, oi)) continue;
 					bestOld = oi;
@@ -647,7 +672,7 @@ public class LambdaAligner {
 				// 第一优先级：同组内指纹相同（保持 Step 1 之外的原配对倾向）
 				List<SyntheticInfo> sameGroup = oldGroups.get(newGroups.keyAt(idx));
 				if (sameGroup != null) {
-					bestOld = firstFingerprintMatch(sameGroup, ni, ctx.currentClass, true);
+					bestOld = firstFingerprintMatch(ctx, sameGroup, ni, true);
 				}
 				// 第二优先级：全类范围内指纹相同
 				if (bestOld == null) {
@@ -655,7 +680,7 @@ public class LambdaAligner {
 					for (int k = oldGroups.nextEntry(-1); k != -1; k = oldGroups.nextEntry(k)) {
 						List<SyntheticInfo> g = oldGroups.valueAt(k);
 						if (g == null || g == sameGroup) continue;
-						SyntheticInfo oi = firstFingerprintMatch(g, ni, ctx.currentClass, true);
+						SyntheticInfo oi = firstFingerprintMatch(ctx, g, ni, true);
 						if (oi != null) { bestOld = oi; break outer; }
 					}
 				}
@@ -678,13 +703,15 @@ public class LambdaAligner {
 	 *                       "编译期序号都没变"，是更强的证据）
 	 * @return 命中的旧方法信息；没有则返回 {@code null}
 	 */
-	private static SyntheticInfo firstFingerprintMatch(List<SyntheticInfo> group, SyntheticInfo ni,
-	                                                   String owner, boolean preferSameName) {
+	private static SyntheticInfo firstFingerprintMatch(MatchContext ctx, List<SyntheticInfo> group,
+	                                                   SyntheticInfo ni, boolean preferSameName) {
 		if (group == null) return null;
+		String owner = ctx.currentClass;
 
 		if (preferSameName) {
 			for (SyntheticInfo oi : group) {
 				if (oi.matched || oi.ghost) continue;
+				if (ctx.usedOldNames.contains(oi.name)) continue;   // 旧名只能被占一次
 				if (!sameSemantics(ni, oi)) continue;
 				if (!isSignatureCompatible(owner, oi, ni)) continue;
 				if (!sameNestingLevel(ni, oi)) continue;
@@ -693,6 +720,7 @@ public class LambdaAligner {
 		}
 		for (SyntheticInfo oi : group) {
 			if (oi.matched || oi.ghost) continue;
+			if (ctx.usedOldNames.contains(oi.name)) continue;   // 旧名只能被占一次
 			if (!sameSemantics(ni, oi)) continue;
 			if (!isSignatureCompatible(owner, oi, ni)) continue;
 			if (!sameNestingLevel(ni, oi)) continue;
@@ -799,6 +827,13 @@ public class LambdaAligner {
 			}
 		}
 		return remapped;
+	}
+
+	/** 读出字节码里所有方法的方法名（用于判断幽灵名字是否已被占用）。 */
+	private static List<MethodNode> newCnMethods(byte[] bytes) {
+		ClassNode cn = new ClassNode();
+		new ClassReader(bytes).accept(cn, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+		return cn.methods;
 	}
 
 	/** 把 {@link ClassNode} 序列化为字节码。 */
@@ -1216,10 +1251,25 @@ public class LambdaAligner {
 		if (orphanedKeys.isEmpty()) return newBytes;
 
 		// 2. 从已解析的 oldCn 中取遗弃方法的签名头（不再二次读 oldBytes）
+		//
+		// 跳过"名字已被新类某个活方法占用"的幽灵：幽灵的意义是替老 CallSite 兜住那个
+		// **名字**；一旦这个名字已经被新方法占着，幽灵就既兜不住（调用会解析到活方法上）
+		// 又与活方法构成"同名不同描述符"的重复定义。
+		// 实测场景见 scratch/hstest/deep2/ 变体乙：删掉整条 doA 链 + 改掉 doB 链叶子体，
+		// 序号整体位移且无任何指纹证据，新叶子落到名字 $2 上，而旧 $2 本该被复活；
+		// 注入幽灵会让老 doA 的调用点**安静地跑起 doB2 的代码**。
+		// 此时老 CallSite 本来就无解（它引用的旧结构已不存在），让它抛
+		// NoSuchMethodError / 走 UpdateRef 熔断，比静默执行别人的逻辑正确。
+		Set<String> liveNames = new HashSet<>();
+		for (MethodNode mn : newCnMethods(newBytes)) liveNames.add(mn.name);
+
 		List<MethodNode> toInject = new ArrayList<>();
 		for (MethodNode mn : oldCn.methods) {
-			if (orphanedKeys.contains(mn.name + mn.desc)) toInject.add(mn);
+			if (!orphanedKeys.contains(mn.name + mn.desc)) continue;
+			if (liveNames.contains(mn.name)) continue;   // 名字已被活方法占用，幽灵无意义
+			toInject.add(mn);
 		}
+		if (toInject.isEmpty()) return newBytes;
 
 		// 3. 以空壳形式追加到新类末尾
 		ClassReader cr = new ClassReader(newBytes);

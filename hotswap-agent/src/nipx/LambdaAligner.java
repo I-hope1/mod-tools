@@ -83,7 +83,7 @@ public class LambdaAligner {
 	 * 诊断开关：打开后打印配对决策的细节（谁在哪个阶段拿了哪个旧名字）。
 	 *
 	 * <p><b>为什么做成常设开关</b>：排查本对齐器的顺序问题时，临时插
-	 * {@code System.err.println} 是必需的；但临时探针有两个反复出现的代价 ——
+	 * 排查本对齐器的顺序问题时，临时插日志打印是必需的；但临时探针有两个反复出现的代价 ——
 	 * 忘了移除（污染生产日志），以及 <b>改了没生效却察觉不到</b>
 	 * （曾因 hstest 加载陈旧 jar，数轮结论都建立在旧字节码上）。
 	 * 做成开关后，排查只需设属性/环境变量，<b>不必改代码</b>。</p>
@@ -108,7 +108,7 @@ public class LambdaAligner {
 
 	/** 诊断输出：仅在 {@link #DEBUG} 打开时打印，统一前缀便于 grep。 */
 	static void dbg(Supplier<String> msg) {
-		if (DEBUG) System.err.println("[LambdaAligner] " + msg.get());
+		if (DEBUG) HotSwapAgent.info("[LambdaAligner] " + msg.get());
 	}
 
 	/** 按当前测试钩子决定的方向，在 {@code groups} 上迭代（返回下标序列）。 */
@@ -436,10 +436,12 @@ public class LambdaAligner {
 			return resurrectOrphanedLambdas(oldCn, alignedBytes, presentKeys, ctx);
 		} catch (Exception e) {
 			// 降级：不崩溃，返回原始字节码。
-			// 默认只记一行（热更失败不该刷屏）；DEBUG 下打完整堆栈，便于定位。
-			HotSwapAgent.info("[LambdaAligner] align failed, fallback to newBytes: " + e);
+			// 默认只记一行（热更失败不该刷屏）；DEBUG 下走 Logger 的 (msg, Throwable)
+			// 重载打完整堆栈 —— 而不是直接 printStackTrace，保持输出统一经日志系统。
 			if (DEBUG) {
-				e.printStackTrace();
+				HotSwapAgent.error("[LambdaAligner] align failed, fallback to newBytes", e);
+			} else {
+				HotSwapAgent.info("[LambdaAligner] align failed, fallback to newBytes: " + e);
 			}
 			return newBytes;
 		} finally {
@@ -1851,7 +1853,7 @@ public class LambdaAligner {
 	/** 日志去重。{@code add} 返回 true 表示本次是首次，才打印。 */
 	private static void logOrphanOnce(String location) {
 		if (LOGGED_ORPHANS.add(location)) {
-			System.err.println("[LambdaAligner] orphaned lambda invoked: " + location
+			HotSwapAgent.warn("[LambdaAligner] orphaned lambda invoked: " + location
 				+ " (subsequent invocations will be muted)");
 		}
 	}

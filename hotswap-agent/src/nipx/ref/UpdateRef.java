@@ -25,11 +25,12 @@ import java.util.Objects;
  * <b>核心工作机制：</b>
  * <ul>
  *   <li><b>动态代理：</b>在方法调用入口处代理原始函数式接口，透明捕获所有 {@link LinkageError}。</li>
- *   <li><b>精准局部熔断：</b>通过 {@link #onRemove} 提供细粒度的资源注销与置空（例如 {@code el.update(null)}、{@code el.removeListener(ref)}），
+ *   <li><b>精准局部熔断：</b>通过 {@code onRemove} 清理动作提供细粒度的资源注销与置空（例如 {@code el.update(null)}、{@code el.removeListener(ref)}），
  *       确保故障仅在局部隔离，绝不波及宿主组件的正常渲染与展示。</li>
  *   <li><b>Events 事件总线熔断：</b>底层重写 {@link arc.Events#on} / {@link arc.Events#run}，通过原生字节码自举直传私有注册表；
  *       监听器失效时通过注册表将失效监听器即刻注销，阻断 60FPS 高频事件（如 {@code Trigger.update}）死循环与泄漏，且异步解绑保护内部遍历安全。</li>
- *   <li><b>细粒度闭包释放：</b>针对局部熔断捕获的 UI 节点与回调闭包，在触发熔断时通过哨兵对象 {@link #REMOVED} 瞬时切断引用，对 GC 极度友好。</li>
+ *   <li><b>细粒度闭包释放：</b>针对局部熔断捕获的 UI 节点与回调闭包，在触发熔断时通过将 {@code fn} 与 {@code original} 一并置空，
+ *       瞬时切断对原始闭包的强引用，零额外对象开销，对 GC 极度友好。</li>
  *   <li><b>静默降级（Silent）：</b>对于点击、鼠标悬停、弹窗生命周期等瞬时事件，采用 {@link #wrapSilent}，异常时仅将内部引用置空静音。</li>
  *   <li><b>与 {@link nipx.LambdaAligner} 的双轨协同：</b><br>
  *       对于已被删除的“孤儿方法”，{@code LambdaAligner} 内部通过 {@link StackWalker} 探测调用栈：
@@ -40,6 +41,7 @@ import java.util.Objects;
  * @see nipx.LambdaRef
  * @see nipx.Injector
  */
+@SuppressWarnings({"rawtypes", "unchecked", "unused"})
 public class UpdateRef {
 
 	/** 空操作常量，用于事件回调发生异常时的静默熔断，防止触发任何外部破坏性清理 */
@@ -108,12 +110,14 @@ public class UpdateRef {
 		}
 	}
 
-	/** 原始函数式接口实例，不随熔断置空，供比较、哈希与透传提取 */
-	private final    Object   original;
+	/** 原始函数式接口实例（熔断时与 fn 一同置空切断闭包引用），供解包、比较与哈希 */
+	private volatile Object                original;
+	/** 原始函数式接口的哈希码缓存，保证对象在熔断与置空前后 hashCode 恒定不变 */
+	private final    int                   originalHash;
 	/** 当前被代理的目标函数式接口实例（例如 {@link Runnable}、{@link Cons} 等）；发生异常或注销后置为 null */
-	private volatile Object   fn;
+	private volatile Object                fn;
 	/** 自定义熔断/销毁动作；为 null 时表示静默失效；为 {@link #REMOVED} 时表示已触发熔断清理 */
-	private volatile Runnable onRemove;
+	private volatile Runnable              onRemove;
 
 	/** 线程本地上下文，支持通过 {@link #withOnRemove} 跨调用栈隐式传递熔断清理回调 */
 	private static final ThreadLocal<Runnable> CONTEXT_ON_REMOVE = new ThreadLocal<>();
@@ -142,15 +146,23 @@ public class UpdateRef {
 	 */
 	private UpdateRef(Object original, Runnable onRemove) {
 		this.original = original;
+		this.originalHash = original != null ? original.hashCode() : 0;
 		this.fn = original;
 		this.onRemove = onRemove == NOOP ? NOOP : combine(onRemove, CONTEXT_ON_REMOVE.get());
 	}
 
 	/**
-	 * 获取被代理的原始函数式接口对象。
+	 * 获取被代理的原始函数式接口对象（若已触发熔断清理则返回 null）。
 	 */
 	public Object getOriginal() {
 		return original;
+	}
+
+	/**
+	 * 获取原始函数式接口对象的哈希码缓存。
+	 */
+	public int getOriginalHash() {
+		return originalHash;
 	}
 
 	/**
@@ -181,21 +193,30 @@ public class UpdateRef {
 
 	/**
 	 * 为当前包装引用追加合并新的清理动作。
-	 * 若当前已处于熔断状态（{@code onRemove == REMOVED}）或静音模式（{@code onRemove == NOOP}），则忽略此操作。
+	 * 若当前已处于熔断状态（{@code onRemove == REMOVED}）或静音模式（{@code onRemove == NOOP}），则拒绝并返回 false。
 	 * @param action 待追加的清理动作
+	 * @return 若成功追加返回 true；若已被拒绝（已熔断、静音模式或 action 无效）返回 false
 	 */
-	public void addOnRemove(Runnable action) {
-		if (action == null || action == NOOP || action == REMOVED) return;
+	public boolean addOnRemove(Runnable action) {
+		if (action == null || action == NOOP || action == REMOVED) return false;
 		synchronized (this) {
 			if (this.onRemove != REMOVED && this.onRemove != NOOP) {
 				this.onRemove = combine(this.onRemove, action);
+				return true;
 			}
 		}
+		return false;
 	}
 
 	/**
 	 * 在指定代码块的作用域内设置默认的 {@code onRemove} 动作。
 	 * 该作用域内由 {@link UpdateRef} 创建且未显式指定清理动作的包装实例，将自动继承此动作。
+	 * <p>
+	 * <b>关于动作幂等性说明：</b><br>
+	 * 由于同一作用域内可能创建多个被代理的回调引用（例如同一个 UI 组件内的多个 update/visible 回调），
+	 * 它们会共享继承同一个上下文清理动作。当其中任意一个回调发生异常触发熔断时，该清理动作即会被执行；
+	 * 因此传入的 {@code onRemoveAction} 建议具备<b>幂等性</b>（即支持安全地被多次调用，或在首次执行后自行置空状态）。
+	 * </p>
 	 * @param onRemoveAction 该作用域内默认的清理动作
 	 * @param block          受该作用域保护并执行的代码块
 	 */
@@ -215,6 +236,11 @@ public class UpdateRef {
 
 	/**
 	 * 在指定代码块的作用域内设置默认的 {@code onRemove} 动作并返回执行结果。
+	 * <p>
+	 * <b>关于动作幂等性说明：</b><br>
+	 * 由于同一作用域内可能创建多个被代理的回调引用，它们会共享继承同一个上下文清理动作；
+	 * 传入的 {@code onRemoveAction} 建议具备<b>幂等性</b>。
+	 * </p>
 	 * @param onRemoveAction 该作用域内默认的清理动作
 	 * @param block          受该作用域保护并提供返回值的代码块
 	 * @param <T>            返回值类型
@@ -246,6 +272,24 @@ public class UpdateRef {
 			UpdateRef ref = getUpdateRef();
 			return ref != null ? ref.getOriginal() : null;
 		}
+
+		default int getOriginalHash() {
+			UpdateRef ref = getUpdateRef();
+			return ref != null ? ref.getOriginalHash() : 0;
+		}
+
+		/**
+		 * 统一比对两个包装代理实例的等价性。
+		 * 仅当两者的运行时类型一致，且底层的原始委托实例均未被熔断置空且逻辑相等时才判为相等。
+		 * 若任一方已被熔断置空，则退化为基于引用全等 (==) 的判定，杜绝因两个 null 产生误判。
+		 */
+		static boolean equals(WrappedRef a, Object b) {
+			if (a == b) return true;
+			if (b == null || a.getClass() != b.getClass()) return false;
+			Object origA = a.getOriginal();
+			Object origB = ((WrappedRef) b).getOriginal();
+			return origA != null && origA.equals(origB);
+		}
 	}
 
 	public static class WrappedRunnable implements Runnable, WrappedRef {
@@ -267,16 +311,12 @@ public class UpdateRef {
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (o == null || getClass() != o.getClass()) return false;
-			WrappedRunnable other = (WrappedRunnable) o;
-			return Objects.equals(getOriginal(), other.getOriginal());
+			return WrappedRef.equals(this, o);
 		}
 
 		@Override
 		public int hashCode() {
-			Object orig = getOriginal();
-			return orig != null ? orig.hashCode() : 0;
+			return getOriginalHash();
 		}
 	}
 
@@ -311,16 +351,12 @@ public class UpdateRef {
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (o == null || getClass() != o.getClass()) return false;
-			WrappedProv<?> other = (WrappedProv<?>) o;
-			return Objects.equals(getOriginal(), other.getOriginal());
+			return WrappedRef.equals(this, o);
 		}
 
 		@Override
 		public int hashCode() {
-			Object orig = getOriginal();
-			return orig != null ? orig.hashCode() : 0;
+			return getOriginalHash();
 		}
 	}
 
@@ -355,16 +391,12 @@ public class UpdateRef {
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (o == null || getClass() != o.getClass()) return false;
-			WrappedBoolp other = (WrappedBoolp) o;
-			return Objects.equals(getOriginal(), other.getOriginal());
+			return WrappedRef.equals(this, o);
 		}
 
 		@Override
 		public int hashCode() {
-			Object orig = getOriginal();
-			return orig != null ? orig.hashCode() : 0;
+			return getOriginalHash();
 		}
 	}
 
@@ -387,16 +419,12 @@ public class UpdateRef {
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (o == null || getClass() != o.getClass()) return false;
-			WrappedCons<?> other = (WrappedCons<?>) o;
-			return Objects.equals(getOriginal(), other.getOriginal());
+			return WrappedRef.equals(this, o);
 		}
 
 		@Override
 		public int hashCode() {
-			Object orig = getOriginal();
-			return orig != null ? orig.hashCode() : 0;
+			return getOriginalHash();
 		}
 	}
 
@@ -431,16 +459,12 @@ public class UpdateRef {
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (o == null || getClass() != o.getClass()) return false;
-			WrappedBoolf<?> other = (WrappedBoolf<?>) o;
-			return Objects.equals(getOriginal(), other.getOriginal());
+			return WrappedRef.equals(this, o);
 		}
 
 		@Override
 		public int hashCode() {
-			Object orig = getOriginal();
-			return orig != null ? orig.hashCode() : 0;
+			return getOriginalHash();
 		}
 	}
 
@@ -475,16 +499,12 @@ public class UpdateRef {
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (o == null || getClass() != o.getClass()) return false;
-			WrappedValidator other = (WrappedValidator) o;
-			return Objects.equals(getOriginal(), other.getOriginal());
+			return WrappedRef.equals(this, o);
 		}
 
 		@Override
 		public int hashCode() {
-			Object orig = getOriginal();
-			return orig != null ? orig.hashCode() : 0;
+			return getOriginalHash();
 		}
 	}
 
@@ -507,16 +527,12 @@ public class UpdateRef {
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (o == null || getClass() != o.getClass()) return false;
-			WrappedFloatc other = (WrappedFloatc) o;
-			return Objects.equals(getOriginal(), other.getOriginal());
+			return WrappedRef.equals(this, o);
 		}
 
 		@Override
 		public int hashCode() {
-			Object orig = getOriginal();
-			return orig != null ? orig.hashCode() : 0;
+			return getOriginalHash();
 		}
 	}
 
@@ -539,16 +555,12 @@ public class UpdateRef {
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (o == null || getClass() != o.getClass()) return false;
-			WrappedFloatc2 other = (WrappedFloatc2) o;
-			return Objects.equals(getOriginal(), other.getOriginal());
+			return WrappedRef.equals(this, o);
 		}
 
 		@Override
 		public int hashCode() {
-			Object orig = getOriginal();
-			return orig != null ? orig.hashCode() : 0;
+			return getOriginalHash();
 		}
 	}
 
@@ -571,16 +583,12 @@ public class UpdateRef {
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (o == null || getClass() != o.getClass()) return false;
-			WrappedEventListener other = (WrappedEventListener) o;
-			return Objects.equals(getOriginal(), other.getOriginal());
+			return WrappedRef.equals(this, o);
 		}
 
 		@Override
 		public int hashCode() {
-			Object orig = getOriginal();
-			return orig != null ? orig.hashCode() : 0;
+			return getOriginalHash();
 		}
 	}
 
@@ -606,7 +614,9 @@ public class UpdateRef {
 	public static Runnable wrap(Runnable original, Runnable onRemove) {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
-			if (onRemove != null) wr.getUpdateRef().addOnRemove(onRemove);
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (onRemove != null && ref != null) ref.addOnRemove(onRemove);
 			return original;
 		}
 		return new WrappedRunnable(new UpdateRef(original, onRemove));
@@ -632,7 +642,9 @@ public class UpdateRef {
 	public static <T> Prov<T> wrap(Prov<T> original, Runnable onRemove) {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
-			if (onRemove != null) wr.getUpdateRef().addOnRemove(onRemove);
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (onRemove != null && ref != null) ref.addOnRemove(onRemove);
 			return original;
 		}
 		return new WrappedProv<>(new UpdateRef(original, onRemove));
@@ -656,7 +668,9 @@ public class UpdateRef {
 	public static Boolp wrap(Boolp original, Runnable onRemove) {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
-			if (onRemove != null) wr.getUpdateRef().addOnRemove(onRemove);
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (onRemove != null && ref != null) ref.addOnRemove(onRemove);
 			return original;
 		}
 		return new WrappedBoolp(new UpdateRef(original, onRemove));
@@ -682,7 +696,9 @@ public class UpdateRef {
 	public static <T> Cons<T> wrap(Cons<T> original, Runnable onRemove) {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
-			if (onRemove != null) wr.getUpdateRef().addOnRemove(onRemove);
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (onRemove != null && ref != null) ref.addOnRemove(onRemove);
 			return original;
 		}
 		return new WrappedCons<>(new UpdateRef(original, onRemove));
@@ -795,7 +811,9 @@ public class UpdateRef {
 	public static Boolf<?> wrap(Element element, Boolf<?> original, Runnable onRemove) {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
-			if (onRemove != null) wr.getUpdateRef().addOnRemove(onRemove);
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (onRemove != null && ref != null) ref.addOnRemove(onRemove);
 			return original;
 		}
 		return new WrappedBoolf<>(new UpdateRef(original, onRemove));
@@ -821,7 +839,9 @@ public class UpdateRef {
 	public static TextFieldValidator wrap(Element element, TextFieldValidator original, Runnable onRemove) {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
-			if (onRemove != null) wr.getUpdateRef().addOnRemove(onRemove);
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (onRemove != null && ref != null) ref.addOnRemove(onRemove);
 			return original;
 		}
 		return new WrappedValidator(new UpdateRef(original, onRemove));
@@ -847,7 +867,9 @@ public class UpdateRef {
 	public static Floatc wrap(Element element, Floatc original, Runnable onRemove) {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
-			if (onRemove != null) wr.getUpdateRef().addOnRemove(onRemove);
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (onRemove != null && ref != null) ref.addOnRemove(onRemove);
 			return original;
 		}
 		return new WrappedFloatc(new UpdateRef(original, onRemove));
@@ -873,7 +895,9 @@ public class UpdateRef {
 	public static Floatc2 wrap(Element element, Floatc2 original, Runnable onRemove) {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
-			if (onRemove != null) wr.getUpdateRef().addOnRemove(onRemove);
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (onRemove != null && ref != null) ref.addOnRemove(onRemove);
 			return original;
 		}
 		return new WrappedFloatc2(new UpdateRef(original, onRemove));
@@ -900,12 +924,14 @@ public class UpdateRef {
 		try {
 			updateField = Element.class.getDeclaredField("update");
 			updateField.setAccessible(true);
-		} catch (Throwable ignored) {
+		} catch (Throwable t) {
+			HotSwapAgent.error("[UpdateRef] Failed to reflect Element.update field: " + t.getMessage(), t);
 		}
 		try {
 			disabledField = Button.class.getDeclaredField("disabledProvider");
 			disabledField.setAccessible(true);
-		} catch (Throwable ignored) {
+		} catch (Throwable t) {
+			HotSwapAgent.error("[UpdateRef] Failed to reflect Button.disabledProvider field: " + t.getMessage(), t);
 		}
 		ELEMENT_UPDATE_FIELD = updateField;
 		BUTTON_DISABLED_PROVIDER_FIELD = disabledField;
@@ -974,7 +1000,7 @@ public class UpdateRef {
 		@Override
 		public void run() {
 			if (element instanceof Button b && BUTTON_DISABLED_PROVIDER_FIELD != null && getButtonDisabledProvider(b) == target) {
-				b.setDisabled((Boolp) null);
+				b.setDisabled(null);
 			}
 		}
 	}
@@ -1001,10 +1027,12 @@ public class UpdateRef {
 	public static EventListener wrap(Element element, EventListener original, Runnable onRemove) {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
-			if (element != null) {
-				wr.getUpdateRef().addOnRemove(new RemoveListenerAction(element, original));
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (element != null && ref != null) {
+				ref.addOnRemove(new RemoveListenerAction(element, original));
 			}
-			if (onRemove != null) wr.getUpdateRef().addOnRemove(onRemove);
+			if (onRemove != null && ref != null) ref.addOnRemove(onRemove);
 			return original;
 		}
 		UpdateRef ref = new UpdateRef(original, onRemove);
@@ -1028,8 +1056,10 @@ public class UpdateRef {
 	public static Runnable wrapUpdate(Element element, Runnable original) {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
-			if (element != null) {
-				wr.getUpdateRef().addOnRemove(new RemoveUpdateAction(element, original));
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (element != null && ref != null) {
+				ref.addOnRemove(new RemoveUpdateAction(element, original));
 			}
 			return original;
 		}
@@ -1049,8 +1079,10 @@ public class UpdateRef {
 	public static Boolp wrapVisible(Element element, Boolp original) {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
-			if (element != null) {
-				wr.getUpdateRef().addOnRemove(new RemoveVisibleAction(element, original));
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (element != null && ref != null) {
+				ref.addOnRemove(new RemoveVisibleAction(element, original));
 			}
 			if (original instanceof WrappedBoolp wb) {
 				wb.setFallbackIfAbsent(() -> element == null || element.visible);
@@ -1074,8 +1106,10 @@ public class UpdateRef {
 	public static Prov<?> wrapTouchable(Element element, Prov<?> original) {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
-			if (element != null) {
-				wr.getUpdateRef().addOnRemove(new RemoveTouchableAction(element, original));
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (element != null && ref != null) {
+				ref.addOnRemove(new RemoveTouchableAction(element, original));
 			}
 			if (original instanceof WrappedProv wp) {
 				wp.setFallbackIfAbsent(() -> element != null ? element.touchable : Touchable.enabled);
@@ -1099,8 +1133,10 @@ public class UpdateRef {
 	public static Boolp wrapButtonDisabled(Element element, Boolp original) {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
-			if (element != null) {
-				wr.getUpdateRef().addOnRemove(new RemoveButtonDisabledAction(element, original));
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (element != null && ref != null) {
+				ref.addOnRemove(new RemoveButtonDisabledAction(element, original));
 			}
 			if (original instanceof WrappedBoolp wb) {
 				wb.setFallbackIfAbsent(() -> element instanceof Button b && b.isDisabled());
@@ -1132,8 +1168,10 @@ public class UpdateRef {
 	public static TextFieldValidator wrapValidator(Element element, TextFieldValidator original) {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
-			if (element != null) {
-				wr.getUpdateRef().addOnRemove(new RemoveValidatorAction(element, original));
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (element != null && ref != null) {
+				ref.addOnRemove(new RemoveValidatorAction(element, original));
 			}
 			if (original instanceof WrappedValidator wv) {
 				wv.setFallbackIfAbsent(text -> true);
@@ -1156,8 +1194,10 @@ public class UpdateRef {
 	public static EventListener wrapListener(Element element, EventListener original) {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
-			if (element != null) {
-				wr.getUpdateRef().addOnRemove(new RemoveListenerAction(element, original));
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (element != null && ref != null) {
+				ref.addOnRemove(new RemoveListenerAction(element, original));
 			}
 			return original;
 		}
@@ -1177,8 +1217,10 @@ public class UpdateRef {
 	public static EventListener wrapCaptureListener(Element element, EventListener original) {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
-			if (element != null) {
-				wr.getUpdateRef().addOnRemove(new RemoveCaptureListenerAction(element, original));
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (element != null && ref != null) {
+				ref.addOnRemove(new RemoveCaptureListenerAction(element, original));
 			}
 			return original;
 		}
@@ -1234,9 +1276,13 @@ public class UpdateRef {
 
 	/**
 	 * 包装 {@link Cell#update(Cons)} 布局单元每帧消费回调。
+	 * <p>
+	 * <b>关于形参说明：</b>保留形参 {@code cell} 是为了保持与字节码注入器（Injector）在拦截 {@code Cell.update(Cons)} 时的调用签名一致；
+	 * 由于 Cell 内部机制，发生异常时采用 {@link #NOOP} 静默熔断，不执行外部清理动作，因而无需持有或操作 {@code cell} 引用。
+	 * </p>
 	 * 发生 {@link LinkageError} 时执行静默熔断（{@link #NOOP}）：由内部引用置空短路阻断高频报错，
 	 * 避免调用外部清理误清宿主元素的其他 update 回调。
-	 * @param cell     目标表格单元
+	 * @param cell     目标表格单元（仅用于注入签名协议兼容，不被持有）
 	 * @param original 原始单元更新回调
 	 * @return 具备局部熔断保护的代理 Cons
 	 */
@@ -1274,18 +1320,16 @@ public class UpdateRef {
 
 	/**
 	 * 包装 {@link Cell#tooltip(Cons)} 浮动提示构建回调。
-	 * 发生 {@link LinkageError} 时执行静默失效，避免调用 {@code cell.tooltip(null)} 重新实例化空 Tooltip 监听器。
-	 * @param cell     目标表格单元
+	 * <p>
+	 * <b>关于形参说明：</b>保留形参 {@code cell} 是为了保持与字节码注入器（Injector）在拦截 {@code Cell.tooltip(Cons)} 时的调用签名一致；
+	 * 转发至 {@link #wrapCellUpdate(Cell, Cons)} 执行静默熔断，避免调用 {@code cell.tooltip(null)} 重新实例化空 Tooltip 监听器。
+	 * </p>
+	 * @param cell     目标表格单元（仅用于注入签名协议兼容，不被持有）
 	 * @param original 原始提示构建回调
 	 * @return 具备局部熔断保护的代理 Cons
 	 */
-	@SuppressWarnings({"unchecked", "rawtypes"})
 	public static Cons<?> wrapCellTooltip(Cell<?> cell, Cons<?> original) {
-		if (original == null) return null;
-		if (original instanceof WrappedRef) {
-			return original;
-		}
-		return new WrappedCons<>(new UpdateRef(original, NOOP));
+		return wrapCellUpdate(null, original);
 	}
 
 	/**
@@ -1315,8 +1359,10 @@ public class UpdateRef {
 
 	/**
 	 * 包装瞬时交互事件（如 {@code clicked}、{@code hovered}、弹窗生命周期等）。
-	 * 发生 {@link LinkageError} 时仅清空内部引用静音失效，绝不调用任何外部删除动作，零 Element 引用。
-	 * @param element  宿主 Element
+	 * 形参中的 {@code element} 仅用于保持与字节码注入器（Injector）统一的调用签名协议，
+	 * {@code UpdateRef} 内部对其完全忽略且绝不持有任何强引用；
+	 * 发生 {@link LinkageError} 时仅清空内部引用静音失效，绝不调用任何外部删除或清理动作，零 Element 引用。
+	 * @param element  宿主 Element（仅用于注入签名协议兼容，不被持有）
 	 * @param original 原始 Runnable 实例
 	 * @return 具备静默熔断保护的代理 Runnable
 	 */
@@ -1325,8 +1371,10 @@ public class UpdateRef {
 	}
 
 	/**
-	 * 包装瞬时消费事件回调。发生 {@link LinkageError} 时仅清空内部引用静音失效。
-	 * @param element  宿主 Element
+	 * 包装瞬时消费事件回调。
+	 * 形参中的 {@code element} 仅用于保持与注入器统一的签名协议，UpdateRef 内部对其忽略且不持有；
+	 * 发生 {@link LinkageError} 时仅清空内部引用静音失效，绝不调用外部删除动作。
+	 * @param element  宿主 Element（仅用于注入签名协议兼容，不被持有）
 	 * @param original 原始 Cons 实例
 	 * @return 具备静默熔断保护的代理 Cons
 	 */
@@ -1335,8 +1383,10 @@ public class UpdateRef {
 	}
 
 	/**
-	 * 包装瞬时单浮点手势/滚动回调。发生 {@link LinkageError} 时仅清空内部引用静音失效。
-	 * @param element  宿主 Element
+	 * 包装瞬时单浮点手势/滚动回调。
+	 * 形参中的 {@code element} 仅用于保持与注入器统一的签名协议，UpdateRef 内部对其忽略且不持有；
+	 * 发生 {@link LinkageError} 时仅清空内部引用静音失效，绝不调用外部删除动作。
+	 * @param element  宿主 Element（仅用于注入签名协议兼容，不被持有）
 	 * @param original 原始 Floatc 实例
 	 * @return 具备静默熔断保护的代理 Floatc
 	 */
@@ -1345,8 +1395,10 @@ public class UpdateRef {
 	}
 
 	/**
-	 * 包装瞬时双浮点拖拽手势回调。发生 {@link LinkageError} 时仅清空内部引用静音失效。
-	 * @param element  宿主 Element
+	 * 包装瞬时双浮点拖拽手势回调。
+	 * 形参中的 {@code element} 仅用于保持与注入器统一的签名协议，UpdateRef 内部对其忽略且不持有；
+	 * 发生 {@link LinkageError} 时仅清空内部引用静音失效，绝不调用外部删除动作。
+	 * @param element  宿主 Element（仅用于注入签名协议兼容，不被持有）
 	 * @param original 原始 Floatc2 实例
 	 * @return 具备静默熔断保护的代理 Floatc2
 	 */
@@ -1378,31 +1430,43 @@ public class UpdateRef {
 
 	private static final Seq<Runnable> DEFERRED_REMOVALS = new Seq<>();
 	private static volatile boolean hasDeferredRemovals;
+	private static volatile int flushFailCount;
 
 	private static void deferRemoval(Runnable r) {
 		if (r == null || r == NOOP || r == REMOVED) return;
 		synchronized (DEFERRED_REMOVALS) {
 			DEFERRED_REMOVALS.add(r);
 			hasDeferredRemovals = true;
+			flushFailCount = 0;
 		}
 		tryScheduleDeferredFlush();
 	}
 
 	/**
 	 * 若当前处于主循环环境（{@code Core.app != null}）且存在暂存的熔断注销动作，
-	 * 通过 {@link Core.Application#post} 向主线程安全点投递清理任务。
+	 * 通过 {@link Core#app} 的 {@link Application#post} 方法向主线程安全点投递清理任务。
 	 * 采用 double-check 快速短路，在无暂存动作时 100% 零锁竞争与零开销。
+	 * 若投递连续失败达到上限（5次），将暂停在热路径上反复调度，防止异常刷屏。
 	 */
 	public static void tryScheduleDeferredFlush() {
-		if (!hasDeferredRemovals || Core.app == null) return;
+		if (!hasDeferredRemovals || Core.app == null || flushFailCount >= 5) return;
 		synchronized (DEFERRED_REMOVALS) {
-			if (!hasDeferredRemovals || DEFERRED_REMOVALS.isEmpty()) return;
+			if (!hasDeferredRemovals || DEFERRED_REMOVALS.isEmpty() || flushFailCount >= 5) return;
 			hasDeferredRemovals = false;
 		}
 		try {
 			Core.app.post(UpdateRef::flushDeferredRemovals);
-		} catch (Throwable ignored) {
-			hasDeferredRemovals = true;
+			synchronized (DEFERRED_REMOVALS) {
+				flushFailCount = 0;
+			}
+		} catch (Throwable t) {
+			synchronized (DEFERRED_REMOVALS) {
+				hasDeferredRemovals = true;
+				flushFailCount++;
+				if (flushFailCount == 5) {
+					HotSwapAgent.error("[UpdateRef] Core.app.post failed 5 times continuously, suspending retries until new removals added: " + t.getMessage(), t);
+				}
+			}
 		}
 	}
 
@@ -1414,6 +1478,7 @@ public class UpdateRef {
 		Seq<Runnable> toRun;
 		synchronized (DEFERRED_REMOVALS) {
 			hasDeferredRemovals = false;
+			flushFailCount = 0;
 			if (DEFERRED_REMOVALS.isEmpty()) return;
 			toRun = new Seq<>(DEFERRED_REMOVALS);
 			DEFERRED_REMOVALS.clear();
@@ -1427,12 +1492,10 @@ public class UpdateRef {
 	 * 包装 {@link Cons} 的事件监听器容器，支持与原始被代理引用的等价比较与注销。
 	 */
 	public static class EventCons<T> implements Cons<T>, WrappedRef {
-		public final  UpdateRef ref;
-		private final Cons<T>   key;
+		public final UpdateRef ref;
 
 		public EventCons(Cons<T> original, Runnable onRemove) {
 			this.ref = new UpdateRef(original, onRemove);
-			this.key = original;
 		}
 
 		@Override
@@ -1445,21 +1508,19 @@ public class UpdateRef {
 			return ref;
 		}
 
+		@SuppressWarnings("unchecked")
 		public Cons<T> getKey() {
-			return key;
+			return (Cons<T>) getOriginal();
 		}
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (o == null || getClass() != o.getClass()) return false;
-			EventCons<?> other = (EventCons<?>) o;
-			return Objects.equals(key, other.key);
+			return WrappedRef.equals(this, o);
 		}
 
 		@Override
 		public int hashCode() {
-			return key != null ? key.hashCode() : 0;
+			return getOriginalHash();
 		}
 	}
 
@@ -1468,17 +1529,18 @@ public class UpdateRef {
 	 * 并在熔断时通过私有注册表将自身精准注销。同时实现 {@link Runnable} 以支持双向多态解包与比较。
 	 */
 	public static class EventRunnableCons implements Runnable, Cons<Object>, WrappedRef {
-		public final  UpdateRef ref;
-		private final Object    key;
+		public final UpdateRef ref;
 
 		public EventRunnableCons(Runnable original, Runnable onRemove) {
 			this.ref = new UpdateRef(original, onRemove);
-			this.key = original;
+		}
+
+		public EventRunnableCons(UpdateRef ref) {
+			this.ref = ref;
 		}
 
 		public EventRunnableCons(UpdateRef ref, Object key) {
 			this.ref = ref;
-			this.key = key;
 		}
 
 		@Override
@@ -1497,20 +1559,17 @@ public class UpdateRef {
 		}
 
 		public Object getKey() {
-			return key;
+			return getOriginal();
 		}
 
 		@Override
 		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (o == null || getClass() != o.getClass()) return false;
-			EventRunnableCons other = (EventRunnableCons) o;
-			return Objects.equals(key, other.key);
+			return WrappedRef.equals(this, o);
 		}
 
 		@Override
 		public int hashCode() {
-			return key != null ? key.hashCode() : 0;
+			return getOriginalHash();
 		}
 	}
 
@@ -1531,19 +1590,24 @@ public class UpdateRef {
 		if (eventsMap != map) eventsMap = map;
 		tryScheduleDeferredFlush();
 
-		if (listener instanceof EventCons) {
+		if (listener instanceof EventCons ec) {
+			if (ec.getUpdateRef() != null && ec.getUpdateRef().isRemoved()) return;
 			map.get(type, () -> new Seq<>(Cons.class)).add(listener);
 			return;
 		}
 
 		if (listener instanceof WrappedRef wr) {
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return;
 			// 若已受 UpdateRef 包装，不再重复代理，追加注销动作后直接注入注册表
-			wr.getUpdateRef().addOnRemove(() -> {
-				Seq<Cons<?>> s = map.get(type);
-				if (s != null) {
-					s.remove(listener, true);
-				}
-			});
+			if (ref != null) {
+				ref.addOnRemove(() -> {
+					Seq<Cons<?>> s = map.get(type);
+					if (s != null) {
+						s.remove(listener, true);
+					}
+				});
+			}
 			map.get(type, () -> new Seq<>(Cons.class)).add(listener);
 			return;
 		}
@@ -1579,7 +1643,8 @@ public class UpdateRef {
 		if (eventsMap != map) eventsMap = map;
 		tryScheduleDeferredFlush();
 
-		if (listener instanceof EventRunnableCons) {
+		if (listener instanceof EventRunnableCons erc) {
+			if (erc.getUpdateRef() != null && erc.getUpdateRef().isRemoved()) return;
 			map.get(type, () -> new Seq<>(Cons.class)).add((Cons) listener);
 			return;
 		}
@@ -1596,10 +1661,13 @@ public class UpdateRef {
 
 		EventRunnableCons wrapper;
 		if (listener instanceof WrappedRef wr) {
-			// 复用已有的 UpdateRef，追加从注册表注销的动作，避免多层嵌套代理吞掉 LinkageError
 			UpdateRef ref = wr.getUpdateRef();
-			ref.addOnRemove(onRemove);
-			wrapper = new EventRunnableCons(ref, wr.getOriginal());
+			if (ref != null && ref.isRemoved()) return;
+			// 复用已有的 UpdateRef，追加从注册表注销的动作，避免多层嵌套代理吞掉 LinkageError
+			if (ref != null) {
+				ref.addOnRemove(onRemove);
+			}
+			wrapper = new EventRunnableCons(ref);
 		} else {
 			wrapper = new EventRunnableCons(listener, onRemove);
 		}
@@ -1608,16 +1676,14 @@ public class UpdateRef {
 	}
 
 	private static Object unwrapTargetKey(Object obj) {
-		if (obj instanceof EventCons<?> ec) return ec.getKey();
-		if (obj instanceof EventRunnableCons erc) return erc.getKey();
 		if (obj instanceof WrappedRef wr) return wr.getOriginal();
 		return obj;
 	}
 
 	private static boolean matchListener(Cons<?> item, Object listener, Object targetKey) {
-		if (item == listener || item == targetKey) return true;
+		if (item == listener || (targetKey != null && item == targetKey)) return true;
 		Object itemKey = unwrapTargetKey(item);
-		return itemKey == targetKey || (itemKey != null && Objects.equals(itemKey, targetKey));
+		return targetKey != null && itemKey != null && Objects.equals(itemKey, targetKey);
 	}
 
 	/**
@@ -1701,9 +1767,10 @@ public class UpdateRef {
 		}
 	}
 
-	/** 清空被代理的原始函数引用，切断死代码调用 */
+	/** 清空被代理的原始函数引用，切断死代码调用并释放闭包引用供 GC 回收 */
 	private void clearFn() {
 		this.fn = null;
+		this.original = null;
 	}
 
 	/**

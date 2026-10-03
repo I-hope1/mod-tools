@@ -1,17 +1,14 @@
 package modtools.unsupported;
 
 import arc.files.Fi;
-import arc.util.*;
+import arc.util.Log;
 import com.sun.tools.attach.VirtualMachine;
 import jdk.internal.misc.Unsafe;
 import mindustry.Vars;
 import modtools.IntVars;
-import modtools.jsfunc.reflect.UNSAFE;
 import modtools.utils.io.FileUtils;
-import modtools.utils.reflect.FieldUtils;
 import nipx.UtilsAgent;
 import nipx.jni.JNIEnv;
-import sun.tools.attach.HotSpotVirtualMachine;
 
 import java.io.*;
 import java.lang.management.ManagementFactory;
@@ -106,11 +103,16 @@ public class UtilsAgentManager {
 	}
 
 	static void prepareSelfAttach() {
-		UNSAFE.openModule(VirtualMachine.class, "sun.tools.attach");
-		Unsafe unsafe = Unsafe.getUnsafe();
-		unsafe.ensureClassInitialized(HotSpotVirtualMachine.class);
-		unsafe.putBoolean(HotSpotVirtualMachine.class,
-		 unsafe.staticFieldOffset(FieldUtils.getFieldAccess(HotSpotVirtualMachine.class, "ALLOW_ATTACH_SELF")),
-		 true);
+		// UNSAFE.openModule(VirtualMachine.class, "sun.tools.attach");
+		try {
+			Unsafe   unsafe              = Unsafe.getUnsafe();
+			Class<?> hsvm = Class.forName("sun.tools.attach.HotSpotVirtualMachine");
+			unsafe.ensureClassInitialized(hsvm);
+			unsafe.putBoolean(hsvm,
+			 unsafe.staticFieldOffset(hsvm.getDeclaredField("ALLOW_ATTACH_SELF")),
+			 true);
+		} catch (Throwable e) {
+			throw new RuntimeException(e);
+		}
 	}
 }

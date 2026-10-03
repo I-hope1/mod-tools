@@ -607,9 +607,19 @@ tasks.register("hstestRun", Exec) {
 	// 并在配置期冻结为字符串，避免 Exec 延迟求值时拿到空值。
 	def cp = sourceSets.hstest.runtimeClasspath.asPath
 	def javaBin = "${System.getProperty('java.home')}/bin/java"
+	// 三个 javac 在 Gradle 侧解析成**绝对路径**，与 daemon 的 PATH 解耦
+	def jdk8  = System.getenv('HSTEST_JAVAC8')  ?: 'F:/files/java/jdks/jdk-1.8/bin/javac.exe'
+	def jdk17 = System.getenv('HSTEST_JAVAC17') ?: 'F:/files/java/jdks/jdk-17.0.2/bin/javac.exe'
+	def jdk21 = System.getenv('HSTEST_JAVAC21') ?: 'F:/files/java/jdks/openjdk-21.0.2/bin/javac.exe'
+	[ [jdk8, true], [jdk17, true], [jdk21, true] ].each { f, _ ->
+		if (!new File(f).exists()) logger.warn("hstest: javac 不存在: " + f)
+	}
 	doFirst {
 		commandLine "bash", "suite.sh", cp
 		environment "HSTEST_JAVA", javaBin
+		environment "HSTEST_JAVAC8", jdk8
+		environment "HSTEST_JAVAC17", jdk17
+		environment "HSTEST_JAVAC21", jdk21
 	}
 	standardOutput = System.out
 	errorOutput = System.err

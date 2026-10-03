@@ -8,7 +8,7 @@
 # 用法：HSTEST_CP=<classpath> bash suite.sh
 # 退出码：0 = 全部通过（含 expected-failure 按 KNOWN 计数）；非 0 = 失败或数量不符基线。
 # ============================================================================
-set -u
+set +u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
 
@@ -45,7 +45,7 @@ for v in 8 17 21; do
     out="fx/c${v}${ver}"; rm -rf "$out"; mkdir -p "$out"
     if [ "$ver" = v1 ]; then SRC="comp/v1/test24/Compete.java"; else SRC="comp/v2/test24/Compete.java"; fi
     "$JC" -nowarn -encoding UTF-8 -d "$out" comp/Time7.java "$SRC" >/dev/null 2>&1 \
-      || { echo "   FAIL 编译 c${v}${ver}"; FAILED=1; }
+      || { echo "   FAIL 编译 c${v}${ver} (javac=$JC cwd=$PWD)"; "$JC" -nowarn -encoding UTF-8 -d "$out" comp/Time7.java "$SRC" 2>&1 | head -4; FAILED=1; }
   done
 done
 for v in 8 21; do

@@ -165,7 +165,6 @@ public class LambdaAligner {
 	 */
 	public static void clearLoggedOrphans() {
 		LOGGED_ORPHANS.clear();
-
 	}
 
 	//region 匹配上下文
@@ -1004,9 +1003,23 @@ public class LambdaAligner {
 	private static final Set<String> WARNED_REALIGNMENTS =
 		Collections.newSetFromMap(new ConcurrentHashMap<>());
 
-	/** 清空顺序回退告警去重缓存（与 {@link #clearLoggedOrphans()} 同步调用）。 */
+	/**
+	 * 清空"只报一次"的去重缓存（{@link #WARNED_REALIGNMENTS} 与
+	 * {@link #LOGGED_ORPHANS}）。
+	 *
+	 * <p><b>当前未被调用</b>（按项目决定保留为可选 API）。因此两个去重集合
+	 * <b>在本进程内只增不减</b>，带来两个已知后果：</p>
+	 * <ul>
+	 *   <li>某个 lambda 在 V2 被删除、V3 又被加回时，其孤儿日志不会再次打印；</li>
+	 *   <li>集合大小随"历史上出现过的不同 location 数"单调增长（量级通常很小）。</li>
+	 * </ul>
+	 *
+	 * <p>若要接入热更流程，应在每轮 transform 开始时调用一次，使"每轮都能重新报告"
+	 * 且避免无界增长。</p>
+	 */
 	public static void clearLoggedWarnings() {
 		WARNED_REALIGNMENTS.clear();
+		clearLoggedOrphans();
 	}
 
 	/**

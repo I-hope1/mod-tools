@@ -26,7 +26,12 @@ import static nipx.HotSwapAgent.*;
 /** @see UpdateRef */
 public class LambdaRef {
 
-	public static void init() {
+	private static volatile boolean initialized = false;
+
+	public static synchronized void init() {
+		if (initialized) return;
+		initialized = true;
+
 		String runnableType      = internalName(Runnable.class);
 		String boolpType         = internalName(Boolp.class);
 		String provType          = internalName(Prov.class);
@@ -67,7 +72,9 @@ public class LambdaRef {
 		Injector.redefineTask(Element.class, "dragged", "(" + floatc2Native + ")V", floatc2Type, 1, "wrapSilent");
 		Injector.redefineTask(Element.class, "scrolled", "(" + floatcNative + ")V", floatcType, 1, "wrapSilent");
 		Injector.redefineTask(Element.class, "addListener", "(" + eventListenerNative + ")V", eventListenerType, 1, "wrapListener");
+		Injector.redefineTask(Element.class, "removeListener", "(" + eventListenerNative + ")Z", eventListenerType, 1, "unwrapListener");
 		Injector.redefineTask(Element.class, "addCaptureListener", "(" + eventListenerNative + ")V", eventListenerType, 1, "wrapCaptureListener");
+		Injector.redefineTask(Element.class, "removeCaptureListener", "(" + eventListenerNative + ")Z", eventListenerType, 1, "unwrapCaptureListener");
 		Injector.redefineTask(Element.class, "clicked", "(" + runnableNative + ")" + clickListenerNative, runnableType, 1, "wrapSilent");
 		Injector.redefineTask(Element.class, "clicked", "(" + keyCodeNative + runnableNative + ")" + clickListenerNative, runnableType, 2, "wrapSilent");
 		Injector.redefineTask(Element.class, "clicked", "(" + consNative + runnableNative + ")" + clickListenerNative, runnableType, 2, "wrapSilent");
@@ -116,7 +123,7 @@ public class LambdaRef {
 						AnnotationTransformer.internalName(UpdateRef.class),
 						"eventsOn", "(Ljava/lang/Class;Larc/func/Cons;Larc/struct/ObjectMap;)V", false);
 					mv.visitInsn(Opcodes.RETURN);
-					mv.visitMaxs(3, 2);
+					mv.visitMaxs(0, 0);
 					mv.visitEnd();
 					return null;
 				}
@@ -131,7 +138,7 @@ public class LambdaRef {
 						AnnotationTransformer.internalName(UpdateRef.class),
 						"eventsRun", "(Ljava/lang/Object;Ljava/lang/Runnable;Larc/struct/ObjectMap;)V", false);
 					mv.visitInsn(Opcodes.RETURN);
-					mv.visitMaxs(3, 2);
+					mv.visitMaxs(0, 0);
 					mv.visitEnd();
 					return null;
 				}
@@ -146,7 +153,7 @@ public class LambdaRef {
 						AnnotationTransformer.internalName(UpdateRef.class),
 						"eventsRemove", "(Ljava/lang/Class;Larc/func/Cons;Larc/struct/ObjectMap;)Z", false);
 					mv.visitInsn(Opcodes.IRETURN);
-					mv.visitMaxs(3, 2);
+					mv.visitMaxs(0, 0);
 					mv.visitEnd();
 					return null;
 				}
@@ -182,7 +189,7 @@ public class LambdaRef {
 					return new CellAdviceAdapter(mv, access, name, descriptor, "Larc/func/Cons;", "wrapCellUpdate");
 				}
 				// 拦截 disabled(Larc/func/Boolf;)Larc/scene/ui/layout/Cell;
-				if ("disabled".equals(name) && "(Larc/fusnc/Boolf;)Larc/scene/ui/layout/Cell;".equals(descriptor)) {
+				if ("disabled".equals(name) && "(Larc/func/Boolf;)Larc/scene/ui/layout/Cell;".equals(descriptor)) {
 					return new CellAdviceAdapter(mv, access, name, descriptor, "Larc/func/Boolf;", "wrapCellDisabled");
 				}
 				// 拦截 tooltip(Larc/func/Cons;)Larc/scene/ui/layout/Cell;
@@ -247,12 +254,6 @@ public class LambdaRef {
 	//endregion
 
 
-	/**
-	 * 当某个类被 HotSwap 重载时调用。
-	 * 清除所有 UpdateRef 中来自该类的 lambda，避免 NoSuchMethodError。
-	 * @param slashClassName 被重载的类名，如 com/example/MyView
-	 * @param newBytecode    新的类字节码
-	 */
 	public static void beforeClassRedefined(String slashClassName, byte[] newBytecode) {
 		/* int cleared = 0;
 		for (var ref : UpdateRef.getAll()) {

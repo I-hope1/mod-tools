@@ -1,20 +1,17 @@
 package nipx.ref;
 
-import arc.Core;
-import arc.Events;
+import arc.*;
 import arc.func.*;
 import arc.scene.Element;
 import arc.scene.event.*;
-import arc.scene.event.EventListener;
-import arc.scene.ui.Button;
-import arc.scene.ui.TextField;
+import arc.scene.ui.*;
 import arc.scene.ui.TextField.TextFieldValidator;
 import arc.scene.ui.layout.Cell;
-import arc.struct.ObjectMap;
-import arc.struct.Seq;
+import arc.scene.utils.Disableable;
+import arc.struct.*;
 import nipx.HotSwapAgent;
 
-import java.util.*;
+import java.util.Objects;
 
 /**
  * 热重载（HotSwap）中 Lambda 表达式与回调函数式接口的容错及精准熔断代理包装器。
@@ -38,7 +35,6 @@ import java.util.*;
  *       若检测到当前由 {@link UpdateRef} 调用，则定向抛出 {@link NoSuchMethodError}，精准触发此处的局部熔断与清理动作；
  *       若为普通业务代码调用，则静默返回类型默认值，绝不中断业务。</li>
  * </ul>
- *
  * @see nipx.LambdaAligner
  * @see nipx.LambdaRef
  * @see nipx.Injector
@@ -46,10 +42,12 @@ import java.util.*;
 public class UpdateRef {
 
 	/** 空操作常量，用于事件回调发生异常时的静默熔断，防止触发任何外部破坏性清理 */
-	public static final Runnable NOOP = () -> {};
+	public static final Runnable NOOP = () -> { };
 
 	/** 标记熔断清理已被触发的哨兵对象，替代原有的 boolean removed 标志，兼顾状态判定与闭包引用释放 */
-	public static final Runnable REMOVED = () -> {};
+	public static final Runnable REMOVED = () -> {
+		throw new UnsupportedOperationException();
+	};
 
 	/** 原始函数式接口实例，不随熔断置空，供比较、哈希与透传提取 */
 	private final    Object   original;
@@ -63,7 +61,6 @@ public class UpdateRef {
 
 	/**
 	 * 合并两个清理动作。按序执行，任何一方抛出异常均被隔离捕获并记录日志，不影响后续清理。
-	 *
 	 * @param a 首要清理动作
 	 * @param b 次要/上下文清理动作
 	 * @return 合并后的单一动作
@@ -87,7 +84,6 @@ public class UpdateRef {
 
 	/**
 	 * 初始化包装引用与熔断动作，自动与当前线程上下文清理动作（{@link #CONTEXT_ON_REMOVE}）合并。
-	 *
 	 * @param original 原始函数式接口实例
 	 * @param onRemove 显式指定的清理动作
 	 */
@@ -106,7 +102,6 @@ public class UpdateRef {
 
 	/**
 	 * 获取当前配置的熔断清理动作。
-	 *
 	 * @return 当前绑定的清理动作，若已熔断或未设置则返回 null
 	 */
 	public Runnable getOnRemove() {
@@ -117,7 +112,6 @@ public class UpdateRef {
 	/**
 	 * 动态设置或替换当前包装引用的熔断清理动作。
 	 * 若当前已处于熔断状态（{@code onRemove == REMOVED}），则忽略此设置。
-	 *
 	 * @param onRemove 新的清理动作
 	 */
 	public void setOnRemove(Runnable onRemove) {
@@ -131,7 +125,6 @@ public class UpdateRef {
 	/**
 	 * 为当前包装引用追加合并新的清理动作。
 	 * 若当前已处于熔断状态（{@code onRemove == REMOVED}），则忽略此操作。
-	 *
 	 * @param action 待追加的清理动作
 	 */
 	public void addOnRemove(Runnable action) {
@@ -146,7 +139,6 @@ public class UpdateRef {
 	/**
 	 * 在指定代码块的作用域内设置默认的 {@code onRemove} 动作。
 	 * 该作用域内由 {@link UpdateRef} 创建且未显式指定清理动作的包装实例，将自动继承此动作。
-	 *
 	 * @param onRemoveAction 该作用域内默认的清理动作
 	 * @param block          受该作用域保护并执行的代码块
 	 */
@@ -166,7 +158,6 @@ public class UpdateRef {
 
 	/**
 	 * 在指定代码块的作用域内设置默认的 {@code onRemove} 动作并返回执行结果。
-	 *
 	 * @param onRemoveAction 该作用域内默认的清理动作
 	 * @param block          受该作用域保护并提供返回值的代码块
 	 * @param <T>            返回值类型
@@ -530,17 +521,15 @@ public class UpdateRef {
 
 	/**
 	 * 将原始 {@link Runnable} 包装为具备热重载容错保护的代理，异常时静默失效。
-	 *
 	 * @param original 原始 Runnable 实例
 	 * @return 具备容错保护的代理 Runnable
 	 */
 	public static Runnable wrap(Runnable original) {
-		return wrap(original, (Runnable) null);
+		return wrap(original, null);
 	}
 
 	/**
 	 * 将原始 {@link Runnable} 包装为具备热重载容错保护的代理，并在异常时触发指定熔断动作。
-	 *
 	 * @param original 原始 Runnable 实例
 	 * @param onRemove 发生 LinkageError 时的清理/注销动作
 	 * @return 具备容错保护的代理 Runnable
@@ -556,18 +545,16 @@ public class UpdateRef {
 
 	/**
 	 * 将原始 {@link Prov} 包装为具备热重载容错保护的代理，异常时返回 null 并静默失效。
-	 *
 	 * @param original 原始 Prov 实例
 	 * @param <T>      提供的值类型
 	 * @return 具备容错保护的代理 Prov
 	 */
 	public static <T> Prov<T> wrap(Prov<T> original) {
-		return wrap(original, (Runnable) null);
+		return wrap(original, null);
 	}
 
 	/**
 	 * 将原始 {@link Prov} 包装为具备热重载容错保护的代理，并在异常时触发指定熔断动作。
-	 *
 	 * @param original 原始 Prov 实例
 	 * @param onRemove 发生 LinkageError 时的清理/注销动作
 	 * @param <T>      提供的值类型
@@ -584,17 +571,15 @@ public class UpdateRef {
 
 	/**
 	 * 将原始 {@link Boolp} 包装为具备热重载容错保护的代理，异常时返回 false 并静默失效。
-	 *
 	 * @param original 原始 Boolp 实例
 	 * @return 具备容错保护的代理 Boolp
 	 */
 	public static Boolp wrap(Boolp original) {
-		return wrap(original, (Runnable) null);
+		return wrap(original, null);
 	}
 
 	/**
 	 * 将原始 {@link Boolp} 包装为具备热重载容错保护的代理，并在异常时触发指定熔断动作。
-	 *
 	 * @param original 原始 Boolp 实例
 	 * @param onRemove 发生 LinkageError 时的清理/注销动作
 	 * @return 具备容错保护的代理 Boolp
@@ -610,18 +595,16 @@ public class UpdateRef {
 
 	/**
 	 * 将原始 {@link Cons} 包装为具备热重载容错保护的代理，异常时静默失效。
-	 *
 	 * @param original 原始 Cons 实例
 	 * @param <T>      消费的值类型
 	 * @return 具备容错保护的代理 Cons
 	 */
 	public static <T> Cons<T> wrap(Cons<T> original) {
-		return wrap(original, (Runnable) null);
+		return wrap(original, null);
 	}
 
 	/**
 	 * 将原始 {@link Cons} 包装为具备热重载容错保护的代理，并在异常时触发指定熔断动作。
-	 *
 	 * @param original 原始 Cons 实例
 	 * @param onRemove 发生 LinkageError 时的清理/注销动作
 	 * @param <T>      消费的值类型
@@ -641,7 +624,6 @@ public class UpdateRef {
 
 	/**
 	 * 将原始 {@link Runnable} 包装为具备热重载容错保护的代理（兼容原有 Element 接口）。
-	 *
 	 * @param element  宿主 Element（仅作兼容参数，UpdateRef 不再强持有该引用）
 	 * @param original 原始 Runnable 实例
 	 * @return 具备容错保护的代理 Runnable
@@ -652,7 +634,6 @@ public class UpdateRef {
 
 	/**
 	 * 将原始 {@link Runnable} 包装为具备热重载容错保护的代理，并在异常时触发指定熔断动作。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始 Runnable 实例
 	 * @param onRemove 发生 LinkageError 时的清理/注销动作
@@ -664,7 +645,6 @@ public class UpdateRef {
 
 	/**
 	 * 将原始 {@link Prov} 包装为具备热重载容错保护的代理（兼容原有 Element 接口）。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始 Prov 实例
 	 * @return 具备容错保护的代理 Prov
@@ -675,7 +655,6 @@ public class UpdateRef {
 
 	/**
 	 * 将原始 {@link Prov} 包装为具备热重载容错保护的代理，并在异常时触发指定熔断动作。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始 Prov 实例
 	 * @param onRemove 发生 LinkageError 时的清理/注销动作
@@ -687,7 +666,6 @@ public class UpdateRef {
 
 	/**
 	 * 将原始 {@link Boolp} 包装为具备热重载容错保护的代理（兼容原有 Element 接口）。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始 Boolp 实例
 	 * @return 具备容错保护的代理 Boolp
@@ -698,7 +676,6 @@ public class UpdateRef {
 
 	/**
 	 * 将原始 {@link Boolp} 包装为具备热重载容错保护的代理，并在异常时触发指定熔断动作。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始 Boolp 实例
 	 * @param onRemove 发生 LinkageError 时的清理/注销动作
@@ -710,7 +687,6 @@ public class UpdateRef {
 
 	/**
 	 * 将原始 {@link Cons} 包装为具备热重载容错保护的代理（兼容原有 Element 接口）。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始 Cons 实例
 	 * @return 具备容错保护的代理 Cons
@@ -721,7 +697,6 @@ public class UpdateRef {
 
 	/**
 	 * 将原始 {@link Cons} 包装为具备热重载容错保护的代理，并在异常时触发指定熔断动作。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始 Cons 实例
 	 * @param onRemove 发生 LinkageError 时的清理/注销动作
@@ -733,7 +708,6 @@ public class UpdateRef {
 
 	/**
 	 * 将原始 {@link Boolf} 包装为具备热重载容错保护的代理（兼容原有 Element 接口）。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始 Boolf 实例
 	 * @return 具备容错保护的代理 Boolf
@@ -744,25 +718,22 @@ public class UpdateRef {
 
 	/**
 	 * 将原始 {@link Boolf} 包装为具备热重载容错保护的代理，并在异常时触发指定熔断动作。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始 Boolf 实例
 	 * @param onRemove 发生 LinkageError 时的清理/注销动作
 	 * @return 具备容错保护的代理 Boolf
 	 */
-	@SuppressWarnings("unchecked")
 	public static Boolf<?> wrap(Element element, Boolf<?> original, Runnable onRemove) {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
 			if (onRemove != null) wr.getUpdateRef().addOnRemove(onRemove);
 			return original;
 		}
-		return new WrappedBoolf<>((UpdateRef) new UpdateRef(original, onRemove));
+		return new WrappedBoolf<>(new UpdateRef(original, onRemove));
 	}
 
 	/**
 	 * 将文本框验证器 {@link TextFieldValidator} 包装为具备热重载容错保护的代理。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始验证器
 	 * @return 具备容错保护的代理验证器
@@ -773,7 +744,6 @@ public class UpdateRef {
 
 	/**
 	 * 将文本框验证器 {@link TextFieldValidator} 包装为具备热重载容错保护的代理，并在异常时触发指定熔断动作。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始验证器
 	 * @param onRemove 发生 LinkageError 时的清理动作
@@ -790,7 +760,6 @@ public class UpdateRef {
 
 	/**
 	 * 将原始单浮点消费回调 {@link Floatc} 包装为具备热重载容错保护的代理。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始 Floatc 实例
 	 * @return 具备容错保护的代理 Floatc
@@ -801,7 +770,6 @@ public class UpdateRef {
 
 	/**
 	 * 将原始单浮点消费回调 {@link Floatc} 包装为具备热重载容错保护的代理，并在异常时触发指定熔断动作。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始 Floatc 实例
 	 * @param onRemove 发生 LinkageError 时的清理动作
@@ -818,7 +786,6 @@ public class UpdateRef {
 
 	/**
 	 * 将原始双浮点消费回调 {@link Floatc2} 包装为具备热重载容错保护的代理。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始 Floatc2 实例
 	 * @return 具备容错保护的代理 Floatc2
@@ -829,7 +796,6 @@ public class UpdateRef {
 
 	/**
 	 * 将原始双浮点消费回调 {@link Floatc2} 包装为具备热重载容错保护的代理，并在异常时触发指定熔断动作。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始 Floatc2 实例
 	 * @param onRemove 发生 LinkageError 时的清理动作
@@ -847,7 +813,6 @@ public class UpdateRef {
 	/**
 	 * 将事件监听器 {@link EventListener} 包装为具备热重载容错保护的代理。
 	 * 默认在发生异常时精准注销该监听器（{@code element.removeListener}）。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始监听器
 	 * @return 具备容错保护的代理监听器
@@ -858,7 +823,6 @@ public class UpdateRef {
 
 	/**
 	 * 将事件监听器 {@link EventListener} 包装为具备热重载容错保护的代理，并在异常时触发指定熔断动作。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始监听器
 	 * @param onRemove 自定义熔断动作；若为 null，默认精准注销该监听器
@@ -866,16 +830,19 @@ public class UpdateRef {
 	 */
 	public static EventListener wrap(Element element, EventListener original, Runnable onRemove) {
 		if (original == null) return null;
+		if (original instanceof WrappedRef wr) {
+			if (element != null) {
+				wr.getUpdateRef().addOnRemove(() -> element.removeListener(original));
+			}
+			if (onRemove != null) wr.getUpdateRef().addOnRemove(onRemove);
+			return original;
+		}
 		EventListener[] box = new EventListener[1];
 		Runnable defaultRemove = () -> {
 			if (element != null && box[0] != null) element.removeListener(box[0]);
 		};
 		Runnable combined = combine(defaultRemove, onRemove);
-		if (original instanceof WrappedRef wr) {
-			wr.getUpdateRef().addOnRemove(combined);
-			return original;
-		}
-		UpdateRef ref = new UpdateRef(original, combined);
+		UpdateRef            ref      = new UpdateRef(original, combined);
 		WrappedEventListener listener = new WrappedEventListener(ref);
 		box[0] = listener;
 		return listener;
@@ -888,7 +855,6 @@ public class UpdateRef {
 	/**
 	 * 包装 {@link Element#update(Runnable)} 回调。
 	 * 发生 {@link LinkageError} 时执行精准局部熔断：{@code element.update(null)}，仅移除该每帧更新回调，绝不删除 Element。
-	 *
 	 * @param element  目标 UI 节点
 	 * @param original 原始更新回调
 	 * @return 具备局部熔断保护的代理 Runnable
@@ -908,7 +874,6 @@ public class UpdateRef {
 	/**
 	 * 包装 {@link Element#visible(Boolp)} 条件回调。
 	 * 发生 {@link LinkageError} 时执行精准局部熔断：恢复可见并注销条件，绝不让元素永久消失。
-	 *
 	 * @param element  目标 UI 节点
 	 * @param original 原始可见性提供器
 	 * @return 具备局部熔断保护的代理 Boolp
@@ -932,7 +897,6 @@ public class UpdateRef {
 	/**
 	 * 包装 {@link Element#touchable(Prov)} 条件回调。
 	 * 发生 {@link LinkageError} 时执行精准局部熔断：{@code element.touchable((Prov) null)}，仅移除可触摸状态动态提供器。
-	 *
 	 * @param element  目标 UI 节点
 	 * @param original 原始 Touchable 提供器
 	 * @return 具备局部熔断保护的代理 Prov
@@ -940,7 +904,7 @@ public class UpdateRef {
 	public static Prov<?> wrapTouchable(Element element, Prov<?> original) {
 		if (original == null) return null;
 		Runnable removeAction = () -> {
-			if (element != null) element.touchable((Prov) null);
+			if (element != null) element.touchable(null);
 		};
 		if (original instanceof WrappedRef wr) {
 			wr.getUpdateRef().addOnRemove(removeAction);
@@ -952,12 +916,11 @@ public class UpdateRef {
 	/**
 	 * 包装 {@link Button#setDisabled(Boolp)} 禁用条件回调。
 	 * 发生 {@link LinkageError} 时执行精准局部熔断：{@code button.setDisabled(null)}，仅移除禁用条件。
-	 *
 	 * @param element  目标按钮元素
 	 * @param original 原始禁用状态提供器
 	 * @return 具备局部熔断保护的代理 Boolp
 	 */
-	public static Boolp wrapButtonDisabled(Element element, Boolp original) {
+	public static Boolp wrapButtonDisabled(Button element, Boolp original) {
 		if (original == null) return null;
 		Runnable removeAction = () -> {
 			if (element instanceof Button b) b.setDisabled(null);
@@ -966,18 +929,17 @@ public class UpdateRef {
 			wr.getUpdateRef().addOnRemove(removeAction);
 			return original;
 		}
-		return new WrappedBoolp(new UpdateRef(original, removeAction), () -> false);
+		return new WrappedBoolp(new UpdateRef(original, removeAction), element::isDisabled);
 	}
 
 	/**
 	 * 包装 {@link TextField#setValidator(TextFieldValidator)} 输入验证器。
 	 * 发生 {@link LinkageError} 时执行精准局部熔断：{@code textField.setValidator(null)}，仅移除验证规则。
-	 *
 	 * @param element  目标输入框元素
 	 * @param original 原始输入验证器
 	 * @return 具备局部熔断保护的代理 TextFieldValidator
 	 */
-	public static TextFieldValidator wrapValidator(Element element, TextFieldValidator original) {
+	public static TextFieldValidator wrapValidator(TextField element, TextFieldValidator original) {
 		if (original == null) return null;
 		Runnable removeAction = () -> {
 			if (element instanceof TextField tf) tf.setValidator(null);
@@ -986,28 +948,29 @@ public class UpdateRef {
 			wr.getUpdateRef().addOnRemove(removeAction);
 			return original;
 		}
-		return new WrappedValidator(new UpdateRef(original, removeAction), text -> true);
+		return new WrappedValidator(new UpdateRef(original, removeAction), text -> element.isValid());
 	}
 
 	/**
 	 * 包装 {@link Element#addListener(EventListener)} 事件监听器。
 	 * 发生 {@link LinkageError} 时执行精准局部熔断：{@code element.removeListener(ref)}，仅注销当前出故障的监听器。
-	 *
 	 * @param element  目标 UI 节点
 	 * @param original 原始监听器
 	 * @return 具备局部熔断保护的代理 EventListener
 	 */
 	public static EventListener wrapListener(Element element, EventListener original) {
 		if (original == null) return null;
+		if (original instanceof WrappedRef wr) {
+			if (element != null) {
+				wr.getUpdateRef().addOnRemove(() -> element.removeListener(original));
+			}
+			return original;
+		}
 		EventListener[] box = new EventListener[1];
 		Runnable removeAction = () -> {
 			if (element != null && box[0] != null) element.removeListener(box[0]);
 		};
-		if (original instanceof WrappedRef wr) {
-			wr.getUpdateRef().addOnRemove(removeAction);
-			return original;
-		}
-		UpdateRef ref = new UpdateRef(original, removeAction);
+		UpdateRef            ref      = new UpdateRef(original, removeAction);
 		WrappedEventListener listener = new WrappedEventListener(ref);
 		box[0] = listener;
 		return listener;
@@ -1016,24 +979,67 @@ public class UpdateRef {
 	/**
 	 * 包装 {@link Element#addCaptureListener(EventListener)} 捕获阶段监听器。
 	 * 发生 {@link LinkageError} 时执行精准局部熔断：{@code element.removeCaptureListener(ref)}，仅注销当前捕获监听器。
-	 *
 	 * @param element  目标 UI 节点
 	 * @param original 原始监听器
 	 * @return 具备局部熔断保护的代理 EventListener
 	 */
 	public static EventListener wrapCaptureListener(Element element, EventListener original) {
 		if (original == null) return null;
+		if (original instanceof WrappedRef wr) {
+			if (element != null) {
+				wr.getUpdateRef().addOnRemove(() -> element.removeCaptureListener(original));
+			}
+			return original;
+		}
 		EventListener[] box = new EventListener[1];
 		Runnable removeAction = () -> {
 			if (element != null && box[0] != null) element.removeCaptureListener(box[0]);
 		};
-		if (original instanceof WrappedRef wr) {
-			wr.getUpdateRef().addOnRemove(removeAction);
-			return original;
-		}
-		UpdateRef ref = new UpdateRef(original, removeAction);
+		UpdateRef            ref      = new UpdateRef(original, removeAction);
 		WrappedEventListener listener = new WrappedEventListener(ref);
 		box[0] = listener;
+		return listener;
+	}
+
+	/**
+	 * 在 {@link Element#removeListener(EventListener)} 入口反查被包装的 {@link WrappedEventListener} 实例。
+	 * Arc 的 removeListener 使用引用全等 (==) 判定，若传入原始监听器则无法匹配内部存入的包装器。
+	 * 此方法返回列表中实际存在的包装实例，未匹配则原样返回。
+	 * @param element  宿主 Element
+	 * @param listener 待移除的监听器（原始或包装器）
+	 * @return 列表中实际存在的监听器实例
+	 */
+	public static EventListener unwrapListener(Element element, EventListener listener) {
+		if (element == null || listener == null) return listener;
+		var listeners = element.getListeners();
+		if (listeners == null) return listener;
+		for (int i = 0; i < listeners.size; i++) {
+			EventListener item = listeners.get(i);
+			if (item == listener) return item;
+			if (item instanceof WrappedRef wr && (wr.getOriginal() == listener || Objects.equals(wr.getOriginal(), listener))) {
+				return item;
+			}
+		}
+		return listener;
+	}
+
+	/**
+	 * 在 {@link Element#removeCaptureListener(EventListener)} 入口反查被包装的 {@link WrappedEventListener} 实例。
+	 * @param element  宿主 Element
+	 * @param listener 待移除的捕获监听器（原始或包装器）
+	 * @return 列表中实际存在的监听器实例
+	 */
+	public static EventListener unwrapCaptureListener(Element element, EventListener listener) {
+		if (element == null || listener == null) return listener;
+		var listeners = element.getCaptureListeners();
+		if (listeners == null) return listener;
+		for (int i = 0; i < listeners.size; i++) {
+			EventListener item = listeners.get(i);
+			if (item == listener) return item;
+			if (item instanceof WrappedRef wr && (wr.getOriginal() == listener || Objects.equals(wr.getOriginal(), listener))) {
+				return item;
+			}
+		}
 		return listener;
 	}
 
@@ -1042,12 +1048,10 @@ public class UpdateRef {
 	/**
 	 * 包装 {@link Cell#update(Cons)} 布局单元每帧消费回调。
 	 * 发生 {@link LinkageError} 时执行精准局部熔断：{@code cell.update(null)}。
-	 *
 	 * @param cell     目标表格单元
 	 * @param original 原始单元更新回调
 	 * @return 具备局部熔断保护的代理 Cons
 	 */
-	@SuppressWarnings("unchecked")
 	public static Cons<?> wrapCellUpdate(Cell<?> cell, Cons<?> original) {
 		if (original == null) return null;
 		Runnable removeAction = () -> {
@@ -1057,18 +1061,16 @@ public class UpdateRef {
 			wr.getUpdateRef().addOnRemove(removeAction);
 			return original;
 		}
-		return new WrappedCons<>((UpdateRef) new UpdateRef(original, removeAction));
+		return new WrappedCons<>(new UpdateRef(original, removeAction));
 	}
 
 	/**
 	 * 包装 {@link Cell#disabled(Boolf)} 布局单元禁用条件。
 	 * 发生 {@link LinkageError} 时执行精准局部熔断：{@code cell.disabled(null)}。
-	 *
 	 * @param cell     目标表格单元
 	 * @param original 原始禁用断言
 	 * @return 具备局部熔断保护的代理 Boolf
 	 */
-	@SuppressWarnings("unchecked")
 	public static Boolf<?> wrapCellDisabled(Cell<?> cell, Boolf<?> original) {
 		if (original == null) return null;
 		Runnable removeAction = () -> {
@@ -1078,18 +1080,23 @@ public class UpdateRef {
 			wr.getUpdateRef().addOnRemove(removeAction);
 			return original;
 		}
-		return new WrappedBoolf<>((UpdateRef) new UpdateRef(original, removeAction), t -> false);
+		return new WrappedBoolf<>(new UpdateRef(original, removeAction), t -> {
+			Element element = cell.get();
+			if (element instanceof Disableable) {
+				return ((Disableable) element).isDisabled();
+			}
+			return false;
+		});
 	}
 
 	/**
 	 * 包装 {@link Cell#tooltip(Cons)} 浮动提示构建回调。
 	 * 发生 {@link LinkageError} 时执行精准局部熔断：{@code cell.tooltip((Cons) null)}。
-	 *
 	 * @param cell     目标表格单元
 	 * @param original 原始提示构建回调
 	 * @return 具备局部熔断保护的代理 Cons
 	 */
-	@SuppressWarnings("unchecked")
+	@SuppressWarnings({"unchecked", "rawtypes"})
 	public static Cons<?> wrapCellTooltip(Cell<?> cell, Cons<?> original) {
 		if (original == null) return null;
 		Runnable removeAction = () -> {
@@ -1099,18 +1106,16 @@ public class UpdateRef {
 			wr.getUpdateRef().addOnRemove(removeAction);
 			return original;
 		}
-		return new WrappedCons<>((UpdateRef) new UpdateRef(original, removeAction));
+		return new WrappedCons<>(new UpdateRef(original, removeAction));
 	}
 
 	/**
 	 * 包装 {@link Cell#checked(Boolf)} 布局单元选中状态断言。
 	 * 发生 {@link LinkageError} 时执行精准局部熔断：{@code cell.checked(null)}。
-	 *
 	 * @param cell     目标表格单元
 	 * @param original 原始选中断言
 	 * @return 具备局部熔断保护的代理 Boolf
 	 */
-	@SuppressWarnings("unchecked")
 	public static Boolf<?> wrapCellChecked(Cell<?> cell, Boolf<?> original) {
 		if (original == null) return null;
 		Runnable removeAction = () -> {
@@ -1120,7 +1125,13 @@ public class UpdateRef {
 			wr.getUpdateRef().addOnRemove(removeAction);
 			return original;
 		}
-		return new WrappedBoolf<>((UpdateRef) new UpdateRef(original, removeAction), t -> false);
+		return new WrappedBoolf<>(new UpdateRef(original, removeAction), t -> {
+			Element element = cell.get();
+			if (element instanceof Button) {
+				return ((Button) element).isChecked();
+			}
+			return false;
+		});
 	}
 
 	// 事件静默熔断专用（针对 clicked, hovered 等事件回调，报错仅停止回调，不删元素）
@@ -1128,7 +1139,6 @@ public class UpdateRef {
 	/**
 	 * 包装瞬时交互事件（如 {@code clicked}、{@code hovered}、弹窗生命周期等）。
 	 * 发生 {@link LinkageError} 时仅清空内部引用静音失效，绝不调用任何外部删除动作，零 Element 引用。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始 Runnable 实例
 	 * @return 具备静默熔断保护的代理 Runnable
@@ -1139,19 +1149,16 @@ public class UpdateRef {
 
 	/**
 	 * 包装瞬时消费事件回调。发生 {@link LinkageError} 时仅清空内部引用静音失效。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始 Cons 实例
 	 * @return 具备静默熔断保护的代理 Cons
 	 */
-	@SuppressWarnings("unchecked")
 	public static Cons<?> wrapSilent(Element element, Cons<?> original) {
-		return wrap(element, (Cons) original, NOOP);
+		return wrap(element, original, NOOP);
 	}
 
 	/**
 	 * 包装瞬时单浮点手势/滚动回调。发生 {@link LinkageError} 时仅清空内部引用静音失效。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始 Floatc 实例
 	 * @return 具备静默熔断保护的代理 Floatc
@@ -1162,7 +1169,6 @@ public class UpdateRef {
 
 	/**
 	 * 包装瞬时双浮点拖拽手势回调。发生 {@link LinkageError} 时仅清空内部引用静音失效。
-	 *
 	 * @param element  宿主 Element
 	 * @param original 原始 Floatc2 实例
 	 * @return 具备静默熔断保护的代理 Floatc2
@@ -1179,7 +1185,6 @@ public class UpdateRef {
 
 	/**
 	 * 获取 {@link Events#events} 事件注册表（由 ASM 重写的 Events 方法在运行时通过 GETSTATIC 自举传递）。
-	 *
 	 * @return Events 内部维护的事件映射表，若尚未自举接收则返回 null
 	 */
 	public static ObjectMap<Object, Seq<Cons<?>>> getEventsMap() {
@@ -1188,7 +1193,6 @@ public class UpdateRef {
 
 	/**
 	 * 供字节码或自举流程直接注入 {@link Events#events} 引用，实现 100% 零反射访问。
-	 *
 	 * @param map Events 内部维护的事件注册表
 	 */
 	public static void setEventsMap(ObjectMap<Object, Seq<Cons<?>>> map) {
@@ -1197,7 +1201,8 @@ public class UpdateRef {
 
 	private static final Seq<Runnable> DEFERRED_REMOVALS = new Seq<>();
 
-	private static void runDeferredOrSync(Runnable r) {
+	private static void deferRemoval(Runnable r) {
+		if (r == null || r == NOOP || r == REMOVED) return;
 		synchronized (DEFERRED_REMOVALS) {
 			DEFERRED_REMOVALS.add(r);
 		}
@@ -1205,13 +1210,17 @@ public class UpdateRef {
 
 	/**
 	 * 清理在无主循环环境（如 Core.app == null）下暂存的熔断注销动作。
+	 * 在监视器锁外执行回调，彻底消除持有锁调用外部代码与死锁风险。
 	 */
 	public static void flushDeferredRemovals() {
+		Seq<Runnable> toRun;
 		synchronized (DEFERRED_REMOVALS) {
-			while (!DEFERRED_REMOVALS.isEmpty()) {
-				Runnable r = DEFERRED_REMOVALS.pop();
-				executeRemove(r);
-			}
+			if (DEFERRED_REMOVALS.isEmpty()) return;
+			toRun = new Seq<>(DEFERRED_REMOVALS);
+			DEFERRED_REMOVALS.clear();
+		}
+		for (int i = 0; i < toRun.size; i++) {
+			executeRemove(toRun.get(i));
 		}
 	}
 
@@ -1244,11 +1253,9 @@ public class UpdateRef {
 		@Override
 		public boolean equals(Object o) {
 			if (this == o) return true;
-			if (o == null) return false;
-			if (o == key) return true;
-			if (o instanceof EventCons<?> other) return Objects.equals(key, other.key);
-			if (o instanceof WrappedRef wr) return Objects.equals(key, wr.getOriginal());
-			return Objects.equals(key, o);
+			if (o == null || getClass() != o.getClass()) return false;
+			EventCons<?> other = (EventCons<?>) o;
+			return Objects.equals(key, other.key);
 		}
 
 		@Override
@@ -1287,11 +1294,9 @@ public class UpdateRef {
 		@Override
 		public boolean equals(Object o) {
 			if (this == o) return true;
-			if (o == null) return false;
-			if (o == key) return true;
-			if (o instanceof EventRunnableCons other) return Objects.equals(key, other.key);
-			if (o instanceof WrappedRef wr) return Objects.equals(key, wr.getOriginal());
-			return Objects.equals(key, o);
+			if (o == null || getClass() != o.getClass()) return false;
+			EventRunnableCons other = (EventRunnableCons) o;
+			return Objects.equals(key, other.key);
 		}
 
 		@Override
@@ -1302,7 +1307,6 @@ public class UpdateRef {
 
 	/**
 	 * 代理 {@link Events#on(Class, Cons)}，由 ASM 重写的方法通过原生 GETSTATIC 指令自举传入 events 注册表。
-	 *
 	 * @param type     事件类型 Class
 	 * @param listener 事件消费回调
 	 * @param map      Events 内部私有事件注册表（100% 零反射原生自举传入）
@@ -1318,34 +1322,41 @@ public class UpdateRef {
 		if (eventsMap != map) eventsMap = map;
 		flushDeferredRemovals();
 
-		if (listener instanceof EventCons) {
-			map.get(type, () -> new Seq<>(Cons.class)).add(listener);
-			return;
-		}
+		Object key = listener instanceof EventCons<?> ec ? ec.getKey() : listener;
+		Seq<Cons<?>> seq = map.get(type, () -> new Seq<>(Cons.class));
 
 		EventCons<T>[] box = (EventCons<T>[]) new EventCons[1];
 		Runnable onRemove = () -> {
 			if (box[0] != null) {
-				Seq<Cons<?>> seq = map.get(type);
-				if (seq != null) {
-					seq.remove(box[0], true);
+				Seq<Cons<?>> s = map.get(type);
+				if (s != null) {
+					s.remove(box[0], true);
 				}
 			}
 		};
 
-		EventCons<T> wrapper = new EventCons<>(listener, onRemove);
+		EventCons<T> wrapper = (listener instanceof EventCons)
+			? (EventCons<T>) listener
+			: new EventCons<>(listener, onRemove);
 		box[0] = wrapper;
-		map.get(type, () -> new Seq<>(Cons.class)).add(wrapper);
+
+		for (int i = 0; i < seq.size; i++) {
+			Cons<?> item = seq.items[i];
+			if (item == key || (item instanceof EventCons<?> ec && Objects.equals(ec.getKey(), key))) {
+				seq.set(i, wrapper);
+				return;
+			}
+		}
+		seq.add(wrapper);
 	}
 
 	/**
 	 * 代理 {@link Events#run(Object, Runnable)}，由 ASM 重写的方法通过原生 GETSTATIC 指令自举传入 events 注册表。
-	 *
 	 * @param type     事件类型（Class 或 Enum Trigger 等）
 	 * @param listener 运行回调
 	 * @param map      Events 内部私有事件注册表（100% 零反射原生自举传入）
 	 */
-	@SuppressWarnings("unchecked")
+	@SuppressWarnings("rawtypes")
 	public static void eventsRun(Object type, Runnable listener, ObjectMap<Object, Seq<Cons<?>>> map) {
 		if (listener == null) return;
 		if (map == null) {
@@ -1355,29 +1366,36 @@ public class UpdateRef {
 		if (eventsMap != map) eventsMap = map;
 		flushDeferredRemovals();
 
-		if (listener instanceof EventRunnableCons) {
-			map.get(type, () -> new Seq<>(Cons.class)).add((Cons) listener);
-			return;
-		}
+		Object key = listener instanceof EventRunnableCons erc ? erc.getKey() : listener;
+		Seq<Cons<?>> seq = map.get(type, () -> new Seq<>(Cons.class));
 
 		EventRunnableCons[] box = new EventRunnableCons[1];
 		Runnable onRemove = () -> {
 			if (box[0] != null) {
-				Seq<Cons<?>> seq = map.get(type);
-				if (seq != null) {
-					seq.remove(box[0], true);
+				Seq<Cons<?>> s = map.get(type);
+				if (s != null) {
+					s.remove(box[0], true);
 				}
 			}
 		};
 
-		EventRunnableCons wrapper = new EventRunnableCons(listener, onRemove);
+		EventRunnableCons wrapper = (listener instanceof EventRunnableCons)
+			? (EventRunnableCons) listener
+			: new EventRunnableCons(listener, onRemove);
 		box[0] = wrapper;
-		map.get(type, () -> new Seq<>(Cons.class)).add(wrapper);
+
+		for (int i = 0; i < seq.size; i++) {
+			Cons<?> item = seq.items[i];
+			if (item == key || (item instanceof EventRunnableCons erc && Objects.equals(erc.getKey(), key))) {
+				seq.set(i, (Cons) wrapper);
+				return;
+			}
+		}
+		seq.add((Cons) wrapper);
 	}
 
 	/**
 	 * 代理 {@link Events#remove(Class, Cons)}，支持解包匹配并注销已被包装的事件监听器。
-	 *
 	 * @param type     事件类型 Class
 	 * @param listener 待注销的监听器（可以是原始 listener，也可以是 EventCons 代理实例）
 	 * @param map      Events 内部私有事件注册表（100% 零反射原生自举传入）
@@ -1392,13 +1410,24 @@ public class UpdateRef {
 		Seq<Cons<?>> seq = map.get(type);
 		if (seq == null) return false;
 
+		Object targetKey = listener instanceof EventCons<?> ec ? ec.getKey() :
+		                   (listener instanceof EventRunnableCons erc ? erc.getKey() : listener);
+
 		for (int i = 0; i < seq.size; i++) {
 			Cons<?> item = seq.items[i];
-			if (item == listener || listener.equals(item)) {
+			if (item == listener || item == targetKey) {
 				seq.remove(i);
 				return true;
 			}
-			if (item instanceof EventCons<?> ec && (ec.getKey() == listener || Objects.equals(ec.getKey(), listener))) {
+			if (item instanceof EventCons<?> ec && (ec.getKey() == targetKey || Objects.equals(ec.getKey(), targetKey))) {
+				seq.remove(i);
+				return true;
+			}
+			if (item instanceof EventRunnableCons erc && (erc.getKey() == targetKey || Objects.equals(erc.getKey(), targetKey))) {
+				seq.remove(i);
+				return true;
+			}
+			if (Objects.equals(item, targetKey)) {
 				seq.remove(i);
 				return true;
 			}
@@ -1408,7 +1437,6 @@ public class UpdateRef {
 
 	/**
 	 * 注销通过 {@link Events#run(Object, Runnable)} 注册的监听器。
-	 *
 	 * @param type     事件类型
 	 * @param listener 原始 Runnable 实例
 	 * @return 若成功找到并注销返回 true，否则返回 false
@@ -1421,9 +1449,23 @@ public class UpdateRef {
 		Seq<Cons<?>> seq = map.get(type);
 		if (seq == null) return false;
 
+		Object targetKey = listener instanceof EventRunnableCons erc ? erc.getKey() : listener;
+
 		for (int i = 0; i < seq.size; i++) {
 			Cons<?> item = seq.items[i];
-			if (item instanceof EventRunnableCons rc && (rc.getKey() == listener || Objects.equals(rc.getKey(), listener))) {
+			if (item == listener || item == targetKey) {
+				seq.remove(i);
+				return true;
+			}
+			if (item instanceof EventRunnableCons erc && (erc.getKey() == targetKey || Objects.equals(erc.getKey(), targetKey))) {
+				seq.remove(i);
+				return true;
+			}
+			if (item instanceof EventCons<?> ec && (ec.getKey() == targetKey || Objects.equals(ec.getKey(), targetKey))) {
+				seq.remove(i);
+				return true;
+			}
+			if (Objects.equals(item, targetKey)) {
 				seq.remove(i);
 				return true;
 			}
@@ -1436,7 +1478,6 @@ public class UpdateRef {
 	/**
 	 * 检查原始函数引用是否已被清空。
 	 * 若为 null，说明已发生热重载异常或已被清理，若尚未投递熔断动作则仅投递一次，并返回 true 以便短路跳过执行。
-	 *
 	 * @param f 目标函数对象
 	 * @return true 表示已被清空，当前执行应短路中断
 	 */
@@ -1491,18 +1532,17 @@ public class UpdateRef {
 
 	/**
 	 * 执行被代理的 {@link Boolp}。捕获 {@link LinkageError} 并转入熔断处理，熔断后执行兜底逻辑。
-	 *
 	 * @param fallback 熔断发生或引用清空时的兜底提供器
 	 * @return 运行结果或兜底结果
 	 */
 	public boolean runBoolp(Boolp fallback) {
 		var f = (Boolp) this.fn;
-		if (checkFn(f)) return fallback != null ? fallback.get() : false;
+		if (checkFn(f)) return fallback != null && fallback.get();
 		try {
 			return f.get();
 		} catch (LinkageError e) {
 			onLinkageError(f, e);
-			return fallback != null ? fallback.get() : false;
+			return fallback != null && fallback.get();
 		}
 	}
 
@@ -1523,14 +1563,12 @@ public class UpdateRef {
 	/**
 	 * 执行被代理的 {@link Boolf}。捕获 {@link LinkageError} 并转入熔断处理，熔断后返回 false。
 	 */
-	@SuppressWarnings("unchecked")
 	public <T> boolean runBoolf(T t) {
 		return runBoolf(t, null);
 	}
 
 	/**
 	 * 执行被代理的 {@link Boolf}。捕获 {@link LinkageError} 并转入熔断处理，熔断后执行兜底逻辑。
-	 *
 	 * @param t        入参
 	 * @param fallback 熔断发生或引用清空时的兜底断言
 	 * @return 运行结果或兜底结果
@@ -1538,12 +1576,12 @@ public class UpdateRef {
 	@SuppressWarnings("unchecked")
 	public <T> boolean runBoolf(T t, Boolf<T> fallback) {
 		var f = (Boolf<T>) this.fn;
-		if (checkFn(f)) return fallback != null ? fallback.get(t) : false;
+		if (checkFn(f)) return fallback != null && fallback.get(t);
 		try {
 			return f.get(t);
 		} catch (LinkageError e) {
 			onLinkageError(f, e);
-			return fallback != null ? fallback.get(t) : false;
+			return fallback != null && fallback.get(t);
 		}
 	}
 
@@ -1582,19 +1620,18 @@ public class UpdateRef {
 
 	/**
 	 * 执行被代理的 {@link TextFieldValidator}。捕获 {@link LinkageError} 并转入熔断处理，熔断后执行兜底逻辑。
-	 *
 	 * @param t        输入文本
 	 * @param fallback 熔断发生或引用清空时的兜底验证器
 	 * @return 验证结果或兜底结果
 	 */
 	public boolean runValidator(String t, TextFieldValidator fallback) {
 		var f = (TextFieldValidator) this.fn;
-		if (checkFn(f)) return fallback != null ? fallback.valid(t) : false;
+		if (checkFn(f)) return fallback != null && fallback.valid(t);
 		try {
 			return f.valid(t);
 		} catch (LinkageError e) {
 			onLinkageError(f, e);
-			return fallback != null ? fallback.valid(t) : false;
+			return fallback != null && fallback.valid(t);
 		}
 	}
 
@@ -1614,7 +1651,6 @@ public class UpdateRef {
 
 	/**
 	 * 查询当前代理是否已触发熔断清理流程。
-	 *
 	 * @return 若熔断清理动作已投递或已执行则返回 true
 	 */
 	public boolean isRemoved() {
@@ -1624,16 +1660,12 @@ public class UpdateRef {
 	/**
 	 * 判断给定的 Throwable 是否属于热重载结构变更引起的链接异常（类/方法/字段不存在或签名不兼容）。
 	 * 对于非热重载引发的错误（如 {@link ExceptionInInitializerError} 静态块异常或 {@link VerifyError} 等）应正常抛出，避免吞掉业务异常。
-	 *
 	 * @param t 目标异常
 	 * @return 若为热重载引起的结构缺失异常则返回 true
 	 */
 	public static boolean isHotSwapLinkageError(Throwable t) {
-		return t instanceof NoSuchMethodError
-			|| t instanceof NoSuchFieldError
-			|| t instanceof AbstractMethodError
-			|| t instanceof IncompatibleClassChangeError
-			|| t instanceof NoClassDefFoundError;
+		return t instanceof IncompatibleClassChangeError
+		       || t instanceof NoClassDefFoundError;
 	}
 
 	/**
@@ -1651,10 +1683,14 @@ public class UpdateRef {
 		}
 		if (r != null && r != NOOP) {
 			if (Core.app != null) {
-				Core.app.post(() -> executeRemove(r));
-			} else {
-				runDeferredOrSync(r);
+				try {
+					Core.app.post(() -> executeRemove(r));
+					return;
+				} catch (Throwable t) {
+					HotSwapAgent.error("[UpdateRef] Core.app.post failed, fallback to deferred removal: " + t.getMessage(), t);
+				}
 			}
+			deferRemoval(r);
 		}
 	}
 
@@ -1672,7 +1708,6 @@ public class UpdateRef {
 	 * 2) 打印诊断错误日志与完整异常堆栈；
 	 * 3) 立即置空 {@code fn} 停止后续调用；
 	 * 4) 触发精准熔断清理 {@link #triggerRemove()}（具备 REMOVED 哨兵防抖，单实例仅投递一次）。
-	 *
 	 * @param f 发生故障的原始函数实例
 	 * @param e 捕获的链接错误异常
 	 */

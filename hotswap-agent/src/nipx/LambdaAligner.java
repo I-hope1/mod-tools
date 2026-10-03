@@ -777,6 +777,8 @@ public class LambdaAligner {
 				warnPositionalMismatch(ctx.currentClass, bestOld, ni.name, ni.desc);
 			}
 			recordRename(ctx, ni, bestOld.name);
+			System.err.println("[T] CLAIM " + ni.name + " -> " + bestOld.name
+				+ " (site=step2-B, ni.depth=" + ni.upDepth + " oi.depth=" + bestOld.upDepth + ")");
 			ni.matched = true;
 			bestOld.matched = true;
 			ctx.usedOldNames.add(bestOld.name);

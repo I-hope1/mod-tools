@@ -121,6 +121,80 @@ raw 方法表：<init> build create delete save     ← 没有 lambda$
 >>> 有 lambda$ 合成方法吗？ false
 ```
 
+## 嵌套 lambda 与 #SYNTHETIC_METHOD# 占位（`nest/`、`swap/`、`NestTest`、`SwapTest`、`FpProbe`、`PlaceholderTest`）
+
+### 结论一：嵌套 lambda 的身份由指纹恢复，不会被对调
+
+`nest/v1` 是 `outer = () -> { Runnable inner = () -> {...}; inner.run(); }`，
+`nest/v2` 在 outer 体内**最前面插入一个新的内层 lambda**（原有内层序号 $1 → $2）。
+
+```bash
+mkdir -p nout1 nout2 noutT
+javac -d nout1 nest/v1/test6/NestCase.java
+javac -d nout2 nest/v2/test6/NestCase.java
+MSYS2_ARG_CONV_EXCL='*' javac -nowarn -cp "$CP" -d noutT src/NestTest.java
+MSYS2_ARG_CONV_EXCL='*' java -cp "noutT;nout1;nout2;$CP" NestTest nout1/test6/NestCase.class nout2/test6/NestCase.class
+```
+
+```
+v2 forced: $1(hash=8504b2…, 新代码)  $2(hash=4e1dab…, 原内层)
+aligned:   $1(hash=4e1dab…, 原内层)  $3(hash=8504b2…, 新代码)
+added = [lambda$build$3()V]
+```
+
+原内层 lambda 被指纹精确认回 `$1`，新插入的拿到避障名 `$3`，**没有对调**。
+
+### 结论二：占位机制正常，但它不保护"槽位变化"
+
+`FpProbe` 逐项打印 CRC 更新。对调两个内层 lambda 的声明顺序后，外层 lambda 的
+两处 implMethod 句柄名字都被成功屏蔽：
+
+```
+handle owner=test7/SwapCase name=lambda$build$1 -> 计入[#SYNTHETIC_METHOD#]
+handle owner=test7/SwapCase name=lambda$build$2 -> 计入[#SYNTHETIC_METHOD#]
+```
+
+**但外层 hash 仍然变了**。差异在最后三条指令：
+
+```
+v1: ... var 58 0 ... var 58 1 ... var 25 0 / run ... var 25 1 / run
+v2: ... var 58 0 ... var 58 1 ... var 25 1 / run ... var 25 0 / run
+```
+
+对调声明使得 `a`/`b` 两个局部变量的**槽位互换**，而
+`MethodFingerprinter.visitVarInsn` 把变量号计入指纹 —— 所以这是**真实的方法体差异**，
+不是占位失效。`PlaceholderTest` 用 ASM 精确复现了这一点：
+
+```bash
+javac -d soutT src/PlaceholderTest.java
+MSYS2_ARG_CONV_EXCL='*' java -cp "soutT;$CP" PlaceholderTest
+```
+
+```
+A: 内层名=lambda$build$1 槽位=0  hash=5ee60045c25af6d3
+B: 内层名=lambda$build$9 槽位=0  hash=5ee60045c25af6d3   ← 只有名字不同 → hash 相同 ✓
+C: 内层名=lambda$build$1 槽位=1  hash=7b52196a45dfd981   ← 只有槽位不同 → hash 不同
+>>> 只有内层名字不同 -> 外层 hash 相同？ true   （占位机制生效）
+>>> 只有槽位不同     -> 外层 hash 相同？ false  （槽位参与指纹）
+```
+
+推论：改动内层 lambda 的**数量或顺序**会改变外层 lambda 的槽位布局，因此外层必然被判定为
+"方法体变了"，走顺序回退（并触发告警）。这是设计使然，无法靠占位消除。
+
+### 结论三：内层对调时，内层自己靠指纹各就各位
+
+`swap/v1` 与 `swap/v2` 只对调两个内层 lambda 的声明顺序，内层体不变：
+
+```bash
+MSYS2_ARG_CONV_EXCL='*' java -cp "soutT;sout1;sout2;$CP" SwapTest sout1/test7/SwapCase.class sout2/test7/SwapCase.class
+```
+
+```
+v2 forced: $1=[BBB]  $2=[AAA]      ← 声明顺序对调，名字跟着对调
+aligned:   $1=[AAA]  $2=[BBB]      ← AAA 仍是 $1，BBB 仍是 $2，未被交换
+added = []  removed = []
+```
+
 ## 顺序回退告警 (a) 与跨组指纹匹配 (c)
 
 `pair/v1`、`pair/v2` 是同一方法内两个"同形"lambda（描述符相同），`v2` 只改第一个的方法体。

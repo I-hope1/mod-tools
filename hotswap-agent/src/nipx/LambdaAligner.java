@@ -665,6 +665,34 @@ public class LambdaAligner {
 
 			SyntheticInfo bestOld = null;
 
+			// 【A 趟】优先配"上行深度 + shape 都相等"的候选。
+			//
+			// 动机（实测 scratch/hstest/UpDepthTest）：同一次保存里插入新叶子 + 改另一条链的
+			// 叶子体时，两个新叶子都可能没有指纹证据，而旧侧只剩一个叶子名。
+			// 此时按组内顺序先到先得是错的 —— "被谁引用"是唯一可用的结构信号：
+			//   由 build() 直接引用的叶子，上行深度 0；
+			//   被嵌套链引用的叶子，上行深度 2。
+			// 二者形状都是 "()"，所以必须**同时**比深度与形状，只比深度会把同深度的
+			// 不同形状候选放进同一池子。
+			//
+			// A 趟只收窄、不做硬否决：B 趟仍按原逻辑兜底，因此"把叶子用新 lambda 包一层"
+			// 这类合法编辑（深度变了）不会因此丢名字、被熔断。
+			//
+			// 深度与 shape 都由两侧各自的 indy 关系算出、与匹配状态无关，所以这里对叶子
+			// 可以直接判定，不会与 hasUnmatchedChild 互等（A 趟里不应出现
+			// SKIP(parent has unmatched child)）。
+			if (ni.upDepth >= 0) {
+				for (SyntheticInfo oi : oldGroup) {
+					if (oi.matched || oi.ghost) continue;
+					if (ctx.usedOldNames.contains(oi.name)) continue;
+					if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
+					if (!sameNestingLevel(ni, oi)) continue;
+					if (oi.upDepth != ni.upDepth) continue;
+					if (oi.name.equals(ni.name)) { bestOld = oi; break; }   // 同名者优先
+					if (bestOld == null) bestOld = oi;
+				}
+			}
+
 			// 第一优先级：组内同名且签名逻辑等价
 			//
 			// 两道约束缺一不可：
@@ -675,6 +703,7 @@ public class LambdaAligner {
 			// 会被登记给两个不同描述符的新方法，renameMap 里一个键覆盖另一个，
 			// 结果新方法内部对被改名的子的引用指向了别处。实测见 scratch/hstest/deep2/ 变体乙：
 			// 新的叶子占了旧 $2，而新外层内部引用的 $2 实际指向新的中层。
+			if (bestOld == null)
 			for (SyntheticInfo oi : oldGroup) {
 				if (oi.matched || oi.ghost) continue;
 				if (ctx.usedOldNames.contains(oi.name)) continue;
@@ -1307,6 +1336,64 @@ public class LambdaAligner {
 			for (SyntheticInfo info : g) if (info.shape == null) info.shape = "()";
 		}
 
+		// 上行深度：该 lambda 被多少层 lambda 嵌套引用。
+		//
+		// 由**反向** indy 引用关系算出（谁的体内引用了谁），迭代到定稿。
+		//   • 被非 lambda 方法（如 build()）引用 -> 深度 0；
+		//   • 只被 lambda 引用 -> 1 + 那些引用者的深度取最大；
+		//   • 幽灵**不得当引用者**（它们是空壳，没有真实语义），也不参与。
+		//
+		// 与 shape 一样，这是纯结构信息、与方法体内容无关，因此"编辑叶子体"不影响它。
+		// 哨兵 -1 = 未定稿；0 是合法值，绝不用作哨兵。
+		{
+			// 反向索引：target -> referrers（仅本侧、排除幽灵）
+			Map<String, List<String>> referrers = new HashMap<>();
+			for (int idx = groups.nextEntry(-1); idx != -1; idx = groups.nextEntry(idx)) {
+				List<SyntheticInfo> g = groups.valueAt(idx);
+				if (g == null) continue;
+				for (SyntheticInfo info : g) {
+					if (info.ghost) continue;                       // 幽灵不是引用者
+					for (String c : info.children) {
+						referrers.computeIfAbsent(c, k -> new ArrayList<>()).add(info.name);
+					}
+				}
+			}
+			for (int round = 0; round < 64; round++) {
+				boolean changed = false;
+				for (int idx = groups.nextEntry(-1); idx != -1; idx = groups.nextEntry(idx)) {
+					List<SyntheticInfo> g = groups.valueAt(idx);
+					if (g == null) continue;
+					for (SyntheticInfo info : g) {
+						if (info.ghost) continue;
+						List<String> rs = referrers.get(info.name);
+						int nd;
+						if (rs == null || rs.isEmpty()) {
+							// 没有任何 lambda 引用它：若它本身是 lambda 合成方法，
+							// 说明被普通方法（build()）直接引用 -> 深度 0。
+							nd = 0;
+						} else {
+							int max = -1;
+							boolean pendingRef = false;
+							for (String r : rs) {
+								SyntheticInfo ri = infoByName(ctx, isOld, r);
+								if (ri == null) { pendingRef = true; continue; }
+								if (ri.upDepth < 0) { pendingRef = true; continue; }
+								if (ri.upDepth > max) max = ri.upDepth;
+							}
+							if (pendingRef) continue;               // 引用者未定稿 -> 本轮跳过
+							nd = max + 1;
+						}
+						if (nd != info.upDepth) { info.upDepth = nd; changed = true; }
+					}
+				}
+				if (!changed) break;
+				if (round == 63) {
+					HotSwapAgent.warn("[LambdaAligner] 上行深度在 " + (isOld ? "old" : "new")
+						+ " 侧 64 轮未收敛（可能存在环），未定稿者保持 -1");
+				}
+			}
+		}
+
 		// 语义指纹同理：0 表示未定稿，但 0 不可能是合法指纹值（CRC64 结果），
 		// 因此这里不存在"哨兵与合法值撞车"的问题。
 
@@ -1895,6 +1982,22 @@ public class LambdaAligner {
 		 * 新旧两侧同错，任何等值校验都说不出话。用 null 之后，"未算完"与"叶子"永远可分。</p>
 		 */
 		String shape;
+
+		/**
+		 * 上行深度：该 lambda 被多少层 lambda 嵌套引用。
+		 *
+		 * <p>{@code build()} 里直接写的 {@code run(() -> x)} 深度为 <b>0</b>；
+		 * 若它又被另一层 lambda 包着，则深度为 1，依此类推。</p>
+		 *
+		 * <p><b>哨兵必须用 -1（未定稿），不能用 0</b> —— 0 是合法值，用它兼作哨兵会重演
+		 * {@link #shape} 那个坑：父读到未定稿的值却当成合法值用了。</p>
+		 *
+		 * <p>用途：两个都没有指纹证据的新叶子争抢同一个旧叶子名时（实测见
+		 * {@code scratch/hstest/UpDepthTest}），"被谁引用"是唯一可用的结构信号 ——
+		 * 一个由 {@code build()} 直接引用（深度 0），另一个被嵌套链引用（深度 2）。
+		 * 它是纯结构信息，编辑方法体不会改变它，与 {@link #shape} 对称。</p>
+		 */
+		int upDepth = -1;
 
 		SyntheticInfo(String name, String desc, int access, long hash, String logicalName, boolean renameable) {
 			this.name        = name;

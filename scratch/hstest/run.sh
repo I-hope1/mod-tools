@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # 对齐器验证套件的统一入口。任何一条失败 -> 非零退出 -> gradle 构建变红。
 set -u
-cd "$(dirname "$0")"
-ROOT="../../"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$HERE/../.." && pwd)"
+cd "$HERE"
+unset CLASSPATH   # gradle Exec 会继承宿主 CLASSPATH（本机指向 jbrsdk 25 的 dt.jar/tools.jar）
 CP="$ROOT/hotswap-agent/build/classes/java/main"
 CP="$CP;$ROOT/jni-agent/build/classes/java/main"
 for j in \
@@ -26,12 +28,14 @@ done
 JK="javac --release 21"          # 夹具：只要字节码版本 21，不用 classpath
 JH="javac -source 21 -target 21" # 测试入口：要读 classpath（--release 不接受）
 FAILED=0
+: > /tmp/hstest_log
 run() { echo "--- $1 ---"; }
 step() { # step <描述> <命令...>
   local desc="$1"; shift
   local log=/tmp/hstest_step.$$.log
   "$@" > "$log" 2>&1
   local rc=$?
+  cat "$log" >> /tmp/hstest_log 2>/dev/null
   if [ $rc -eq 0 ]; then
     echo "   OK   $desc"
   else
@@ -117,6 +121,17 @@ step "幂等 pass1==pass2==pass3" java -cp "$HOUT;r_out1;$CP" IdemDebug r_out1/t
 step "MoveCase added=[] removed=[]" bash -c 'java -cp "'"$HOUT"';r_move1;r_move2;'"$CP"'" MoveTest r_move1/test8/MoveCase.class r_move2/test8/MoveCase.class | grep -q "added   = \[\]" && java -cp "'"$HOUT"';r_move1;r_move2;'"$CP"'" MoveTest r_move1/test8/MoveCase.class r_move2/test8/MoveCase.class | grep -q "removed = \[\]"'
 step "NestTest" bash -c 'java -cp "'"$HOUT"';r_nest1;r_nest2;'"$CP"'" NestTest r_nest1/test6/NestCase.class r_nest2/test6/NestCase.class | grep -q "added"'
 step "ForceIdemTest 幂等" bash -c 'java -cp "'"$HOUT"';r_out1;r_out2;r_out3;'"$CP"'" ForceIdemTest r_out1/test/Case.class r_out2/test/Case.class r_out3/test/Case.class | grep -q "IDEMPOTENT = true"'
+
+# ---------- 金丝雀：断言数下限 ----------
+# 防止"套件被无意改成什么都不跑，构建照样是绿的"。基线数字随套件增长只增不减。
+MIN_CHECKS=40
+CHECKS=$(grep -ac "PASS  \|FAIL  " /tmp/hstest_log 2>/dev/null || echo 0)
+if [ "${CHECKS:-0}" -lt "$MIN_CHECKS" ]; then
+  echo "   FAIL 金丝雀：实际执行的断言数 $CHECKS < 下限 $MIN_CHECKS（套件可能没真正跑）"
+  FAILED=1
+else
+  echo "   OK   金丝雀：执行了 $CHECKS 条断言（下限 $MIN_CHECKS）"
+fi
 
 echo
 if [ "$FAILED" = 0 ]; then echo "HSTEST SUITE: ALL PASSED"; else echo "HSTEST SUITE: FAILED"; fi

@@ -210,43 +210,37 @@ public class LambdaAligner {
 			LongObjectMap<List<SyntheticInfo>> oldGroups = ctx.oldGroups;
 			LongObjectMap<List<SyntheticInfo>> newGroups = ctx.newGroups;
 
-			// 【阶段一】三轮迭代：Step 1a（同组同 hash 同名）→ 跨组指纹 → Step 2（顺序回退）
+			// 【阶段一】先只做"有证据"的匹配：Step 1（同组同 hash）+ 跨组指纹。
 			//
-			// 为什么要反复跑同一个组：lambda 是**可以嵌套**的，而 hash 中内层 lambda 的名字被
-			// #SYNTHETIC_METHOD# 屏蔽掉了。于是"外层"和"内层"在指纹上可能完全等价 ——
-			// 最典型的是 `run(() -> Time.run(10, () -> doA()))`：外层就是"求值一个
-			// Time.run(10, 内层)"，而这个形状与内层自身完全同构。
+			// 为什么要反复跑：lambda 可以嵌套，而指纹里内层 lambda 的名字被
+			// #SYNTHETIC_METHOD# 屏蔽，于是"父"与"子"在指纹上可能完全等价 ——
+			// 例如 `run(() -> Time.run(10, () -> doA()))`，父的体就是"求值一个
+			// Time.run(10, 子)"，与子自身同构。hasUnmatchedChild 挡住尚未落定子节点的父，
+			// 让匹配按"由下往上"推进；每轮至少确认一个方法，最多 n 轮收敛。
 			//
-			// 如果让子先配对，父就可能被另一个同 hash 的方法抢走名字，接着父的方法体里
-			// 指向子的那句引用会跟着被重映射到别人的名字上 —— 父保住了名字、子却丢了，
-			// 语义静默对调。实测复现与决策轨迹见 scratch/hstest/swap2/。
-			//
-			// 因此这里做成"按层级由下往上"：hasUnmatchedChild 挡住尚未落定子节点的父，
-			// 每跑完一轮若仍有进展就再跑一轮，让父在下一轮基于已经稳定的子重新尝试。
-			// 每一轮至少确认一个方法，所以最多 n 轮收敛。
-			while (true) {
-				boolean progressed = false;
-
-				// —— Step 1a：同组、同 hash、同名
+			// 顺序上刻意**先排除无证据的 Step 2**：Step 2 完全不看指纹，若让它参与中间轮次，
+			// 某个叶子可能被"按位置"占走，而那个旧方法本该由后面某轮的精确指纹认领。
+			// hasUnmatchedChild 只挡得住父，挡不住叶子之间的这种抢占。
+			// 因此这里收敛的是"证据匹配"，Step 2 只在最后兜底跑一次。
+			// 实测对照见 scratch/hstest/swap2/ 与 step2preempt 夹具。
+			boolean progressed;
+			do {
+				progressed = false;
 				for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
 					List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
 					List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
 					if (newGroup == null || oldGroup == null) continue;
 					progressed |= step1a(ctx, newGroup, oldGroup);
 				}
-
-				// —— 跨组指纹匹配（必须在 Step 2 之前，理由见下）
 				progressed |= matchByFingerprintAcrossGroups(ctx);
+			} while (progressed);
 
-				// —— Step 2：顺序回退
-				for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
-					List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
-					List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
-					if (newGroup == null || oldGroup == null) continue;
-					progressed |= step2(ctx, newGroup, oldGroup);
-				}
-
-				if (!progressed) break;
+			// 【阶段一·末】Step 2：顺序回退 —— 只处理"指纹也对不上、仍无归宿"的新方法
+			for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
+				List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
+				List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
+				if (newGroup == null || oldGroup == null) continue;
+				step2(ctx, newGroup, oldGroup);
 			}
 
 			// 【阶段二】未匹配的新方法统一处理

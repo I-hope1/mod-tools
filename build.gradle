@@ -161,6 +161,11 @@ task runTest(type: JavaExec) {
 	mainClass = project.findProperty("mainClass") ?: "JSSyntaxTest"
 }
 
+// 根项目的 test/ 下有 5 个 main 程序（非 JUnit），`check` 里默认的 `:test` 会因
+// "有测试源但没发现测试"而失败 —— 既有问题，与对齐器改动无关，但会让 `check` 永远红。
+// 这些入口由 `runTest` 显式运行，因此关掉这个检查。
+tasks.named("test") { failOnNoDiscoveredTests = false }
+
 task jarAndroid(type: JavaExec) {
 	dependsOn "jar"
 
@@ -599,7 +604,16 @@ tasks.register("hstestCanary", JavaExec) {
 
 // 套件唯一入口：classpath 由 Gradle 解析后经环境变量传入，脚本内不手写 classpath。
 tasks.register("hstestRun", Exec) {
-	dependsOn tasks.named("hstestClasses")   // 没有它，classpath 里的类可能尚未编译
+	// 必须同时依赖 **jar 重建**！
+	//
+	// hstest 的 runtimeClasspath 通过 project(":hotswap-agent") 解析到
+	// build/libs/hotswap-agent-1.6.0.jar（**不是** build/classes/java/main），
+	// 而 Gradle 不会因为 compileJava 就自动重打 jar。
+	// 少了下面两行，测试跑的是**陈旧 jar** —— 实测代价：数轮里匹配逻辑的改动
+	// 全部"改了没生效"，因为改动只进了 classes、没进 jar。
+	dependsOn tasks.named("hstestClasses")
+	dependsOn project(":hotswap-agent").tasks.named("jar")
+	dependsOn project(":jni-agent").tasks.named("jar")
 	group = "verification"
 	description = "运行对齐器验证套件（含数量基线；失败则构建失败）"
 	workingDir = file("$rootDir/scratch/hstest")

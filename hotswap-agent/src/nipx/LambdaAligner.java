@@ -663,8 +663,6 @@ public class LambdaAligner {
 
 	/** 配对并登记：把 {@code ni} 改名为 {@code oi} 的名字。 */
 	private static void pair(MatchContext ctx, SyntheticInfo ni, SyntheticInfo oi) {
-		System.err.println("[T] PAIR " + ni.name + " -> " + oi.name
-			+ " (phase=pair/step2, ni.depth=" + ni.upDepth + " oi.depth=" + oi.upDepth + ")");
 		recordRename(ctx, ni, oi.name);
 		ni.matchedWith = oi;
 		ni.matched = true;
@@ -777,8 +775,6 @@ public class LambdaAligner {
 				warnPositionalMismatch(ctx.currentClass, bestOld, ni.name, ni.desc);
 			}
 			recordRename(ctx, ni, bestOld.name);
-			System.err.println("[T] CLAIM " + ni.name + " -> " + bestOld.name
-				+ " (site=step2-B, ni.depth=" + ni.upDepth + " oi.depth=" + bestOld.upDepth + ")");
 			ni.matched = true;
 			bestOld.matched = true;
 			ctx.usedOldNames.add(bestOld.name);
@@ -863,9 +859,6 @@ public class LambdaAligner {
 				}
 				if (bestOld == null) continue;
 
-				System.err.println("[T] PAIR " + ni.name + " -> " + bestOld.name
-					+ " (phase=crossGroupFingerprint, ni.depth=" + ni.upDepth
-					+ " oi.depth=" + bestOld.upDepth + ")");
 				recordRename(ctx, ni, bestOld.name);
 				ni.matchedWith = bestOld;
 				ni.matched = true;

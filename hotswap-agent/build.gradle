@@ -52,4 +52,8 @@ dependencies {
 
 test {
 	useJUnitPlatform()
+	// 本模块没有 JUnit 测试（测试入口是 scratch/hstest 下的 main 程序，由 hstestRun 跑）。
+	// 不设这一条时，`:test` 会因"有测试源但没发现测试"而失败 —— 那是既有问题，
+	// 与本次改动无关，但会让 `check` 永远红。
+	failOnNoDiscoveredTests = false
 }

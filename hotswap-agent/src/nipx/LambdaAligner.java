@@ -1282,6 +1282,17 @@ public class LambdaAligner {
 		}
 		if (toInject.isEmpty()) return newBytes;
 
+		// 可观测性：幽灵化是"静默"发生在对齐期的。把这行与
+		// warnPositionalMismatch 放在一起看，就能认出"删除 + 改体同时发生"这一形态
+		// （两者同时出现时，本类既有被幽灵化的名字、又有位置错配）。
+		StringBuilder ghosted = new StringBuilder();
+		for (MethodNode mn : toInject) {
+			if (ghosted.length() > 0) ghosted.append(", ");
+			ghosted.append(mn.name);
+		}
+		HotSwapAgent.info("[LambdaAligner] " + oldCn.name + " 幽灵化 " + toInject.size()
+			+ " 个方法（老 CallSite 将走熔断/降级）：" + ghosted);
+
 		// 3. 以空壳形式追加到新类末尾
 		ClassReader cr = new ClassReader(newBytes);
 		// 关键：不用 COMPUTE_FRAMES，避免 getCommonSuperClass 触发目标类加载

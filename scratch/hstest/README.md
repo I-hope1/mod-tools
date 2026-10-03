@@ -73,6 +73,54 @@ MSYS2_ARG_CONV_EXCL='*' java -cp "coutT;cout1;cout2;$CP" RawHandoffTest  cout1/t
    `forceStaticLambdas` 改过描述符的字节码。实测 `rename 落地了？ false`（改用 forced 描述符
    做键则 `true`）。即 rename 会被静默丢弃，除非另加"描述符无关回退"。
 
+## 按钮注册形态的可区分性（`btn/`、`id/`、`BtnTest`、`IdTest`、`RefTest`）
+
+用户反例：`t.button("新建", () -> create()); t.button("保存", () -> save()); ...`
+在 `build()` 最前面插入一个新按钮。三种写法实测结论完全不同：
+
+| 写法 | 编译产物 | 指纹可区分？ | 结果 |
+|---|---|---|---|
+| `() -> create()` / `() -> save()` / `() -> delete()` | 三个 synthetic lambda 方法 | ✅ 互不相同 | 插入后可正确认领，无对调 |
+| `() -> create()` ×3（三个体完全相同） | 三个 synthetic lambda 方法，**逐字节等价** | ❌ 只有 1 种指纹 | 无法区分，但对调也无行为差异 |
+| `this::create`（方法引用） | **没有** synthetic lambda 方法，indy 直接指向 `create` | — | 不在对齐器处理范围内，只作为普通方法增删出现在 DIFF |
+
+```bash
+mkdir -p bout1 bout2 boutL boutL2 boutT iout1 iout2 ioutT
+javac -d bout1 btn/Table.java btn/v1/test4/BtnCase.java
+javac -d bout2 btn/Table.java btn/v2/test4/BtnCase.java
+javac -d boutL  btn/Table.java btn/v1lambda/test4/BtnCase.java
+javac -d boutL2 btn/Table.java btn/v2lambda/test4/BtnCase.java
+javac -d iout1 id/Table.java id/v1/test5/IdCase.java
+javac -d iout2 id/Table.java id/v2/test5/IdCase.java
+MSYS2_ARG_CONV_EXCL='*' javac -nowarn -cp "$CP" -d boutT src/BtnTest.java src/RefTest.java
+MSYS2_ARG_CONV_EXCL='*' javac -nowarn -cp "$CP" -d ioutT src/IdTest.java
+
+MSYS2_ARG_CONV_EXCL='*' java -cp "boutT;boutL;boutL2;$CP" BtnTest boutL/test4/BtnCase.class boutL2/test4/BtnCase.class
+MSYS2_ARG_CONV_EXCL='*' java -cp "boutT;bout1;$CP"        RefTest bout1/test4/BtnCase.class
+MSYS2_ARG_CONV_EXCL='*' java -cp "ioutT;iout1;iout2;$CP"  IdTest  iout1/test5/IdCase.class iout2/test5/IdCase.class
+```
+
+关键实测输出：
+
+```
+# 三个不同调用目标的 lambda：指纹互不相同
+v1: lambda$build$0 hash=c33858f85aa7c03b 调用链=[create]
+    lambda$build$1 hash=0fb80e7ad347e60f 调用链=[save]
+    lambda$build$2 hash=2f30545f307ce793 调用链=[delete]
+>>> 三个 lambda 指纹互不相同？ true
+
+# 插入新按钮后，原三个原地保留，新按钮拿到新名字
+aligned: $0=[create]  $1=[save]  $2=[delete]  $4=[createNew]   added=[createNew()V, lambda$build$4]
+
+# 三个体完全相同时：只有 1 种指纹
+>>> 三个 lambda 指纹互不相同？ false（只有 1 种指纹）
+aligned: 四个方法体全等，added=[lambda$build$3] —— 无对调，也无从对调
+
+# 方法引用
+raw 方法表：<init> build create delete save     ← 没有 lambda$
+>>> 有 lambda$ 合成方法吗？ false
+```
+
 ## 顺序回退告警 (a) 与跨组指纹匹配 (c)
 
 `pair/v1`、`pair/v2` 是同一方法内两个"同形"lambda（描述符相同），`v2` 只改第一个的方法体。

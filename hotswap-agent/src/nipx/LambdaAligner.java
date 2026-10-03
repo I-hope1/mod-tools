@@ -491,6 +491,23 @@ public class LambdaAligner {
 	 * <p><b>选择顺序</b>：先在<b>同组</b>里找指纹相同的未匹配旧方法（最大限度保留
 	 * 原有配对倾向），再退到全类范围。全类范围内遇到多个同指纹候选时，优先同名，
 	 * 否则取分组遍历顺序里的第一个。</p>
+	 *
+	 * <p><b>能力边界（实测结论，避免过度承诺）</b>：本方法只能区分“方法体不同”的 lambda。
+	 * 指纹由方法体的指令序列决定，因此：</p>
+	 * <ul>
+	 *   <li>{@code t.button("新建", () -> create());} 与 {@code () -> save();} —— 被调方法名
+	 *       参与指纹（{@link MethodFingerprinter#visitMethodInsn} 会把 name 计入），
+	 *       三个按钮的指纹互不相同，插入后可被正确认领；</li>
+	 *   <li>三个 lambda 体<b>逐字节相同</b>（例如都只写 {@code () -> create()}）时，
+	 *       指纹只有一个值，本方法无法区分谁是谁 —— 但此时“谁是谁”在类文件里本来就
+	 *       不存在答案，且方法体相同意味着对调也不改变行为，因此不构成故障；</li>
+	 *   <li>{@code this::create} 这种<b>方法引用</b>根本不产生 synthetic lambda 方法
+	 *       （字节码里是直接指向 {@code create} 的方法句柄），因此不在本对齐器的处理范围内，
+	 *       也就谈不上“认领名字”。它只会作为普通方法增删出现在 DIFF 里。</li>
+	 * </ul>
+	 *
+	 * <p>因此真正的风险区间是“多个 lambda 体相似但不相同、且承载同一个方法”，
+	 * 这时才会出现对调；该情形由 {@link #warnPositionalMismatch} 留痕。</p>
 	 */
 	private static void matchByFingerprintAcrossGroups(MatchContext ctx) {
 		var newGroups = ctx.newGroups;

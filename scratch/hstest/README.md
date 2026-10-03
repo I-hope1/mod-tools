@@ -42,6 +42,37 @@ MSYS2_ARG_CONV_EXCL='*' java -cp "outT;out1;out2;out3;$CP" ForceIdemTest \
     out1/test/Case.class out2/test/Case.class out3/test/Case.class
 ```
 
+## Context 包装提案 / raw 基线可行性（`ctx/`、`CtxTest`、`RawVsForcedTest`、`RawHandoffTest`）
+
+三个夹具 `ctx/v1`、`ctx/v2`、`ctx/v3` 是同一份 `test2.CtxCase`，两个 lambda 各自只捕获一个
+`PaneContext` 引用（提案形态）。`v2` 在 `build()` 最前面插入一个新 lambda，原有 lambda 源码
+一字未改；`v3` 只改方法体。
+
+```bash
+mkdir -p cout1 cout2 cout3 coutT
+javac -d cout1 ctx/v1/test2/CtxCase.java
+javac -d cout2 ctx/v2/test2/CtxCase.java
+javac -d cout3 ctx/v3/test2/CtxCase.java
+MSYS2_ARG_CONV_EXCL='*' javac -nowarn -cp "$CP" -d coutT src/CtxTest.java src/RawVsForcedTest.java src/RawHandoffTest.java
+MSYS2_ARG_CONV_EXCL='*' java -cp "coutT;cout1;cout2;$CP" CtxTest    cout1/test2/CtxCase.class cout2/test2/CtxCase.class cout3/test2/CtxCase.class
+MSYS2_ARG_CONV_EXCL='*' java -cp "coutT;cout1;cout2;$CP" RawVsForcedTest cout1/test2/CtxCase.class cout2/test2/CtxCase.class
+MSYS2_ARG_CONV_EXCL='*' java -cp "coutT;cout1;cout2;$CP" RawHandoffTest  cout1/test2/CtxCase.class cout2/test2/CtxCase.class
+```
+
+结论（三个都已复现）：
+
+1. **只改方法体（v1 -> v3）**：`added=[] removed=[]`。注意 `MethodFingerprinter.visitFieldInsn`
+   把字段名算进指纹，所以 body hash 会变、Step 1 失配，真正保住名字的是 **Step 2**
+   （同组 + 签名逻辑等价 + 同名优先，不看指纹）。
+2. **插入新 lambda（v1 -> v2）**：两个原有 lambda 的归一化描述符完全相同，Step 2 只能按组内
+   顺序配对，结果**语义对调** —— 老 callsite `lambda$build$0`（原为 `ctx.pane`）解析到打印
+   `ctx.infoCell` 的方法体。`RawVsForcedTest` 证明：**raw 基线与 forced 基线的对齐产物逐项相同**，
+   换基线不解决交叉。
+3. **raw 基线的手递手问题（`RawHandoffTest`）**：`LambdaAligner` 的 `renameMap` 以
+   `name + desc` 为键；改用 raw 基线后键是 raw 描述符，而 `applyTransform` 面对的是已被
+   `forceStaticLambdas` 改过描述符的字节码。实测 `rename 落地了？ false`（改用 forced 描述符
+   做键则 `true`）。即 rename 会被静默丢弃，除非另加"描述符无关回退"。
+
 ## 断言要点（对应修复点）
 
 - `forceStaticLambdas IDEMPOTENT = true`

@@ -58,3 +58,46 @@ N = 100 / 400 / 1600，各测多次取最小值。
 
 每秒 10 万次调用时，`SMART_ADAPTIVE` 路径约占 CPU **1.2%**。
 加缓存前同口径约 **13.5%**（1527ns 探测 × 10 万次）—— 这就是缓存的实际意义。
+
+---
+
+## 并发安全（用户指出）
+
+`onOrphanInvoked` 是幽灵空壳的入口，会被**任意业务线程**并发调用。
+原先有两处隐患：
+
+1. **`LOCATION_KEY` 是静态共享缓冲** —— 两个线程会互相覆盖 `StringBuilder` 内容，
+   导致查错集合、打错日志，甚至写坏 location。
+   改为 `ThreadLocal.withInitial(() -> new LookupKey(128))`。
+   （`GlTimerProfiler` 里同样是静态 `LookupKey`，但那里有"只在 GL 线程访问"的明确前提，
+   此处没有，不能照搬。）
+2. **两个集合是普通 `HashSet`** —— 且两处用法都是 check-then-act
+   （先 `containsKey` 再 `add`），并发下同一 location 可能重复打日志、重复探测。
+
+### 修法
+
+`StringSet` 内部用 `Collections.synchronizedSet` 包住，并把**整个判定与写入放在同一临界区**：
+
+```java
+synchronized boolean containsKey(LookupKey k)      // 遍历比较，整体加锁
+synchronized boolean addIfAbsentKey(LookupKey k)   // 原子的 check-then-add
+```
+
+未改用 `ConcurrentHashMap.newKeySet()`：它保证元素是 `String` 类型，
+与 `LookupKey.equals(Object)` 的双向比较语义冲突。
+读远多于写（命中即返回），因此 synchronized 的粗粒度不构成实际瓶颈。
+
+### 验证（`ConcurrencyCheck`）
+
+16 线程 × 200 次 = **3,200 次并发调用**（`LOG_AND_RETURN_DEFAULT`），
+每个线程使用自己唯一的 location：
+
+```
+日志行数     = 16      （每个 location 恰好一条）
+重复 location = 无
+唯一 location = 16
+```
+
+若 ThreadLocal 未生效，各线程的 key 会互相污染，出现**错位的 location 名**或
+行数偏离 16；若集合未原子化，同一 location 会出现**重复日志**。两种问题均未出现。
+

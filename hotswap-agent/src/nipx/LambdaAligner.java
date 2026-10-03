@@ -1758,9 +1758,9 @@ public class LambdaAligner {
 	 * 等于在热路径上每次调用都分配一个 String。</p>
 	 */
 	private static void logOrphanOnce(LookupKey key) {
-		if (LOGGED_ORPHANS.containsKey(key)) return;
+		// addIfAbsentKey 是原子的 check-then-add：并发下同一个 location 只会打一条日志。
+		if (!LOGGED_ORPHANS.addIfAbsentKey(key)) return;
 		String location = key.copy();
-		LOGGED_ORPHANS.add(location);
 		System.err.println("[LambdaAligner] orphaned lambda invoked: " + location
 			+ " (subsequent invocations will be muted)");
 	}
@@ -1781,34 +1781,77 @@ public class LambdaAligner {
 	 *
 	 * <p>每个 {@code location} 仍在**首次**触达时完整探测一次，因此正确性不变。</p>
 	 */
-	private static final Set<String> NOT_FROM_UPDATE_REF = new StringSet();
+	private static final StringSet NOT_FROM_UPDATE_REF = new StringSet();
 
 	/**
-	 * 按 {@code LookupKey} 内容查询的 {@code Set<String>}。
+	 * 按 {@code LookupKey} 内容查询的 {@code Set<String>}，**线程安全**。
 	 *
-	 * <p>元素存的是普通 {@code String}；但查询时可传 {@link LookupKey} ——
-	 * 此时 {@code String.equals(LookupKey)} 会返回 false，因此显式改走
+	 * <p>元素存普通 {@code String}；查询时可传 {@link LookupKey} —— 此时
+	 * {@code String.equals(LookupKey)} 会返回 false，因此显式改走
 	 * {@link LookupKey#equals(Object)}（它支持与 String 比较），从而**零 String 分配**。</p>
+	 *
+	 * <p><b>为什么必须同步</b>：{@link #onOrphanInvoked} 会被**任意业务线程**并发调用，
+	 * 而两处用法都是 check-then-act（先 {@code containsKey} 再 {@code add}）。
+	 * 用带自身锁的 {@code synchronizedSet} 包住，并把整个判定放进同一临界区，
+	 * 避免并发下同一个 location 重复打日志/重复探测。</p>
+	 *
+	 * <p>未用 {@code ConcurrentHashMap.newKeySet()}：它保证元素是 {@code String} 类型，
+	 * 与 {@link LookupKey#equals(Object)} 的双向比较语义冲突。读远多于写（命中即返回），
+	 * 因此 synchronized 的粗粒度不构成实际瓶颈。</p>
 	 */
-	private static final class StringSet extends HashSet<String> {
-		boolean containsKey(LookupKey k) {
-			for (String s : this) {
-				if (k.equals(s)) return true;
+	private static final class StringSet {
+		private final Set<String> delegate = Collections.synchronizedSet(new HashSet<>());
+
+		boolean add(String s) {
+			synchronized (delegate) {
+				return delegate.add(s);
 			}
-			return false;
+		}
+
+		void clear() {
+			synchronized (delegate) {
+				delegate.clear();
+			}
+		}
+
+		/** 按 LookupKey 内容查；与后续 add 构成 check-then-act，因此整体加锁。 */
+		synchronized boolean containsKey(LookupKey k) {
+			synchronized (delegate) {
+				for (String s : delegate) {
+					if (k.equals(s)) return true;
+				}
+				return false;
+			}
+		}
+
+		/** 内容不存在时加入；返回是否**新增**。原子操作，避免并发重复写。 */
+		synchronized boolean addIfAbsentKey(LookupKey k) {
+			synchronized (delegate) {
+				for (String s : delegate) {
+					if (k.equals(s)) return false;
+				}
+				return delegate.add(k.toString());
+			}
 		}
 	}
 
+	/** 该 location 是否已判定"非 UpdateRef 调用"。 */
 	private static boolean isMarkedNotFromUpdateRef(LookupKey key) {
-		return ((StringSet) NOT_FROM_UPDATE_REF).containsKey(key);
+		return NOT_FROM_UPDATE_REF.containsKey(key);
 	}
 
-	private static void markNotFromUpdateRef(LookupKey key) {
-		NOT_FROM_UPDATE_REF.add(key.toString());   // 只在此 location 首次触达时执行
-	}
-
-	/** 复用的 location 构造缓冲（与 {@code GlTimerProfiler} 的用法一致）。 */
-	private static final LookupKey LOCATION_KEY = new LookupKey(128);
+	/**
+	 * 复用的 location 构造缓冲，**每线程一份**。
+	 *
+	 * <p>必须用 {@link ThreadLocal} 包装：{@link #onOrphanInvoked} 是幽灵空壳的入口，
+	 * 可能被**任意业务线程**并发调用（回调、事件、线程池任务…）。
+	 * 若用静态共享缓冲，两个线程会互相覆盖 {@code StringBuilder} 内容，
+	 * 导致查错集合、打错日志，甚至把 location 写坏。</p>
+	 *
+	 * <p>（{@code GlTimerProfiler} 里同样用静态 {@code LookupKey}，但那里有明确的
+	 * "只在 GL 线程访问"前提；此处没有这种前提，不能照搬。）</p>
+	 */
+	private static final ThreadLocal<LookupKey> LOCATION_KEY = ThreadLocal.withInitial(() -> new LookupKey(128));
 
 	/**
 	 * 当热重载中被删除/孤立的空壳 Lambda 方法被调用时由生成的字节码调用。
@@ -1824,8 +1867,8 @@ public class LambdaAligner {
 	@SuppressWarnings("SuspiciousMethodCalls")
 	public static void onOrphanInvoked(String className, String name, String desc) {
 		OrphanPolicy policy = orphanPolicy;
-		// 用可复用的 LookupKey 构造 location：命中缓存的热路径上**零 String 分配**。
-		LookupKey key = LOCATION_KEY.reset();
+		// 用**本线程**的可复用 LookupKey 构造 location：命中缓存的热路径上**零 String 分配**。
+		LookupKey key = LOCATION_KEY.get().reset();
 		if (className != null && !className.isEmpty()) {
 			key.append(className.replace('/', '.')).append('#');
 		}
@@ -1839,7 +1882,7 @@ public class LambdaAligner {
 				if (isCalledByUpdateRef()) {
 					throw new NoSuchMethodError("Lambda removed by hot swap: " + key);
 				}
-				markNotFromUpdateRef(key);
+				NOT_FROM_UPDATE_REF.addIfAbsentKey(key);
 			}
 			// 普通业务调用：去重后打印日志（命中时零 String 分配，见 logOrphanOnce）。
 			logOrphanOnce(key);

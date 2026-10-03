@@ -49,6 +49,17 @@ import java.util.function.Supplier;
  * 修复需要给幽灵方法打标记（自定义 attribute 或特殊 access 位），代价与收益
  * 暂不匹配，暂列为已知限制。</p>
  *
+ * <p><b>已知限制：改变嵌套拓扑的编辑会丢失身份。</b>
+ * {@link #sameNestingLevel} 在 Step 1/2 全程是<b>硬否决</b>：形状不等的候选永远不配对。
+ * 因此<b>任何改变嵌套拓扑的编辑</b>——在现有 lambda 体内新增或删除一层内层 lambda——
+ * 都会让该 lambda 的 shape 变化，从而失去身份：旧名被幽灵化、新方法去阶段二拿新名。
+ * 这是"安全优先于召回"的自觉取舍（形状混淆会让父子错配、语义静默对调，代价更大），
+ * 但这类编辑在日常开发中很常见，因此明确记录在此。</p>
+ *
+ * <p><b>可见性假设：</b>注入的幽灵桩通过 {@code INVOKESTATIC} 调用
+ * {@link #onOrphanInvoked(String)}，因此目标类的类加载器必须能看到 {@code nipx.LambdaAligner}。
+ * 父委派正常时成立。</p>
+ *
  * @see nipx.ref.UpdateRef
  * @see nipx.LambdaRef
  * @see nipx.HotSwapAgent
@@ -634,8 +645,9 @@ public class LambdaAligner {
 	 * {@code #SYNTHETIC_METHOD#} 屏蔽。此时若只比指纹，父会配到子（或反之），
 	 * 造成"父保住名字、子丢了名字"的语义静默对调。</p>
 	 *
-	 * <p>区分办法不靠推断嵌套深度，而是比<b>子集合</b>：父有子、子是叶子，两者的
-	 * {@link SyntheticInfo#childHashes} 必然不同。指纹相同但层级不同的候选会被否决。</p>
+	 * <p>区分办法不靠推断嵌套深度，而是比<b>子树形状</b>（{@link SyntheticInfo#shape}）：
+	 * 形状只由 indy 引用拓扑决定，父有子、子是叶子，两者必然不同。
+	 * 指纹相同但层级不同的候选会被否决。</p>
 	 *
 	 * <p>实测场景见 {@code scratch/hstest/swap2/}（删除变体）：新旧外层同 hash、
 	 * 新旧内层也同 hash，仅凭 hash 无法区分谁是谁。</p>
@@ -834,6 +846,9 @@ public class LambdaAligner {
 				warnPositionalMismatch(ctx.currentClass, bestOld, ni.name, ni.desc);
 			}
 			recordRename(ctx, ni, bestOld.name);
+			// 与 pair() 保持一致：登记配对对象。否则 verifyShapeInvariant 看不到
+			// Step 2 的配对（它按 matchedWith 遍历），校验会漏掉这一批。
+			ni.matchedWith = bestOld;
 			ni.matched = true;
 			bestOld.matched = true;
 			ctx.usedOldNames.add(bestOld.name);
@@ -1373,12 +1388,6 @@ public class LambdaAligner {
 			if (g == null) continue;
 			for (SyntheticInfo info : g) {
 				if (info.children.isEmpty()) continue;
-				Set<Long> hs = new HashSet<>(info.children.size() * 2);
-				for (String c : info.children) {
-					SyntheticInfo ci = infoByName(ctx, isOld, c);
-					if (ci != null) hs.add(ci.hash);
-				}
-				info.childHashes = hs;
 
 				// 子树形状：由子形状串接而成（与内容无关）
 
@@ -1640,16 +1649,15 @@ public class LambdaAligner {
 		// 若按名字一刀切地不注入，这类场景会直接 NoSuchMethodError —— 在业务代码路径下就是崩溃，
 		// 违背"不崩溃"的设计目标。
 		//
-		// 真正需要跳过的只有一种：{@code name + desc} 与某个活方法完全相同。那会让类里出现
-		// 重复定义（ClassFormatError），而且幽灵本来也兜不住（解析会命中活方法）。
-		Set<String> liveKeys = new HashSet<>();
-		for (MethodNode mn : newCnMethods(newBytes)) liveKeys.add(mn.name + mn.desc);
-
+		// 真正需要跳过的只有一种：{@code name + desc} 与某个活方法完全相同。
+		// 但那已由 orphanedKeys 的定义排除 —— 它取自 {@code !presentKeys.contains(key)}，
+		// 而 presentKeys 就是本类的全部方法键。**因此这里不需要再查一次"是否与活方法重名"**：
+		// 曾有一份 liveKeys 分支做这件事，它解析的是与 presentKeys 同一份字节码、
+		// 结果恒为同一集合，那个判断永远为 false，还白多解析一遍（与"避免二次读取"相悖）。
 		List<MethodNode> toInject = new ArrayList<>();
 		for (MethodNode mn : oldCn.methods) {
 			String key = mn.name + mn.desc;
 			if (!orphanedKeys.contains(key)) continue;
-			if (liveKeys.contains(key)) continue;   // 同名同描述符：重复定义，且兜不住
 			toInject.add(mn);
 		}
 		if (toInject.isEmpty()) return newBytes;
@@ -2098,15 +2106,6 @@ public class LambdaAligner {
 		 */
 		List<String> children = Collections.emptyList();
 
-		/**
-		 * 子 lambda 的指纹集合（由 {@code scan} 在收集 children 时一并算出）。
-		 *
-		 * <p>用途：把"父"和"子"分开。父与子可能指纹相同（父的体就是"求值一个子"），
-		 * 但它们的<b>子集合</b>必然不同 —— 父有子、子是叶子。用集合比对即可否决
-		 * "父配到子"这种跨层错配，比推断嵌套深度稳健。</p>
-		 */
-		Set<Long> childHashes = Collections.emptySet();
-
 		/** {@link #children} 对应的新类 SyntheticInfo（下标对齐；仅新类侧填充）。 */
 		List<SyntheticInfo> childInfos = Collections.emptyList();
 
@@ -2118,7 +2117,7 @@ public class LambdaAligner {
 		 *
 		 * <p>{@link #hash}（票据指纹）会把子 lambda 的名字屏蔽成 {@code #SYNTHETIC_METHOD#}，
 		 * 因此"整棵子树只差最深处叶子"的两个 lambda 会得到相同的 {@code hash} ——
-		 * 三层嵌套正是如此：两个中层同 hash、两个外层同 hash，{@code childHashes} 也退化成
+		 * 三层嵌套正是如此：两个中层同 hash、两个外层同 hash，{@code shape} 也退化成
 		 * 相等的集合，否决与正向选择同时失效。实测见 scratch/hstest/deep/。</p>
 		 *
 		 * <p>把子的语义指纹折进来后，差异会沿树<b>向上传播</b>：叶子不同 ⇒ 中层语义指纹不同

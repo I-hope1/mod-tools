@@ -1022,7 +1022,7 @@ public class UpdateRef {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
 			if (element != null) {
-				wr.getUpdateRef().addOnRemove(new RemoveUpdateAction(element, (Runnable) original));
+				wr.getUpdateRef().addOnRemove(new RemoveUpdateAction(element, original));
 			}
 			return original;
 		}
@@ -1043,7 +1043,7 @@ public class UpdateRef {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
 			if (element != null) {
-				wr.getUpdateRef().addOnRemove(new RemoveVisibleAction(element, (Boolp) original));
+				wr.getUpdateRef().addOnRemove(new RemoveVisibleAction(element, original));
 			}
 			return original;
 		}
@@ -1065,7 +1065,7 @@ public class UpdateRef {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
 			if (element != null) {
-				wr.getUpdateRef().addOnRemove(new RemoveTouchableAction(element, (Prov) original));
+				wr.getUpdateRef().addOnRemove(new RemoveTouchableAction(element, original));
 			}
 			return original;
 		}
@@ -1087,7 +1087,7 @@ public class UpdateRef {
 		if (original == null) return null;
 		if (original instanceof WrappedRef wr) {
 			if (element != null) {
-				wr.getUpdateRef().addOnRemove(new RemoveButtonDisabledAction(element, (Boolp) original));
+				wr.getUpdateRef().addOnRemove(new RemoveButtonDisabledAction(element, original));
 			}
 			return original;
 		}
@@ -1100,6 +1100,15 @@ public class UpdateRef {
 	/**
 	 * 包装 {@link TextField#setValidator(TextFieldValidator)} 输入验证器。
 	 * 发生 {@link LinkageError} 时执行精准局部熔断：核验槽位并移除验证规则。
+	 * <p>
+	 * <b>关于兜底断言说明：</b><br>
+	 * 此处的兜底断言必须固定为 {@code text -> true}，<b>绝对严禁</b>调用宿主元素的 {@code tf.isValid()}。<br>
+	 * 这是因为 Arc 的 {@link TextField#isValid()} 实现为 {@code validator == null || validator.valid(text)}，
+	 * 会直接向当前安装的 {@code validator} 委托判定。若在兜底逻辑中调用 {@code tf.isValid()}，
+	 * 发生异常或 fallback 时将陷入互调死循环（{@code wrapper.valid} &rarr; {@code fallback.valid} &rarr; {@code tf.isValid} &rarr; {@code wrapper.valid}），
+	 * 最终触发不可逆的 {@link StackOverflowError}。<br>
+	 * 固定兜底为 {@code true} 既斩断了无限递归，又与移除验证器后的默认行为（无限制允许输入）保持语义一致。
+	 * </p>
 	 * @param element  目标输入框元素（声明为 Element 以匹配字节码注入签名）
 	 * @param original 原始输入验证器
 	 * @return 具备局部熔断保护的代理 TextFieldValidator

@@ -1459,6 +1459,7 @@ public class UpdateRef {
 			if (!DEFERRED_REMOVALS.contains(r, true)) {
 				DEFERRED_REMOVALS.add(r);
 				hasDeferredRemovals = true;
+				flushFailCount = 0; // 新动作入队时重置失败计数，允许重新尝试调度
 			}
 		}
 		tryScheduleDeferredFlush();
@@ -1469,7 +1470,7 @@ public class UpdateRef {
 	 * 通过 {@link Core#app} 的 {@link Application#post} 方法向主线程安全点投递清理任务。
 	 * 采用 {@code flushScheduled} 标志位与 double-check 快速短路：
 	 * 1) 无暂存动作或已有投递任务在等待主线程执行时 100% 零锁竞争与零开销，杜绝重复投递导致的空转 post；
-	 * 2) 若投递连续失败达到上限（5次），将暂停在热路径上反复调度，防止异常刷屏。
+	 * 2) 若投递连续失败达到上限（5次），将暂停在热路径上反复调度，直到有新的清理动作入队（由 {@link #deferRemoval} 重置计数）。
 	 */
 	public static void tryScheduleDeferredFlush() {
 		if (!hasDeferredRemovals || flushScheduled || Core.app == null || flushFailCount >= 5) return;
@@ -1492,6 +1493,13 @@ public class UpdateRef {
 
 	/**
 	 * 清理在无主循环环境（如 Core.app == null）下暂存或主线程安全点投递的熔断注销动作。
+	 * <p>
+	 * <b>重要线程约束说明：</b><br>
+	 * 此方法内部包含修改 UI 树（如 {@code element.remove()}、{@code element.update(null)}）以及
+	 * 修改事件注册表的清理逻辑。<b>必须且只能在游戏主线程安全点调用</b>（例如由 {@link Core#app} 的 {@code post}
+	 * 异步调度执行，或在 {@link mindustry.game.EventType.ClientLoadEvent} 等主线程生命周期事件中调用）。<br>
+	 * 绝对严禁在工作线程或并发后台线程中手动调用此方法，否则将破坏 UI 树及 Arc 集合的线程安全性。
+	 * </p>
 	 * 在监视器锁外执行回调，彻底消除持有锁调用外部代码与死锁风险。
 	 */
 	public static void flushDeferredRemovals() {

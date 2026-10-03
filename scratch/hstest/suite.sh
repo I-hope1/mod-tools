@@ -25,6 +25,25 @@ JAVAC_8="${HSTEST_JAVAC8:-F:/files/java/jdks/jdk-1.8/bin/javac}"
 JAVAC_17="${HSTEST_JAVAC17:-F:/files/java/jdks/jdk-17.0.2/bin/javac}"
 JAVAC_21="${HSTEST_JAVAC21:-F:/files/java/jdks/openjdk-21.0.2/bin/javac}"
 
+# 路径规范化：Gradle 的 Exec 可能调用 **WSL 的 bash**（cwd 形如 /mnt/e/...），
+# 而 WSL 不认 F:/... 这种 Windows 风格路径。只在原路径**确实不存在**时才转换，
+# 这样 Git Bash 直接运行（路径可用）不受影响。
+winpath() { # winpath <windows-style-path>
+  local p="$1"
+  [ -e "$p" ] && { printf '%s' "$p"; return; }          # 已可用，原样返回
+  if command -v wslpath >/dev/null 2>&1; then
+    printf '%s' "$(wslpath -u "$p" 2>/dev/null || printf '%s' "$p")"
+  elif command -v cygpath >/dev/null 2>&1; then
+    printf '%s' "$(cygpath -u "$p" 2>/dev/null || printf '%s' "$p")"
+  else
+    printf '%s' "$p"
+  fi
+}
+JAVA_BIN="$(winpath "$JAVA_BIN")"
+JAVAC_8="$(winpath "$JAVAC_8")"
+JAVAC_17="$(winpath "$JAVAC_17")"
+JAVAC_21="$(winpath "$JAVAC_21")"
+
 FAILED=0
 LOG=$(mktemp)
 

@@ -498,13 +498,15 @@ public class LambdaAligner {
 	 * 新旧内层也同 hash，仅凭 hash 无法区分谁是谁。</p>
 	 */
 	private static boolean sameNestingLevel(SyntheticInfo ni, SyntheticInfo oi) {
-		// 只比**结构**：有子/无子、子数量是否一致。绝不比 childHashes 的**值**。
+		// 比**子树形状**：只由 indy 引用拓扑决定，与方法体内容无关。
 		//
-		// 比值的后果（实测，save3 的 V2→V3）：某个后代被改过之后，祖先的 childHashes
-		// 必然变化，于是"同一个祖先"被判成"不同层级"而遭否决，整条祖先链失去候选、
-		// 被幽灵化。而这条否决本来只需要拦住"父配叶子"。
-		if (ni.children.isEmpty() != oi.children.isEmpty()) return false;
-		return ni.children.size() == oi.children.size();
+		// 演进过程（两个方向都踩过）：
+		//   • 早先比 childHashes 的**值** ⇒ 后代被编辑时祖先形状被误判（实测 save3 的
+		//     单轮 V2→V3，整条祖先链被幽灵化）；
+		//   • 改成只比"有无子 + 子数量"⇒ 外层与中层结构等价（都是 1 个子），互换无人拦
+		//     （实测 save3 两轮序列：$3 与 $4 互换，老回调静默改了语义）。
+		// 形状同时解决两者：与内容无关、但能区分外层/中层/叶子。
+		return ni.shape.equals(oi.shape);
 	}
 
 	/**
@@ -1179,6 +1181,15 @@ public class LambdaAligner {
 				}
 				info.childHashes = hs;
 
+				// 子树形状：由子形状串接而成（与内容无关）
+				List<String> shapes = new ArrayList<>(info.children.size());
+				for (String c : info.children) {
+					SyntheticInfo ci = infoByName(ctx, isOld, c);
+					shapes.add(ci == null ? "()" : ci.shape);
+				}
+				Collections.sort(shapes);
+				info.shape = "(" + String.join("", shapes) + ")";
+
 				// 新类侧额外登记"子名 -> SyntheticInfo"，供 calleesPairTo 查"子配给了谁"
 				if (!isOld) {
 					List<SyntheticInfo> cis = new ArrayList<>(info.children.size());
@@ -1742,6 +1753,24 @@ public class LambdaAligner {
 		 * <p>{@code 0} 表示尚未定稿（子还没算完）。叶子没有子，语义指纹就等于票据指纹。</p>
 		 */
 		long semanticHash;
+
+		/**
+		 * 子树**形状**：只由 indy 引用拓扑决定，与方法体内容无关。
+		 *
+		 * <pre>
+		 *   shape(m) = "(" + 排序后的 shape(子) 串接 + ")"
+		 *   叶子 = "()"      中层 = "(())"      外层 = "((()))"
+		 * </pre>
+		 *
+		 * <p>用途（实测问题）：{@link #sameNestingLevel} 早先只比"有无子 + 子数量"，
+		 * 于是<b>外层与中层结构等价</b>（都是 1 个子），互换时无人拦截 —— save3 的
+		 * 两轮序列里 `$3`（旧外层）与 `$4`（旧中层）真的互换了，持有 `$3` 的老回调
+		 * 从此执行中层的逻辑，延迟与嵌套层数都变了却不报错。</p>
+		 *
+		 * <p>形状与内容无关，所以"编辑叶子方法体"不会改变它（不会重现上一轮那个
+		 * "祖先因后代被编辑而失去证据"的问题），但它能区分外层与中层。</p>
+		 */
+		String shape = "()";
 
 		SyntheticInfo(String name, String desc, int access, long hash, String logicalName, boolean renameable) {
 			this.name        = name;

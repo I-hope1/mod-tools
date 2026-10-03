@@ -121,6 +121,39 @@ public class SemAssert {
 		return null;
 	}
 
+	// ---------- 子树形状（只由 indy 拓扑决定，与方法体内容无关）----------
+
+	static List<String> kids(ClassNode cn, MethodNode mn) {
+		List<String> l = new ArrayList<>();
+		for (AbstractInsnNode n : mn.instructions) {
+			if (n instanceof InvokeDynamicInsnNode i && i.bsmArgs != null && i.bsmArgs.length > 1
+			    && i.bsmArgs[1] instanceof Handle h && cn.name.equals(h.getOwner())) l.add(h.getName());
+		}
+		return l;
+	}
+
+	static String shape(ClassNode cn, Map<String, MethodNode> byName, String name, int depth) {
+		if (depth > 12) return "?";
+		MethodNode mn = byName.get(name);
+		if (mn == null || isGhost(mn)) return "()";
+		List<String> parts = new ArrayList<>();
+		for (String c : kids(cn, mn)) parts.add(shape(cn, byName, c, depth + 1));
+		Collections.sort(parts);
+		return "(" + String.join("", parts) + ")";
+	}
+
+	static Map<String, String> shapeOfAll(byte[] bytes) {
+		ClassNode cn = parse(bytes);
+		Map<String, MethodNode> byName = new HashMap<>();
+		for (MethodNode mn : cn.methods) byName.put(mn.name, mn);
+		Map<String, String> out = new TreeMap<>();
+		for (MethodNode mn : cn.methods) {
+			if (!mn.name.startsWith("lambda$")) continue;
+			out.put(mn.name, shape(cn, byName, mn.name, 0));
+		}
+		return out;
+	}
+
 	static byte[] force(String path, ClassLoader cl) throws Exception {
 		byte[] r = Files.readAllBytes(Paths.get(path));
 		String slash = new ClassReader(r).getClassName();
@@ -257,6 +290,19 @@ public class SemAssert {
 			check(sem3.containsValue("[doB2]"), "V2→V3：B 链叶子存在");
 			check(B2chainIntact(a3), "V2→V3：B 链自洽（外层→中层→叶子 引用闭合）");
 			check(noDupOrShadow(a3), "V2→V3：最终类自洽");
+
+			// ---- KNOWN ISSUE：跨两轮出现"跨层级错绑" ----
+			// 判据：旧基线里每个存活下来的名字，其**子树形状**（只由 indy 拓扑决定、
+			// 与方法体内容无关）必须保持不变。外层 ((())) 与中层 (()) 若互换，
+			// 持有旧名字的 UpdateRef 回调会静默改了语义（延迟、嵌套层数都变）。
+			Map<String, String> s2 = shapeOfAll(a2), s3 = shapeOfAll(a3);
+			List<String> swapped = new ArrayList<>();
+			for (var e : s2.entrySet()) {
+				String now = s3.get(e.getKey());
+				if (now == null) continue;                 // 已消失可接受
+				if (!now.equals(e.getValue())) swapped.add(e.getKey() + " 旧=" + e.getValue() + " 现=" + now);
+			}
+			check(swapped.isEmpty(), "KNOWN ISSUE: 存活名字的子树形状跨轮不变（错绑=" + swapped + "）");
 		}
 
 		System.out.println();

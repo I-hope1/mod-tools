@@ -14,7 +14,6 @@ import arc.struct.ObjectMap;
 import arc.struct.Seq;
 import nipx.HotSwapAgent;
 
-import java.lang.reflect.Field;
 import java.util.*;
 
 /**
@@ -678,34 +677,27 @@ public class UpdateRef {
 	//region Events 事件总线包装支持
 
 	private static volatile ObjectMap<Object, Seq<Cons<?>>> eventsMap;
-	private static volatile boolean                         eventsFieldFailed;
 
 	/**
-	 * 反射获取 {@link Events#events} 私有事件注册表。
+	 * 获取 {@link Events#events} 事件注册表（由 ASM 重写的 Events 方法在运行时通过 GETSTATIC 自举传递）。
 	 *
-	 * @return Events 内部维护的事件映射表，若反射失败则返回 null
+	 * @return Events 内部维护的事件映射表，若尚未自举接收则返回 null
 	 */
-	@SuppressWarnings("unchecked")
 	public static ObjectMap<Object, Seq<Cons<?>>> getEventsMap() {
-		if (eventsMap == null && !eventsFieldFailed) {
-			synchronized (UpdateRef.class) {
-				if (eventsMap == null && !eventsFieldFailed) {
-					try {
-						Field f = Events.class.getDeclaredField("events");
-						f.setAccessible(true);
-						eventsMap = (ObjectMap<Object, Seq<Cons<?>>>) f.get(null);
-					} catch (Throwable t) {
-						eventsFieldFailed = true;
-						HotSwapAgent.error("[UpdateRef] Failed to reflect Events.events: " + t.getMessage(), t);
-					}
-				}
-			}
-		}
 		return eventsMap;
 	}
 
 	/**
-	 * 包装 {@link Cons} 的事件监听器容器，支持与原始被代理引用的等价比较与反射注销。
+	 * 供字节码或自举流程直接注入 {@link Events#events} 引用，实现 100% 零反射访问。
+	 *
+	 * @param map Events 内部维护的事件注册表
+	 */
+	public static void setEventsMap(ObjectMap<Object, Seq<Cons<?>>> map) {
+		eventsMap = map;
+	}
+
+	/**
+	 * 包装 {@link Cons} 的事件监听器容器，支持与原始被代理引用的等价比较与注销。
 	 */
 	public static class EventCons<T> implements Cons<T> {
 		public final UpdateRef ref;
@@ -774,16 +766,17 @@ public class UpdateRef {
 	}
 
 	/**
-	 * 代理 {@link Events#on(Class, Cons)}，为事件监听器提供热重载异常自动熔断与注销支持。
+	 * 代理 {@link Events#on(Class, Cons)}，由 ASM 重写的方法通过原生 GETSTATIC 指令自举传入 events 注册表。
 	 *
 	 * @param type     事件类型 Class
 	 * @param listener 事件消费回调
+	 * @param map      Events 内部私有事件注册表（100% 零反射原生自举传入）
 	 * @param <T>      事件类型
 	 */
 	@SuppressWarnings("unchecked")
-	public static <T> void eventsOn(Class<T> type, Cons<T> listener) {
+	public static <T> void eventsOn(Class<T> type, Cons<T> listener, ObjectMap<Object, Seq<Cons<?>>> map) {
 		if (listener == null) return;
-		ObjectMap<Object, Seq<Cons<?>>> map = getEventsMap();
+		if (map != null) eventsMap = map;
 		if (map == null || returnOriginal(listener)) {
 			if (map != null) {
 				map.get(type, () -> new Seq<>(Cons.class)).add(listener);
@@ -794,9 +787,8 @@ public class UpdateRef {
 		EventCons<T>[] box = (EventCons<T>[]) new EventCons[1];
 		Runnable outer = CONTEXT_ON_REMOVE.get();
 		Runnable onRemove = () -> {
-			ObjectMap<Object, Seq<Cons<?>>> m = getEventsMap();
-			if (m != null && box[0] != null) {
-				Seq<Cons<?>> seq = m.get(type);
+			if (box[0] != null) {
+				Seq<Cons<?>> seq = map.get(type);
 				if (seq != null) {
 					seq.remove(box[0], true);
 				}
@@ -810,15 +802,16 @@ public class UpdateRef {
 	}
 
 	/**
-	 * 代理 {@link Events#run(Object, Runnable)}，为运行监听器提供热重载异常自动熔断与注销支持。
+	 * 代理 {@link Events#run(Object, Runnable)}，由 ASM 重写的方法通过原生 GETSTATIC 指令自举传入 events 注册表。
 	 *
 	 * @param type     事件类型（Class 或 Enum Trigger 等）
 	 * @param listener 运行回调
+	 * @param map      Events 内部私有事件注册表（100% 零反射原生自举传入）
 	 */
 	@SuppressWarnings("unchecked")
-	public static void eventsRun(Object type, Runnable listener) {
+	public static void eventsRun(Object type, Runnable listener, ObjectMap<Object, Seq<Cons<?>>> map) {
 		if (listener == null) return;
-		ObjectMap<Object, Seq<Cons<?>>> map = getEventsMap();
+		if (map != null) eventsMap = map;
 		if (map == null || returnOriginal(listener)) {
 			if (map != null) {
 				map.get(type, () -> new Seq<>(Cons.class)).add(e -> listener.run());
@@ -829,9 +822,8 @@ public class UpdateRef {
 		EventRunnableCons[] box = new EventRunnableCons[1];
 		Runnable outer = CONTEXT_ON_REMOVE.get();
 		Runnable onRemove = () -> {
-			ObjectMap<Object, Seq<Cons<?>>> m = getEventsMap();
-			if (m != null && box[0] != null) {
-				Seq<Cons<?>> seq = m.get(type);
+			if (box[0] != null) {
+				Seq<Cons<?>> seq = map.get(type);
 				if (seq != null) {
 					seq.remove(box[0], true);
 				}
@@ -849,12 +841,13 @@ public class UpdateRef {
 	 *
 	 * @param type     事件类型 Class
 	 * @param listener 待注销的监听器（可以是原始 listener，也可以是 EventCons 代理实例）
+	 * @param map      Events 内部私有事件注册表（100% 零反射原生自举传入）
 	 * @param <T>      事件类型
 	 * @return 若成功找到并注销返回 true，否则返回 false
 	 */
-	public static <T> boolean eventsRemove(Class<T> type, Cons<T> listener) {
+	public static <T> boolean eventsRemove(Class<T> type, Cons<T> listener, ObjectMap<Object, Seq<Cons<?>>> map) {
 		if (listener == null) return false;
-		ObjectMap<Object, Seq<Cons<?>>> map = getEventsMap();
+		if (map != null) eventsMap = map;
 		if (map == null) return false;
 		Seq<Cons<?>> seq = map.get(type);
 		if (seq == null) return false;
@@ -875,9 +868,6 @@ public class UpdateRef {
 
 	/**
 	 * 注销通过 {@link Events#run(Object, Runnable)} 注册的监听器。
-	 * <p>
-	 * 由于 Arc 原生未提供按 Runnable 注销的接口，此方法通过反射遍历注册表实现解绑注销。
-	 * </p>
 	 *
 	 * @param type     事件类型
 	 * @param listener 原始 Runnable 实例
@@ -885,7 +875,7 @@ public class UpdateRef {
 	 */
 	public static boolean removeEventRun(Object type, Runnable listener) {
 		if (listener == null) return false;
-		ObjectMap<Object, Seq<Cons<?>>> map = getEventsMap();
+		ObjectMap<Object, Seq<Cons<?>>> map = eventsMap;
 		if (map == null) return false;
 		Seq<Cons<?>> seq = map.get(type);
 		if (seq == null) return false;

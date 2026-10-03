@@ -111,11 +111,12 @@ public class LambdaRef {
 					mv.visitCode();
 					mv.visitVarInsn(Opcodes.ALOAD, 0); // type (Class)
 					mv.visitVarInsn(Opcodes.ALOAD, 1); // listener (Cons)
+					mv.visitFieldInsn(Opcodes.GETSTATIC, "arc/Events", "events", "Larc/struct/ObjectMap;");
 					mv.visitMethodInsn(Opcodes.INVOKESTATIC,
 						AnnotationTransformer.internalName(UpdateRef.class),
-						"eventsOn", "(Ljava/lang/Class;Larc/func/Cons;)V", false);
+						"eventsOn", "(Ljava/lang/Class;Larc/func/Cons;Larc/struct/ObjectMap;)V", false);
 					mv.visitInsn(Opcodes.RETURN);
-					mv.visitMaxs(2, 2);
+					mv.visitMaxs(3, 2);
 					mv.visitEnd();
 					return null;
 				}
@@ -125,11 +126,12 @@ public class LambdaRef {
 					mv.visitCode();
 					mv.visitVarInsn(Opcodes.ALOAD, 0); // type (Object)
 					mv.visitVarInsn(Opcodes.ALOAD, 1); // listener (Runnable)
+					mv.visitFieldInsn(Opcodes.GETSTATIC, "arc/Events", "events", "Larc/struct/ObjectMap;");
 					mv.visitMethodInsn(Opcodes.INVOKESTATIC,
 						AnnotationTransformer.internalName(UpdateRef.class),
-						"eventsRun", "(Ljava/lang/Object;Ljava/lang/Runnable;)V", false);
+						"eventsRun", "(Ljava/lang/Object;Ljava/lang/Runnable;Larc/struct/ObjectMap;)V", false);
 					mv.visitInsn(Opcodes.RETURN);
-					mv.visitMaxs(2, 2);
+					mv.visitMaxs(3, 2);
 					mv.visitEnd();
 					return null;
 				}
@@ -139,11 +141,12 @@ public class LambdaRef {
 					mv.visitCode();
 					mv.visitVarInsn(Opcodes.ALOAD, 0); // type (Class)
 					mv.visitVarInsn(Opcodes.ALOAD, 1); // listener (Cons)
+					mv.visitFieldInsn(Opcodes.GETSTATIC, "arc/Events", "events", "Larc/struct/ObjectMap;");
 					mv.visitMethodInsn(Opcodes.INVOKESTATIC,
 						AnnotationTransformer.internalName(UpdateRef.class),
-						"eventsRemove", "(Ljava/lang/Class;Larc/func/Cons;)Z", false);
+						"eventsRemove", "(Ljava/lang/Class;Larc/func/Cons;Larc/struct/ObjectMap;)Z", false);
 					mv.visitInsn(Opcodes.IRETURN);
-					mv.visitMaxs(2, 2);
+					mv.visitMaxs(3, 2);
 					mv.visitEnd();
 					return null;
 				}

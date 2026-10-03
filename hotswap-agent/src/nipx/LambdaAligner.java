@@ -1775,7 +1775,10 @@ public class LambdaAligner {
 	 *   <li>若为 UpdateRef 保护的调用：Java 静态方法直接抛出 {@link NoSuchMethodError} 展开栈中断执行；</li>
 	 *   <li>若为普通业务调用：Java 静态方法去重打印警告日志后正常返回，随后由生成的字节码 100% 线性返回类型默认值（0 / null / false）。</li>
 	 * </ul>
-	 * 从而在 Java 7+ / 8 / 11 / 17 / 21 任意平台环境下，无需 StackMapTable 即可 100% 通过 JVM 类验证。
+	 * 从而在 Java 17+ / 21 等平台环境下，无需 StackMapTable 即可 100% 通过 JVM 类验证。
+	 * （本类实际用了 {@code instanceof} 模式匹配与 {@link java.util.stream.Stream#toList()}，
+	 * 均需 Java 16+；文首"Java 7+"的旧说法已不成立，{@link StackWalker} 的降级分支因此
+	 * 主要是历史兜底而非当前最低版本要求。）
 	 * </p>
 	 */
 	private static void injectDummyBody(MethodVisitor mv, String className, String name, String desc) {
@@ -1929,8 +1932,10 @@ public class LambdaAligner {
 	 * 于是误判为"非 UpdateRef"，<b>熔断静默失效</b>。改为"定位幽灵桩入口后取 +2 帧"
 	 * 与深度无关：栈有多深都能看到直接调用者。</p>
 	 *
-	 * <p>降级路径（无 StackWalker，如 Java 8/Android）同样按"定位 {@code onOrphanInvoked}，
-	 * 再取 +2 帧"处理，语义与 StackWalker 路径一致。</p>
+	 * <p>降级路径（无 StackWalker 的环境，如 Android/desugar）同样按"定位 {@code onOrphanInvoked}，
+	 * 再跳过透明帧取调用者"处理，语义与 StackWalker 路径一致。
+	 * 桌面 JVM 上该分支实际不可达（本类最低要求 Java 16+，而 StackWalker 自 Java 9 起可用），
+	 * 保留它是为了 Android 等没有 StackWalker 的运行时。</p>
 	 *
 	 * @return 若直接调用者为 UpdateRef 的 run 系方法（或兜底命中）则返回 true
 	 */

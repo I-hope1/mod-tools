@@ -39,6 +39,25 @@ public class FixtureAProbe {
 		System.out.println("--- align 返回 " + (out == null ? "null" : out.length + " 字节") + " ---");
 		System.out.println("对齐后方法签名:");
 		dump(out);
+
+		// V2->V3 稳定性：把同一份 V2 再对齐一次（等价于"源码不变又保存一次"）。
+		// 目的：检查 align 输出里"同名不同描述符"的活/幽灵对，是否会让下一轮对齐
+		// 因以名字为键的索引（childIndex / oldNameIndex / newNameIndex）而认错。
+		// 期望：名字集合不变、不新增幽灵。红了说明名字键索引有问题。
+		System.out.println("--- 第二轮 align(对齐结果, 同一份新类) ---");
+		byte[] out2 = LambdaAligner.align(out, newB);
+		System.out.println("第二轮方法签名:");
+		dump(out2);
+		System.out.println("两轮方法键集合一致 = " + names(out).equals(names(out2)));
+	}
+
+	static java.util.TreeSet<String> names(byte[] b) {
+		java.util.TreeSet<String> s = new java.util.TreeSet<>();
+		if (b == null) return s;
+		org.objectweb.asm.tree.ClassNode cn = new org.objectweb.asm.tree.ClassNode();
+		new org.objectweb.asm.ClassReader(b).accept(cn, 0);
+		for (org.objectweb.asm.tree.MethodNode mn : cn.methods) s.add(mn.name + mn.desc);
+		return s;
 	}
 
 	static void dump(byte[] b) {

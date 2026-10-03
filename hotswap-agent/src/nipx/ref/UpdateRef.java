@@ -1302,6 +1302,9 @@ public class UpdateRef {
 	 */
 	public static Cons<?> wrapCellUpdate(Cell<?> cell, Cons<?> original) {
 		if (original == null) return null;
+		// 已包装则**原样返回、不追加任何动作** —— 这是有意的，别与相邻的 wrapCellDisabled 类比：
+		// wrapCellDisabled 有 fallback 可以追加（setFallbackIfAbsent），而 update/tooltip 的
+		// 静默熔断不需要额外兜底状态，重新包一层只会多套一层代理、白增开销与栈深度。
 		if (original instanceof WrappedRef) {
 			return original;
 		}
@@ -1346,6 +1349,7 @@ public class UpdateRef {
 	 */
 	public static Cons<?> wrapCellTooltip(Cell<?> cell, Cons<?> original) {
 		if (original == null) return null;
+		// 同 wrapCellUpdate：已包装则原样返回、不追加动作，属于有意为之（无额外兜底状态可加）。
 		if (original instanceof WrappedRef) {
 			return original;
 		}
@@ -1662,6 +1666,19 @@ public class UpdateRef {
 			UpdateRef ref = wr.getUpdateRef();
 			if (ref != null && ref.isRemoved()) return;
 			// 复用已有的 UpdateRef，追加从注册表注销的动作，避免多层嵌套代理吞掉 LinkageError
+			//
+			// ⚠️ 与 eventsOn 的 WrappedRef 分支**有意不同**，差异有实际后果：
+			// eventsOn 直接把原 listener（即 wr 本身）塞进注册表，而 eventsRemove 的
+			// unwrapTargetKey 能对 WrappedRef 解出 getOriginal()，因此那个条目**可以按内容注销**；
+			// 这里则额外包了一层 new EventCons<>(ref)，而 unwrapTargetKey **不解 EventCons**，
+			// 于是该条目只有传入同一个 EventCons 实例（item == targetKey）才能注销 ——
+			// 而该实例是本方法内新造的，调用方拿不到。
+			//
+			// 之所以仍然正确：本分支已把 onRemove 挂到 ref 上（addOnRemove），
+			// 真正的移除走那条**主动清理**路径 —— ref 包的是同一个 original，
+			// ref.run() 执行的就是用户原始 Runnable，不依赖注册表里的条目。
+			// 也就是说，注册表里这个条目是**残留**而非功能失效。
+			// 若要统一成 eventsOn 的形态，属于行为变更，需单独评估。
 			if (ref != null) {
 				ref.addOnRemove(onRemove);
 			}

@@ -414,8 +414,8 @@ public class LambdaAligner {
 	 * （内层 lambda 的定义），以及直接的方法调用（lambda 体里显式调用某个合成方法）。
 	 * 只收集本类的、命中 lambda 系命名模式的那些。</p>
 	 */
-	private static Set<String> collectChildLambdaNames(MethodNode mn, String owner) {
-		Set<String> children = null;
+	private static List<String> collectChildLambdaNames(MethodNode mn, String owner) {
+		List<String> children = null;
 		for (AbstractInsnNode n : mn.instructions) {
 			String callee = null;
 			if (n instanceof InvokeDynamicInsnNode i && i.bsmArgs != null && i.bsmArgs.length > 1
@@ -425,10 +425,10 @@ public class LambdaAligner {
 				callee = m.name;
 			}
 			if (callee == null || !MethodFingerprinter.isSyntheticName(callee)) continue;
-			if (children == null) children = new HashSet<>(4);
-			children.add(callee);
+			if (children == null) children = new ArrayList<>(4);
+			if (!children.contains(callee)) children.add(callee);   // 去重但保持出现顺序
 		}
-		return children == null ? Collections.emptySet() : children;
+		return children == null ? Collections.emptyList() : children;
 	}
 
 	/**
@@ -444,6 +444,35 @@ public class LambdaAligner {
 	 * <p>实测复现与决策轨迹见 {@code scratch/hstest/swap2/}。判断只看"子是否已 matched"，
 	 * 因为匹配是单调的：一旦子落定就不会再变，父可以安全地基于它做决定。</p>
 	 */
+	/**
+	 * 当双方都有子 lambda 时，检查"子的配对对象"是否与旧方法的子逐个吻合。
+	 *
+	 * <p>为什么需要：{@link #sameSemantics} 是递归语义指纹，后代一旦被编辑，祖先的语义
+	 * 指纹也会变，于是祖先拿不到任何候选（实测 save3 的 V2→V3：中层/外层因此被幽灵化，
+	 * 子被改体是 update 期最常见的动作）。子树等价这条证据在"后代被改"时必然失效，
+	 * 此时退而求其次用**结构证据**：子已经落定（{@link #hasUnmatchedChild} 保证），
+	 * 顺着"新子被配给了哪个旧方法"看，只有"子正好是那些旧方法"的旧候选才有资格当选。
+	 * 逐层传递，不需要知道嵌套深度。</p>
+	 *
+	 * <p>只在双方都有子、且子数量一致时启用（结构不符已由 {@link #sameNestingLevel}
+	 * 否决）；子尚未落定或信息不足时返回 true，不额外限制。</p>
+	 */
+	private static boolean calleesPairTo(SyntheticInfo ni, SyntheticInfo oi) {
+		if (ni.children.isEmpty() || oi.children.isEmpty()) return true;
+		if (ni.children.size() != oi.children.size()) return false;
+		for (int i = 0; i < ni.children.size(); i++) {
+			SyntheticInfo ci = ni.childInfos.get(i);
+			String want = oi.children.get(i);
+			if (ci == null) return true;                  // 信息不足，不额外限制
+			if (ci.matchedWith != null) {
+				if (!ci.matchedWith.name.equals(want)) return false;
+			} else if (!ci.name.equals(want)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	private static boolean hasUnmatchedChild(MatchContext ctx, SyntheticInfo ni) {
 		if (ni.children.isEmpty()) return false;
 		for (String child : ni.children) {
@@ -469,8 +498,13 @@ public class LambdaAligner {
 	 * 新旧内层也同 hash，仅凭 hash 无法区分谁是谁。</p>
 	 */
 	private static boolean sameNestingLevel(SyntheticInfo ni, SyntheticInfo oi) {
-		if (ni.children.isEmpty() && oi.children.isEmpty()) return true;
-		return ni.childHashes.equals(oi.childHashes);
+		// 只比**结构**：有子/无子、子数量是否一致。绝不比 childHashes 的**值**。
+		//
+		// 比值的后果（实测，save3 的 V2→V3）：某个后代被改过之后，祖先的 childHashes
+		// 必然变化，于是"同一个祖先"被判成"不同层级"而遭否决，整条祖先链失去候选、
+		// 被幽灵化。而这条否决本来只需要拦住"父配叶子"。
+		if (ni.children.isEmpty() != oi.children.isEmpty()) return false;
+		return ni.children.size() == oi.children.size();
 	}
 
 	/**
@@ -520,7 +554,8 @@ public class LambdaAligner {
 		// 语义指纹一致 ⇔ 整棵子树等价，因此不会把两个不同的 lambda 配成一对。
 		if (!sameSemantics(ni, oi)) return false;
 		if (!isSignatureCompatible(ctx.currentClass, oi, ni)) return false;
-		return sameNestingLevel(ni, oi);
+		if (!sameNestingLevel(ni, oi)) return false;   // 否决：父不得配子
+		return calleesPairTo(ni, oi);                  // 正向：子必须配到对方的子
 	}
 
 	/** 两个方法的递归语义指纹是否一致（未定稿时退回票据指纹）。 */
@@ -533,6 +568,7 @@ public class LambdaAligner {
 	/** 配对并登记：把 {@code ni} 改名为 {@code oi} 的名字。 */
 	private static void pair(MatchContext ctx, SyntheticInfo ni, SyntheticInfo oi) {
 		recordRename(ctx, ni, oi.name);
+		ni.matchedWith = oi;
 		ni.matched = true;
 		oi.matched = true;
 		ctx.usedOldNames.add(oi.name);
@@ -687,6 +723,7 @@ public class LambdaAligner {
 				if (bestOld == null) continue;
 
 				recordRename(ctx, ni, bestOld.name);
+				ni.matchedWith = bestOld;
 				ni.matched = true;
 				bestOld.matched = true;
 				ctx.usedOldNames.add(bestOld.name);
@@ -1141,6 +1178,13 @@ public class LambdaAligner {
 					if (ci != null) hs.add(ci.hash);
 				}
 				info.childHashes = hs;
+
+				// 新类侧额外登记"子名 -> SyntheticInfo"，供 calleesPairTo 查"子配给了谁"
+				if (!isOld) {
+					List<SyntheticInfo> cis = new ArrayList<>(info.children.size());
+					for (String c : info.children) cis.add(ctx.childIndex.get(c));
+					info.childInfos = cis;
+				}
 			}
 		}
 
@@ -1667,7 +1711,7 @@ public class LambdaAligner {
 		 * <p>用于把匹配排成"由下往上"：父 lambda 必须等子 lambda 落定后再配对，
 		 * 否则子被改名会让父的方法体指向别处（详见 {@link #hasUnmatchedChild} 的说明）。</p>
 		 */
-		Set<String> children = Collections.emptySet();
+		List<String> children = Collections.emptyList();
 
 		/**
 		 * 子 lambda 的指纹集合（由 {@code scan} 在收集 children 时一并算出）。
@@ -1677,6 +1721,12 @@ public class LambdaAligner {
 		 * "父配到子"这种跨层错配，比推断嵌套深度稳健。</p>
 		 */
 		Set<Long> childHashes = Collections.emptySet();
+
+		/** {@link #children} 对应的新类 SyntheticInfo（下标对齐；仅新类侧填充）。 */
+		List<SyntheticInfo> childInfos = Collections.emptyList();
+
+		/** 与哪个旧方法配成了一对（未匹配时为 null）。父层据此过滤候选。 */
+		SyntheticInfo matchedWith;
 
 		/**
 		 * 递归语义指纹：{@link #hash} 再逐层折入每个子 lambda 的语义指纹。

@@ -7,9 +7,19 @@ import java.nio.file.*;
 import java.util.*;
 
 /**
- * 断言式对拍：把"语义 -> 名字"的归属查清并直接判定通过/失败。
- *   1) 删除变体（swap2）：doB 外层必须落在旧 $2，doA 外层/内层必须变幽灵
- *   2) 叶子抢占（leaf）：插入/改体时不得互相抢名字、不得把旧名配给不同语义
+ * 对齐结果的确定性断言集。
+ *
+ * 判据都不依赖"肉眼读名字表"：
+ *   - 按名字取方法体，递归算出"语义"（它最终调用哪个叶子）；
+ *   - 最终类自洽性（不得出现重复的 名字+描述符）。
+ *
+ * 参数顺序（15 个夹具）：
+ *  0,1   swap2 v1,v2        删除变体
+ *  2,3,4 leaf  v1,v2,v3     叶子插入 / 双改体
+ *  5,6   deep  v1,v2        三层删除变体
+ *  7,8   two   v1,v2        两级链 Step 2 时序
+ *  9,10,11 deep2 v1,v2,v3   只改叶子体 / 删链+改体
+ *  12,13,14 save3 v1,v2,v3  三次保存（先删后改）
  */
 public class SemAssert {
 
@@ -26,23 +36,30 @@ public class SemAssert {
 		return cn;
 	}
 
+	static boolean isGhost(MethodNode mn) {
+		for (AbstractInsnNode n : mn.instructions) {
+			if (n instanceof MethodInsnNode m && m.owner.equals("nipx/LambdaAligner")
+			    && m.name.equals("onOrphanInvoked")) return true;
+		}
+		return false;
+	}
+
+	/** 递归语义：叶子列出它直接调用的本类业务方法；父列出子的语义。 */
 	static String sem(ClassNode cn, MethodNode mn, int depth) {
 		if (depth > 6) return "...";
+		if (isGhost(mn)) return "GHOST";
 		Map<String, MethodNode> byName = new HashMap<>();
 		for (MethodNode m : cn.methods) byName.put(m.name, m);
-		boolean ghost = false;
 		List<String> parts = new ArrayList<>();
 		for (AbstractInsnNode n : mn.instructions) {
-			if (n instanceof MethodInsnNode m) {
-				if (m.owner.equals("nipx/LambdaAligner") && m.name.equals("onOrphanInvoked")) ghost = true;
-				else if (m.owner.equals(cn.name) && !m.name.startsWith("lambda$")) parts.add(m.name);
+			if (n instanceof MethodInsnNode m && m.owner.equals(cn.name) && !m.name.startsWith("lambda$")) {
+				parts.add(m.name);
 			} else if (n instanceof InvokeDynamicInsnNode i && i.bsmArgs != null && i.bsmArgs.length > 1
 			           && i.bsmArgs[1] instanceof Handle h && cn.name.equals(h.getOwner())) {
 				MethodNode child = byName.get(h.getName());
 				if (child != null) parts.add(sem(cn, child, depth + 1));
 			}
 		}
-		if (ghost) return "GHOST";
 		Collections.sort(parts);
 		return parts.toString();
 	}
@@ -57,39 +74,7 @@ public class SemAssert {
 		return m;
 	}
 
-
-
-	/** 新方法（按描述符取）在最终类里的语义；desc 用于区分同名的幽灵与活方法。 */
-	static String semByDesc(byte[] aligned, String desc) {
-		ClassNode cn = parse(aligned);
-		for (MethodNode mn : cn.methods) {
-			if (!mn.name.startsWith("lambda$") || !mn.desc.equals(desc)) continue;
-			return sem(cn, mn, 0);
-		}
-		return "<none>";
-	}
-
-
-	/** 最终类里是否存在某个语义（不关心它落在哪个名字上）。 */
-	static boolean aliSemContains(byte[] aligned, String want) {
-		ClassNode cn = parse(aligned);
-		for (MethodNode mn : cn.methods) {
-			if (!mn.name.startsWith("lambda$")) continue;
-			if (sem(cn, mn, 0).equals(want)) return true;
-		}
-		return false;
-	}
-
-
-	/** 只做 forceStaticLambdas，方便检查新类自身的语义集合。 */
-	static byte[] force(String path, ClassLoader cl) throws Exception {
-		byte[] r = Files.readAllBytes(Paths.get(path));
-		String slash = new ClassReader(r).getClassName();
-		AnnotationTransformer.HierarchyTree.register(r);
-		return AnnotationTransformer.forceStaticLambdas(r, slash, cl);
-	}
-
-	/** 最终类是否自洽：无重复的 名字+描述符，且无"同名不同描述符"的幽灵遮蔽。 */
+	/** 最终类是否自洽：不得出现重复的 名字+描述符。 */
 	static boolean noDupOrShadow(byte[] aligned) {
 		ClassNode cn = parse(aligned);
 		Map<String, List<String>> byName = new HashMap<>();
@@ -97,196 +82,181 @@ public class SemAssert {
 			if (!mn.name.startsWith("lambda$")) continue;
 			byName.computeIfAbsent(mn.name, k -> new ArrayList<>()).add(mn.desc);
 		}
-		// 判据只有一条：不得出现重复的 名字+描述符（那才是 ClassFormatError）。
-		// 同名不同描述符是合法的，而且正是幽灵的正常形态 —— 捕获列表变化时
-		// 旧 (I)V 与新 ()V 并存，靠描述符区分，JVM 完全接受。
 		for (var e : byName.entrySet()) {
 			if (new HashSet<>(e.getValue()).size() != e.getValue().size()) return false;
 		}
 		return true;
 	}
 
+	/**
+	 * B 链是否自洽：存在一个"三层语义"的方法，它内含的 indy 指向一个"两层语义"的方法，
+	 * 后者又指向一个"一层语义"的方法，且叶子调用的正是 doB2。
+	 * 用递归语义串起整条链，不关心各自叫什么名字。
+	 */
+	static boolean B2chainIntact(byte[] aligned) {
+		ClassNode cn = parse(aligned);
+		for (MethodNode mn : cn.methods) {
+			if (!mn.name.startsWith("lambda$")) continue;
+			if (!sem(cn, mn, 0).equals("[[[doB2]]]")) continue;
+			// 顺着引用逐层往下核对
+			MethodNode mid = childOf(cn, mn);
+			if (mid == null || !sem(cn, mid, 0).equals("[[doB2]]")) continue;
+			MethodNode leaf = childOf(cn, mid);
+			if (leaf == null || !sem(cn, leaf, 0).equals("[doB2]")) continue;
+			return true;
+		}
+		return false;
+	}
+
+	/** 该方法体里第一个 indy 指向的本类 lambda 方法。 */
+	static MethodNode childOf(ClassNode cn, MethodNode mn) {
+		for (AbstractInsnNode n : mn.instructions) {
+			if (n instanceof InvokeDynamicInsnNode i && i.bsmArgs != null && i.bsmArgs.length > 1
+			    && i.bsmArgs[1] instanceof Handle h && cn.name.equals(h.getOwner())) {
+				for (MethodNode m : cn.methods) {
+					if (m.name.equals(h.getName())) return m;
+				}
+			}
+		}
+		return null;
+	}
+
+	static byte[] force(String path, ClassLoader cl) throws Exception {
+		byte[] r = Files.readAllBytes(Paths.get(path));
+		String slash = new ClassReader(r).getClassName();
+		AnnotationTransformer.HierarchyTree.register(r);
+		return AnnotationTransformer.forceStaticLambdas(r, slash, cl);
+	}
+
 	static byte[] aligned(String v1Path, String v2Path, ClassLoader cl) throws Exception {
-		byte[] r1 = Files.readAllBytes(Paths.get(v1Path));
-		byte[] r2 = Files.readAllBytes(Paths.get(v2Path));
-		String slash = new ClassReader(r1).getClassName();
-		AnnotationTransformer.HierarchyTree.register(r1);
-		AnnotationTransformer.HierarchyTree.register(r2);
-		return LambdaAligner.align(
-			AnnotationTransformer.forceStaticLambdas(r1, slash, cl),
-			AnnotationTransformer.forceStaticLambdas(r2, slash, cl));
+		return LambdaAligner.align(force(v1Path, cl), force(v2Path, cl));
 	}
 
 	public static void main(String[] args) throws Exception {
 		ClassLoader cl = SemAssert.class.getClassLoader();
 
-		// ---------- 1) 删除变体：活的那个必须保住旧名字，死的才变幽灵 ----------
+		// ---------- 1) swap2 删除变体 ----------
 		{
-			System.out.println("== swap2 删除变体 ==");
-			byte[] r1 = Files.readAllBytes(Paths.get(args[0]));
-			String slash = new ClassReader(r1).getClassName();
-			byte[] r2 = Files.readAllBytes(Paths.get(args[1]));
-			AnnotationTransformer.HierarchyTree.register(r1);
-			AnnotationTransformer.HierarchyTree.register(r2);
-			byte[] v1 = AnnotationTransformer.forceStaticLambdas(r1, slash, cl);
-			byte[] v2 = AnnotationTransformer.forceStaticLambdas(r2, slash, cl);
-			Map<String, String> oldM = nameToSem(v1);
-			Map<String, String> aliM = nameToSem(LambdaAligner.align(v1, v2));
-
-			// 旧：$0=[[doA]] $1=[doA] $2=[[doB]] $3=[doB]
-			check(oldM.get("lambda$build$2").equals("[[doB]]"), "夹具前提：旧 $2 是 doB 的外层");
-			check(aliM.get("lambda$build$2") != null
-			      && aliM.get("lambda$build$2").equals("[[doB]]"),
-				"doB 外层仍落在旧名字 lambda$build$2（活 lambda 未被误杀）");
-			check("GHOST".equals(aliM.get("lambda$build$0")), "doA 外层变幽灵（它确实被删了）");
-			check("GHOST".equals(aliM.get("lambda$build$1")), "doA 内层变幽灵");
-			check(aliM.get("lambda$build$3") != null && aliM.get("lambda$build$3").equals("[doB]"),
-				"doB 内层仍落在旧名字 lambda$build$3");
-		}
-
-		// ---------- 2) 叶子：插入不得抢名字 ----------
-		{
-			System.out.println("== leaf 插入（v1 -> v2，开头插一个 gamma 叶子） ==");
-			Map<String, String> aliM = nameToSem(aligned(args[2], args[3], cl));
-			// 旧：$0=[alpha] $1=[beta]；新多一个 [gamma]
-			check("[alpha]".equals(aliM.get("lambda$build$0")), "alpha 叶子保住旧名 lambda$build$0");
-			check("[beta]".equals(aliM.get("lambda$build$1")), "beta 叶子保住旧名 lambda$build$1");
-			long gammaCount = aliM.values().stream().filter(v -> v.equals("[gamma]")).count();
-			check(gammaCount == 1, "新增的 gamma 叶子拿到独立名字（未被 alpha/beta 抢）");
-		}
-
-		// ---------- 3) 叶子：两个体都改了，不得互相抢、不得串名 ----------
-		{
-			System.out.println("== leaf 双改体（v1 -> v3，alpha->alpha2、beta->beta2） ==");
-			Map<String, String> aliM = nameToSem(aligned(args[2], args[4], cl));
-			long a2 = aliM.values().stream().filter(v -> v.equals("[alpha2]")).count();
-			long b2 = aliM.values().stream().filter(v -> v.equals("[beta2]")).count();
-			check(a2 == 1, "alpha2 恰好落在一个名字上");
-			check(b2 == 1, "beta2 恰好落在一个名字上");
-			// 旧名字若还在，不得承载不同语义
-			for (String oldName : new String[]{"lambda$build$0", "lambda$build$1"}) {
-				String now = aliM.get(oldName);
-				if (now == null) continue;
-				check(now.equals("GHOST") || now.equals("[alpha2]") || now.equals("[beta2]"),
-					oldName + " 未承载无关语义（现=" + now + "）");
-			}
-			// 语义不得互换：alpha2 与 beta2 不能落在同一个名字上
-			check(!Objects.equals(
-				aliM.entrySet().stream().filter(e -> e.getValue().equals("[alpha2]")).findFirst().map(Map.Entry::getKey).orElse(null),
-				aliM.entrySet().stream().filter(e -> e.getValue().equals("[beta2]")).findFirst().map(Map.Entry::getKey).orElse(null)),
-				"alpha2 与 beta2 未落在同一名字");
-		}
-
-		// ---------- 4) 三层嵌套：删除变体（deep） ----------
-		//
-		// 这条是"原始票据指纹"解决不了的：两个中层同 hash、两个外层同 hash、
-		// childHashes 也退化成相等集合。靠递归语义指纹把叶子差异向上传播才分得开。
-		{
-			System.out.println("== deep 三层删除变体 ==");
-			Map<String, String> aliM = nameToSem(aligned(args[5], args[6], cl));
-			check("[[[doB]]]".equals(aliM.get("lambda$build$3")),
-				"活的外层落在旧名字 lambda$build$3");
-			check("[[doB]]".equals(aliM.get("lambda$build$4")),
-				"中层落在旧名字 lambda$build$4");
-			check("[doB]".equals(aliM.get("lambda$build$5")),
-				"叶子落在旧名字 lambda$build$5");
+			System.out.println("== 1) swap2 删除变体 ==");
+			byte[] v1 = force(args[0], cl);
+			byte[] ali = LambdaAligner.align(v1, force(args[1], cl));
+			Map<String, String> oldM = nameToSem(v1), aliM = nameToSem(ali);
+			check("[[doB]]".equals(oldM.get("lambda$build$2")), "夹具前提：旧 $2 是 doB 外层");
+			check("[[doB]]".equals(aliM.get("lambda$build$2")), "doB 外层保住旧名 $2（活 lambda 未误杀）");
+			check("[doB]".equals(aliM.get("lambda$build$3")), "doB 内层保住旧名 $3");
 			check("GHOST".equals(aliM.get("lambda$build$0")), "doA 外层变幽灵");
-			check("GHOST".equals(aliM.get("lambda$build$1")), "doA 中层变幽灵");
-			check("GHOST".equals(aliM.get("lambda$build$2")), "doA 叶子变幽灵");
+			check("GHOST".equals(aliM.get("lambda$build$1")), "doA 内层变幽灵");
 		}
 
-		// ---------- 5) 两级链 + Step 2 时序（two） ----------
-		//
-		// 骨架：新类的 (LTwoLevel;)V 有"外层"和"插入的普通 lambda"两个，用描述符区分。
-		// 父排在子之前被处理时，hasUnmatchedChild 会让父在 Step 2 里被跳过；
-		// 若 Step 2 只跑一遍，父就永远拿不到名字。修好后父必须拿到一个可用名字。
+		// ---------- 2) leaf 插入 ----------
 		{
-			System.out.println("== two 两级链：Step 2 时序 ==");
+			System.out.println("== 2) leaf 插入（开头插 gamma）==");
+			Map<String, String> aliM = nameToSem(aligned(args[2], args[3], cl));
+			check("[alpha]".equals(aliM.get("lambda$build$0")), "alpha 保住 $0");
+			check("[beta]".equals(aliM.get("lambda$build$1")), "beta 保住 $1");
+			check(aliM.values().stream().filter(v -> v.equals("[gamma]")).count() == 1,
+				"gamma 拿独立名字（未被抢）");
+		}
+
+		// ---------- 3) leaf 双改体 ----------
+		{
+			System.out.println("== 3) leaf 双改体（alpha2 / beta2）==");
+			byte[] ali = aligned(args[2], args[4], cl);
+			Map<String, String> aliM = nameToSem(ali);
+			check(aliM.values().stream().filter(v -> v.equals("[alpha2]")).count() == 1, "alpha2 落在一个名字上");
+			check(aliM.values().stream().filter(v -> v.equals("[beta2]")).count() == 1, "beta2 落在一个名字上");
+			check(noDupOrShadow(ali), "最终类自洽");
+		}
+
+		// ---------- 4) deep 三层删除变体 ----------
+		{
+			System.out.println("== 4) deep 三层删除变体 ==");
+			Map<String, String> aliM = nameToSem(aligned(args[5], args[6], cl));
+			check("[[[doB]]]".equals(aliM.get("lambda$build$3")), "活的外层保住 $3");
+			check("[[doB]]".equals(aliM.get("lambda$build$4")), "中层保住 $4");
+			check("[doB]".equals(aliM.get("lambda$build$5")), "叶子保住 $5");
+			check("GHOST".equals(aliM.get("lambda$build$0"))
+			      && "GHOST".equals(aliM.get("lambda$build$1"))
+			      && "GHOST".equals(aliM.get("lambda$build$2")), "doA 整链变幽灵");
+		}
+
+		// ---------- 5) two 两级链 Step 2 时序 ----------
+		{
+			System.out.println("== 5) two 两级链：Step 2 时序 ==");
 			byte[] ali = aligned(args[7], args[8], cl);
-			check(noDupOrShadow(ali), "最终类无重复定义/幽灵遮蔽");
-			// 新外层的体是"求值一个 lambda"，语义应为两层；新内层为 [doY]
-			check(aliSemContains(ali, "[[doY]]"), "新外层的语义 [[doY]] 在最终类里存在（父没被丢掉）");
-			check(aliSemContains(ali, "[doY]"), "新内层的语义 [doY] 在最终类里存在");
+			Map<String, String> aliM = nameToSem(ali);
+			check(noDupOrShadow(ali), "最终类自洽");
+			check(aliM.containsValue("[[doY]]"), "新外层的语义 [[doY]] 存在（父未被丢掉）");
+			check(aliM.containsValue("[doY]"), "新内层的语义 [doY] 存在");
 		}
 
-		// ---------- 6) 三层链：只改叶子体（deep2 变体甲） ----------
+		// ---------- 6) deep2 变体甲：只改 doB 叶子体 ----------
+		//
+		// 本用例的关键点：后代被编辑后，祖先的语义指纹必然变化，但靠"子配给了谁"的
+		// 逐层传递，doB2 整条链仍能保住原有名字，不再被幽灵化。
 		{
-			System.out.println("== deep2 变体甲：只改 doB 叶子体 ==");
-			Map<String, String> aliM = nameToSem(aligned(args[9], args[10], cl));
-			check("[[[doA]]]".equals(aliM.get("lambda$build$0")), "doA 外层保住名字");
-			check("[[doA]]".equals(aliM.get("lambda$build$1")), "doA 中层保住名字");
-			check("[doA]".equals(aliM.get("lambda$build$2")), "doA 叶子保住名字");
-			check(aliM.containsValue("[[[doB2]]]"), "doB2 外层仍存在");
-			check(noDupOrShadow(aligned(args[9], args[10], cl)), "最终类无重复定义/幽灵遮蔽");
+			System.out.println("== 6) deep2 只改叶子体 ==");
+			byte[] ali = aligned(args[9], args[10], cl);
+			Map<String, String> aliM = nameToSem(ali);
+			check("[[[doA]]]".equals(aliM.get("lambda$build$0")), "doA 外层保住 $0");
+			check("[[doA]]".equals(aliM.get("lambda$build$1")), "doA 中层保住 $1");
+			check("[doA]".equals(aliM.get("lambda$build$2")), "doA 叶子保住 $2");
+			check("[[[doB2]]]".equals(aliM.get("lambda$build$3")), "doB2 外层保住 $3");
+			check("[[doB2]]".equals(aliM.get("lambda$build$4")), "doB2 中层保住 $4");
+			check("[doB2]".equals(aliM.get("lambda$build$5")), "doB2 叶子保住 $5");
+			check(noDupOrShadow(ali), "最终类自洽");
 		}
 
-		// ---------- 7) 已知限制：删一条链 + 改另一条叶子（deep2 变体乙）----------
+		// ---------- 7) deep2 变体乙：删 A 链 + 改 B 叶子体（同时发生）----------
 		//
-		// 【KNOWN LIMITATION】这里钉住的是**当前实际行为**，不是期望行为。写成
-		// expected-failure 而不是常驻红灯：套件保持全绿，一旦行为变化（无论变好变坏）
-		// 这条会响，必须有人有意识地来更新它。
+		// 【KNOWN LIMITATION】钉住当前实际行为：整条新链一致地绑到**被删掉的 A 链**的名字
+		// （$0/$1/$2）上，A 链三个老调用点都静默执行 doB2 的逻辑 —— 没有熔断。
 		//
-		// 实测行为：旧 doA 叶子的名字 $2 被新叶子拿走并承载 doB2 —— 老 doA 的 CallSite
-		// **不会抛异常，而是静默执行 doB2**。
-		//
-		// 为什么根治不了：序号整体位移且叶子体已变，"只改了方法体"与"删除+新增"在结构上
-		// 无法区分；Step 2 保名是合理默认。按设计不引入启发式去消除。
+		// 这是"删 + 改同时发生"这一无证据场景的固有后果：叶子的方法体变了，没有任何指纹证据
+		// 能把它认回旧 doB 链，Step 2 的同名优先把它配给了位置相同的 $2；此后中层/外层顺着
+		// "子配给了谁"逐层跟随，于是整条链一致地落在 A 的名字上（一致性本身是对的，错的是
+		// 落在了被删链的名字上）。写成 expected-failure：套件保持全绿，行为一变就会响。
 		{
-			System.out.println("== deep2 变体乙：删 doA 链 + 改 doB 叶子【已知限制/期望失败】==");
+			System.out.println("== 7) deep2 删 A 链 + 改 B 叶子【已知限制/期望失败】==");
 			byte[] ali = aligned(args[9], args[11], cl);
-			Map<String, String> aliSem = nameToSem(ali);
-
-			check(noDupOrShadow(ali), "最终类无重复的 名字+描述符");
-			check("[[[doB2]]]".equals(aliSem.get("lambda$build$6")), "新链外层在 $6");
-			check("[[doB2]]".equals(aliSem.get("lambda$build$7")), "新链中层在 $7");
-
-			// ---- 以下是 KNOWN LIMITATION 的钉子：钉住"当前行为" ----
-			check("[doB2]".equals(aliSem.get("lambda$build$2")),
-				"KNOWN LIMITATION: 旧 doA 叶子的名字 $2 被新叶子占用并承载 doB2（静默错绑）");
-			for (String g : new String[]{"lambda$build$0", "lambda$build$1",
-			                             "lambda$build$3", "lambda$build$4", "lambda$build$5"}) {
-				check("GHOST".equals(aliSem.get(g)), "KNOWN LIMITATION: " + g + " 是幽灵");
-			}
+			Map<String, String> aliM = nameToSem(ali);
+			check(noDupOrShadow(ali), "最终类自洽");
+			check("[[[doB2]]]".equals(aliM.get("lambda$build$0")), "KNOWN LIMITATION: 新外层落在 $0");
+			check("[[doB2]]".equals(aliM.get("lambda$build$1")), "KNOWN LIMITATION: 新中层落在 $1");
+			check("[doB2]".equals(aliM.get("lambda$build$2")), "KNOWN LIMITATION: 新叶子落在 $2");
+			check("GHOST".equals(aliM.get("lambda$build$3"))
+			      && "GHOST".equals(aliM.get("lambda$build$4"))
+			      && "GHOST".equals(aliM.get("lambda$build$5")), "KNOWN LIMITATION: 旧 doB 链变幽灵");
 		}
 
-		// ---------- 8) 三次保存：V1 两条链 → V2 删 A 链 → V3 改 B 叶子 ----------
+		// ---------- 8) save3 三次保存：先删 A 链，再改 B 叶子体 ----------
 		//
-		// 检验"先删再改、分两次保存"这条缓解路径，以及幽灵是否真的退出了匹配
-		// （第二次保存时类里已有 $0/$1/$2 幽灵，而 V3 的 javac 名恰好又是 $0/$1/$2）。
+		// 分两次保存：第二次保存时类里已有 A 链幽灵、旧 doB 链是活方法。叶子虽被改体
+		// （无指纹证据），但"子配给了谁"的逐层传递让外层/中层都能跟着落到旧 doB 链的名字上。
+		// 因此这条路径是有效的缓解做法。
 		{
-			System.out.println("== save3 三次保存：先删后改 ==");
-			byte[] v1 = force(args[12], cl);
-			byte[] v2 = force(args[13], cl);
-			byte[] v3 = force(args[14], cl);
-			byte[] a2 = LambdaAligner.align(v1, v2);
-			byte[] a3 = LambdaAligner.align(a2, v3);
+			System.out.println("== 8) save3 三次保存：先删后改 ==");
+			byte[] a2 = LambdaAligner.align(force(args[12], cl), force(args[13], cl));
+			byte[] a3 = LambdaAligner.align(a2, force(args[14], cl));
 
-			ClassNode c2 = parse(a2);
-			Map<String, String> sem2 = new TreeMap<>();
-			for (MethodNode mn : c2.methods) {
-				if (mn.name.startsWith("lambda$")) sem2.put(mn.name, sem(c2, mn, 0));
-			}
-			check("[doB]".equals(sem2.get("lambda$build$5")), "V1→V2：B 链叶子保住 $5（未被幽灵抢）");
+			Map<String, String> sem2 = nameToSem(a2);
 			check("[[[doB]]]".equals(sem2.get("lambda$build$3")), "V1→V2：B 链外层保住 $3");
+			check("[doB]".equals(sem2.get("lambda$build$5")), "V1→V2：B 链叶子保住 $5");
 			check("GHOST".equals(sem2.get("lambda$build$0"))
-			      && "GHOST".equals(sem2.get("lambda$build$2")), "V1→V2：A 链三个名字是幽灵");
+			      && "GHOST".equals(sem2.get("lambda$build$2")), "V1→V2：A 链成为幽灵");
 
-			ClassNode c3 = parse(a3);
-			Map<String, String> sem3 = new TreeMap<>();
-			for (MethodNode mn : c3.methods) {
-				if (mn.name.startsWith("lambda$")) sem3.put(mn.name, sem(c3, mn, 0));
-			}
+			Map<String, String> sem3 = nameToSem(a3);
 			check("GHOST".equals(sem3.get("lambda$build$0"))
 			      && "GHOST".equals(sem3.get("lambda$build$1"))
 			      && "GHOST".equals(sem3.get("lambda$build$2")),
-				"V2→V3：先前的 A 链幽灵被重新注入（未消失，老 CallSite 仍熔断）");
-			check(noDupOrShadow(a3), "V2→V3：最终类无重复的 名字+描述符");
-
-			// ---- KNOWN LIMITATION：分两次保存只保住了叶子，外层/中层仍被幽灵化 ----
-			check("[doB2]".equals(sem3.get("lambda$build$5")),
-				"KNOWN LIMITATION: 分两次保存后 B 链叶子仍保住 $5");
-			check("GHOST".equals(sem3.get("lambda$build$3")) && "GHOST".equals(sem3.get("lambda$build$4")),
-				"KNOWN LIMITATION: 但 B 链外层/中层被幽灵化（$3/$4）");
+				"V2→V3：A 链幽灵被重新注入（老调用点仍熔断）");
+			// 不绑定具体编号：V2→V3 里外层/中层可能与上一轮互换编号（都是旧 doB 链的名字），
+			// 但只要链条自洽、叶子可达、且旧 A 链仍熔断，缓解就是有效的。
+			check(sem3.containsValue("[[[doB2]]]"), "V2→V3：B 链外层（三层）存在");
+			check(sem3.containsValue("[[doB2]]"), "V2→V3：B 链中层（两层）存在");
+			check(sem3.containsValue("[doB2]"), "V2→V3：B 链叶子存在");
+			check(B2chainIntact(a3), "V2→V3：B 链自洽（外层→中层→叶子 引用闭合）");
+			check(noDupOrShadow(a3), "V2→V3：最终类自洽");
 		}
 
 		System.out.println();

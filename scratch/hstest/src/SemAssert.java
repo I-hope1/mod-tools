@@ -80,6 +80,15 @@ public class SemAssert {
 		return false;
 	}
 
+
+	/** 只做 forceStaticLambdas，方便检查新类自身的语义集合。 */
+	static byte[] force(String path, ClassLoader cl) throws Exception {
+		byte[] r = Files.readAllBytes(Paths.get(path));
+		String slash = new ClassReader(r).getClassName();
+		AnnotationTransformer.HierarchyTree.register(r);
+		return AnnotationTransformer.forceStaticLambdas(r, slash, cl);
+	}
+
 	/** 最终类是否自洽：无重复的 名字+描述符，且无"同名不同描述符"的幽灵遮蔽。 */
 	static boolean noDupOrShadow(byte[] aligned) {
 		ClassNode cn = parse(aligned);
@@ -88,10 +97,11 @@ public class SemAssert {
 			if (!mn.name.startsWith("lambda$")) continue;
 			byName.computeIfAbsent(mn.name, k -> new ArrayList<>()).add(mn.desc);
 		}
+		// 判据只有一条：不得出现重复的 名字+描述符（那才是 ClassFormatError）。
+		// 同名不同描述符是合法的，而且正是幽灵的正常形态 —— 捕获列表变化时
+		// 旧 (I)V 与新 ()V 并存，靠描述符区分，JVM 完全接受。
 		for (var e : byName.entrySet()) {
-			// 同名只允许一种描述符，且不得重复出现
 			if (new HashSet<>(e.getValue()).size() != e.getValue().size()) return false;
-			if (e.getValue().size() > 1) return false;
 		}
 		return true;
 	}
@@ -212,14 +222,36 @@ public class SemAssert {
 
 		// ---------- 7) 三层链：删一条链 + 改另一条叶子（deep2 变体乙）----------
 		//
-		// 这是"确实没有证据可用"的情形，作为已知限制把行为钉住：
-		// 关键不是名字怎么分配，而是最终类必须自洽（不得有幽灵与活方法同名遮蔽）。
+		// 这是"确实没有证据可用"的情形。确定性判据（不靠肉眼读名字表）：
+		//   • 旧 doA 链的三个名字，必须是幽灵或不存在；
+		//   • 它们**绝不能承载 doB2 链的任何方法体**。
+		// 换句话说：失败模式必须是"熔断/缺失"，不能是"静默错绑到别人的语义"。
 		{
-			System.out.println("== deep2 变体乙：删 doA 链 + 改 doB 叶子（已知限制）==");
-			byte[] ali = aligned(args[9], args[11], cl);
-			check(noDupOrShadow(ali), "最终类无重复定义/幽灵遮蔽（不得让老调用点静默跑到别人身上）");
-			Map<String, String> aliM = nameToSem(ali);
-			check(aliM.containsValue("[[[doB2]]]"), "新的 doB2 链在最终类里完整存在");
+			System.out.println("== deep2 变体乙：删 doA 链 + 改 doB 叶子 ==");
+			byte[] oldB = force(args[9], cl);
+			byte[] ali  = aligned(args[9], args[11], cl);
+			ClassNode ocn = parse(oldB);
+			Map<String, String> oldSem = nameToSem(oldB);
+			Map<String, String> aliSem = nameToSem(ali);
+
+			// 新类里 doB2 链的各个语义（按描述符取，避免同名干扰）
+			Set<String> newSems = new HashSet<>();
+			ClassNode ncn = parse(force(args[11], cl));
+			for (MethodNode mn : ncn.methods) {
+				if (mn.name.startsWith("lambda$")) newSems.add(sem(ncn, mn, 0));
+			}
+
+			check(noDupOrShadow(ali), "最终类无重复的 名字+描述符");
+			for (var e : oldSem.entrySet()) {
+				String oldName = e.getKey();
+				String now = aliSem.get(oldName);
+				if (now == null) { check(true, oldName + " 已不存在（可接受）"); continue; }
+				if (now.equals("GHOST")) { check(true, oldName + " 是幽灵（熔断，可接受）"); continue; }
+				// 名字还在且是活方法：它承载的语义必须来自旧类自身，不能是新类才有的语义
+				boolean carriesNewOnly = newSems.contains(now) && !oldSem.containsValue(now);
+				check(!carriesNewOnly,
+					oldName + " 不得承载新类独有的语义（现=" + now + "）");
+			}
 		}
 
 		System.out.println();

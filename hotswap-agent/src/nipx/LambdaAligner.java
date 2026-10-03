@@ -766,7 +766,8 @@ public class LambdaAligner {
 		HotSwapAgent.warn("[LambdaAligner] 顺序回退配对但方法体不一致 " + owner
 			+ "：旧 " + oi.name + oi.desc + " <- 新 " + newName + newDesc
 			+ "。同一逻辑组内存在多个同形 lambda 时，插入/删除会使其序号整体位移，"
-			+ "老 CallSite 可能去执行另一个回调的方法体。"
+			+ "此时旧名字会被交给一个语义不同的方法：老 CallSite **不会抛异常**，"
+			+ "而是安静地执行新方法体（实测确认：deep2 变体乙里旧 $2 承载了 doB2 的语义）。"
 			+ "建议把每个 lambda 放进独立的私有方法，让身份由结构而非位置决定。");
 	}
 	//endregion
@@ -1166,6 +1167,14 @@ public class LambdaAligner {
 				}
 			}
 			if (!changed) break;
+			if (round == 63) {
+				// 跑满上限仍未收敛：降级为"沿用当前值并留痕"，绝不抛异常。
+				// 正常 javac 产物不会成环（lambda 的构造关系是 DAG），这里只是防御：
+				// 真出现环时，宁可让少数方法按当前（可能不完整的）语义指纹参与匹配，
+				// 也不能让整次热更失败。
+				HotSwapAgent.warn("[LambdaAligner] 递归语义指纹在 " + cn.name
+					+ " 上 64 轮未收敛，沿用当前值继续（结果可能不够精确，但不影响可用性）");
+			}
 		}
 
 		return cn;
@@ -1252,21 +1261,23 @@ public class LambdaAligner {
 
 		// 2. 从已解析的 oldCn 中取遗弃方法的签名头（不再二次读 oldBytes）
 		//
-		// 跳过"名字已被新类某个活方法占用"的幽灵：幽灵的意义是替老 CallSite 兜住那个
-		// **名字**；一旦这个名字已经被新方法占着，幽灵就既兜不住（调用会解析到活方法上）
-		// 又与活方法构成"同名不同描述符"的重复定义。
-		// 实测场景见 scratch/hstest/deep2/ 变体乙：删掉整条 doA 链 + 改掉 doB 链叶子体，
-		// 序号整体位移且无任何指纹证据，新叶子落到名字 $2 上，而旧 $2 本该被复活；
-		// 注入幽灵会让老 doA 的调用点**安静地跑起 doB2 的代码**。
-		// 此时老 CallSite 本来就无解（它引用的旧结构已不存在），让它抛
-		// NoSuchMethodError / 走 UpdateRef 熔断，比静默执行别人的逻辑正确。
-		Set<String> liveNames = new HashSet<>();
-		for (MethodNode mn : newCnMethods(newBytes)) liveNames.add(mn.name);
+		// 判据必须是 {@code name + desc}，<b>不能只看名字</b>。同名不同描述符是幽灵的
+		// 正常工作形态：捕获列表变化时（旧 {@code lambda$build$0(I)V} → 新
+		// {@code lambda$build$0()V}）新方法保住了名字但描述符变了，旧 CallSite 要的正是
+		// 旧描述符，全局唯一能兜住它的就是这个幽灵。JVM 按"名字+描述符"解析，两者并存完全合法。
+		// 若按名字一刀切地不注入，这类场景会直接 NoSuchMethodError —— 在业务代码路径下就是崩溃，
+		// 违背"不崩溃"的设计目标。
+		//
+		// 真正需要跳过的只有一种：{@code name + desc} 与某个活方法完全相同。那会让类里出现
+		// 重复定义（ClassFormatError），而且幽灵本来也兜不住（解析会命中活方法）。
+		Set<String> liveKeys = new HashSet<>();
+		for (MethodNode mn : newCnMethods(newBytes)) liveKeys.add(mn.name + mn.desc);
 
 		List<MethodNode> toInject = new ArrayList<>();
 		for (MethodNode mn : oldCn.methods) {
-			if (!orphanedKeys.contains(mn.name + mn.desc)) continue;
-			if (liveNames.contains(mn.name)) continue;   // 名字已被活方法占用，幽灵无意义
+			String key = mn.name + mn.desc;
+			if (!orphanedKeys.contains(key)) continue;
+			if (liveKeys.contains(key)) continue;   // 同名同描述符：重复定义，且兜不住
 			toInject.add(mn);
 		}
 		if (toInject.isEmpty()) return newBytes;

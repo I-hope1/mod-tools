@@ -72,13 +72,33 @@ public class HotSwapAgent {
 	//region Agent Initialization
 	static AnnotationTransformer transformer;
 
+	public static void premain(String agentArgs, Instrumentation inst) {
+		agentmain(agentArgs, inst);
+	}
+
 	public static void agentmain(String agentArgs, Instrumentation inst) {
 		HotSwapAgent.inst = inst;
 		try {
-			init(agentArgs, false);
+			if (agentArgs != null && !agentArgs.trim().isEmpty()) {
+				init(agentArgs, false);
+			} else {
+				initConfig();
+				if (transformer == null) {
+					transformer = new AnnotationTransformer();
+					inst.addTransformer(transformer, true);
+					try {
+						DynamicProfilerAPI.init();
+					} catch (Throwable ignored) {
+					}
+				}
+			}
 		} catch (Throwable t) {
 			error("Critical error during agent initialization", t);
 		}
+	}
+
+	public static Instrumentation getInstrumentation() {
+		return inst;
 	}
 
 	public static void init(String agentArgs, boolean reinit) {
@@ -141,7 +161,8 @@ public class HotSwapAgent {
 		info("DEBUG: " + DEBUG);
 		REDEFINE_MODE = RedefineMode.valueOfFail(System.getProperty("nipx.agent.redefine_mode", "inject"), RedefineMode.inject);
 		info("Redefine Mode: " + REDEFINE_MODE);
-		HOTSWAP_BLACKLIST = System.getProperty("nipx.agent.hotswap_blacklist", "").split(",");
+		String bl = System.getProperty("nipx.agent.hotswap_blacklist", "").trim();
+		HOTSWAP_BLACKLIST = bl.isEmpty() ? new String[0] : bl.split(",");
 		info("Injection Blacklist: " + String.join(",", HOTSWAP_BLACKLIST));
 		HOTSWAP_PLUS = Boolean.parseBoolean(System.getProperty("nipx.agent.hotswap_plus", "false"));
 		info("HotSwap Plus: " + HOTSWAP_PLUS);
@@ -534,7 +555,7 @@ public class HotSwapAgent {
 	static boolean isBlacklisted(String className) {
 		if (HOTSWAP_BLACKLIST == null) return false;
 		for (String prefix : HOTSWAP_BLACKLIST) {
-			if (className.startsWith(prefix)) return true;
+			if (!prefix.isEmpty() && className.startsWith(prefix)) return true;
 		}
 		return false;
 	}

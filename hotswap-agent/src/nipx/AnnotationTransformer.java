@@ -64,7 +64,10 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		if (className.startsWith("nipx/")) return null;
 
 		// 注册到继承树
-		HierarchyTree.register(classfileBuffer); // TODO: 如果父类是系统类，可能会出错
+		try {
+			HierarchyTree.register(classfileBuffer); // TODO: 如果父类是系统类，可能会出错
+		} catch (Throwable ignored) {
+		}
 
 		String dotClassName = className.replace('/', '.');
 		if (HotSwapAgent.isBlacklisted(dotClassName)) return null;

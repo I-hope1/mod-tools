@@ -693,15 +693,16 @@ public class HotSwapAgent {
 		public final Map<String, byte[]> cacheUpdates = new LinkedHashMap<>();
 		public final Map<String, byte[]> pinOldBytes = new LinkedHashMap<>();
 		public final Set<String> targetClasses = new LinkedHashSet<>();
+		public boolean preRegistered = false;
 		public boolean committed = false;
 
 		public AlignmentTransaction(String hostName) {
 			this.hostName = hostName;
 		}
 
-		public void commit() {
-			if (committed) return;
-			committed = true;
+		public void preRegister() {
+			if (preRegistered || committed) return;
+			preRegistered = true;
 			for (Map.Entry<String, byte[]> entry : pendingAdds.entrySet()) {
 				String targetSlash = entry.getKey().replace('.', '/');
 				String targetDot = entry.getKey().replace('/', '.');
@@ -709,6 +710,12 @@ public class HotSwapAgent {
 				AnnotationTransformer.pendingAlignedClasses.put(targetSlash, bytes);
 				AnnotationTransformer.pendingAlignedClasses.put(targetDot, bytes);
 			}
+		}
+
+		public void commit() {
+			if (committed) return;
+			preRegister();
+			committed = true;
 			for (Map.Entry<String, byte[]> entry : cacheUpdates.entrySet()) {
 				bytecodeCache.put(entry.getKey().replace('/', '.'), entry.getValue());
 			}
@@ -735,7 +742,10 @@ public class HotSwapAgent {
 	}
 
 	/**
-	 * 分块执行 Redefine，防止其中一个类出错导致所有类失败，并依据重定义成败驱动事务提交或回滚
+	 * 分块执行 Redefine，防止其中一个类出错导致所有类失败，并依据重定义成败驱动事务提交或回滚。
+	 *
+	 * <p>注：真正的多类原子一致性依赖 JVM 批量 {@code inst.redefineClasses(definitions)} 的原子调用；
+	 * 当批量失败切换到单类模式时，属于尽力挽救兜底，客观上存在短暂的类间不一致时间窗口。</p>
 	 */
 	private static void applyRedefinitions(List<ClassDefinition> definitions, Collection<AlignmentTransaction> transactions) {
 		if (definitions.isEmpty()) {
@@ -744,6 +754,13 @@ public class HotSwapAgent {
 			}
 			return;
 		}
+
+		// 关键竞态消除：在调用 redefineClasses 之前先乐观登记新的 pending 注入！
+		// 避免宿主重定义成功到事务提交之间，并发线程或初始化方法首次加载未加载类时读到磁盘错位产物
+		for (AlignmentTransaction tx : transactions) {
+			tx.preRegister();
+		}
+
 		// 排序：被引用的匿名类优先重定义，宿主类最后重定义，降低单类重定义模式下的半生效风险
 		definitions.sort((d1, d2) -> {
 			boolean a1 = d1.getDefinitionClass().getName().contains("$");

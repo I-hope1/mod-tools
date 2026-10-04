@@ -1248,6 +1248,19 @@ public class InitFix {
 	private static final Set<String> THREAD_LOCAL_STATEFUL = Set.of(
 	 "get", "set", "remove", "initialValue", "childValue");
 
+	/** 可复用 builder 的类型：两者都是 final 类，不存在"宿主自身即接收者"的情况。 */
+	private static final Set<String> BUILDER_OWNERS = Set.of(
+	 "java/lang/StringBuilder", "java/lang/StringBuffer");
+
+	/**
+	 * builder 的变异方法。这些方法本身必须放行（{@code new StringBuilder().append(..)}
+	 * 是 §4.2 明确要求豁免的 {@code ALLOC_PURE}），所以判定落在<b>接收者</b>上，
+	 * 见 {@link #builderMutatorReason}。
+	 */
+	private static final Set<String> BUILDER_MUTATORS = Set.of(
+	 "append", "insert", "delete", "deleteCharAt", "replace", "reverse",
+	 "setLength", "setCharAt", "ensureCapacity", "trimToSize");
+
 	/**
 	 * P0 版最小效应判定。
 	 *
@@ -1262,6 +1275,9 @@ public class InitFix {
 	 *   <li><b>黑名单</b>：非确定性（时间/随机/identityHashCode/默认时区与字符集）、
 	 *       线程局部堆状态（ThreadLocal 的 get/set/remove）、反射与动态调用、
 	 *       进程与类加载、文件/网络 IO、日志输出；</li>
+	 *   <li><b>接收者敏感的可复用 builder 判定</b>：{@code StringBuilder}/{@code StringBuffer}
+	 *       的变异方法，接收者不是本切片内 {@code NEW} 出来的对象时拒绝
+	 *       （见 {@link #builderMutatorReason}）；</li>
 	 *   <li>未命中者 P0 一律放行 —— 这一步只做"明确危险"的负向拦截，
 	 *       真正的白名单准入（{@code ALLOWED_MASK}）在 P2 落地。</li>
 	 * </ol>
@@ -1414,6 +1430,64 @@ public class InitFix {
 	private static boolean isWallClockNow(String owner, String name) {
 		if (!"now".equals(name)) return false;
 		return owner.startsWith("java/time/") || owner.startsWith("java/time/chrono/");
+	}
+
+	/**
+	 * §4.2「接收者敏感的堆读取判定」+「局部逃逸豁免严格边界」的最小落地。
+	 *
+	 * <p>两种形态在指令层面只差<b>接收者从哪来</b>：</p>
+	 * <ul>
+	 *   <li>{@code this.key = new StringBuilder().append(a).toString()}：接收者是切片内
+	 *       {@code NEW} 出来的对象，从未逃逸 → {@code ALLOC_PURE}，<b>放行</b>；</li>
+	 *   <li>{@code this.key = BUF.append(name).toString()}（{@code BUF} 是可复用缓存字段）：
+	 *       接收者来自字段/参数 → 读到的是别人留下的内容，且会把外部堆状态改脏
+	 *       （§4.2 bit 4 + bit 5）。更隐蔽的是 {@code setLength(0)} 这类重置语句通常写在
+	 *       <b>切片之外</b>，提取时看不见，于是补丁重放会得到 {@code "abcabc"} 这种累积值。
+	 *       实测确认过这条路径，<b>拒绝</b>。</li>
+	 * </ul>
+	 *
+	 * <p>完整的逃逸证明（对象是否被赋值给外部字段、是否传给了非纯调用）属于 P2 的代数模型；
+	 * 这里只排除"接收者不是切片内新建对象"这一档已实测会读脏的形态。</p>
+	 *
+	 * @return null 表示放行；否则返回拒绝原因
+	 */
+	private static String builderMutatorReason(
+	 MethodInsnNode m, InsnList insns, Frame<SourceValue>[] frames) {
+
+		if (m.getOpcode() == Opcodes.INVOKESTATIC) return null;
+		if (!BUILDER_OWNERS.contains(m.owner) || !BUILDER_MUTATORS.contains(m.name)) return null;
+		if (frames == null) return null;
+
+		int idx = insns.indexOf(m);
+		if (idx < 0 || idx >= frames.length) return null;
+		Frame<SourceValue> fr = frames[idx];
+		if (fr == null) return null;
+
+		int argCount = Type.getArgumentTypes(m.desc).length;
+		int recvIdx  = fr.getStackSize() - 1 - argCount;
+		if (recvIdx < 0) return null;
+
+		SourceValue recv = fr.getStack(recvIdx);
+		if (recv == null) return null;
+
+		StringBuilder origin = new StringBuilder();
+		for (AbstractInsnNode src : recv.insns) {
+			if (src instanceof TypeInsnNode t && t.getOpcode() == Opcodes.NEW) {
+				if (t.desc.equals(m.owner)) return null;   // 局部逃逸豁免
+				appendOrigin(origin, "new " + t.desc);
+			} else if (src instanceof FieldInsnNode f) {
+				appendOrigin(origin, f.owner + "." + f.name);
+			} else if (src instanceof VarInsnNode v) {
+				appendOrigin(origin, v.var == 0 ? "this" : "slot" + v.var);
+			}
+		}
+		return "mutates a reusable " + m.owner + " obtained outside the slice"
+		     + " (接收者来源: " + (origin.length() == 0 ? "未知" : origin) + ")";
+	}
+
+	private static void appendOrigin(StringBuilder sb, String what) {
+		if (sb.length() > 0) sb.append(", ");
+		sb.append(what);
 	}
 
 	// ==================== 构造器参数 -> 字段扫描 ====================
@@ -2069,7 +2143,7 @@ public class InitFix {
 					unsafeReason = "collected instructions after the put";
 				} else {
 					unsafeReason = checkSafe(host, className, method, insns, jumpTargets,
-					 receiver, collected, minIdx, i, isStatic, privateMethods,
+					 frames, receiver, collected, minIdx, i, isStatic, privateMethods,
 					 paramFields, rejectedParamSlots, localProtected);
 					if (unsafeReason == null && !isStackBalanced(frames, minIdx, i, isStatic)) {
 						unsafeReason = "unbalanced stack after extraction";
@@ -2299,6 +2373,7 @@ public class InitFix {
 
 	private static String checkSafe(Class<?> host, String className, MethodNode method,
 	                                InsnList insns, Set<LabelNode> jumpTargets,
+	                                Frame<SourceValue>[] frames,
 	                                SourceValue receiver,
 	                                Set<AbstractInsnNode> collected,
 	                                int minIdx, int putIdx, boolean isStatic,
@@ -2368,6 +2443,12 @@ public class InitFix {
 			// §4.2 的最小效应防御（P0 版）：明确非确定性 / 环境依赖 / IO 的调用直接拒绝。
 			String effect = effectReason(n);
 			if (effect != null) return effect;
+
+			// §4.2 局部逃逸豁免的接收者敏感判定：可复用 builder 的接收者必须来自本切片。
+			if (n instanceof MethodInsnNode mm) {
+				String builderReason = builderMutatorReason(mm, insns, frames);
+				if (builderReason != null) return builderReason;
+			}
 
 			if (n instanceof MethodInsnNode m
 			    && m.getOpcode() == Opcodes.INVOKESPECIAL

@@ -106,6 +106,7 @@ public class InitFixOracle {
 		scenario("§4.3 Nest 成员二次写入：内部类改源字段 → 阻断", InitFixOracle::caseNestSecondWrite);
 		scenario("§5.3 ClassDiff 合成字段过滤：$nipx$ 标记不入 added*Fields，业务字段仍检出", InitFixOracle::caseInternalMarkerFilter);
 		scenario("§4.2 bit 4：ThreadLocal 新增字段可补；读取 ThreadLocal.get() 的切片 → 阻断", InitFixOracle::caseThreadLocal);
+		scenario("§4.2 bit 4/5：可复用缓存字段 + setLength(0) → 阻断；切片内 NEW 的 builder → 放行", InitFixOracle::caseReusableBuilderCache);
 
 		System.out.println();
 		System.out.println("通过 " + passed + " 条；失败 " + failed + " 条；合计 " + (passed + failed) + " 条");
@@ -590,6 +591,123 @@ public class InitFixOracle {
 		t.join();
 		if (err.get() != null) throw new IllegalStateException(err.get());
 		return ref.get();
+	}
+
+	// ==================== 场景 12：§4.2 bit 4/5 可复用 builder 缓存 ====================
+
+	static final String CASE_Q_V1 = """
+		package oracle;
+		public class CaseQ {
+			private static final StringBuilder BUF = new StringBuilder(64);
+			private final String name;
+			public CaseQ(String name) { this.name = name; BUF.setLength(0); BUF.append(this.name); }
+		}
+		""";
+
+	static final String CASE_Q_V2 = """
+		package oracle;
+		public class CaseQ {
+			private static final StringBuilder BUF = new StringBuilder(64);
+			private final String name;
+			private String key;
+			public CaseQ(String name) {
+				this.name = name;
+				BUF.setLength(0);
+				this.key = BUF.append(this.name).toString();
+			}
+		}
+		""";
+
+	static final String CASE_R_V1 = """
+		package oracle;
+		public class CaseR {
+			private final StringBuilder buf = new StringBuilder(64);
+			private final String name;
+			public CaseR(String name) { this.name = name; this.buf.setLength(0); this.buf.append(this.name); }
+		}
+		""";
+
+	static final String CASE_R_V2 = """
+		package oracle;
+		public class CaseR {
+			private final StringBuilder buf = new StringBuilder(64);
+			private final String name;
+			private String key;
+			public CaseR(String name) {
+				this.name = name;
+				this.buf.setLength(0);
+				this.key = this.buf.append(this.name).toString();
+			}
+		}
+		""";
+
+	/** 正向对照：builder 在切片内 NEW 出来、从未逃逸 → §4.2 的 ALLOC_PURE 必须继续放行。 */
+	static final String CASE_S_V1 = """
+		package oracle;
+		public class CaseS {
+			public CaseS() { }
+		}
+		""";
+
+	static final String CASE_S_V2 = """
+		package oracle;
+		public class CaseS {
+			private String key;
+			public CaseS() { this.key = new StringBuilder().append("a").append(42).toString(); }
+		}
+		""";
+
+	static void caseReusableBuilderCache() throws Exception {
+		// ---- 负向一：静态可复用缓存，值来自字段（入参已持久化） ----
+		Fixture fq = loadFixture("oracle.CaseQ", CASE_Q_V1, CASE_Q_V2);
+		Object cq = construct(fq.host, "abc");
+		Object sq = construct(fq.host, "abc");
+		resetToDefault(fq.host, sq, "key", "Ljava/lang/String;");
+		InstanceTracker.register(sq);
+
+		InitFix.PatchReport rq = fq.transform();
+		expect(rq, false, "key", InitFix.FieldStatus.REJECTED, "mutates a reusable java/lang/StringBuilder");
+		check(!rq.patchGenerated(), "CaseQ：不再为「读可复用缓存」的切片生成补丁");
+		fq.apply();
+		// 拒绝的语义是"宁可不补"：存量实例保持默认值（构造器本会算出 'abc'，但不该在这里猜）
+		check(read(fq.host, sq, "key") == null,
+			"CaseQ：key 保持默认值，没有被累积成 'abcabc'（实际 "
+			+ describe(read(fq.host, sq, "key")) + "）");
+		check("abc".equals(String.valueOf(read(fq.host, cq, "BUF"))),
+			"CaseQ：共享缓存内容未被补丁污染（期望 abc，实际 "
+			+ read(fq.host, cq, "BUF") + "）");
+
+		// ---- 负向二：实例可复用缓存，值来自字段 ----
+		Fixture fr = loadFixture("oracle.CaseR", CASE_R_V1, CASE_R_V2);
+		Object cr = construct(fr.host, "abc");
+		Object sr = construct(fr.host, "abc");
+		resetToDefault(fr.host, sr, "key", "Ljava/lang/String;");
+		InstanceTracker.register(sr);
+
+		InitFix.PatchReport rr = fr.transform();
+		expect(rr, false, "key", InitFix.FieldStatus.REJECTED, "mutates a reusable java/lang/StringBuilder");
+		check(!rr.patchGenerated(), "CaseR：不再为「读实例缓存」的切片生成补丁");
+		fr.apply();
+		check("abc".equals(String.valueOf(read(fr.host, sr, "buf"))),
+			"CaseR：被补丁实例的 buf 未被污染（期望 abc，实际 " + read(fr.host, sr, "buf") + "）");
+		check(read(fr.host, sr, "key") == null,
+			"CaseR：key 保持默认值，没有被累积成 'abcabc'（实际 "
+			+ describe(read(fr.host, sr, "key")) + "）");
+
+		// ---- 正向对照：局部 builder 链式调用照旧放行并算出正确值 ----
+		Fixture fs = loadFixture("oracle.CaseS", CASE_S_V1, CASE_S_V2);
+		Object cs = construct(fs.host);
+		Object ss = construct(fs.host);
+		resetToDefault(fs.host, ss, "key", "Ljava/lang/String;");
+		InstanceTracker.register(ss);
+
+		InitFix.PatchReport rs = fs.transform();
+		expect(rs, false, "key", InitFix.FieldStatus.ACCEPTED, null);
+		fs.apply();
+		expectValue(fs, ss, cs, "key");
+		check("a42".equals(String.valueOf(read(fs.host, ss, "key"))),
+			"CaseS：切片内 NEW 的 builder 链式调用正确算出 'a42'（实际 "
+			+ describe(read(fs.host, ss, "key")) + "）");
 	}
 
 	// ==================== 夹具装配 ====================

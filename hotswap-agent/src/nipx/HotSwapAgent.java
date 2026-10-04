@@ -31,7 +31,7 @@ public class HotSwapAgent {
 	public static boolean      UCP_APPEND         = Boolean.parseBoolean(System.getProperty("nipx.agent.ucp_append", "true"));
 	public static int          FILE_SHAKE_MS      = 1200;
 	public static RedefineMode REDEFINE_MODE;
-	public static String[]     HOTSWAP_BLACKLIST;
+	public static String[]     HOTSWAP_BLACKLIST  = new String[0];
 	public static boolean      RETRANSFORM_LOADED = Boolean.parseBoolean(System.getProperty("nipx.agent.retransform_loaded", "false"));
 	public static boolean      ENABLE_HOTSWAP_EVENT;
 	public static boolean      FORCE_REINIT;
@@ -313,6 +313,8 @@ public class HotSwapAgent {
 				// 无论是否已加载，均注入 pendingAlignedClasses，以便未加载的类首次 load 时拦截磁盘产物
 				AnnotationTransformer.pendingAlignedClasses.put(targetSlash, alignedBytes);
 				AnnotationTransformer.pendingAlignedClasses.put(targetDot, alignedBytes);
+				// 关键：登记 pending 时立即写入 bytecodeCache，消除未加载类在后续重定义轮次中的旧侧身份窗口
+				bytecodeCache.put(targetDot, alignedBytes);
 			}
 		}
 
@@ -389,7 +391,6 @@ public class HotSwapAgent {
 							newBytecode = LambdaAligner.align(oldBytecode, newBytecode, oldResolver, newResolver);
 						}
 					}
-					bytecodeCache.put(className, newBytecode);
 					if (oldBytecode != null) {
 						ClassDiffUtil.ClassDiff diff = ClassDiffUtil.diff(oldBytecode, newBytecode);
 						ClassDiffUtil.logDiff(className, diff);
@@ -521,6 +522,7 @@ public class HotSwapAgent {
 
 
 	static boolean isBlacklisted(String className) {
+		if (HOTSWAP_BLACKLIST == null) return false;
 		for (String prefix : HOTSWAP_BLACKLIST) {
 			if (className.startsWith(prefix)) return true;
 		}
@@ -652,6 +654,9 @@ public class HotSwapAgent {
 		try {
 			inst.redefineClasses(definitions.toArray(new ClassDefinition[0]));
 			info("HotSwap successful: " + definitions.size() + " classes redefined.");
+			for (ClassDefinition def : definitions) {
+				bytecodeCache.put(def.getDefinitionClass().getName(), def.getDefinitionClassFile());
+			}
 		} catch (Throwable t) {
 			error("Bulk Redefine failed, switching to individual mode...", t);
 			for (ClassDefinition def : definitions) {
@@ -659,6 +664,7 @@ public class HotSwapAgent {
 				InitFix.afterRedefineFailed(def.getDefinitionClass());
 				try {
 					inst.redefineClasses(def);
+					bytecodeCache.put(def.getDefinitionClass().getName(), def.getDefinitionClassFile());
 					if (DEBUG) log("[OK] " + def.getDefinitionClass().getName());
 				} catch (Throwable e) {
 					error("[FAIL] " + def.getDefinitionClass().getName(), e);

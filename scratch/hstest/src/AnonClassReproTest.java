@@ -9,6 +9,9 @@ import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.tree.TypeInsnNode;
 
+import nipx.HotSwapAgent;
+import nipx.MethodFingerprinter;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
@@ -76,6 +79,12 @@ public class AnonClassReproTest {
 			testScenario10_AnonymousClassWithInnerLambda(javac, baseDir);
 			// 测试 11 互换位置且包含未加载类的加载期拦截验证
 			testScenario11_SwapWithUnloadedClass(javac, baseDir);
+			// 测试 12 javac 8 嵌套 Lambda 匿名类宿主扫描对齐
+			testScenario12_Javac8NestedLambdaNullEnclosingMethod(javac, baseDir);
+			// 测试 13 复合位移与哈希器命中断言
+			testScenario13_CombinedShiftAndHasherTableHit(javac, baseDir);
+			// 测试 14 嵌套匿名类 Foo$1$1 结构识别与对齐
+			testScenario14_NestedAnonymousClasses(javac, baseDir);
 		} finally {
 			deleteRecursively(baseDir);
 		}
@@ -479,6 +488,26 @@ public class AnonClassReproTest {
 		AnonClassAligner.Result res2 = AnonClassAligner.align("testAnon/AnonCase", res1.alignedHostBytes, anonMap, res1.alignedAnonClasses);
 		check(Objects.equals(res1.renameMap, res2.renameMap), "Scenario 7: 对齐操作映射表完全幂等");
 		check(Arrays.equals(res1.alignedHostBytes, res2.alignedHostBytes), "Scenario 7: 宿主字节码二次对齐完全恒等");
+
+		// 真实开发场景幂等性：用户按两次保存（V1 -> V2 插入 Other，再按一次保存重对齐）
+		byte[] v2Host = Files.readAllBytes(new File(dir, "out_v2/testAnon/AnonCase.class").toPath());
+		byte[] v2_1 = Files.readAllBytes(new File(dir, "out_v2/testAnon/AnonCase$1.class").toPath());
+		byte[] v2_2 = Files.readAllBytes(new File(dir, "out_v2/testAnon/AnonCase$2.class").toPath());
+		byte[] v2_3 = Files.readAllBytes(new File(dir, "out_v2/testAnon/AnonCase$3.class").toPath());
+		Map<String, byte[]> rawV2Map = new HashMap<>();
+		rawV2Map.put("testAnon/AnonCase$1", v2_1); // Other
+		rawV2Map.put("testAnon/AnonCase$2", v2_2); // Save
+		rawV2Map.put("testAnon/AnonCase$3", v2_3); // Delete
+
+		// 第一次热更：旧侧为 V1，新侧为磁盘原始产物 V2
+		AnonClassAligner.Result rRound1 = AnonClassAligner.align("testAnon/AnonCase", v2Host, anonMap, rawV2Map);
+
+		// 第二次热更：旧侧为第一次对齐后的生效版本（$1=Save, $2=Delete, $3=Other），新侧为同一份未修改源码的磁盘产物 V2
+		AnonClassAligner.Result rRound2 = AnonClassAligner.align("testAnon/AnonCase", v2Host, rRound1.alignedAnonClasses, rawV2Map);
+
+		check(Objects.equals(rRound1.renameMap, rRound2.renameMap), "Scenario 7: 二次编译保存的重命名映射严格一致");
+		check(Arrays.equals(rRound1.alignedHostBytes, rRound2.alignedHostBytes), "Scenario 7: 二次编译保存的宿主字节码严格一致");
+		check(rRound2.alignedAnonClasses.keySet().equals(rRound1.alignedAnonClasses.keySet()), "Scenario 7: 二次编译保存的对齐匿名类集合严格一致");
 	}
 
 	// 8. 顺序无关性测试（反向遍历钩子）
@@ -638,39 +667,249 @@ public class AnonClassReproTest {
 		check(lambdaAligned != null, "Scenario 10: 重命名后的匿名类通过 LambdaAligner 流水线对齐其内部 lambda 成功");
 	}
 
-	// 11. 互换位置且包含未加载类的加载期拦截验证（验证第 2 点）
+	// 11. 位移后未加载类的磁盘覆盖与加载期拦截验证
 	static void testScenario11_SwapWithUnloadedClass(String javac, File baseDir) throws Exception {
-		System.out.println("\n--- Scenario 11: 互换且包含未加载类的加载期拦截验证 ---");
-		File dir = new File(baseDir, "s2");
-		byte[] v1_1 = Files.readAllBytes(new File(dir, "out_v1/testSwap/SwapCase$1.class").toPath());
-		byte[] v1_2 = Files.readAllBytes(new File(dir, "out_v1/testSwap/SwapCase$2.class").toPath());
-		byte[] v2_1 = Files.readAllBytes(new File(dir, "out_v2/testSwap/SwapCase$1.class").toPath());
-		byte[] v2_2 = Files.readAllBytes(new File(dir, "out_v2/testSwap/SwapCase$2.class").toPath());
-		byte[] v2Host = Files.readAllBytes(new File(dir, "out_v2/testSwap/SwapCase.class").toPath());
+		System.out.println("\n--- Scenario 11: 位移后未加载类的磁盘覆盖与加载期拦截验证 ---");
+		File dir = new File(baseDir, "s1");
+		byte[] v1_1 = Files.readAllBytes(new File(dir, "out_v1/testAnon/AnonCase$1.class").toPath()); // Save
+		byte[] v1_2 = Files.readAllBytes(new File(dir, "out_v1/testAnon/AnonCase$2.class").toPath()); // Delete
+		byte[] v2_1 = Files.readAllBytes(new File(dir, "out_v2/testAnon/AnonCase$1.class").toPath()); // Other (on disk)
+		byte[] v2_2 = Files.readAllBytes(new File(dir, "out_v2/testAnon/AnonCase$2.class").toPath()); // Save (on disk)
+		byte[] v2_3 = Files.readAllBytes(new File(dir, "out_v2/testAnon/AnonCase$3.class").toPath()); // Delete (on disk)
+		byte[] v2Host = Files.readAllBytes(new File(dir, "out_v2/testAnon/AnonCase.class").toPath());
 
+		// 假设在 JVM 中：AnonCase$1 (Save) 已加载，但 AnonCase$2 (Delete) 尚未加载
+		// 磁盘重新编译后：插入了 Other，导致磁盘上的 AnonCase$2 实际上是 Save 的字节码！
 		Map<String, byte[]> oldAnon = new HashMap<>();
-		oldAnon.put("testSwap/SwapCase$1", v1_1);
-		oldAnon.put("testSwap/SwapCase$2", v1_2);
+		oldAnon.put("testAnon/AnonCase$1", v1_1);
+		oldAnon.put("testAnon/AnonCase$2", v1_2);
 
 		Map<String, byte[]> newAnon = new HashMap<>();
-		newAnon.put("testSwap/SwapCase$1", v2_1);
-		newAnon.put("testSwap/SwapCase$2", v2_2);
+		newAnon.put("testAnon/AnonCase$1", v2_1); // Other
+		newAnon.put("testAnon/AnonCase$2", v2_2); // Save
+		newAnon.put("testAnon/AnonCase$3", v2_3); // Delete
 
-		AnonClassAligner.Result res = AnonClassAligner.align("testSwap/SwapCase", v2Host, oldAnon, newAnon);
+		AnonClassAligner.Result res = AnonClassAligner.align("testAnon/AnonCase", v2Host, oldAnon, newAnon);
 
-		// 模拟 Agent 注入 pendingAlignedClasses
+		// 模拟 Agent 注入 pendingAlignedClasses 和 bytecodeCache
 		for (Map.Entry<String, byte[]> entry : res.alignedAnonClasses.entrySet()) {
-			AnnotationTransformer.pendingAlignedClasses.put(entry.getKey(), entry.getValue());
+			String slash = entry.getKey();
+			String dot = slash.replace('/', '.');
+			AnnotationTransformer.pendingAlignedClasses.put(slash, entry.getValue());
+			AnnotationTransformer.pendingAlignedClasses.put(dot, entry.getValue());
+			HotSwapAgent.bytecodeCache.put(dot, entry.getValue());
 		}
 
-		check(AnnotationTransformer.pendingAlignedClasses.containsKey("testSwap/SwapCase$2"), "Scenario 11: pendingAlignedClasses 已注册目标类 $2");
-		check(AnnotationTransformer.pendingAlignedClasses.containsKey("testSwap/SwapCase$1"), "Scenario 11: pendingAlignedClasses 已注册目标类 $1");
+		check(AnnotationTransformer.pendingAlignedClasses.containsKey("testAnon/AnonCase$2"), "Scenario 11: pendingAlignedClasses 已注册位移类 $2");
 
-		// 模拟 JVM 首次加载未加载类 testSwap/SwapCase$2
-		byte[] intercepted = AnnotationTransformer.pendingAlignedClasses.remove("testSwap/SwapCase$2");
-		check(intercepted != null, "Scenario 11: 成功从 pendingAlignedClasses 拦截到未加载类的对齐字节码");
-		check(!AnnotationTransformer.pendingAlignedClasses.containsKey("testSwap/SwapCase$2"), "Scenario 11: 拦截消费后 pending 集合清除对应项，杜绝内存泄漏");
-		AnnotationTransformer.pendingAlignedClasses.clear(); // 清理测试残余
+		// 模拟类加载器首次加载 testAnon.AnonCase$2（磁盘上是 v2_2 即 Save 字节码）
+		// 此时 classBeingRedefined == null
+		AnnotationTransformer transformer = new AnnotationTransformer();
+		byte[] intercepted = transformer.transform(
+			AnonClassReproTest.class.getClassLoader(),
+			"testAnon/AnonCase$2",
+			null,
+			null,
+			v2_2 // 磁盘读取到的错误位移字节码(Save)
+		);
+
+		check(intercepted != null, "Scenario 11: transform 拦截并替换了未加载类字节码");
+		check(!Arrays.equals(intercepted, v2_2), "Scenario 11: 拦截到的字节码不是磁盘上的原始 Save 产物");
+		// 校验拦截到的是 Delete 逻辑（含有 doDelete 方法调用）
+		ClassNode cn = new ClassNode();
+		new ClassReader(intercepted).accept(cn, 0);
+		boolean callsDelete = false;
+		for (MethodNode mn : cn.methods) {
+			for (AbstractInsnNode insn : mn.instructions) {
+				if (insn instanceof MethodInsnNode && "doDelete".equals(((MethodInsnNode) insn).name)) {
+					callsDelete = true;
+				}
+			}
+		}
+		check(callsDelete, "Scenario 11: 拦截注入的字节码是真实正确的对齐版本 (Delete)");
+		check(!AnnotationTransformer.pendingAlignedClasses.containsKey("testAnon/AnonCase$2"), "Scenario 11: 消费后 pending 集合清除 slash 键");
+		check(!AnnotationTransformer.pendingAlignedClasses.containsKey("testAnon.AnonCase$2"), "Scenario 11: 消费后 pending 集合清除 dot 键");
+		check(HotSwapAgent.bytecodeCache.containsKey("testAnon.AnonCase$2"), "Scenario 11: bytecodeCache 保持对齐生效版本");
+		AnnotationTransformer.pendingAlignedClasses.clear();
+	}
+
+	// 12. JDK 8 嵌套 Lambda 内匿名类（lambda$null$0）宿主方法扫描与对齐
+	static void testScenario12_Javac8NestedLambdaNullEnclosingMethod(String javac, File baseDir) throws Exception {
+		System.out.println("\n--- Scenario 12: javac 8 嵌套 Lambda (lambda$null$0) 宿主扫描与对齐 ---");
+		String javac8 = System.getenv("HSTEST_JAVAC8");
+		if (javac8 == null) javac8 = "F:/files/java/jdks/jdk-1.8/bin/javac.exe";
+		if (!new File(javac8).exists()) javac8 = javac;
+
+		File dir = new File(baseDir, "s12");
+		dir.mkdirs();
+		File fSrc = new File(dir, "NestedCase.java");
+		Files.writeString(fSrc.toPath(),
+			"package testJ8Nest;\n" +
+			"public class NestedCase {\n" +
+			"    public void runJob() {\n" +
+			"        Runnable r1 = () -> {\n" +
+			"            Runnable r2 = () -> {\n" +
+			"                Runnable r3 = new Runnable() {\n" +
+			"                    public void run() { System.out.println(\"job\"); }\n" +
+			"                };\n" +
+			"                r3.run();\n" +
+			"            };\n" +
+			"            r2.run();\n" +
+			"        };\n" +
+			"    }\n" +
+			"}\n");
+
+		File outDir = new File(dir, "out");
+		outDir.mkdirs();
+		runCmd(javac8, "-nowarn", "-encoding", "UTF-8", "-d", outDir.getAbsolutePath(), fSrc.getAbsolutePath());
+
+		byte[] hostBytes = Files.readAllBytes(new File(outDir, "testJ8Nest/NestedCase.class").toPath());
+		byte[] anonBytes = Files.readAllBytes(new File(outDir, "testJ8Nest/NestedCase$1.class").toPath());
+
+		// 验证 javac 8 产物的 EnclosingMethod 确实是 lambda$null$0
+		ClassNode anonNode = new ClassNode();
+		new ClassReader(anonBytes).accept(anonNode, 0);
+		check("lambda$null$0".equals(anonNode.outerMethod), "Scenario 12: 证实 javac 8 将嵌套 lambda 匿名类 EnclosingMethod 记为 lambda$null$0");
+
+		Map<String, byte[]> anonMap = new HashMap<>();
+		anonMap.put("testJ8Nest/NestedCase$1", anonBytes);
+
+		Function<String, byte[]> resolver = name -> {
+			if ("testJ8Nest/NestedCase".equals(name) || "testJ8Nest.NestedCase".equals(name)) return hostBytes;
+			if ("testJ8Nest/NestedCase$1".equals(name) || "testJ8Nest.NestedCase$1".equals(name)) return anonBytes;
+			return null;
+		};
+
+		AnonClassAligner.Result res = AnonClassAligner.align("testJ8Nest/NestedCase", hostBytes, anonMap, anonMap, resolver, resolver);
+		check("testJ8Nest/NestedCase$1".equals(res.renameMap.get("testJ8Nest/NestedCase$1")), "Scenario 12: javac 8 嵌套 lambda 匿名类成功对齐");
+		check(res.stats.tier1Matches == 1, "Scenario 12: resolveHostMethodForAnon 成功恢复真实宿主方法 runJob 并达成 Tier 1 命中");
+	}
+
+	// 13. 复合位移（新 lambda + 新匿名类）与哈希器命中断言
+	static void testScenario13_CombinedShiftAndHasherTableHit(String javac, File baseDir) throws Exception {
+		System.out.println("\n--- Scenario 13: 复合位移与哈希器命中断言 ---");
+		File dir = new File(baseDir, "s13");
+		dir.mkdirs();
+		File fV1 = new File(dir, "ComboV1.java");
+		File fV2 = new File(dir, "ComboV2.java");
+
+		Files.writeString(fV1.toPath(),
+			"package testCombo;\n" +
+			"class ComboHost {\n" +
+			"    public void setup() {\n" +
+			"        Runnable rSave = () -> { new Runnable() { public void run() { doSave(); } }.run(); };\n" +
+			"        Runnable rDelete = () -> { new Runnable() { public void run() { doDelete(); } }.run(); };\n" +
+			"    }\n" +
+			"    void doSave() {}\n" +
+			"    void doDelete() {}\n" +
+			"}\n");
+
+		Files.writeString(fV2.toPath(),
+			"package testCombo;\n" +
+			"class ComboHost {\n" +
+			"    public void setup() {\n" +
+			"        Runnable rNewLog = () -> { doLog(); };\n" +
+			"        Runnable rNewThread = () -> { new Runnable() { public void run() { doLog(); } }.run(); };\n" +
+			"        Runnable rSave = () -> { new Runnable() { public void run() { doSave(); } }.run(); };\n" +
+			"        Runnable rDelete = () -> { new Runnable() { public void run() { doDelete(); } }.run(); };\n" +
+			"    }\n" +
+			"    void doLog() {}\n" +
+			"    void doSave() {}\n" +
+			"    void doDelete() {}\n" +
+			"}\n");
+
+		File outV1 = new File(dir, "out_v1");
+		File outV2 = new File(dir, "out_v2");
+		outV1.mkdirs();
+		outV2.mkdirs();
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.getAbsolutePath(), fV1.getAbsolutePath());
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.getAbsolutePath(), fV2.getAbsolutePath());
+
+		byte[] v1Host = Files.readAllBytes(new File(outV1, "testCombo/ComboHost.class").toPath());
+		byte[] v1_1 = Files.readAllBytes(new File(outV1, "testCombo/ComboHost$1.class").toPath());
+		byte[] v1_2 = Files.readAllBytes(new File(outV1, "testCombo/ComboHost$2.class").toPath());
+
+		byte[] v2Host = Files.readAllBytes(new File(outV2, "testCombo/ComboHost.class").toPath());
+		byte[] v2_1 = Files.readAllBytes(new File(outV2, "testCombo/ComboHost$1.class").toPath());
+		byte[] v2_2 = Files.readAllBytes(new File(outV2, "testCombo/ComboHost$2.class").toPath());
+		byte[] v2_3 = Files.readAllBytes(new File(outV2, "testCombo/ComboHost$3.class").toPath());
+
+		Map<String, byte[]> oldAnon = new HashMap<>();
+		oldAnon.put("testCombo/ComboHost$1", v1_1);
+		oldAnon.put("testCombo/ComboHost$2", v1_2);
+
+		Map<String, byte[]> newAnon = new HashMap<>();
+		newAnon.put("testCombo/ComboHost$1", v2_1); // Log
+		newAnon.put("testCombo/ComboHost$2", v2_2); // Save
+		newAnon.put("testCombo/ComboHost$3", v2_3); // Delete
+
+		// 阶段 1：AnonClassAligner 对齐匿名类
+		AnonClassAligner.Result anonRes = AnonClassAligner.align("testCombo/ComboHost", v2Host, oldAnon, newAnon);
+		check("testCombo/ComboHost$1".equals(anonRes.renameMap.get("testCombo/ComboHost$2")), "Scenario 13: 复合位移下 Save 匿名类精准重映射回 $1");
+		check("testCombo/ComboHost$2".equals(anonRes.renameMap.get("testCombo/ComboHost$3")), "Scenario 13: 复合位移下 Delete 匿名类精准重映射回 $2");
+
+		// 构建新侧批次（包含对齐重命名后的匿名类，注册 slash 与 dot 格式键，与 HotSwapAgent 一致）
+		Map<String, byte[]> newBatch = new HashMap<>();
+		for (Map.Entry<String, byte[]> entry : anonRes.alignedAnonClasses.entrySet()) {
+			newBatch.put(entry.getKey(), entry.getValue());
+			newBatch.put(entry.getKey().replace('/', '.'), entry.getValue());
+		}
+		newBatch.put("testCombo/ComboHost", anonRes.alignedHostBytes);
+		newBatch.put("testCombo.ComboHost", anonRes.alignedHostBytes);
+
+		Function<String, byte[]> oldResolver = name -> {
+			byte[] b = oldAnon.get(name.replace('.', '/'));
+			return b != null ? b : oldAnon.get(name.replace('/', '.'));
+		};
+		Function<String, byte[]> newResolver = name -> {
+			byte[] b = newBatch.get(name.replace('.', '/'));
+			return b != null ? b : newBatch.get(name.replace('/', '.'));
+		};
+
+		// 阶段 2：LambdaAligner 对齐宿主 Lambda
+		byte[] finalHost = LambdaAligner.align(v1Host, anonRes.alignedHostBytes, oldResolver, newResolver);
+		check(finalHost != null, "Scenario 13: 对齐后的宿主成功通过 LambdaAligner 流水线");
+
+		// 断言哈希器表命中：验证 MethodFingerprinter 处理时已包含重命名后的匿名类哈希
+		Map<String, Long> lastHashes = LambdaAligner.LAST_NEW_ANON_HASHES;
+		check(lastHashes != null, "Scenario 13: 成功读取 LAST_NEW_ANON_HASHES");
+		check(lastHashes.containsKey("testCombo/ComboHost$1"), "Scenario 13: 哈希器新侧解析表成功按重命名后的类名 $1 命中");
+		check(lastHashes.containsKey("testCombo/ComboHost$2"), "Scenario 13: 哈希器新侧解析表成功按重命名后的类名 $2 命中");
+		check(lastHashes.get("testCombo/ComboHost$1") != null, "Scenario 13: 命中哈希值非空，证明未静默退回纯序号模式");
+	}
+
+	// 14. 嵌套匿名类 Foo$1$1 结构识别与对齐
+	static void testScenario14_NestedAnonymousClasses(String javac, File baseDir) throws Exception {
+		System.out.println("\n--- Scenario 14: 嵌套匿名类 Foo$1$1 结构识别与对齐 ---");
+		File dir = new File(baseDir, "s14");
+		dir.mkdirs();
+		File fV1 = new File(dir, "NestCase.java");
+		Files.writeString(fV1.toPath(),
+			"package testNestAnon;\n" +
+			"class NestHost {\n" +
+			"    public void run() {\n" +
+			"        Runnable r = new Runnable() {\n" +
+			"            public void run() {\n" +
+			"                Runnable inner = new Runnable() {\n" +
+			"                    public void run() { System.out.println(\"inner\"); }\n" +
+			"                };\n" +
+			"                inner.run();\n" +
+			"            }\n" +
+			"        };\n" +
+			"    }\n" +
+			"}\n");
+
+		File outV1 = new File(dir, "out_v1");
+		outV1.mkdirs();
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.getAbsolutePath(), fV1.getAbsolutePath());
+
+		byte[] v1_1 = Files.readAllBytes(new File(outV1, "testNestAnon/NestHost$1.class").toPath());
+		byte[] v1_1_1 = Files.readAllBytes(new File(outV1, "testNestAnon/NestHost$1$1.class").toPath());
+
+		check(AnonClassAligner.isAnonymousClassName("testNestAnon/NestHost", "testNestAnon/NestHost$1$1"), "Scenario 14: isAnonymousClassName 准确识别嵌套匿名类 $1$1");
+		Long hInner = AnonClassHasher.hash("testNestAnon/NestHost$1$1", v1_1_1, "testNestAnon/NestHost", null, null, null, 0);
+		check(hInner != null, "Scenario 14: AnonClassHasher 成功计算嵌套匿名类哈希");
+		check(MethodFingerprinter.isUnstableNestedSuffix("1$1"), "Scenario 14: isUnstableNestedSuffix 识别 1$1 为不稳定匿名类后缀");
 	}
 
 	static void runCmd(String... cmd) throws Exception {

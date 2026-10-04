@@ -185,7 +185,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 	 *   <li>{@code Builder}→ 具名内部类，稳定</li>
 	 * </ul>
 	 */
-	static boolean isUnstableNestedSuffix(String suffix) {
+	public static boolean isUnstableNestedSuffix(String suffix) {
 		int lastSep = suffix.lastIndexOf('$');
 		int start   = lastSep + 1;
 		if (start >= suffix.length()) return false;

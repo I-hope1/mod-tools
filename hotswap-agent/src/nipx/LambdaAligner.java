@@ -120,6 +120,7 @@ public class LambdaAligner {
 
 	/** 仅供单线程测试断言读取的最近一次对齐统计。测试调用前请先置 null。 */
 	public static volatile AlignmentStats LAST_STATS;
+	public static volatile Map<String, Long> LAST_NEW_ANON_HASHES;
 
 	/**
 	 * 诊断开关：打开后打印配对决策的细节（谁在哪个阶段拿了哪个旧名字）。
@@ -478,10 +479,12 @@ public class LambdaAligner {
 			validateIndyTargets(alignedCn, presentKeys);
 
 			LAST_STATS = new AlignmentStats(ctx.step1Pairs, ctx.passAPairs, ctx.passBPairs);
+			LAST_NEW_ANON_HASHES = new HashMap<>(ctx.newAnonHashes);
 			// 传入 oldCn（已解析过一次）—— 避免 resurrectOrphanedLambdas 二次读 oldBytes
 			return resurrectOrphanedLambdas(oldCn, alignedBytes, presentKeys, ctx);
 		} catch (Exception | LinkageError | StackOverflowError e) {
 			LAST_STATS = null;
+			LAST_NEW_ANON_HASHES = null;
 			// 降级：不崩溃，返回原始字节码。捕获 Exception 与 LinkageError、StackOverflowError 等。
 			// 默认只记一行（热更失败不该刷屏）；DEBUG 下走 Logger 的 (msg, Throwable)
 			// 重载打完整堆栈 —— 而不是直接 printStackTrace，保持输出统一经日志系统。

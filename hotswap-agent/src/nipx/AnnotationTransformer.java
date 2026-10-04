@@ -76,6 +76,8 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			byte[] pending = pendingAlignedClasses.remove(className);
 			if (pending == null) {
 				pending = pendingAlignedClasses.remove(dotClassName);
+			} else {
+				pendingAlignedClasses.remove(dotClassName);
 			}
 			if (pending != null) {
 				classfileBuffer = pending;

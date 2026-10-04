@@ -31,6 +31,15 @@ import java.util.function.Function;
  * <p>对齐后使用 ASM {@link ClassRemapper} 对新匿名类字节码及宿主类中的所有引用（包括字节码指令、
  * {@code InnerClasses}、{@code EnclosingMethod}、{@code NestHost}/{@code NestMembers}）
  * 进行一致性重命名，未被匹配的旧类作为孤儿在 JVM 中保留不动以维护旧实例引用。
+ *
+ * <p><b>注意事项与已知边界</b>：
+ * <ul>
+ *   <li><b>运行时依赖</b>：本对齐器及孤儿保留策略依赖 DCEVM / JBR 增强重定义运行时（{@code -XX:+AllowEnhancedClassRedefinition}），
+ *       标准 JVM HotSwap 会因 Schema 变化直接拒绝新增/重排匿名类。</li>
+ *   <li><b>多 ClassLoader</b>：{@code pendingAlignedClasses} 以全限定类名为键，同名类在不同 ClassLoader 中时仅首个生效。</li>
+ *   <li><b>Kotlin 兼容性</b>：Kotlin 匿名对象（{@code object :}）及局部函数存在特定的 {@code @Metadata} 与命名前缀，
+ *       当前套件暂未覆盖 Kotlin 真实夹具验证，官方支持目前聚焦于 Java 8 / 17 / 21 编译器产物。</li>
+ * </ul>
  */
 public final class AnonClassAligner {
 
@@ -304,6 +313,11 @@ public final class AnonClassAligner {
 
 	public static String normalizeEnclosingMethod(String outerMethod) {
 		if (outerMethod == null) return null;
+		// Kotlin lambda naming: foo$lambda$0 or foo$lambda-0
+		int kLambdaIdx = outerMethod.indexOf("$lambda");
+		if (kLambdaIdx > 0) {
+			return outerMethod.substring(0, kLambdaIdx);
+		}
 		if (outerMethod.startsWith("lambda$")) {
 			// 在 JDK 8 中，lambda 体内的匿名类其 EnclosingMethod 指向 lambda$foo$0，
 			// 在 JDK 17/21 中则直接指向外层源码方法 foo。
@@ -322,6 +336,37 @@ public final class AnonClassAligner {
 			return outerMethod.substring(7);
 		}
 		return outerMethod;
+	}
+
+	private static String resolveHostMethodForAnon(String hostSlash, String anonSlash, Function<String, byte[]> resolver) {
+		if (resolver == null || hostSlash == null || anonSlash == null) return null;
+		try {
+			byte[] hostBytes = resolver.apply(hostSlash);
+			if (hostBytes == null) {
+				hostBytes = resolver.apply(hostSlash.replace('/', '.'));
+			}
+			if (hostBytes == null) return null;
+
+			ClassNode hostNode = new ClassNode();
+			new ClassReader(hostBytes).accept(hostNode, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+			if (hostNode.methods == null) return null;
+
+			for (MethodNode mn : hostNode.methods) {
+				if (mn.instructions == null) continue;
+				for (org.objectweb.asm.tree.AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+					if (insn.getOpcode() == Opcodes.NEW && insn instanceof org.objectweb.asm.tree.TypeInsnNode) {
+						org.objectweb.asm.tree.TypeInsnNode tin = (org.objectweb.asm.tree.TypeInsnNode) insn;
+						if (anonSlash.equals(tin.desc)) {
+							String norm = normalizeEnclosingMethod(mn.name);
+							if (norm != null && !norm.equals("null")) {
+								return norm;
+							}
+						}
+					}
+				}
+			}
+		} catch (Throwable ignored) { }
+		return null;
 	}
 
 	private static List<AnonInfo> parseInfos(
@@ -346,6 +391,14 @@ public final class AnonClassAligner {
 			Collections.sort(interfaces);
 
 			String outerMethod = normalizeEnclosingMethod(cn.outerMethod);
+			// 针对 javac 8 的嵌套 lambda 缺陷（EnclosingMethod 生成虚拟的 lambda$null$0）：
+			// 通过扫描宿主类字节码中实例化该匿名类的真实方法恢复其真实外层源码方法
+			if ((outerMethod == null || "null".equals(outerMethod)) && resolver != null) {
+				String hostMethod = resolveHostMethodForAnon(hostSlash, name, resolver);
+				if (hostMethod != null) {
+					outerMethod = hostMethod;
+				}
+			}
 			String outerMethodDesc = cn.outerMethodDesc;
 
 			List<String> fields = new ArrayList<>();
@@ -460,6 +513,9 @@ public final class AnonClassAligner {
 				remainingOld.remove(best);
 				toRemoveNew.add(n);
 				recordTierMatch(stats, tier);
+				if (HotSwapAgent.DEBUG || tier >= 4) {
+					HotSwapAgent.info("[ANON_MATCH] Tier " + tier + " paired: " + n.name + " -> " + best.name);
+				}
 			} else if (candidates.size() > 1) {
 				stats.ambiguousMatches++;
 				System.err.println("[WARN-ANON] Ambiguous anonymous class match in Tier " + tier +
@@ -480,6 +536,9 @@ public final class AnonClassAligner {
 					remainingOld.remove(best);
 					toRemoveNew.add(n);
 					recordTierMatch(stats, tier);
+					if (HotSwapAgent.DEBUG || tier >= 4) {
+						HotSwapAgent.info("[ANON_MATCH] Tier " + tier + " fallback paired: " + n.name + " -> " + best.name);
+					}
 				}
 			}
 		}

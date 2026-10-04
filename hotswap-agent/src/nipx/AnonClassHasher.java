@@ -54,6 +54,9 @@ public final class AnonClassHasher {
 			if (anonBytes == null) {
 				anonBytes = resolver.apply(anonClassName.replace('/', '.'));
 			}
+			if (anonBytes == null) {
+				anonBytes = resolver.apply(anonClassName.replace('.', '/'));
+			}
 		}
 		if (anonBytes == null || anonBytes.length == 0) {
 			return null;

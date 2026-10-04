@@ -106,6 +106,8 @@ public class AnonClassReproTest {
 			testScenario23_StrictIsSafetyGateNotPolicy(javac, baseDir);
 			// 测试 24 javac 8 嵌套回退扫描必须用直接父类节点（§8.3 第 5 条）
 			testScenario24_Javac8ParentScopedFallback(javac, baseDir);
+			// 测试 25 设计不变量 INV-1（自描述指纹）/ INV-2（禁止两个 aligner 互相递归）
+			testScenario25_DesignInvariants(javac, baseDir);
 		} finally {
 			deleteRecursively(baseDir);
 		}
@@ -1884,6 +1886,105 @@ public class AnonClassReproTest {
 			"                };\n" +
 			"                a.run();\n" +
 			"            }\n";
+	}
+
+	/**
+	 * Scenario 25: 设计不变量 INV-1（自描述指纹）与 INV-2（两个 aligner 不得互相递归）。
+	 *
+	 * <p><b>INV-1</b>：节点的 primary fingerprint 只描述自身，子节点关系不得递归吸收整棵
+	 * descendant 子树。当前它成立靠的是 {@code AnonClassHasher.hash} **内部没有自递归**
+	 * （那个 `depth` 参数与 `MAX_DEPTH` 是死代码）—— 属于"碰巧成立"。一旦有人"顺手把递归
+	 * 修好"，子类内容哈希就会被折进父类，新增/修改任意后代都会让整条祖先链雪崩。本场景把它
+	 * 变成受保护的断言。</p>
+	 *
+	 * <p><b>INV-2</b>：{@code LambdaAligner} 与 {@code AnonClassAligner} 不得互相调用、
+	 * 互相递归求指纹；统一入口只能是纯函数 {@code AnonClassHasher}。用字节码常量池扫描做
+	 * 架构守卫（位置无关，不依赖源码路径）。</p>
+	 */
+	static void testScenario25_DesignInvariants(String javac, File baseDir) throws Exception {
+		System.out.println("\n--- Scenario 25: INV-1 自描述指纹 / INV-2 禁止互相递归 ---");
+		File dir = new File(baseDir, "s25");
+		dir.mkdirs();
+		String host = "testInv/Inv";
+
+		// A: 基线（子层 payload=TAG，父层无额外语句）
+		// B: **只改子层** payload → 父层指纹必须不变、子层指纹必须变
+		// C: **只改父层自身**方法体（加一条 println）→ 父层指纹必须变
+		File outA = compileInv(javac, dir, "a", invSource("TAG", false));
+		File outB = compileInv(javac, dir, "b", invSource("TAG2", false));
+		File outC = compileInv(javac, dir, "c", invSource("TAG", true));
+
+		Long outerA = invHash(outA, host, host + "$1");
+		Long outerB = invHash(outB, host, host + "$1");
+		Long outerC = invHash(outC, host, host + "$1");
+		Long innerA = invHash(outA, host, host + "$1$1");
+		Long innerB = invHash(outB, host, host + "$1$1");
+
+		check(outerA != null && outerA.equals(outerB),
+			"Scenario 25/INV-1: 只改子匿名类内容时，父匿名类指纹必须不变（outer=" + hex(outerA) + " vs " + hex(outerB) + "）");
+		check(innerA != null && innerB != null && !innerA.equals(innerB),
+			"Scenario 25/INV-1（负向对照）: 子匿名类自身内容确实变了，指纹必须不同（" + hex(innerA) + " vs " + hex(innerB) + "）");
+		check(outerA != null && outerC != null && !outerA.equals(outerC),
+			"Scenario 25/INV-1（正对照）: 父匿名类**自身**方法体变化必须改变其指纹（" + hex(outerA) + " vs " + hex(outerC) + "）");
+
+		check(!constantPoolMentions(LambdaAligner.class, "nipx/AnonClassAligner"),
+			"Scenario 25/INV-2: LambdaAligner 不得引用 AnonClassAligner（禁止互相递归）");
+		check(!constantPoolMentions(AnonClassAligner.class, "nipx/LambdaAligner"),
+			"Scenario 25/INV-2: AnonClassAligner 不得引用 LambdaAligner");
+		check(constantPoolMentions(LambdaAligner.class, "nipx/AnonClassHasher")
+				&& constantPoolMentions(AnonClassAligner.class, "nipx/AnonClassHasher"),
+			"Scenario 25/INV-2（正对照）: 两者都只通过纯函数 AnonClassHasher 取指纹");
+	}
+
+	/** 只改子层内容（innerPayload）或只改父层自身语句（outerExtra）的夹具。 */
+	static String invSource(String innerPayload, boolean outerExtra) {
+		return "package testInv;\n" +
+			"class Inv {\n" +
+			"    void setup() {\n" +
+			"        Runnable a = new Runnable() { public void run() {\n" +
+			(outerExtra ? "            System.out.println(\"OUTER\");\n" : "") +
+			"            Runnable b = new Runnable() { public void run() { System.out.println(\"" + innerPayload + "\"); } };\n" +
+			"            b.run();\n" +
+			"        }};\n" +
+			"        a.run();\n" +
+			"    }\n" +
+			"}\n";
+	}
+
+	static File compileInv(String javac, File dir, String tag, String source) throws Exception {
+		File src = new File(dir, tag + ".java");
+		Files.writeString(src.toPath(), source);
+		File out = new File(dir, tag);
+		out.mkdirs();
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", out.getAbsolutePath(), src.getAbsolutePath());
+		return out;
+	}
+
+	static Long invHash(File out, String hostSlash, String slash) {
+		byte[] bytes = readIfExists(new File(out, slash + ".class"));
+		Function<String, byte[]> res = n -> readIfExists(new File(out, n.replace('.', '/') + ".class"));
+		return AnonClassHasher.hash(slash, bytes, hostSlash, res, null, null, 0);
+	}
+
+	/** 读取某个类自身的 class 字节（位置无关，jar 或目录都能取到）。 */
+	static byte[] ownClassBytes(Class<?> c) throws Exception {
+		try (java.io.InputStream in = c.getResourceAsStream(c.getSimpleName() + ".class")) {
+			return in == null ? null : in.readAllBytes();
+		}
+	}
+
+	/**
+	 * 常量池是否出现某个内部名。class 文件里类/方法/字段引用都以 UTF-8 内部名存储，
+	 * 因此对原始字节做 ISO-8859-1 解码后的 contains 即可（ASCII 名不受 modified-UTF8 影响）。
+	 */
+	static boolean constantPoolMentions(Class<?> c, String internalName) throws Exception {
+		byte[] bytes = ownClassBytes(c);
+		if (bytes == null) return false;
+		return new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1).contains(internalName);
+	}
+
+	static String hex(Long h) {
+		return h == null ? "null" : Long.toHexString(h);
 	}
 
 	static void runCmd(String... cmd) throws Exception {

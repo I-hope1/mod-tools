@@ -1,20 +1,13 @@
 package nipx.ref;
 
-import jdk.internal.misc.Unsafe;
+import sun.misc.Unsafe;
 import nipx.Reflect;
-import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.Type;
+import org.objectweb.asm.*;
 
-import java.lang.invoke.CallSite;
-import java.lang.invoke.ConstantCallSite;
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
+import java.lang.invoke.*;
 import java.lang.invoke.MethodHandles.Lookup;
-import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
  * 补丁类引用的两个 bridge 的合并实现，统一走 {@code invokedynamic} + 单一 bootstrap。
@@ -31,17 +24,17 @@ import java.util.Map;
  * 这样 redefine 之后、补丁执行之前或期间其他线程给字段赋过值时，补丁不会覆盖；
  * 代价是字段已是默认值以外时跳过（保守方向）。</p>
  *
- * <p><b>方法名分布（对照 {@code jdk.internal.misc.Unsafe}）</b>：</p>
+ * <p><b>方法名分布（对照 {@code jdk.internal.misc.Unsafe} / {@code sun.misc.Unsafe}）</b>：</p>
  * <ul>
- *   <li><b>引用</b>：JDK 9~11 是 {@code compareAndSetObject}/{@code putObjectVolatile}；
+ *   <li><b>引用</b>：JDK 8 是 {@code compareAndSwapObject}；JDK 9~11 是 {@code compareAndSetObject}/{@code putObjectVolatile}；
  *       JDK 12+ 通过 JDK-8207146 改为 {@code compareAndSetReference}/{@code putReferenceVolatile}，
  *       同时 {@code compareAndSetObject} 作为 @Deprecated 别名保留；
- *       JDK 23+ 通过 JDK-8327729 移除别名。用 {@link Reflect#version} 分流。</li>
+ *       JDK 23+ 通过 JDK-8327729 移除别名。用 fallback 链分流。</li>
  *   <li><b>boolean/byte/char/short/int/long</b>：JDK 9 引入 VarHandle 时就叫
- *       {@code compareAndSetXxx}。没有 {@code compareAndSwapXxx} 的旧名——
- *       那是 {@code sun.misc.Unsafe} 的名字。</li>
- *   <li><b>float/double</b>：{@code jdk.internal.misc.Unsafe} 至今没有
- *       {@code compareAndSetFloat}/{@code compareAndSetDouble}。硬件 {@code cmpxchg}
+ *       {@code compareAndSetXxx}。JDK 8 下 {@code sun.misc.Unsafe} 仅包含 {@code compareAndSwapInt/Long}，
+ *       无子字 CAS（boolean/byte/char/short 找不到 CAS 时自动降级为 volatile 写）。</li>
+ *   <li><b>float/double</b>：{@code Unsafe} 至今没有
+ *       {@code compareAndSetFloat}/{@code compareAndDouble}。硬件 {@code cmpxchg}
  *       只作用于整型，JDK 官方（如 VarHandle）用 raw bits + {@code compareAndSetInt/Long}
  *       实现浮点 CAS。本类不做位转换，直接降级为 {@code putFloatVolatile}/
  *       {@code putDoubleVolatile} 无条件写——丢掉条件语义，但保持 volatile 可见性。
@@ -59,212 +52,300 @@ import java.util.Map;
  * BSM 每次调用点链接时只做 {@code insertArguments(offset)}（静态字段再加一次
  * {@code insertArguments(base)}）。</p>
  */
+@SuppressWarnings("removal")
 public final class HotswapBridge {
 
-    /** protected 成员桥接：owner 是声明类，host 是宿主类。 */
-    public static final int KIND_PROTECTED = 0;
+	/** protected 成员桥接：owner 是声明类，host 是宿主类。 */
+	public static final int KIND_PROTECTED = 0;
 
-    /** 新增字段的条件 CAS 写：owner 是宿主类。 */
-    public static final int KIND_CONDITIONAL = 1;
+	/** 新增字段的条件 CAS 写：owner 是宿主类。 */
+	public static final int KIND_CONDITIONAL = 1;
 
-    private static final Unsafe UNSAFE      = Unsafe.getUnsafe();
-    private static final Lookup IMPL_LOOKUP = Reflect.IMPL_LOOKUP;
+	private static final Unsafe UNSAFE      = Reflect.UNSAFE;
+	private static final Lookup IMPL_LOOKUP = Reflect.IMPL_LOOKUP;
 
-    /**
-     * valueClass -> MethodHandle {@code (Object, long, V)void}。
-     * <p>键：引用类型统一用 {@link Object Object.class}；基本类型用各自的 {@code Class}。</p>
-     * <p>值：优先条件 CAS（expected 已固定为默认值、返回值已 drop）；
-     * {@code Unsafe} 缺对应 CAS 的类型（float/double）降级为无条件 volatile 写。
-     * 两种形态的剩余签名一致，都是 {@code (receiver, offset, value)}。</p>
-     */
-    private static final Map<Class<?>, MethodHandle> CONDITIONAL_PUTTERS;
+	/**
+	 * JDK 9+ 的 {@code jdk.internal.misc.Unsafe}（经 IMPL_LOOKUP 取得，无需 --add-exports）。
+	 * 它自带 {@code compareAndSetByte/Short/Char/Boolean/Int/Long/Reference}，条件 CAS 语义完整；
+	 * 而 JDK 9+ 的 {@code sun.misc.Unsafe} 只剩 {@code compareAndSwapInt/Long/Object}（且无子字 CAS）。
+	 * JDK 8 / Android 没有该类，两者为 null，退回 {@code sun.misc.Unsafe} 并对子字做模拟。
+	 */
+	private static final Class<?> INTERNAL_UNSAFE_CLASS;
+	private static final Object   INTERNAL_UNSAFE;
 
-    static {
-        Map<Class<?>, MethodHandle> m = new HashMap<>(16);
-        try {
-            // 引用类型：优先使用 JDK 12+ 的 Reference 名字，不存在则回退到 JDK 11- 的 Object 名字
-            MethodHandle refHandle = null;
-            try {
-                refHandle = conditional(
-                    "compareAndSetReference", "putReferenceVolatile", Object.class, null);
-            } catch (Throwable ignored) { }
-            if (refHandle == null) {
-                refHandle = conditional(
-                    "compareAndSetObject", "putObjectVolatile", Object.class, null);
-            }
-            m.put(Object.class, refHandle);
+	static {
+		Class<?> c = null;
+		Object   o = null;
+		try {
+			c = Class.forName("jdk.internal.misc.Unsafe");
+			o = IMPL_LOOKUP.findStatic(c, "getUnsafe", MethodType.methodType(c)).invoke();
+		} catch (Throwable ignored) {
+			c = null;
+			o = null;
+		}
+		INTERNAL_UNSAFE_CLASS = c;
+		INTERNAL_UNSAFE = o;
+	}
 
-            // 6 种整型/布尔：JDK 9 起就叫 compareAndSetXxx，无需版本分流
-            m.put(boolean.class, conditional("compareAndSetBoolean", "putBooleanVolatile",
-                                             boolean.class, false));
-            m.put(byte.class,    conditional("compareAndSetByte",    "putByteVolatile",
-                                             byte.class,    (byte) 0));
-            m.put(char.class,    conditional("compareAndSetChar",    "putCharVolatile",
-                                             char.class,    '\u0000'));
-            m.put(short.class,   conditional("compareAndSetShort",   "putShortVolatile",
-                                             short.class,   (short) 0));
-            m.put(int.class,     conditional("compareAndSetInt",     "putIntVolatile",
-                                             int.class,     0));
-            m.put(long.class,    conditional("compareAndSetLong",    "putLongVolatile",
-                                             long.class,    0L));
+	private static final boolean BIG_ENDIAN = java.nio.ByteOrder.nativeOrder() == java.nio.ByteOrder.BIG_ENDIAN;
 
-            // float/double：Unsafe 没有 compareAndSetFloat/Double，
-            // tryFind 返回 null，自动降级为无条件 volatile 写。
-            m.put(float.class,   conditional("compareAndSetFloat",   "putFloatVolatile",
-                                             float.class,   0.0f));
-            m.put(double.class,  conditional("compareAndSetDouble",  "putDoubleVolatile",
-                                             double.class,  0.0d));
-        } catch (Throwable t) {
-            throw new ExceptionInInitializerError(t);
-        }
-        CONDITIONAL_PUTTERS = Collections.unmodifiableMap(m);
-    }
+	/**
+	 * valueClass -> MethodHandle {@code (Object, long, V)void}。
+	 * <p>键：引用类型统一用 {@link Object Object.class}；基本类型用各自的 {@code Class}。</p>
+	 * <p>值：优先条件 CAS（expected 已固定为默认值、返回值已 drop）；
+	 * 只有 float/double（任何 JDK 的 Unsafe 都没有对应 CAS）降级为无条件 volatile 写。
+	 * 两种形态的剩余签名一致，都是 {@code (receiver, offset, value)}。</p>
+	 */
+	private static final Map<Class<?>, MethodHandle> CONDITIONAL_PUTTERS;
 
-    /**
-     * 组合条件写模板：
-     * <ol>
-     *   <li>找 {@code casName}；找到就
-     *       {@code bindTo(UNSAFE) + insertArguments(2, expected) + dropReturn}，
-     *       得到 {@code (Object, long, V)void} 的条件 CAS。</li>
-     *   <li>找不到就找 {@code putName}，{@code bindTo(UNSAFE)} 后形态一致，但无条件写。</li>
-     *   <li>都没有则抛异常，让类初始化失败——"JDK 版本超出预期"应该大声暴露。</li>
-     * </ol>
-     */
-    private static MethodHandle conditional(
-        String casName, String putName,
-        Class<?> valueClass, Object expected
-    ) throws Throwable {
-        MethodType casType = MethodType.methodType(
-            boolean.class, Object.class, long.class, valueClass, valueClass);
-        MethodHandle cas = tryFind(casName, casType);
-        if (cas != null) {
-            MethodHandle bound = cas.bindTo(UNSAFE);
-            bound = MethodHandles.insertArguments(bound, 2, expected);
-            return MethodHandles.dropReturn(bound);
-        }
+	static {
+		Map<Class<?>, MethodHandle> m = new HashMap<>(16);
+		try {
+			// 引用类型：JDK 12+ (Reference) -> JDK 9~11 (Object) -> JDK 8 (compareAndSwapObject)
+			m.put(Object.class, conditional(
+			 new String[]{"compareAndSetReference", "compareAndSetObject", "compareAndSwapObject"},
+			 new String[]{"putReferenceVolatile", "putObjectVolatile"},
+			 Object.class, null));
 
-        MethodType putType = MethodType.methodType(
-            void.class, Object.class, long.class, valueClass);
-        MethodHandle put = tryFind(putName, putType);
-        if (put == null) {
-            throw new NoSuchMethodException(
-                "no CAS or volatile put found for " + valueClass
-                + " (cas=" + casName + ", put=" + putName + ")");
-        }
-        return put.bindTo(UNSAFE);
-    }
+			// 子字类型：JDK 9+ 内部 Unsafe 原生支持；JDK 8 / Android 用 int CAS 模拟
+			m.put(boolean.class, conditional(
+			 new String[]{"compareAndSetBoolean"}, new String[]{"putBooleanVolatile"},
+			 boolean.class, false));
+			m.put(byte.class, conditional(
+			 new String[]{"compareAndSetByte"}, new String[]{"putByteVolatile"},
+			 byte.class, (byte) 0));
+			m.put(char.class, conditional(
+			 new String[]{"compareAndSetChar"}, new String[]{"putCharVolatile"},
+			 char.class, '\u0000'));
+			m.put(short.class, conditional(
+			 new String[]{"compareAndSetShort"}, new String[]{"putShortVolatile"},
+			 short.class, (short) 0));
 
-    private static MethodHandle tryFind(String name, MethodType type) {
-        try {
-            return IMPL_LOOKUP.findVirtual(Unsafe.class, name, type);
-        } catch (NoSuchMethodException | IllegalAccessException e) {
-            return null;
-        }
-    }
+			// int / long：JDK 9+ 叫 compareAndSetXxx，JDK 8 / sun.misc 叫 compareAndSwapXxx
+			m.put(int.class, conditional(
+			 new String[]{"compareAndSetInt", "compareAndSwapInt"}, new String[]{"putIntVolatile"},
+			 int.class, 0));
+			m.put(long.class, conditional(
+			 new String[]{"compareAndSetLong", "compareAndSwapLong"}, new String[]{"putLongVolatile"},
+			 long.class, 0L));
 
-    private HotswapBridge() { }
+			// float/double：没有任何 Unsafe 提供对应 CAS，自动降级为无条件 volatile 写。
+			m.put(float.class, conditional(
+			 new String[]{"compareAndSetFloat"}, new String[]{"putFloatVolatile"},
+			 float.class, 0.0f));
+			m.put(double.class, conditional(
+			 new String[]{"compareAndSetDouble"}, new String[]{"putDoubleVolatile"},
+			 double.class, 0.0d));
+		} catch (Throwable t) {
+			throw new ExceptionInInitializerError(t);
+		}
+		CONDITIONAL_PUTTERS = Collections.unmodifiableMap(m);
+	}
 
-    public static CallSite bootstrap(
-        Lookup caller,
-        String name,
-        MethodType callSiteType,
-        int kind,
-        int opcode,
-        Class<?> owner,
-        Class<?> host
-    ) {
-        try {
-            return switch (kind) {
-                case KIND_PROTECTED   -> protectedCallSite(name, callSiteType, opcode, owner, host);
-                case KIND_CONDITIONAL -> conditionalFieldCallSite(name, callSiteType, opcode, owner);
-                default -> throw new IllegalArgumentException("unknown bridge kind: " + kind);
-            };
-        } catch (BootstrapMethodError bme) {
-            throw bme;
-        } catch (Throwable t) {
-            throw new BootstrapMethodError(
-                "Cannot link bridge for " + owner.getName() + "." + name
-                + " (kind=" + kind + ", opcode=" + opcode + ")", t);
-        }
-    }
+	/**
+	 * 组合条件写模板，依次尝试：
+	 * <ol>
+	 *   <li>{@code casNames} 中第一个存在的真 CAS（先查内部 Unsafe，再查 sun.misc.Unsafe）；
+	 *       得到 {@code (Object, long, V)void} 的条件 CAS。<b>必须先于 put 回退</b>，
+	 *       否则找不到 {@code compareAndSetXxx} 就会误降级成无条件写。</li>
+	 *   <li>boolean/byte/char/short：用同字 int CAS 模拟（JDK 8 / Android）。</li>
+	 *   <li>{@code putNames} 中第一个存在的 volatile put——无条件写（仅 float/double 会走到这里）。</li>
+	 *   <li>都没有则抛异常，让类初始化失败——"JDK 版本超出预期"应该大声暴露。</li>
+	 * </ol>
+	 */
+	private static MethodHandle conditional(
+	 String[] casNames, String[] putNames, Class<?> valueClass, Object expected
+	) throws Throwable {
+		MethodType casType = MethodType.methodType(
+		 boolean.class, Object.class, long.class, valueClass, valueClass);
+		for (String casName : casNames) {
+			MethodHandle cas = tryFind(casName, casType);
+			if (cas != null) {
+				cas = MethodHandles.insertArguments(cas, 2, expected);
+				return cas.asType(cas.type().changeReturnType(void.class));
+			}
+		}
 
-    // ==================== 字段条件 CAS 写 ====================
+		MethodHandle emulated = emulatedSubWordCas(valueClass, expected);
+		if (emulated != null) return emulated;
 
-    private static CallSite conditionalFieldCallSite(
-        String fieldName, MethodType callSiteType, int opcode, Class<?> owner
-    ) throws Throwable {
-        boolean isStatic = opcode == Opcodes.PUTSTATIC;
+		MethodType putType = MethodType.methodType(
+		 void.class, Object.class, long.class, valueClass);
+		for (String putName : putNames) {
+			MethodHandle put = tryFind(putName, putType);
+			if (put != null) return put;
+		}
+		throw new NoSuchMethodException(
+		 "no CAS or volatile put found for " + valueClass
+		 + " (cas=" + Arrays.toString(casNames) + ", put=" + Arrays.toString(putNames) + ")");
+	}
 
-        // 从 callSiteType 派生字段类型：静态在参数 0，实例在参数 1
-        Class<?> valType = callSiteType.parameterType(isStatic ? 0 : 1);
-        Class<?> key     = valType.isPrimitive() ? valType : Object.class;
+	/** 返回已绑定 Unsafe 接收者的句柄；先查 JDK 9+ 内部 Unsafe，再查 sun.misc.Unsafe。 */
+	private static MethodHandle tryFind(String name, MethodType type) {
+		if (INTERNAL_UNSAFE != null) {
+			try {
+				return IMPL_LOOKUP.findVirtual(INTERNAL_UNSAFE_CLASS, name, type).bindTo(INTERNAL_UNSAFE);
+			} catch (NoSuchMethodException | IllegalAccessException ignored) { }
+		}
+		try {
+			return IMPL_LOOKUP.findVirtual(Unsafe.class, name, type).bindTo(UNSAFE);
+		} catch (NoSuchMethodException | IllegalAccessException e) {
+			return null;
+		}
+	}
 
-        MethodHandle template = CONDITIONAL_PUTTERS.get(key);
-        if (template == null) {
-            throw new IllegalStateException("no putter for " + valType);
-        }
+	// ==================== 子字 CAS 模拟（仅 JDK 8 / Android） ====================
 
-        Field field = findField(owner, fieldName, Type.getDescriptor(valType));
-        long offset = isStatic
-            ? UNSAFE.staticFieldOffset(field)
-            : UNSAFE.objectFieldOffset(field);
-        Object base = isStatic ? UNSAFE.staticFieldBase(field) : null;
+	private static MethodHandle emulatedSubWordCas(Class<?> valueClass, Object expected) throws Throwable {
+		String name;
+		if (valueClass == boolean.class) { name = "casBoolean"; } else if (valueClass == byte.class) {
+			name = "casByte";
+		} else if (valueClass == char.class) {
+			name = "casChar";
+		} else if (valueClass == short.class) {
+			name = "casShort";
+		} else return null;
+		MethodHandle h = MethodHandles.lookup().findStatic(HotswapBridge.class, name,
+		 MethodType.methodType(boolean.class, Object.class, long.class, valueClass, valueClass));
+		h = MethodHandles.insertArguments(h, 2, expected);
+		return h.asType(h.type().changeReturnType(void.class));
+	}
 
-        MethodHandle writer = MethodHandles.insertArguments(template, 1, offset);
-        if (isStatic) {
-            writer = MethodHandles.insertArguments(writer, 0, base);
-        }
-        return new ConstantCallSite(writer.asType(callSiteType));
-    }
+	private static boolean casBoolean(Object o, long off, boolean e, boolean x) {
+		return casSubWord(o, off, 1, e ? 1 : 0, x ? 1 : 0);
+	}
 
-    /**
-     * 沿 owner -> 父类链逐层 {@code getDeclaredFields()} 查找。
-     * 热更注入的字段就在 owner 上，第一次迭代即命中。
-     */
-    private static Field findField(Class<?> owner, String name, String desc)
-        throws NoSuchFieldException {
-        for (Class<?> c = owner; c != null; c = c.getSuperclass()) {
-            for (Field f : c.getDeclaredFields()) {
-                if (name.equals(f.getName()) && Type.getDescriptor(f.getType()).equals(desc)) {
-                    return f;
-                }
-            }
-        }
-        throw new NoSuchFieldException(owner.getName() + "." + name + ":" + desc);
-    }
+	private static boolean casByte(Object o, long off, byte e, byte x) {
+		return casSubWord(o, off, 1, e, x);
+	}
 
-    // ==================== protected 成员桥接 ====================
+	private static boolean casChar(Object o, long off, char e, char x) {
+		return casSubWord(o, off, 2, e, x);
+	}
 
-    private static CallSite protectedCallSite(
-        String name, MethodType callSiteType, int opcode,
-        Class<?> owner, Class<?> host
-    ) throws Throwable {
-        Lookup hostLookup = MethodHandles.privateLookupIn(host, IMPL_LOOKUP);
+	private static boolean casShort(Object o, long off, short e, short x) {
+		return casSubWord(o, off, 2, e, x);
+	}
 
-        MethodHandle mh = switch (opcode) {
-            case Opcodes.GETFIELD ->
-                hostLookup.findGetter(owner, name, callSiteType.returnType());
-            case Opcodes.GETSTATIC ->
-                hostLookup.findStaticGetter(owner, name, callSiteType.returnType());
-            case Opcodes.PUTFIELD -> {
-                Class<?> t = callSiteType.parameterType(callSiteType.parameterCount() - 1);
-                yield hostLookup.findSetter(owner, name, t);
-            }
-            case Opcodes.PUTSTATIC -> {
-                Class<?> t = callSiteType.parameterType(0);
-                yield hostLookup.findStaticSetter(owner, name, t);
-            }
-            case Opcodes.INVOKEVIRTUAL, Opcodes.INVOKEINTERFACE ->
-                hostLookup.findVirtual(owner, name, callSiteType.dropParameterTypes(0, 1));
-            case Opcodes.INVOKESTATIC ->
-                hostLookup.findStatic(owner, name, callSiteType);
-            case Opcodes.INVOKESPECIAL ->
-                hostLookup.findSpecial(owner, name,
-                    callSiteType.dropParameterTypes(0, 1), host);
-            default -> throw new IllegalArgumentException(
-                "bad opcode for protected bridge: " + opcode);
-        };
+	/**
+	 * 在包含该子字的 4 字节对齐字上做 int CAS：读整字 -> 比较目标子字 -> 替换子字位 -> CAS 整字，
+	 * 其他字节的并发写入会令 CAS 失败并重试，不会被覆盖。字段偏移必然落在对象体内，
+	 * 向下对齐到 4 字节不会越过对象头。
+	 */
+	private static boolean casSubWord(Object o, long offset, int bytes, int expected, int x) {
+		long wordOffset = offset & ~3L;
+		int  shift      = (int) (offset & 3L) << 3;
+		if (BIG_ENDIAN) shift = 32 - (bytes << 3) - shift;
+		int valueMask = (1 << (bytes << 3)) - 1;
+		int e         = expected & valueMask;
+		int v         = (x & valueMask) << shift;
+		int clear     = ~(valueMask << shift);
+		for (; ; ) {
+			int cur = UNSAFE.getIntVolatile(o, wordOffset);
+			if (((cur >>> shift) & valueMask) != e) return false;
+			if (UNSAFE.compareAndSwapInt(o, wordOffset, cur, (cur & clear) | v)) return true;
+		}
+	}
 
-        return new ConstantCallSite(mh.asType(callSiteType));
-    }
+	private HotswapBridge() { }
+
+	public static CallSite bootstrap(
+	 Lookup caller,
+	 String name,
+	 MethodType callSiteType,
+	 int kind,
+	 int opcode,
+	 Class<?> owner,
+	 Class<?> host
+	) {
+		try {
+			return switch (kind) {
+				case KIND_PROTECTED -> protectedCallSite(caller, name, callSiteType, opcode, owner, host);
+				case KIND_CONDITIONAL -> conditionalFieldCallSite(caller, name, callSiteType, opcode, owner);
+				default -> throw new IllegalArgumentException("unknown bridge kind: " + kind);
+			};
+		} catch (BootstrapMethodError bme) {
+			throw bme;
+		} catch (Throwable t) {
+			throw new BootstrapMethodError(
+			 "Cannot link bridge for " + owner.getName() + "." + name
+			 + " (kind=" + kind + ", opcode=" + opcode + ")", t);
+		}
+	}
+
+	// ==================== 字段条件 CAS 写 ====================
+
+	private static CallSite conditionalFieldCallSite(
+	 Lookup caller, String fieldName, MethodType callSiteType, int opcode, Class<?> owner
+	) throws Throwable {
+		boolean isStatic = opcode == Opcodes.PUTSTATIC;
+
+		// 从 callSiteType 派生字段类型：静态在参数 0，实例在参数 1
+		Class<?> valType = callSiteType.parameterType(isStatic ? 0 : 1);
+		Class<?> key     = valType.isPrimitive() ? valType : Object.class;
+
+		MethodHandle template = CONDITIONAL_PUTTERS.get(key);
+		if (template == null) {
+			throw new IllegalStateException("no putter for " + valType);
+		}
+
+		Field field = findField(owner, fieldName, Type.getDescriptor(valType));
+		long offset = isStatic
+		 ? UNSAFE.staticFieldOffset(field)
+		 : UNSAFE.objectFieldOffset(field);
+		Object base = isStatic ? UNSAFE.staticFieldBase(field) : null;
+
+		MethodHandle writer = MethodHandles.insertArguments(template, 1, offset);
+		if (isStatic) {
+			writer = MethodHandles.insertArguments(writer, 0, base);
+		}
+		return new ConstantCallSite(writer.asType(callSiteType));
+	}
+
+	/**
+	 * 沿 owner -> 父类链逐层 {@code getDeclaredFields()} 查找。
+	 * 热更注入的字段就在 owner 上，第一次迭代即命中。
+	 */
+	private static Field findField(Class<?> owner, String name, String desc)
+	 throws NoSuchFieldException {
+		for (Class<?> c = owner; c != null; c = c.getSuperclass()) {
+			for (Field f : c.getDeclaredFields()) {
+				if (name.equals(f.getName()) && Type.getDescriptor(f.getType()).equals(desc)) {
+					return f;
+				}
+			}
+		}
+		throw new NoSuchFieldException(owner.getName() + "." + name + ":" + desc);
+	}
+
+	// ==================== protected 成员桥接 ====================
+
+	private static CallSite protectedCallSite(
+	 Lookup caller, String name, MethodType callSiteType, int opcode,
+	 Class<?> owner, Class<?> host
+	) throws Throwable {
+		Lookup hostLookup = Reflect.isAndroid ? caller : IMPL_LOOKUP;
+
+		MethodHandle mh = switch (opcode) {
+			case Opcodes.GETFIELD -> hostLookup.findGetter(owner, name, callSiteType.returnType());
+			case Opcodes.GETSTATIC -> hostLookup.findStaticGetter(owner, name, callSiteType.returnType());
+			case Opcodes.PUTFIELD -> {
+				Class<?> t = callSiteType.parameterType(callSiteType.parameterCount() - 1);
+				yield hostLookup.findSetter(owner, name, t);
+			}
+			case Opcodes.PUTSTATIC -> {
+				Class<?> t = callSiteType.parameterType(0);
+				yield hostLookup.findStaticSetter(owner, name, t);
+			}
+			case Opcodes.INVOKEVIRTUAL, Opcodes.INVOKEINTERFACE ->
+			 hostLookup.findVirtual(owner, name, callSiteType.dropParameterTypes(0, 1));
+			case Opcodes.INVOKESTATIC -> hostLookup.findStatic(owner, name, callSiteType);
+			case Opcodes.INVOKESPECIAL -> hostLookup.findSpecial(owner, name,
+			 callSiteType.dropParameterTypes(0, 1), host);
+			default -> throw new IllegalArgumentException(
+			 "bad opcode for protected bridge: " + opcode);
+		};
+
+		return new ConstantCallSite(mh.asType(callSiteType));
+	}
 }

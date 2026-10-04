@@ -31,7 +31,11 @@ import java.lang.annotation.*;
  *         <li>条件 CAS：{@link Mode#OVERWRITE} 走无条件写（
  *             {@code HotswapBridge.KIND_FORCE}），不再"仅当字段是类型默认值时才写"；</li>
  *         <li>后续加工检查：不再因为"构造器里读过/别处写过该字段"而拒绝
- *             —— 已有字段本来就会被各处读写，这条按定义不可能满足。</li>
+ *             —— 已有字段本来就会被各处读写，这条按定义不可能满足。
+ *             <b>触发这条豁免时会打 warn 日志，并在 {@code PatchReport} 的
+ *             {@code FieldDecision.warnings} 里标记</b>：补丁只重建字段初始化式，构造器里
+ *             对它的其它用法不会被重放；且补丁在<b>热更线程上单线程</b>执行，对
+ *             {@code ThreadLocal} 这类按线程的值，构造线程的 per-thread 副本无法还原。</li>
  *       </ul>
  *   </li>
  *   <li><b>不被豁免的门</b>：切片本身的安全门照旧（直线无分支、无局部变量依赖，以及

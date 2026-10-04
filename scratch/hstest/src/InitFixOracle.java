@@ -60,8 +60,9 @@ public class InitFixOracle {
 	static int passed = 0;
 	static int failed = 0;
 
-	/** 被静音掉的 agent 日志里的 error 计数，失败时打印出来便于定位。 */
+	/** 被静音掉的 agent 日志里的 error/warn 计数，失败时打印出来便于定位。 */
 	static final List<String> agentErrors = new ArrayList<>();
+	static final List<String> agentWarnings = new ArrayList<>();
 
 	static void check(boolean ok, String msg) {
 		System.out.println((ok ? "   PASS  " : "   FAIL  ") + msg);
@@ -89,7 +90,7 @@ public class InitFixOracle {
 		HotSwapAgent.logger = new HotSwapAgent.Logger() {
 			public void log(String msg) { }
 			public void info(String msg) { }
-			public void warn(String msg) { }
+			public void warn(String msg) { agentWarnings.add(msg); }
 			public void error(String msg) { agentErrors.add(msg); }
 			public void error(String msg, Throwable t) { agentErrors.add(msg + " :: " + t); }
 		};
@@ -112,6 +113,10 @@ public class InitFixOracle {
 
 		System.out.println();
 		System.out.println("通过 " + passed + " 条；失败 " + failed + " 条；合计 " + (passed + failed) + " 条");
+		if (!agentWarnings.isEmpty()) {
+			System.out.println("（agent 侧 warn，共 " + agentWarnings.size() + " 条）");
+			for (String w : agentWarnings) System.out.println("      WARN  " + w);
+		}
 		if (failed != 0 && !agentErrors.isEmpty()) {
 			System.out.println("（agent 侧 error 记录，共 " + agentErrors.size() + " 条）");
 			for (String e : agentErrors) System.out.println("      " + e);
@@ -761,6 +766,16 @@ public class InitFixOracle {
 		}
 		""";
 
+	/** T3 的注解版：用于验证"非按线程类型也要告警、但文案不误报按线程"。 */
+	static final String CASE_T3R_V2 = """
+		package oracle;
+		public class CaseT3 {
+			@nipx.annotation.HotswapReinit
+			private final StringBuilder sb = new StringBuilder();
+			public CaseT3() { sb.append("aass"); }
+		}
+		""";
+
 	static final String CASE_T4_V1 = """
 		package oracle;
 		public class CaseT4 {
@@ -802,7 +817,7 @@ public class InitFixOracle {
 		InstanceTracker.register(s1);
 
 		InitFix.PatchReport r1 = f1.transform();
-		expect(r1, false, "sb", InitFix.FieldStatus.REJECTED, "field read outside any accepted extraction");
+		expect(r1, false, "sb", InitFix.FieldStatus.REJECTED, "thread-affine field Ljava/lang/ThreadLocal;");
 		check(!r1.patchGenerated(), "CaseT1：构造器里碰过缓存 → 整个字段不再生成补丁");
 		f1.apply();
 		check(read(f1.host, s1, "sb") == null,
@@ -915,7 +930,10 @@ public class InitFixOracle {
 
 		InitFix.PatchReport r1 = f1.transform();
 		expect(r1, false, "sb", InitFix.FieldStatus.ACCEPTED, null);
+		expectWarning(r1, false, "sb", "按线程的值");
 		check(r1.patchGenerated(), "CaseN1：@HotswapReinit 解锁了构造器读取检查，补丁照常生成");
+		check(agentWarnings.stream().anyMatch(w -> w.contains("CaseN1") && w.contains("热更线程")),
+			"CaseN1：同时打了一条 warn 日志（实测 " + agentWarnings.size() + " 条 warn）");
 		f1.apply();
 		check(read(f1.host, s1, "sb") instanceof ThreadLocal,
 			"CaseN1：存量实例拿到了可用的空缓存（实际 " + read(f1.host, s1, "sb") + "）");
@@ -961,6 +979,17 @@ public class InitFixOracle {
 		f5.apply();
 		check("old".equals(read(f5.host, s5, "tag")),
 			"CaseN5 对照：存量值保持 old（实际 " + describe(read(f5.host, s5, "tag")) + "）");
+
+		// ---- N6：注解解锁的是"构造器用法未重放"这条风险，与类型无关；
+		//          非按线程类型也应告警，但文案不应误报"按线程的值" ----
+		Fixture f6 = loadFixture("oracle.CaseT3", CASE_T3_V1, CASE_T3R_V2);
+		InitFix.PatchReport r6 = f6.transform();
+		expect(r6, false, "sb", InitFix.FieldStatus.ACCEPTED, null);
+		expectWarning(r6, false, "sb", "构造器里对它的这部分用法不会被重放");
+		check(r6.instanceFields().get("sb").warnings().stream()
+		      .noneMatch(w -> w.contains("按线程的值")),
+			"CaseT3+注解：非按线程类型不应误报「按线程的值」");
+		f6.apply();
 
 		// ---- N4：既有字段改成零值 + 注解 → 必须绕过 T0 ----
 		Fixture f4 = loadFixture("oracle.CaseN4", CASE_N4_V1, CASE_N4_V2);
@@ -1119,6 +1148,23 @@ public class InitFixOracle {
 			check(d.reason() != null && d.reason().contains(reasonPart),
 				tag + " 原因应包含 \"" + reasonPart + "\"，实际：" + d.reason());
 		}
+	}
+
+	/** 断言某字段带风险告警（报告里可见）。 */
+	static void expectWarning(InitFix.PatchReport report, boolean isStatic, String field, String part) {
+		Map<String, InitFix.FieldDecision> decisions =
+			isStatic ? report.staticFields() : report.instanceFields();
+		InitFix.FieldDecision d = decisions.get(field);
+		String tag = (isStatic ? "static " : "") + field;
+		if (d == null) {
+			check(false, tag + "：报告里缺少该字段的决策记录");
+			return;
+		}
+		boolean hit = false;
+		for (String w : d.warnings()) {
+			if (part == null || w.contains(part)) hit = true;
+		}
+		check(hit, tag + " 应带风险告警（含 \"" + part + "\"），实际 warnings=" + d.warnings());
 	}
 
 	/** 正向值比对：被补丁字段必须等于控制组构造器算出的值。 */

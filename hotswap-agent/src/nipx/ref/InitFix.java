@@ -238,14 +238,31 @@ public class InitFix {
 		REJECTED
 	}
 
-	/** 单个字段的放行决策。 */
-	public record FieldDecision(FieldStatus status, String reason) {
-		public static final FieldDecision ACCEPTED = new FieldDecision(FieldStatus.ACCEPTED, null);
+	/**
+	 * 单个字段的放行决策。
+	 *
+	 * @param status   放行状态
+	 * @param reason   被拒时的原因（{@link FieldStatus#REJECTED} 才有意义）
+	 * @param warnings 已放行但带已知风险的说明（例如 §1.1 注解豁免了"构造器里用过该字段"
+	 *                 这条门时，构造器里的那部分用法不会被补丁重放）。空表示无风险。
+	 */
+	public record FieldDecision(FieldStatus status, String reason, List<String> warnings) {
+		public FieldDecision {
+			warnings = warnings == null ? List.of() : List.copyOf(warnings);
+		}
+
+		public static final FieldDecision ACCEPTED = new FieldDecision(FieldStatus.ACCEPTED, null, List.of());
 		public static final FieldDecision NOTHING_TO_PATCH =
-		 new FieldDecision(FieldStatus.NOTHING_TO_PATCH, null);
+		 new FieldDecision(FieldStatus.NOTHING_TO_PATCH, null, List.of());
 
 		public static FieldDecision rejected(String reason) {
-			return new FieldDecision(FieldStatus.REJECTED, reason);
+			return new FieldDecision(FieldStatus.REJECTED, reason, List.of());
+		}
+
+		/** 放行但带风险标记（报告里可见，同时会打一条 warn 日志）。 */
+		public static FieldDecision accepted(String warning) {
+			return new FieldDecision(FieldStatus.ACCEPTED, null,
+			 warning == null ? List.of() : List.of(warning));
 		}
 
 		/** @return 是否已为该字段生成补丁代码 */
@@ -554,37 +571,44 @@ public class InitFix {
 		}
 
 		// ==================== 阶段 1.5 + 阶段 2：闭包迭代 ====================
+		// 注解豁免过的字段只告警一次，别在 while 循环里刷屏。
+		Set<String> warnedExemptions = new HashSet<>();
 		boolean changed = true;
 		while (changed) {
 			changed = false;
 
 			for (String f : new ArrayList<>(acceptedInstance)) {
-				// §1.1：@HotswapReinit 显式声明"允许覆写存量状态"，因此不再受
-				// "构造器里读过/别处写过该字段"这类后续加工检查约束 —— 已有字段本来
-				// 就会被各处读写，这条按定义不可能满足。
-				if (reinitFields.containsKey(f)) continue;
 				String reason = subsequentProcessingReason(
 				 f, acceptedInstance, instanceExtracts, initMethods,
 				 className, false, fieldNodes.get(f));
-				if (reason != null) {
-					log("Field '" + f + "' refused (subsequent processing): " + reason);
-					acceptedInstance.remove(f);
-					instanceDecisions.put(f, FieldDecision.rejected("subsequent processing: " + reason));
-					changed = true;
+				if (reason == null) continue;
+				if (reinitFields.containsKey(f)) {
+					String warning = warnExemptedReinit(
+					 className, f, fieldNodes.get(f), reason, false, warnedExemptions);
+					instanceDecisions.put(f, FieldDecision.accepted(warning));
+					continue;
 				}
+				log("Field '" + f + "' refused (subsequent processing): " + reason);
+				acceptedInstance.remove(f);
+				instanceDecisions.put(f, FieldDecision.rejected("subsequent processing: " + reason));
+				changed = true;
 			}
 
 			for (String f : new ArrayList<>(acceptedStatic)) {
-				if (reinitFields.containsKey(f)) continue;
 				String reason = subsequentProcessingReason(
 				 f, acceptedStatic, staticExtracts, staticScanMethods,
 				 className, true, fieldNodes.get(f));
-				if (reason != null) {
-					log("Static field '" + f + "' refused (subsequent processing): " + reason);
-					acceptedStatic.remove(f);
-					staticDecisions.put(f, FieldDecision.rejected("subsequent processing: " + reason));
-					changed = true;
+				if (reason == null) continue;
+				if (reinitFields.containsKey(f)) {
+					String warning = warnExemptedReinit(
+					 className, f, fieldNodes.get(f), reason, true, warnedExemptions);
+					staticDecisions.put(f, FieldDecision.accepted(warning));
+					continue;
 				}
+				log("Static field '" + f + "' refused (subsequent processing): " + reason);
+				acceptedStatic.remove(f);
+				staticDecisions.put(f, FieldDecision.rejected("subsequent processing: " + reason));
+				changed = true;
 			}
 
 			for (String f : new ArrayList<>(acceptedInstance)) {
@@ -977,14 +1001,70 @@ public class InitFix {
 				} else if (f.getOpcode() == getOp) {
 					if (fieldIsPrimitive || fieldIsImmutable) continue;
 					if (!acceptedInsns.contains(n)) {
-						return "field read outside any accepted extraction in "
-						     + className + "." + m.name + " at index "
-						     + m.instructions.indexOf(n);
+						String where = className + "." + m.name + " at index "
+						             + m.instructions.indexOf(n);
+						if (isThreadAffineType(fieldNode.desc)) {
+							// 按线程的值类型单独说清楚：补丁在热更线程上单线程执行，
+							// 构造器里对它的使用无法重放，重算只会得到另一条线程的副本。
+							return "thread-affine field " + fieldNode.desc + " is used outside its "
+							     + "extraction in " + where
+							     + " (patch runs single-threaded on the hotswap thread; "
+							     + "the constructor's use of it cannot be replayed)";
+						}
+						return "field read outside any accepted extraction in " + where;
 					}
 				}
 			}
 		}
 		return null;
+	}
+
+	// ==================== §1.1 注解豁免的告警 ====================
+
+	/**
+	 * {@code @HotswapReinit} 豁免了"构造器里用过该字段"这条门时，把风险显式喊出来。
+	 *
+	 * <p>豁免本身是用户显式声明的（§1.1），但代价必须可见：</p>
+	 * <ul>
+	 *   <li>补丁只重建<b>字段初始化式</b>，构造器里对它的其它用法（例如
+	 *       {@code sb.get().append("aass")}）<b>不会</b>重放 —— 存量实例与正常构造的
+	 *       实例在这个点上必然分叉；</li>
+	 *   <li>补丁在<b>热更线程上单线程</b>执行。对 {@code ThreadLocal} 这类按线程的值，
+	 *       构造器当时是在应用线程上跑的，per-thread 副本不是同一份；纯分配
+	 *       （{@code withInitial}）在哪个线程做都一样，但任何"预置内容"都会丢。</li>
+	 * </ul>
+	 * <p>需要按实例、按正确线程补齐时，用 {@link nipx.annotation.OnReload}
+	 * （跑在 {@code Core.app} 的应用线程上、逐实例调用）。</p>
+	 *
+	 * @param warned 去重集合，避免 while 循环里重复告警
+	 * @return 报告里可见的告警文本
+	 */
+	private static String warnExemptedReinit(
+	 String className, String fieldName, FieldNode fieldNode, String gateReason,
+	 boolean isStatic, Set<String> warned) {
+
+		String warning = exemptionWarning(fieldNode, gateReason);
+		if (warned.add(fieldName)) {
+			HotSwapAgent.warn("@HotswapReinit 豁免了 " + className + "."
+			                  + fieldName + "（" + (isStatic ? "static" : "instance") + "）的门禁："
+			                  + gateReason
+			                  + "；补丁只重建字段初始化式、且在热更线程上单线程执行，"
+			                  + "构造器里的这部分用法不会被重放");
+		}
+		return warning;
+	}
+
+	/** 报告里那条告警的文本（按类型锐化）。 */
+	private static String exemptionWarning(FieldNode fieldNode, String gateReason) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("@HotswapReinit 豁免了门禁（").append(gateReason).append("）："
+		          + "补丁只重建该字段的初始化式，构造器里对它的这部分用法不会被重放");
+		if (fieldNode != null && isThreadAffineType(fieldNode.desc)) {
+			sb.append("；该字段是按线程的值（").append(fieldNode.desc)
+			  .append("），补丁在热更线程上单线程执行，构造线程的 per-thread 副本无法还原，"
+			      + "如需按实例/按应用线程补齐请用 @OnReload");
+		}
+		return sb.toString();
 	}
 
 	// ==================== 依赖闭包 ====================
@@ -1372,6 +1452,20 @@ public class InitFix {
 	/** ThreadLocal 家族（{@code InheritableThreadLocal} 复用的是同一套方法名）。 */
 	private static final Set<String> THREAD_LOCAL_OWNERS = Set.of(
 	 "java/lang/ThreadLocal", "java/lang/InheritableThreadLocal");
+
+	/**
+	 * 字段描述符层面的"按线程的值"类型。
+	 *
+	 * <p>这类字段在构造器里的<b>使用</b>（不只是初始化式）无法被补丁重放：补丁只在
+	 * 热更线程上单线程跑，而构造器当时是在应用线程上跑的，per-thread 副本根本不是同一份。
+	 * 因此它们默认被"后续加工检查"拒绝；{@code @HotswapReinit} 可以显式解锁，但必须告警。</p>
+	 */
+	private static final Set<String> THREAD_AFFINE_DESCS = Set.of(
+	 "Ljava/lang/ThreadLocal;", "Ljava/lang/InheritableThreadLocal;");
+
+	private static boolean isThreadAffineType(String desc) {
+		return desc != null && THREAD_AFFINE_DESCS.contains(desc);
+	}
 
 	/**
 	 * ThreadLocal 家族里依赖"执行线程"的方法：{@code get}/{@code initialValue}/{@code childValue}

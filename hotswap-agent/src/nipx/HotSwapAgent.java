@@ -219,27 +219,115 @@ public class HotSwapAgent {
 		int skippedCount  = 0;
 		int injectedCount = 0;
 
-		Map<String, byte[]> newBatchBytes = new HashMap<>(changedFiles.size());
+		Map<String, byte[]> newBatchBytes = new LinkedHashMap<>(changedFiles.size());
+		Map<String, Path>   classToPath   = new HashMap<>(changedFiles.size());
 		for (Path p : changedFiles) {
 			try {
 				byte[] bc = Files.readAllBytes(p);
 				String cn = Utils.getClassNameASM(bc);
-				if (cn != null) newBatchBytes.put(cn, bc);
+				if (cn != null) {
+					newBatchBytes.put(cn, bc);
+					classToPath.put(cn, p);
+				} else {
+					skippedCount++;
+					error("[SKIP] No className: " + p);
+				}
 			} catch (Throwable ignored) { }
 		}
 
-		for (Path path : changedFiles) {
-			if (DEBUG) log("Processing changes: " + path);
-			try {
-				byte[] bytecode  = Files.readAllBytes(path);
-				// dotClassName
-				String className = Utils.getClassNameASM(bytecode);
-				if (className == null) {
-					skippedCount++;
-					error("[SKIP] No className: " + path);
-					continue;
+		// 收集需要对齐匿名类的所有宿主类
+		Set<String> hostClassesToAlign = new LinkedHashSet<>();
+		for (String cn : newBatchBytes.keySet()) {
+			String host = cn.replaceAll("\\$\\d+(\\$\\d+)*$", "");
+			hostClassesToAlign.add(host);
+		}
+
+		// 记录所有对齐过程中产生的旧孤儿类（不得在本次重定义中被误更新）
+		Set<String> allOrphanClasses = new HashSet<>();
+
+		for (String hostName : hostClassesToAlign) {
+			String hostSlash = hostName.replace('.', '/');
+
+			// 预热并收集已加载但尚未缓存的旧匿名类字节码
+			for (Map.Entry<String, Class<?>> entry : loadedClassesMap.entrySet()) {
+				String cName = entry.getKey();
+				if (AnonClassAligner.isAnonymousClassName(hostSlash, cName)) {
+					if (!bytecodeCache.containsKey(cName)) {
+						byte[] bc = fetchOriginalBytecode(entry.getValue());
+						if (bc != null) bytecodeCache.put(cName, bc);
+					}
+				}
+			}
+
+			Map<String, byte[]> oldAnon = new HashMap<>();
+			for (Map.Entry<String, byte[]> entry : bytecodeCache.entrySet()) {
+				if (AnonClassAligner.isAnonymousClassName(hostSlash, entry.getKey())) {
+					oldAnon.put(entry.getKey(), entry.getValue());
+				}
+			}
+
+			Map<String, byte[]> newAnon = new HashMap<>();
+			for (Map.Entry<String, byte[]> entry : newBatchBytes.entrySet()) {
+				if (AnonClassAligner.isAnonymousClassName(hostSlash, entry.getKey())) {
+					newAnon.put(entry.getKey(), entry.getValue());
+				}
+			}
+
+			if (oldAnon.isEmpty() && newAnon.isEmpty()) {
+				continue;
+			}
+
+			byte[] hostBytes = newBatchBytes.get(hostName);
+			if (DEBUG) log("[ANON_ALIGN] Aligning anonymous classes for host: " + hostName + " (old=" + oldAnon.size() + ", new=" + newAnon.size() + ")");
+
+			java.util.function.Function<String, byte[]> oldRes = name -> bytecodeCache.get(name.replace('/', '.'));
+			java.util.function.Function<String, byte[]> newRes = name -> newBatchBytes.get(name.replace('/', '.'));
+
+			AnonClassAligner.Result res = AnonClassAligner.align(hostSlash, hostBytes, oldAnon, newAnon, oldRes, newRes);
+
+			if (res.alignedHostBytes != null) {
+				newBatchBytes.put(hostName, res.alignedHostBytes);
+			}
+
+			for (String orphan : res.orphanOldClasses) {
+				allOrphanClasses.add(orphan.replace('/', '.'));
+			}
+
+			// 清理已被重命名位移的原编译类名（避免旧名字被当作新类重复处理）
+			for (String originalAnonName : newAnon.keySet()) {
+				newBatchBytes.remove(originalAnonName);
+			}
+
+			// 将对齐重命名后的新匿名类注入批次并注册到 pendingAligned
+			Path hostPath = classToPath.get(hostName);
+			for (Map.Entry<String, byte[]> entry : res.alignedAnonClasses.entrySet()) {
+				String targetSlash = entry.getKey();
+				String targetDot = targetSlash.replace('/', '.');
+				byte[] alignedBytes = entry.getValue();
+
+				newBatchBytes.put(targetDot, alignedBytes);
+				if (hostPath != null && !classToPath.containsKey(targetDot)) {
+					classToPath.put(targetDot, hostPath);
 				}
 
+				// 无论是否已加载，均注入 pendingAlignedClasses，以便未加载的类首次 load 时拦截磁盘产物
+				AnnotationTransformer.pendingAlignedClasses.put(targetSlash, alignedBytes);
+				AnnotationTransformer.pendingAlignedClasses.put(targetDot, alignedBytes);
+			}
+		}
+
+		for (Map.Entry<String, byte[]> batchEntry : newBatchBytes.entrySet()) {
+			String className = batchEntry.getKey();
+			byte[] bytecode = batchEntry.getValue();
+			Path path = classToPath.get(className);
+			if (DEBUG) log("Processing changes: " + (path != null ? path : className));
+
+			if (allOrphanClasses.contains(className)) {
+				if (DEBUG) log("[ORPHAN-RETAIN] Retaining orphan class: " + className);
+				continue;
+			}
+
+			try {
 				if (isBlacklisted(className)) {
 					if (DEBUG) log("[SKIP-BLACKLIST] " + className);
 					continue;

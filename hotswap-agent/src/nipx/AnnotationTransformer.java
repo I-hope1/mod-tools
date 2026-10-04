@@ -46,6 +46,13 @@ public class AnnotationTransformer implements ClassFileTransformer {
 	}
 	//endregion
 
+	/**
+	 * 对齐后待注入的类字节码缓存（类内部名 / 点分名 -> 对齐后的字节码）。
+	 * 用于在未加载类首次被 JVM ClassLoader 加载时（classBeingRedefined == null），
+	 * 拦截并返回对齐后的字节码，防止类加载器从磁盘读取未对齐的原始编号产物。
+	 */
+	public static final Map<String, byte[]> pendingAlignedClasses = new ConcurrentHashMap<>();
+
 	//region ClassFileTransformer Core
 	@Override
 	public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
@@ -62,10 +69,23 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		String dotClassName = className.replace('/', '.');
 		if (HotSwapAgent.isBlacklisted(dotClassName)) return null;
 
+		boolean modified = false;
+
+		// 加载期拦截：若属于已对齐但尚未加载的类，优先使用对齐后的字节码
+		if (classBeingRedefined == null) {
+			byte[] pending = pendingAlignedClasses.remove(className);
+			if (pending == null) {
+				pending = pendingAlignedClasses.remove(dotClassName);
+			}
+			if (pending != null) {
+				classfileBuffer = pending;
+				bytecodeCache.put(dotClassName, pending);
+				modified = true;
+			}
+		}
+
 		byte[] bytes = classfileBuffer;  // 不clone，用引用做"是否修改"判断
 
-
-		boolean modified = false;
 		if (HOTSWAP_PLUS) {
 			classfileBuffer = forceStaticLambdas(classfileBuffer, className, loader);
 			if (classfileBuffer != bytes) {

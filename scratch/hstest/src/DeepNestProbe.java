@@ -43,6 +43,8 @@ public class DeepNestProbe {
 			dump(javac, base, 1, true);
 			dump(javac, base, 2, true);
 			probeLambdaAnonAlternation(javac, base);
+			probeJavac8NestedFallback(base);
+			probeJavac8TwoChain(base);
 			probeDescriptorSpecificity(javac, base);
 			probeNoLambdaHierarchyLevel();
 		} finally {
@@ -124,6 +126,213 @@ public class DeepNestProbe {
 
 	static String fmt(AnonClassAligner.EnclosingMethodInfo e) {
 		return e == null ? "null（找不到实例化点）" : (e.name + e.desc);
+	}
+
+	/**
+	 * 端到端测量 §8.3 第 5 条：javac 8 下"同一父匿名类里两个方法各含一条 lambda→lambda→匿名类链"，
+	 * v2 把**方法声明顺序反转**且两侧方法体都改（于是 Tier 1 失效，只能靠 scope 区分）。
+	 *
+	 * <p>修复前两侧 `outerMethod` 都停在字面量 `"null"`（无法区分方法），2×2 歧义只能按物理序号仲裁
+	 * → 跨方法错配；修复后 `outerMethod` 分别成为 `alpha` / `beta` → Tier 3 双向唯一、正确跨方法对应。</p>
+	 */
+	static void probeJavac8TwoChain(File base) throws Exception {
+		String javac8 = System.getenv("HSTEST_JAVAC8");
+		if (javac8 == null) javac8 = "F:/files/java/jdks/jdk-1.8/bin/javac.exe";
+		System.out.println("\n=== javac 8 双方法链：回退扫描上下文（" + javac8 + "）===");
+		if (!new File(javac8).exists()) {
+			System.out.println("  SKIP  javac 8 不存在");
+			return;
+		}
+		File dir = new File(base, "two8");
+		File v1 = new File(dir, "v1"), v2 = new File(dir, "v2");
+		v1.mkdirs();
+		v2.mkdirs();
+		File s1 = new File(dir, "V1.java");
+		Files.writeString(s1.toPath(), twoChainSource("alpha", "ALPHA", "beta", "BETA"));
+		File s2 = new File(dir, "V2.java");
+		Files.writeString(s2.toPath(), twoChainSource("beta", "BETA2", "alpha", "ALPHA2"));
+		compile(javac8, v1, s1);
+		compile(javac8, v2, s2);
+
+		Map<String, byte[]> oldAnon = anonMapOf(v1, "testJ8Nest/TwoChain");
+		Map<String, byte[]> newAnon = anonMapOf(v2, "testJ8Nest/TwoChain");
+		System.out.println("  v1: " + oldAnon.keySet());
+		System.out.println("  v2: " + newAnon.keySet());
+		for (Map.Entry<String, byte[]> e : oldAnon.entrySet()) dumpOuter(e.getKey(), e.getValue(), v1);
+		for (Map.Entry<String, byte[]> e : newAnon.entrySet()) dumpOuter(e.getKey(), e.getValue(), v2);
+
+		AnonClassAligner.Result res = AnonClassAligner.align(
+			"testJ8Nest/TwoChain",
+			Files.readAllBytes(new File(v2, "testJ8Nest/TwoChain.class").toPath()),
+			oldAnon, newAnon,
+			n -> readIfExists(new File(v1, n.replace('.', '/') + ".class")),
+			n -> readIfExists(new File(v2, n.replace('.', '/') + ".class")));
+		System.out.println("  renameMap = " + res.renameMap);
+		System.out.println("  stats     = " + res.stats);
+	}
+
+	static void dumpOuter(String slash, byte[] bytes, File out) {
+		org.objectweb.asm.tree.ClassNode cn = new org.objectweb.asm.tree.ClassNode();
+		new org.objectweb.asm.ClassReader(bytes)
+			.accept(cn, org.objectweb.asm.ClassReader.SKIP_DEBUG | org.objectweb.asm.ClassReader.SKIP_FRAMES);
+		AnonClassAligner.EnclosingMethodInfo viaParent = AnonClassAligner.resolveHostMethodForAnon(
+			AnonClassAligner.getParentName("testJ8Nest/TwoChain", slash),
+			AnonClassAligner.parseHostNode(AnonClassAligner.getParentName("testJ8Nest/TwoChain", slash),
+				n -> readIfExists(new File(out, n.replace('.', '/') + ".class"))),
+			slash);
+		System.out.println("    " + slash + "  EM=" + cn.outerMethod + "  父类扫描 -> " + fmt(viaParent));
+	}
+
+	static Map<String, byte[]> anonMapOf(File out, String hostSlash) throws Exception {
+		Map<String, byte[]> m = new LinkedHashMap<>();
+		int lastSlash = hostSlash.lastIndexOf('/');
+		String pkg = lastSlash > 0 ? hostSlash.substring(0, lastSlash) : "";
+		File pkgDir = pkg.isEmpty() ? out : new File(out, pkg);
+		File[] fs = pkgDir.listFiles();
+		if (fs == null) return m;
+		for (File f : fs) {
+			if (!f.getName().endsWith(".class")) continue;
+			String n = (pkg.isEmpty() ? "" : pkg + "/") + f.getName().substring(0, f.getName().length() - 6);
+			// 只取 level >= 2（父匿名类自身由 level 1 处理）
+			if (AnonClassAligner.isAnonymousClassName(hostSlash, n)
+				&& AnonClassAligner.getHierarchyLevel(hostSlash, n) >= 2) {
+				m.put(n, Files.readAllBytes(f.toPath()));
+			}
+		}
+		return m;
+	}
+
+	/** 两条链的夹具源码；方法声明顺序与 payload 由参数控制。 */
+	static String twoChainSource(String m1, String p1, String m2, String p2) {
+		return "package testJ8Nest;\n" +
+			"class TwoChain {\n" +
+			"    static class Worker { void work() {} }\n" +
+			"    void go() {\n" +
+			"        new Worker() {\n" +
+			chain(m1, p1) +
+			chain(m2, p2) +
+			"        }.work();\n" +
+			"    }\n" +
+			"}\n";
+	}
+
+	static String chain(String method, String payload) {
+		return "            void " + method + "() {\n" +
+			"                Runnable a = () -> {\n" +
+			"                    Runnable b = () -> {\n" +
+			"                        new Runnable() { public void run() { System.out.println(\"" + payload + "\"); } };\n" +
+			"                    };\n" +
+			"                    b.run();\n" +
+			"                };\n" +
+			"                a.run();\n" +
+			"            }\n";
+	}
+
+	/**
+	 * 靶子验证：**javac 8** 下嵌套匿名类的 `EnclosingMethod` 是否退化成 `lambda$null$N`，
+	 * 以及"宿主扫描 vs 直接父类扫描"的差异 —— 这决定了 §8.3 第 5 条（`parseInfos` 改用父类节点）
+	 * 是否真有靶子，以及 javac 8 的嵌套命名是否同样是 `$1$1`。
+	 */
+	static void probeJavac8NestedFallback(File base) throws Exception {
+		String javac8 = System.getenv("HSTEST_JAVAC8");
+		if (javac8 == null) javac8 = "F:/files/java/jdks/jdk-1.8/bin/javac.exe";
+		System.out.println("\n=== javac 8 嵌套回退靶子（" + javac8 + "）===");
+		if (!new File(javac8).exists()) {
+			System.out.println("  SKIP  javac 8 不存在");
+			return;
+		}
+		File dir = new File(base, "alt8");
+		File out = new File(dir, "out");
+		out.mkdirs();
+		File src = new File(dir, "Alt.java");
+		Files.writeString(src.toPath(), altDeepLambdaSource());
+		compile(javac8, out, src);
+
+		File pkgDir = new File(out, "deep");
+		List<String> names = new ArrayList<>();
+		for (File f : pkgDir.listFiles()) names.add(f.getName());
+		Collections.sort(names);
+		System.out.println("  javac 8 产物: " + names);
+
+		java.util.function.Function<String, byte[]> res =
+			n -> readIfExists(new File(out, n.replace('.', '/') + ".class"));
+
+		int fallbackTriggered = 0;
+		for (String n : names) {
+			if (!n.endsWith(".class") || !n.contains("$")) continue;
+			String slash = "deep/" + n.substring(0, n.length() - 6);
+			if (!AnonClassAligner.isAnonymousClassName("deep/Alt", slash)) continue;
+			org.objectweb.asm.tree.ClassNode cn = new org.objectweb.asm.tree.ClassNode();
+			new org.objectweb.asm.ClassReader(res.apply(slash))
+				.accept(cn, org.objectweb.asm.ClassReader.SKIP_DEBUG | org.objectweb.asm.ClassReader.SKIP_FRAMES);
+			String normalized = AnonClassAligner.normalizeEnclosingMethod(cn.outerMethod);
+			boolean triggersFallback = normalized == null || "null".equals(normalized);
+			if (triggersFallback) fallbackTriggered++;
+			int lastDollar = slash.lastIndexOf('$');
+			String parent = lastDollar > 0 ? slash.substring(0, lastDollar) : "deep/Alt";
+			System.out.println("  " + slash
+				+ "\n      EnclosingMethod=" + cn.outerClass + "." + cn.outerMethod
+				+ "  normalize->" + normalized + (triggersFallback ? "  ← 触发回退扫描" : "")
+				+ "\n      宿主扫描 -> " + fmt(AnonClassAligner.resolveHostMethodForAnon("deep/Alt",
+					AnonClassAligner.parseHostNode("deep/Alt", res), slash))
+				+ "\n      父类扫描(" + parent + ") -> " + fmt(AnonClassAligner.resolveHostMethodForAnon(parent,
+					AnonClassAligner.parseHostNode(parent, res), slash)));
+		}
+		check(fallbackTriggered > 0,
+			"javac 8 确实存在归一化为 \"null\" 的嵌套匿名类（回退扫描的靶子存在），命中 " + fallbackTriggered + " 个");
+	}
+
+	/**
+	 * 交替嵌套夹具源码（Lambda → 匿名类 → Lambda → 匿名类）。
+	 */
+	static String altSource() {
+		return "package deep;\n" +
+			"class Alt {\n" +
+			"    static class Worker { void work() {} }\n" +
+			"    static class Task {}\n" +
+			"    void run() {\n" +
+			"        Runnable a = () -> {                       // L0\n" +
+			"            new Worker() {                         // A0\n" +
+			"                void work() {\n" +
+			"                    Runnable b = () -> {           // L1（在 A0 内部）\n" +
+			"                        new Task() {};             // A1（在 L1 内部）\n" +
+			"                    };\n" +
+			"                    b.run();\n" +
+			"                }\n" +
+			"            }.work();\n" +
+			"        };\n" +
+			"        a.run();\n" +
+			"    }\n" +
+			"}\n";
+	}
+
+	/**
+	 * 触发 javac 8 `lambda$null$N` 的夹具：**匿名类 → lambda → lambda → 匿名类**。
+	 *
+	 * <p>关键区别：内层匿名类 A1 的创建点在 `Alt$1` 的**第二层** lambda 里 —— javac 8 会把这种
+	 * 嵌套 lambda 体命名为 `lambda$null$N`，而 `normalizeEnclosingMethod` 会把它归约成字面量
+	 * {@code "null"}，于是 `parseInfos` 里的回退扫描被触发；若内层 lambda 只有一层（如 {@link #altSource()}），
+	 * 名字是 `lambda$work$0`、归约后是 `"work"`，回退根本不触发。</p>
+	 */
+	static String altDeepLambdaSource() {
+		return "package deep;\n" +
+			"class Alt {\n" +
+			"    static class Worker { void work() {} }\n" +
+			"    static class Task {}\n" +
+			"    void run() {\n" +
+			"        new Worker() {                                 // A0（EnclosingMethod = Alt.run）\n" +
+			"            void work() {\n" +
+			"                Runnable a = () -> {                   // L0（在 A0 内，名字 lambda$work$0）\n" +
+			"                    Runnable b = () -> {               // L1（在 L0 内 → javac 8 记 lambda$null$N）\n" +
+			"                        new Task() {};                 // A1\n" +
+			"                    };\n" +
+			"                    b.run();\n" +
+			"                };\n" +
+			"                a.run();\n" +
+			"            }\n" +
+			"        }.work();\n" +
+			"    }\n" +
+			"}\n";
 	}
 
 	/**

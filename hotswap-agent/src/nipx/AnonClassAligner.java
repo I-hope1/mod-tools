@@ -749,6 +749,10 @@ public final class AnonClassAligner {
 	 Function<String, byte[]> resolver) {
 		List<AnonInfo> list = new ArrayList<>();
 		Map<String, Long> hashCache = new HashMap<>();
+		// 直接父类的 ClassNode 缓存。嵌套匿名类（Foo$1$1）的实例化点位于**它的直接父匿名类
+		// Foo$1** 的方法里，而不是宿主 Foo 里 —— 拿宿主去扫嵌套层永远找不到实例化点
+		// （scratch/hstest 探针 DeepNestProbe 实测：宿主扫描返回 null，父类扫描返回 work()V）。
+		Map<String, ClassNode> parentNodeCache = new HashMap<>();
 
 		for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
 			String name = entry.getKey();
@@ -768,13 +772,23 @@ public final class AnonClassAligner {
 
 			String outerMethod = normalizeEnclosingMethod(cn.outerMethod);
 			String outerMethodDesc = cn.outerMethodDesc;
-			// 针对 javac 8 的嵌套 lambda 缺陷（EnclosingMethod 生成虚拟的 lambda$null$0）：
-			// 通过扫描已解析的宿主类 ClassNode 恢复其真实外层源码方法与描述符
-			if ((outerMethod == null || "null".equals(outerMethod)) && hostNode != null) {
-				EnclosingMethodInfo hostMethodInfo = resolveHostMethodForAnon(hostSlash, hostNode, name);
-				if (hostMethodInfo != null) {
-					outerMethod = hostMethodInfo.name;
-					outerMethodDesc = hostMethodInfo.desc;
+			// 针对 javac 8 的嵌套 lambda 缺陷（EnclosingMethod 生成虚拟的 lambda$null$0，
+			// normalizeEnclosingMethod 会把它归约成字面量 "null"）：回退到字节码扫描，
+			// 反查实例化点并沿调用链溯源到真实源码方法。
+			//
+			// 扫描上下文必须是**直接父类**（level 1 时父类即宿主），否则嵌套匿名类永远扫不到：
+			//   Foo$1$1 的 NEW 指令在 Foo$1 里，不在 Foo 里。
+			if (outerMethod == null || "null".equals(outerMethod)) {
+				String    scanSlash = getParentName(hostSlash, name);
+				ClassNode scanNode  = scanSlash.equals(hostSlash)
+				 ? hostNode
+				 : (resolver != null ? parentNodeCache.computeIfAbsent(scanSlash, k -> parseHostNode(k, resolver)) : null);
+				if (scanNode != null) {
+					EnclosingMethodInfo hostMethodInfo = resolveHostMethodForAnon(scanSlash, scanNode, name);
+					if (hostMethodInfo != null) {
+						outerMethod = hostMethodInfo.name;
+						outerMethodDesc = hostMethodInfo.desc;
+					}
 				}
 			}
 

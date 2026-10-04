@@ -104,6 +104,8 @@ public class AnonClassReproTest {
 			testScenario22_NestedContentHashAvailability(javac, baseDir);
 			// 测试 23 strict 是安全门而非匹配策略（Tier 3 minDiff 止血 + 拒绝粒度）
 			testScenario23_StrictIsSafetyGateNotPolicy(javac, baseDir);
+			// 测试 24 javac 8 嵌套回退扫描必须用直接父类节点（§8.3 第 5 条）
+			testScenario24_Javac8ParentScopedFallback(javac, baseDir);
 		} finally {
 			deleteRecursively(baseDir);
 		}
@@ -1760,7 +1762,7 @@ public class AnonClassReproTest {
 		return sb.toString();
 	}
 
-	/** 收集某个宿主类下所有匿名类字节码（内部名 -> 字节码）。 */
+	/** 收集某个宿主类下所有匿名类字节码（内部名 -> 字节码）；按文件名排序以保证确定性。 */
 	static Map<String, byte[]> anonClasses(File outDir, String hostSlash) throws Exception {
 		Map<String, byte[]> m = new LinkedHashMap<>();
 		int lastSlash = hostSlash.lastIndexOf('/');
@@ -1768,12 +1770,120 @@ public class AnonClassReproTest {
 		File pkgDir = pkgPath.isEmpty() ? outDir : new File(outDir, pkgPath);
 		File[] files = pkgDir.listFiles();
 		if (files == null) return m;
+		java.util.Arrays.sort(files, java.util.Comparator.comparing(File::getName));
 		for (File f : files) {
 			if (!f.getName().endsWith(".class")) continue;
 			String n = (pkgPath.isEmpty() ? "" : pkgPath + "/") + f.getName().substring(0, f.getName().length() - 6);
 			if (AnonClassAligner.isAnonymousClassName(hostSlash, n)) m.put(n, Files.readAllBytes(f.toPath()));
 		}
 		return m;
+	}
+
+	/**
+	 * Scenario 24: javac 8 嵌套匿名类的**回退扫描上下文**（§8.3 第 5 条）。
+	 *
+	 * <p>javac 8 把"嵌套在另一个 lambda 里的 lambda 体"命名为 {@code lambda$null$N}，
+	 * `normalizeEnclosingMethod` 会把它归约成字面量 {@code "null"}，于是 `parseInfos` 的回退
+	 * 扫描被触发。而嵌套匿名类（{@code Foo$1$1}）的实例化点在**直接父匿名类** {@code Foo$1}
+	 * 的方法里，原先固定拿宿主 {@code Foo} 去扫永远返回 null → 两侧 `outerMethod` 都停在
+	 * {@code "null"}，**方法作用域这个判据被抹平**。</p>
+	 *
+	 * <p>夹具：同一父匿名类里两个方法各含一条 {@code lambda→lambda→匿名类} 链；v2 把方法
+	 * **声明顺序反转**且两侧方法体都改（Tier 1 失效）。此时唯一可用判据就是方法作用域。
+	 * 修复前 2×2 歧义只能按物理序号仲裁 → 恒等映射（跨方法错配）；修复后双向唯一、跨方法正确。</p>
+	 */
+	static void testScenario24_Javac8ParentScopedFallback(String javac, File baseDir) throws Exception {
+		System.out.println("\n--- Scenario 24: javac 8 嵌套回退扫描必须用直接父类节点 ---");
+		String javac8 = System.getenv("HSTEST_JAVAC8");
+		if (javac8 == null) javac8 = "F:/files/java/jdks/jdk-1.8/bin/javac.exe";
+		if (!new File(javac8).exists()) javac8 = javac;
+
+		File dir = new File(baseDir, "s24");
+		File v1 = new File(dir, "v1"), v2 = new File(dir, "v2");
+		v1.mkdirs();
+		v2.mkdirs();
+		File s1 = new File(dir, "V1.java");
+		Files.writeString(s1.toPath(), twoChainSource("alpha", "ALPHA", "beta", "BETA"));
+		File s2 = new File(dir, "V2.java");
+		Files.writeString(s2.toPath(), twoChainSource("beta", "BETA2", "alpha", "ALPHA2"));
+		runCmd(javac8, "-nowarn", "-encoding", "UTF-8", "-d", v1.getAbsolutePath(), s1.getAbsolutePath());
+		runCmd(javac8, "-nowarn", "-encoding", "UTF-8", "-d", v2.getAbsolutePath(), s2.getAbsolutePath());
+
+		String host = "testJ8Nest/TwoChain";
+		String parent = "testJ8Nest/TwoChain$1";
+		File a1 = new File(v1, "testJ8Nest/TwoChain$1$1.class");
+		File a2 = new File(v1, "testJ8Nest/TwoChain$1$2.class");
+		check(a1.exists() && a2.exists(), "Scenario 24: javac 8 的嵌套匿名类命名为 TwoChain$1$1 / $1$2（非平铺）");
+
+		// 靶子：两条链的内层匿名类 EnclosingMethod 都归约成字面量 "null"
+		Function<String, byte[]> res1 = n -> readIfExists(new File(v1, n.replace('.', '/') + ".class"));
+		Function<String, byte[]> res2 = n -> readIfExists(new File(v2, n.replace('.', '/') + ".class"));
+		String norm1 = normalizedEnclosing(res1.apply(host + "$1$1"));
+		String norm2 = normalizedEnclosing(res1.apply(host + "$1$2"));
+		check("null".equals(norm1) && "null".equals(norm2),
+			"Scenario 24: javac 8 的 lambda$null$N 归约为 \"null\"，回退扫描确实被触发（norm=" + norm1 + "/" + norm2 + "）");
+
+		// 宿主扫描找不到实例化点（这正是必须换上下文的原因）
+		boolean hostScanNull = AnonClassAligner.resolveHostMethodForAnon(
+			host, AnonClassAligner.parseHostNode(host, res1), host + "$1$1") == null;
+		check(hostScanNull, "Scenario 24: 用宿主节点扫 TwoChain$1$1 找不到实例化点（返回 null）");
+
+		// 父类扫描能区分两个方法
+		ClassNode parentNode = AnonClassAligner.parseHostNode(parent, res1);
+		AnonClassAligner.EnclosingMethodInfo m1 = AnonClassAligner.resolveHostMethodForAnon(parent, parentNode, host + "$1$1");
+		AnonClassAligner.EnclosingMethodInfo m2 = AnonClassAligner.resolveHostMethodForAnon(parent, parentNode, host + "$1$2");
+		check(m1 != null && m2 != null && !m1.name.equals(m2.name)
+				&& (("alpha".equals(m1.name) && "beta".equals(m2.name))
+				 || ("beta".equals(m1.name) && "alpha".equals(m2.name))),
+			"Scenario 24: 用直接父类节点扫能区分方法作用域（" + fmtEM(m1) + " / " + fmtEM(m2) + "）");
+
+		// 端到端：跨方法正确映射，且没走 minDiff 仲裁
+		AnonClassAligner.Result res = AnonClassAligner.align(host,
+			Files.readAllBytes(new File(v2, "testJ8Nest/TwoChain.class").toPath()),
+			anonClasses(v1, host), anonClasses(v2, host), res1, res2);
+		check((host + "$1$2").equals(res.renameMap.get(host + "$1$1"))
+				&& (host + "$1$1").equals(res.renameMap.get(host + "$1$2")),
+			"Scenario 24: 两条链跨方法正确对齐（$1$1→$1$2, $1$2→$1$1），而不是按物理序号的恒等映射");
+		check(res.stats.ambiguousMatches == 0 && res.orphanOldClasses.isEmpty() && res.stats.newClasses == 0,
+			"Scenario 24: 靠方法作用域达成双向唯一（T3=" + res.stats.tier3Matches
+				+ ", ambiguous=0, 无孤儿无新增），无需 minDiff 仲裁");
+	}
+
+	static String normalizedEnclosing(byte[] bytes) {
+		if (bytes == null) return null;
+		ClassNode cn = new ClassNode();
+		new ClassReader(bytes).accept(cn, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+		return AnonClassAligner.normalizeEnclosingMethod(cn.outerMethod);
+	}
+
+	static String fmtEM(AnonClassAligner.EnclosingMethodInfo e) {
+		return e == null ? "null" : e.name;
+	}
+
+	/** 两条链的夹具源码；方法声明顺序与 payload 由参数控制。 */
+	static String twoChainSource(String m1, String p1, String m2, String p2) {
+		return "package testJ8Nest;\n" +
+			"class TwoChain {\n" +
+			"    static class Worker { void work() {} }\n" +
+			"    void go() {\n" +
+			"        new Worker() {\n" +
+			twoChainMethod(m1, p1) +
+			twoChainMethod(m2, p2) +
+			"        }.work();\n" +
+			"    }\n" +
+			"}\n";
+	}
+
+	static String twoChainMethod(String method, String payload) {
+		return "            void " + method + "() {\n" +
+			"                Runnable a = () -> {\n" +
+			"                    Runnable b = () -> {\n" +
+			"                        new Runnable() { public void run() { System.out.println(\"" + payload + "\"); } };\n" +
+			"                    };\n" +
+			"                    b.run();\n" +
+			"                };\n" +
+			"                a.run();\n" +
+			"            }\n";
 	}
 
 	static void runCmd(String... cmd) throws Exception {

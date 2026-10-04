@@ -1113,6 +1113,18 @@ public class AnonClassReproTest {
 
 		check(target != null, "Scenario 18: 未匹配的嵌套匿名类成功分配目标类名");
 		check(target.startsWith("testPrefix/NestPrefixCase$1$"), "Scenario 18: 嵌套类目标名称保留父前缀路径 (分配为 " + target + " 而非打平为 NestPrefixCase$2)");
+
+		// 进一步验证 A2：父类被重命名时（新 $2 映射到旧 $1），未匹配子类（新 $2$1）前缀必须跟随映射后的父名
+		Map<String, byte[]> oldShift = new HashMap<>();
+		oldShift.put("testPrefix/NestPrefixCase$1", v1);
+
+		Map<String, byte[]> newShift = new HashMap<>();
+		newShift.put("testPrefix/NestPrefixCase$2", v1); // 新侧父类编号发生位移
+		newShift.put("testPrefix/NestPrefixCase$2$1", v1_1); // 新侧子类
+
+		AnonClassAligner.Result resShift = AnonClassAligner.align("testPrefix/NestPrefixCase", hostBytes, oldShift, newShift);
+		String targetShift = resShift.renameMap.get("testPrefix/NestPrefixCase$2$1");
+		check(targetShift != null && targetShift.startsWith("testPrefix/NestPrefixCase$1$"), "Scenario 18: 父被重命名时未匹配子类前缀跟随映射后的父名 (新 $2$1 映射为 " + targetShift + " 而非错误的 $2$*)");
 	}
 
 	static void runCmd(String... cmd) throws Exception {

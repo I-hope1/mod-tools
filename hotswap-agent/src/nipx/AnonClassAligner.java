@@ -163,6 +163,12 @@ public final class AnonClassAligner {
 				// 寻找最小未占用的编号：保留父前缀路径（防止多层嵌套 Foo$1$1 被错误打平成一级类 Foo$3）
 				int lastDollar = n.name.lastIndexOf('$');
 				String prefix = lastDollar > 0 ? n.name.substring(0, lastDollar) : hostSlash;
+				// 关键修复（A2）：若父级类已被重命名（例如新 Foo$2 映射回旧 Foo$1），
+				// 则未匹配子类的新编号必须基于映射后的父名派生，维持正确的 JVM 层级树
+				String mappedParent = renameMap.get(prefix);
+				if (mappedParent != null) {
+					prefix = mappedParent;
+				}
 				int idx = 1;
 				String candidate;
 				do {
@@ -377,22 +383,23 @@ public final class AnonClassAligner {
 
 			MethodNode current = instantiators.get(0);
 			Set<String> visited = new HashSet<>();
-			visited.add(current.name);
+			visited.add(current.name + ":" + current.desc);
 
-			// 顺着 indy 和方法调用向上追溯调用链，直到定位到真正的源码宿主方法名
-			while (current != null) {
+			// 顺着 indy 和方法调用向上追溯调用链，直到定位到真正的源码宿主方法名（具备深度上限与死循环保护）
+			int depth = 0;
+			while (current != null && ++depth <= 32) {
 				String norm = normalizeEnclosingMethod(current.name);
 				if (norm != null && !norm.equals("null") && !norm.isEmpty() && !norm.startsWith("lambda$")) {
 					return norm;
 				}
-				MethodNode caller = findCallerMethod(hostNode, current.name, visited);
+				MethodNode caller = findCallerMethod(hostNode, current.name, current.desc, visited);
 				if (caller == null) {
 					if (norm != null && !norm.equals("null") && !norm.isEmpty()) {
 						return norm;
 					}
 					break;
 				}
-				visited.add(caller.name);
+				visited.add(caller.name + ":" + caller.desc);
 				current = caller;
 			}
 			HotSwapAgent.warn("[ANON_ALIGN] Failed to trace call chain to source method for " + anonSlash + " (bottom=" + instantiators.get(0).name + ")");
@@ -400,20 +407,22 @@ public final class AnonClassAligner {
 		return null;
 	}
 
-	private static MethodNode findCallerMethod(ClassNode hostNode, String calleeMethodName, Set<String> visited) {
+	private static MethodNode findCallerMethod(ClassNode hostNode, String calleeMethodName, String calleeMethodDesc, Set<String> visited) {
 		for (MethodNode mn : hostNode.methods) {
-			if (visited.contains(mn.name) || mn.instructions == null) continue;
+			if (visited.contains(mn.name + ":" + mn.desc) || mn.instructions == null) continue;
 			for (org.objectweb.asm.tree.AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
 				if (insn instanceof org.objectweb.asm.tree.InvokeDynamicInsnNode indy) {
 					for (Object bsmArg : indy.bsmArgs) {
 						if (bsmArg instanceof org.objectweb.asm.Handle h) {
-							if (hostNode.name.equals(h.getOwner()) && calleeMethodName.equals(h.getName())) {
+							if (hostNode.name.equals(h.getOwner()) && calleeMethodName.equals(h.getName())
+							    && (calleeMethodDesc == null || calleeMethodDesc.equals(h.getDesc()))) {
 								return mn;
 							}
 						}
 					}
 				} else if (insn instanceof org.objectweb.asm.tree.MethodInsnNode min) {
-					if (hostNode.name.equals(min.owner) && calleeMethodName.equals(min.name)) {
+					if (hostNode.name.equals(min.owner) && calleeMethodName.equals(min.name)
+					    && (calleeMethodDesc == null || calleeMethodDesc.equals(min.desc))) {
 						return mn;
 					}
 				}

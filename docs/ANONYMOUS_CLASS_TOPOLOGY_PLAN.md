@@ -386,12 +386,63 @@ V2:  L0-new → { A-new,  A0 → L1 }
 >
 > **规格层面怎么看**：§4.1 的 Tier 3 行确实写了"多候选平局 → 差值相等无法区分时降级至 Tier 4"，即允许 diff 不等时仲裁；§4.2 也承认 `orderIndex` 在多轮后会失去源码序含义。所以这条**不是实现偏离规格，而是规格自身的 minDiff 策略在"前插 + 改体"下不安全**。它与 §1.2 的核心原则（宁可不配对，不可配错）冲突。
 >
-> **三条可选修法**（按代价从小到大）：
-> 1. **让 `strict` 也覆盖它**：`stats.ambiguousMatches > 0` 时同样拒绝宿主组。当前 `strict` 只检查 Tier 4 的 `ambiguousPairs`，而**真正会静默错配的恰恰是 Tier 3 这条 minDiff 路径**。这是 3 行改动，立刻给 strict 用户一个安全模式（但默认仍不安全）。
-> 2. **Tier 3 遇到多候选时不再仲裁，降级给 Tier 4 处理**：Tier 4 是双向唯一 + 不仲裁，于是同一场景退化为"新增/孤儿"（保守安全）。代价是牺牲一部分正当的 1-to-N 匹配（例如"删掉一个 + 改动另一个"的常见编辑）。
-> 3. **落地 Tier 1.5 相似度**（根本修法）：本场景中"链头 v1 ↔ 链头 v2"的方法体相似度远高于"链头 v1 ↔ extra"（前者只差一个字符串常量），相似度指标能把它**判对**而不是判成歧义。这是 §4.1 Tier 1.5 真正的用武之地 —— 此前它看起来只是"锦上添花的降级层"。
+> **爆炸半径（先用真实运行量出来再动手）**：用 `nipx.agent.debug=true` 跑仓库内全部会调用 `AnonClassAligner` 的入口（`AnonClassTest` / `AnonClassReproTest` / `DeepNestProbe`），分 tier 统计 `resolved by minDiff`：
 >
-> **为什么此前没人发现**：现有 21 个场景里，凡是"前插"的场景（Scenario 1/13）**都没有同时改方法体**，所以 Tier 1 直接命中，永远走不到 Tier 3 的仲裁分支。探针把这两个条件叠在一起才暴露出来。
+> | tier | bi-unique（唯一候选，必须不变） | minDiff（多候选仲裁，改动面） |
+> |:---|:---|:---|
+> | Tier 1 | 126 | **0** |
+> | Tier 3 | 8 | **9** |
+> | Tier 4 | 6 | 本层不仲裁 |
+>
+> 9 次 Tier 3 命中的性质：**7 次是错配**（前插 + 改体；含"真 A0 被判孤儿"的一例），**2 次原本正确**（夹具 L：2×2 同构原地改体，恒等映射恰好语义正确），**零次"碰巧对"**；且**既有 Scenario 1–20 与 `AnonClassTest` 全部零命中**（既有语料只通过 Tier 3 的**唯一候选**路径碰过 Tier 3，如 Scenario 3）。Tier 1 为 0 次 → "Tier 1 的 minDiff 先不动"实测零代价。
+>
+> **落地修法（已实现）**：Tier 3 的 minDiff 仲裁被**拓扑相等过滤**取代（见下方 §4.1 拓扑判据小节与 §8.3 第 4 条）。
+>
+> **为什么此前没人发现**：现有场景里凡是"前插"的（Scenario 1/13）**都没有同时改方法体**，所以 Tier 1 直接命中，永远走不到 Tier 3 的仲裁分支。探针把这两个条件叠在一起才暴露出来。
+
+> **实现注记（§4.1 拓扑判据：Tier 3 用"拓扑相等过滤"取代 minDiff）** `[部分缓解，根本修法未做]`
+>
+> **判据定义（刻意只做相等，不做距离）**：`TopologySignature` 是一个**粗粒度的 5 元组**，与内容哈希**正交**、**不得**折进哈希（否则违反 INV-1，Scenario 25 变红），也**不得**回调其它 aligner（守 INV-2）：
+>
+> ```
+> anonChildren    直接匿名子类个数（按名字层级：其直接父类正是本类）
+> anonDescendants 更深的匿名后代个数
+> indySites       invokedynamic 数量（lambda 创建点）
+> lambdaMethods   合成 lambda$ 方法个数
+> childKinds      直接子类的 kind 多重集（super + 排序接口，类名已屏蔽）
+> ```
+>
+> **两个必须写清的边界**：
+> 1. **`childKinds` 里的类名必须屏蔽成相对形式**（`#ANON#`，同 `maskDescriptor` 的前缀规则）。理由与 §3.1 那个缺陷同源：嵌套匿名类的父类/接口引用里嵌着会随位移改变的名字，不屏蔽就会把结构相同的两个类误判为拓扑不等。
+> 2. **签名未知 ≠ 计数为 0**：任一子类字节码取不到时整个签名判 `null`（无信息），不得与任何候选配对。夹具 M 的"空拓扑真的相等"是另一种情形。
+>
+> **判定阶梯**（只在 Tier 3 多候选分支生效；Tier 1 的 minDiff 一行未动）：
+> ```
+> size == 0 -> 下一 Tier
+> size == 1 -> accept（原样，不变）
+> size  > 1 -> 拓扑相等过滤
+>              恰好一个候选签名全等 且 双向唯一 -> accept（计入 topologyMatches，不混进 tier3Matches）
+>              0 个 / >=2 个 / 签名未知        -> 不仲裁（non-strict 降级为新增/孤儿；strict 拒绝宿主组）
+> ```
+> 双向唯一之后**一次性**应用全部互唯配对（不是逐对贪心），因此与遍历顺序无关 —— 反序遍历断言即守此性质。
+>
+> **为什么不需要额外"否决集"防 Tier 4 绕过**：Tier 4 谓词（`outerMethod+desc+super+interfaces`）是 Tier 3 谓词的真超集（少了 `fields`/`methods`），而双向唯一性对边数单调递减 —— 同一剩余集上 Tier 3 非双向唯一 ⇒ 边更多的 Tier 4 必然也非双向唯一。夹具 M 的 `tier4Matches == 0` 断言守住这条不变量。
+>
+> **实测效果（三入口，`nipx.agent.debug=true`）**：
+>
+> | 夹具 | 形态 | 结果 |
+> |:---|:---|:---|
+> | **T** | V1 `A0{L1{A1}}` → V2 前插空壳 + `A0'{L1'{A1'}}` | **判对**：`Topo$2→Topo$1`（真 A0 继承旧身份）、`Topo$2$1→Topo$1$1`（§3.3 前缀跟随）、空壳拿未占用新号；**零孤儿**；`topology=1, T3=0` |
+> | **M** | V1 `X` → V2 `extra + X2`（皆无子节点） | **拒绝**：过滤后候选数 `2→2` 故不仲裁；两个新类都不占旧槽（`$1→$2, $2→$3`），旧 `$1` 成孤儿保留旧语义；`ambiguousPairs=1`；**`T4=0`（未被 Tier 4 绕过）** |
+> | **L** | 2×2 同构匿名类**原地改体**（拓扑全等） | **拒绝**（代价）：过滤后 `4→4`，两条编辑都不作用于存活实例。旧实现靠 minDiff 取恒等映射恰好正确 —— 这是**有意付出的保守代价**，以 `KNOWN` 条目钉在基线里 |
+>
+> **分 tier 变化（改动前 → 改动后）**：Tier 3 minDiff **9 → 0**；Tier 3 bi-unique **8 → 8**（逐条日志完全一致，见 §8.2）；Tier 3 新增 `topology=5`；Tier 1 bi-unique 因新增夹具而 +5，既有配对未受影响。
+>
+> **仍然开放的部分（不得标为完成）**：
+> * 夹具 M 那一类（拓扑无信息、候选全等）**根本修法仍是 Tier 1.5 相似度**，本次未做；
+> * 夹具 L 的保守代价同上（§8.3 第 4 条 ③）；
+> * 曾评估过一个 carve-out（"只在 minDiff 能给出完全匹配且序号单调时才允许它仲裁"，可保住 L）：**已否决** —— 它仍然依赖物理序号，"删一个 + 插一个"这类两侧等量的编辑会满足完全匹配条件却判错，等于把已证明有系统性偏向的证据请回 matcher。该选项记入 §8.3 备查。
+> * 本文档 §4.1 Tier 1.5 行、§8.1 相关行均标 **🔶 部分缓解**。
 
 ### 4.2 多轮基线与 sourceOrder 稳定排序 `[未实现]`
 为防止第 N 轮热更后，旧侧 `orderIndex` 丧失源码顺序含义：
@@ -634,9 +685,11 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 | §3.5 非方法上下文宿主归类                          | 🔶                 | 靠 `outerMethod == null` 退化，无 `<initializer>`/`<clinit>`/`<init>` 三态。**回退扫描上下文已修**：改用直接父类节点（javac 8 `lambda$null$N` + 嵌套匿名类，Scenario 24 守卫） |
 | §3.6 Lambda/匿名类边界（INV-1 自描述指纹 / INV-2 禁止互相递归） | ✅         | INV-1/INV-2 均已落成回归断言（Scenario 25，含负向/正对照与常量池架构守卫）；lambda 侧仍是 1 层折叠（§3.1 排除项 4 的偏离）；见 §3.6 |
 | §3.6 提案的"异构拓扑树"                            | ➖ 不需要          | 实测 javac 中 lambda **不构成命名层级**（`Alt$1$1` 而非 `Alt$1$1$1`），匿名类包含树已由 `$` 前缀完全表达；无须合并两棵树（§3.6） |
-| §4.1 Tier 1 / 2 / 3 / 4                            | 🔶                 | `matchTier` + 双向唯一 + minDiff。**新发现缺陷：Tier 3 的 minDiff 在"前插 + 改体"下系统性错配**（§4.1 注记） |
+| §4.1 Tier 1 / 2 / 3 / 4                            | 🔶                 | `matchTier` + 双向唯一。**Tier 3 的 minDiff 已被拓扑相等过滤取代**（前插 + 改体不再错配）；Tier 1 的 minDiff 未动（实测 0 命中） |
 | §4.1 嵌套深度支持范围（§1.1 声明 depth ≤ 4）        | ➖ 声明无效        | `maxLevel > 4` 仅 warn；`AnonClassHasher.MAX_DEPTH` 为**不可达死代码**；探针实测 depth 8 逐层正确（§3 注记） |
-| §4.1 Tier 1.5（相似度）                            | ⬜                 | 无相似度计算；`AlignmentStats.tier5Matches` 为死字段。**注**：§4.1 注记的 Tier 3 错配正是它要解决的问题 |
+| §4.1 Tier 3 拓扑相等过滤（新增维度）              | ✅                 | `TopologySignature` + `applyTopologyFilter`；`topologyMatches` 独立计数；Scenario 26 守卫（T 判对 / M 拒绝且 T4 不绕过 / L 记 KNOWN） |
+| §4.1 夹具 L：2x2 同构原地改体                     | ➖ 有意代价        | 拓扑全等 -> 不仲裁 -> 拒绝配对；KNOWN 条目钉住（根治需 Tier 1.5） |
+| §4.1 Tier 1.5（相似度）                            | ⬜                 | 无相似度计算；`tier5Matches` 为死字段。**拓扑过滤只做“相等”：拓扑无信息的候选集（夹具 M）与 2x2 同构原地改体（夹具 L）仍只能拒绝 —— 根治仍需本行** |
 | §4.2 `sourceOrder` 多轮基线                        | ⬜                 | 无 `sourceOrder`；`diff` 用物理名序号                                                                     |
 | §4.3 拒绝通道（宿主组整体拒绝 + `[HOTSWAP-REJECT]`）| ✅                 | `AlignmentRejectedException` + `HotSwapAgent.rejectHostGroup`；Scenario 21                                |
 | §4.3-① Tier 4 平局拒绝                             | ✅                 | 非 strict：统计 `stats.ambiguousPairs` 后退化为新增/孤儿；strict：拒绝宿主组；Scenario 21                  |
@@ -661,9 +714,9 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 本系统的回归门槛**不在 Gradle 的 `test` 任务里**，而是 `scratch/hstest` 下的一组 main 程序，经 `suite.sh` 由 `:hstestRun`（`Exec`，走 Git Bash）驱动，并已挂在根项目的 `check` 上：
 
 * **入口**：`./gradlew check` → `:hstestRun` → `scratch/hstest/suite.sh`。
-* **本主题直接相关**：`AnonClassTest`（Save/Delete 静默对调防线）、`AnonClassReproTest`（**25 场景**，§1~§4 的绝大多数断言来自它；Scenario 21 专测 §4.3 拒绝通道与 §6.3/§6.4 闸门与开关，Scenario 22 专测嵌套匿名类的内容哈希可用性与设计不变量，Scenario 23 专测 strict 的行为边界，Scenario 24 专测 javac 8 回退扫描上下文，Scenario 25 专测设计不变量 INV-1/INV-2）。
+* **本主题直接相关**：`AnonClassTest`（Save/Delete 静默对调防线）、`AnonClassReproTest`（**26 场景**，§1~§4 的绝大多数断言来自它；Scenario 21 专测 §4.3 拒绝通道与 §6.3/§6.4 闸门与开关，Scenario 22 专测嵌套匿名类的内容哈希可用性与设计不变量，Scenario 23 专测 strict 的行为边界，Scenario 24 专测 javac 8 回退扫描上下文，Scenario 25 专测设计不变量 INV-1/INV-2，Scenario 26 专测 Tier 3 拓扑相等过滤）。
 * **同一次运行还包括**（Lambda 对齐主题，与本主题共用夹具与哈希器）：`SemAssert`、`CompeteDeleteTest`、`PassBTest`、`NameIndexTest`、`FixtureATest`、`XGroupTest`。
-* **数量基线**：`scratch/hstest/expected-count.txt` 记录 `<通过> <失败> <已知限制>` 三元组，实测值与基线不符即构建失败；另有"一条断言都没执行即判 FAIL"的空绿金丝雀。当前基线 `251 0 3`。
+* **数量基线**：`scratch/hstest/expected-count.txt` 记录 `<通过> <失败> <已知限制>` 三元组，实测值与基线不符即构建失败；另有"一条断言都没执行即判 FAIL"的空绿金丝雀。当前基线 `266 0 4`（KNOWN 的第 4 条即夹具 L 的保守代价）。
 * **注意**：`AnonClassReproTest` 的夹具由脚本按 JDK 版本分别编译（同包同名不能混编），且 `hstestRun` 依赖 `hotswap-agent` 的 **jar 重建** —— hstest 的 `runtimeClasspath` 解析到的是 `build/libs` 下的 jar 而非 `classes` 目录，少了这一步会静默跑陈旧产物。
 
 ### 8.3 建议的实施优先级
@@ -673,7 +726,7 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 1. ~~**§6.4 + §6.3 开关与熔断**（`enabled/strict/debug`、`N <= 128`、2000ms 软超时）~~ ✅ **已完成**（`nipx.agent.anon_align/anon_strict/anon_debug` + `MAX_ANON_PER_HOST` + `ALIGN_TIMEOUT_MS`；默认值保持原行为，既有断言全绿）。它是唯一对"未知风险"也有效的缓解手段 —— 其余各项都只针对某个已知缺陷，而这一项决定了出事时能不能立刻回到"不干预"。
 2. ~~**§4.3 对齐期异常路径的宿主级拒绝**（`[HOTSWAP-REJECT]` + 宿主组整体移出本批）~~ ✅ **已完成**（统一拒绝通道 `AlignmentRejectedException` → `HotSwapAgent.rejectHostGroup`；见 §4.3 注记里对"半提交"疑点的更正）。属**事务完整性**问题，与算法保守性不是一个层级。
 3. ~~**修 `AnonClassHasher` 未屏蔽的方法描述符**~~ ✅ **已完成**（改为走 `MethodFingerprinter.maskDescriptor`，定向屏蔽；嵌套匿名类**全层恢复 Tier 1**，`T1` 由恒为 1 变为等于嵌套层数）。守卫断言已进 `check`：`AnonClassReproTest` Scenario 22（4 层嵌套 T1=4 / T4=0；描述符定向性反例；层级守卫）。附带收益：不再依赖"不比字段表"的 Tier 4，等于把 §7.2 风险 1 的暴露面收窄一大半。
-4. **决定 Tier 3 minDiff 策略**（§4.1 注记的实测缺陷：前插 + 改体 → 静默错配；depth 1 已可复现，探针 `DeepNestProbe` 的 2 条 FAIL 即此）。三选一：① `strict` 也覆盖 `ambiguousMatches > 0`（3 行，但默认仍不安全）；② Tier 3 多候选不再仲裁、降级给 Tier 4（保守安全，牺牲部分正当匹配）；③ 落地 **Tier 1.5 相似度 + 后代拓扑维度**（根本修法，能把该场景**判对**而非判成歧义 —— §3.6 已论证"后代拓扑"就是 §4.1 例子真正需要的第二判据）。**建议先做 ①止血，再评估 ③**。
+4. ~~**决定 Tier 3 minDiff 策略**~~ 🔶 **部分缓解**：Tier 3 的 minDiff 仲裁已被**拓扑相等过滤**取代（见 §4.1 拓扑判据注记）。夹具 T 判对、夹具 M 与 L 拒绝（L 记 KNOWN）。**仍开放**：拓扑无信息的候选集与 2x2 同构原地改体只能拒绝 —— 根本修法仍是 ③ **Tier 1.5 相似度**。④ 曾评估的 carve-out（"仅在 minDiff 能给出完全匹配且序号单调时才允许仲裁"，可保住 L）**已否决**：它仍依赖物理序号，"删一个 + 插一个"这类两侧等量编辑会满足完全匹配却判错。
 5. ~~**`parseInfos` 改用直接父类节点做实例化点扫描**~~ ✅ **已完成**（level 1 复用 `hostNode`，嵌套层按需解析并缓存直接父类节点）。靶子经实测收窄为 javac 8 的 `lambda$null$N`（`lambda$work$0` 不触发）；修复前该形态下两侧 `outerMethod` 都停在 `"null"`、方法作用域判据被抹平，导致"方法顺序反转 + 两侧改体"时两条同构链**跨方法错配**。守卫断言已进 `check`：`AnonClassReproTest` Scenario 24（真实 javac 8，6 条）。附带确认 javac 8 的嵌套命名同样是 `$1$1`。
 6. ~~**把 INV-1 / INV-2 写进代码注释与测试**~~ ✅ **已完成**（§3.6）：`AnonClassReproTest` Scenario 25 用"只改子层 → 父层指纹必须不变"把 INV-1 变成受保护断言（若有人让 `AnonClassHasher` 恢复递归折入子哈希，此处立刻变红），并用字节码常量池扫描做 INV-2 架构守卫。
 7. **§7.2 风险 1 升级为实例状态布局安全门**（分级：纯加字段放行 + 日志；删字段 / 改类型 / 改静态性拒绝配对）。理由是它**不是边角路径而是默认路径**（见 §7.2 注记），且后果是"老实例状态被错布局解释"，比配错名字更重。建议这道门做在**事务/重定义层**（顺带覆盖具名类），对齐器只额外拒绝"用户没要求改字段却在背后发生的布局变化"。**建议先补真机实验**：在 `scratch/hstest/src/LiveDcevmTest.java` 的 JBR + `-XX:+AllowEnhancedClassRedefinition` 路径上跑一例"捕获变量类型变更后原地重定义"，看 JBR 是拒绝、复制旧值、还是静默错解释 —— 三种结果对应三种门。

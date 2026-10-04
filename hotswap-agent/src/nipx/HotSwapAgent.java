@@ -744,6 +744,14 @@ public class HotSwapAgent {
 			}
 			return;
 		}
+		// 排序：被引用的匿名类优先重定义，宿主类最后重定义，降低单类重定义模式下的半生效风险
+		definitions.sort((d1, d2) -> {
+			boolean a1 = d1.getDefinitionClass().getName().contains("$");
+			boolean a2 = d2.getDefinitionClass().getName().contains("$");
+			if (a1 && !a2) return -1;
+			if (!a1 && a2) return 1;
+			return 0;
+		});
 		try {
 			inst.redefineClasses(definitions.toArray(new ClassDefinition[0]));
 			info("HotSwap successful: " + definitions.size() + " classes redefined.");
@@ -782,7 +790,7 @@ public class HotSwapAgent {
 					tx.commit();
 				} else {
 					if (hostOk != allAnonsOk) {
-						error("[HOTSWAP-PARTIAL] Host " + tx.hostName + " and its anonymous classes redefined inconsistently! Rolling back transaction and pinning old bytecode.");
+						error("[HOTSWAP-PARTIAL] Host " + tx.hostName + " and its anonymous classes redefined inconsistently! Note: classes already applied in JVM cannot be un-redefined; rolling back pending injections and cache, and pinning old bytecode in pending to protect future class loading.");
 					}
 					tx.rollback(true);
 				}

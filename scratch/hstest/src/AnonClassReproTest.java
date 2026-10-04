@@ -28,6 +28,7 @@ import java.util.function.Function;
  *   <li>删除匿名类 (DeleteClass)</li>
  *   <li>删除后又加回 (DeleteAndReAdd)</li>
  *   <li>新增未加载的匿名类加载期对齐 (UnloadedNewClass)</li>
+ *   <li>事务回滚与旧版本字节码钉扎保护 (TransactionRollbackAndPinning)</li>
  * </ol>
  */
 public class AnonClassReproTest {
@@ -85,6 +86,8 @@ public class AnonClassReproTest {
 			testScenario13_CombinedShiftAndHasherTableHit(javac, baseDir);
 			// 测试 14 嵌套匿名类 Foo$1$1 结构识别与对齐
 			testScenario14_NestedAnonymousClasses(javac, baseDir);
+			// 测试 15 事务回滚与旧版本字节码钉扎保护
+			testScenario15_TransactionRollbackAndPinning(javac, baseDir);
 		} finally {
 			deleteRecursively(baseDir);
 		}
@@ -508,6 +511,12 @@ public class AnonClassReproTest {
 		check(Objects.equals(rRound1.renameMap, rRound2.renameMap), "Scenario 7: 二次编译保存的重命名映射严格一致");
 		check(Arrays.equals(rRound1.alignedHostBytes, rRound2.alignedHostBytes), "Scenario 7: 二次编译保存的宿主字节码严格一致");
 		check(rRound2.alignedAnonClasses.keySet().equals(rRound1.alignedAnonClasses.keySet()), "Scenario 7: 二次编译保存的对齐匿名类集合严格一致");
+
+		// 第三次热更：旧侧为第二次对齐后的生效版本，新侧依旧为 rawV2Map，验证三次连续热更无累积漂移
+		AnonClassAligner.Result rRound3 = AnonClassAligner.align("testAnon/AnonCase", v2Host, rRound2.alignedAnonClasses, rawV2Map);
+		check(Objects.equals(rRound1.renameMap, rRound3.renameMap), "Scenario 7: 三次编译保存的重命名映射严格一致（无累积漂移）");
+		check(Arrays.equals(rRound1.alignedHostBytes, rRound3.alignedHostBytes), "Scenario 7: 三次编译保存的宿主字节码严格一致");
+		check(rRound3.alignedAnonClasses.keySet().equals(rRound1.alignedAnonClasses.keySet()), "Scenario 7: 三次编译保存的对齐匿名类集合严格一致");
 	}
 
 	// 8. 顺序无关性测试（反向遍历钩子）
@@ -733,9 +742,9 @@ public class AnonClassReproTest {
 		AnnotationTransformer.pendingAlignedClasses.clear();
 	}
 
-	// 12. JDK 8 嵌套 Lambda 内匿名类（lambda$null$0）宿主方法扫描与对齐
+	// 12. JDK 8 嵌套 Lambda 内匿名类（多层调用链追溯）宿主方法扫描与对齐
 	static void testScenario12_Javac8NestedLambdaNullEnclosingMethod(String javac, File baseDir) throws Exception {
-		System.out.println("\n--- Scenario 12: javac 8 嵌套 Lambda (lambda$null$0) 宿主扫描与对齐 ---");
+		System.out.println("\n--- Scenario 12: javac 8 嵌套 Lambda (多层调用链追溯) 宿主扫描与对齐 ---");
 		String javac8 = System.getenv("HSTEST_JAVAC8");
 		if (javac8 == null) javac8 = "F:/files/java/jdks/jdk-1.8/bin/javac.exe";
 		if (!new File(javac8).exists()) javac8 = javac;
@@ -747,14 +756,17 @@ public class AnonClassReproTest {
 			"package testJ8Nest;\n" +
 			"public class NestedCase {\n" +
 			"    public void runJob() {\n" +
-			"        Runnable r1 = () -> {\n" +
-			"            Runnable r2 = () -> {\n" +
-			"                Runnable r3 = new Runnable() {\n" +
-			"                    public void run() { System.out.println(\"job\"); }\n" +
+			"        Runnable r0 = () -> {\n" +
+			"            Runnable r1 = () -> {\n" +
+			"                Runnable r2 = () -> {\n" +
+			"                    Runnable r3 = new Runnable() {\n" +
+			"                        public void run() { System.out.println(\"job\"); }\n" +
+			"                    };\n" +
+			"                    r3.run();\n" +
 			"                };\n" +
-			"                r3.run();\n" +
+			"                r2.run();\n" +
 			"            };\n" +
-			"            r2.run();\n" +
+			"            r1.run();\n" +
 			"        };\n" +
 			"    }\n" +
 			"}\n");
@@ -766,10 +778,10 @@ public class AnonClassReproTest {
 		byte[] hostBytes = Files.readAllBytes(new File(outDir, "testJ8Nest/NestedCase.class").toPath());
 		byte[] anonBytes = Files.readAllBytes(new File(outDir, "testJ8Nest/NestedCase$1.class").toPath());
 
-		// 验证 javac 8 产物的 EnclosingMethod 确实是 lambda$null$0
+		// 验证 javac 8 产物的 EnclosingMethod 确实是以 lambda$null 开头
 		ClassNode anonNode = new ClassNode();
 		new ClassReader(anonBytes).accept(anonNode, 0);
-		check("lambda$null$0".equals(anonNode.outerMethod), "Scenario 12: 证实 javac 8 将嵌套 lambda 匿名类 EnclosingMethod 记为 lambda$null$0");
+		check(anonNode.outerMethod != null && anonNode.outerMethod.startsWith("lambda$null$"), "Scenario 12: 证实 javac 8 将 3 层嵌套 lambda 匿名类 EnclosingMethod 记为 lambda$null$x");
 
 		Map<String, byte[]> anonMap = new HashMap<>();
 		anonMap.put("testJ8Nest/NestedCase$1", anonBytes);
@@ -782,7 +794,7 @@ public class AnonClassReproTest {
 
 		AnonClassAligner.Result res = AnonClassAligner.align("testJ8Nest/NestedCase", hostBytes, anonMap, anonMap, resolver, resolver);
 		check("testJ8Nest/NestedCase$1".equals(res.renameMap.get("testJ8Nest/NestedCase$1")), "Scenario 12: javac 8 嵌套 lambda 匿名类成功对齐");
-		check(res.stats.tier1Matches == 1, "Scenario 12: resolveHostMethodForAnon 成功恢复真实宿主方法 runJob 并达成 Tier 1 命中");
+		check(res.stats.tier1Matches == 1, "Scenario 12: resolveHostMethodForAnon 沿多层调用链成功恢复真实宿主方法 runJob 并达成 Tier 1 命中");
 	}
 
 	// 13. 复合位移（新 lambda + 新匿名类）与哈希器命中断言
@@ -876,6 +888,12 @@ public class AnonClassReproTest {
 		check(lastHashes.containsKey("testCombo/ComboHost$1"), "Scenario 13: 哈希器新侧解析表成功按重命名后的类名 $1 命中");
 		check(lastHashes.containsKey("testCombo/ComboHost$2"), "Scenario 13: 哈希器新侧解析表成功按重命名后的类名 $2 命中");
 		check(lastHashes.get("testCombo/ComboHost$1") != null, "Scenario 13: 命中哈希值非空，证明未静默退回纯序号模式");
+
+		Map<String, Long> oldHashes = LambdaAligner.LAST_OLD_ANON_HASHES;
+		check(oldHashes != null, "Scenario 13: 成功读取 LAST_OLD_ANON_HASHES");
+		check(oldHashes.containsKey("testCombo/ComboHost$1"), "Scenario 13: 哈希器旧侧解析表成功命中 $1");
+		check(oldHashes.containsKey("testCombo/ComboHost$2"), "Scenario 13: 哈希器旧侧解析表成功命中 $2");
+		check(LambdaAligner.LAST_STATS != null && LambdaAligner.LAST_STATS.step1Pairs > 0, "Scenario 13: 匿名类哈希助力 LambdaAligner Step 1 配对成功 (step1Pairs > 0)");
 	}
 
 	// 14. 嵌套匿名类 Foo$1$1 结构识别与对齐
@@ -910,6 +928,46 @@ public class AnonClassReproTest {
 		Long hInner = AnonClassHasher.hash("testNestAnon/NestHost$1$1", v1_1_1, "testNestAnon/NestHost", null, null, null, 0);
 		check(hInner != null, "Scenario 14: AnonClassHasher 成功计算嵌套匿名类哈希");
 		check(MethodFingerprinter.isUnstableNestedSuffix("1$1"), "Scenario 14: isUnstableNestedSuffix 识别 1$1 为不稳定匿名类后缀");
+	}
+
+	// 15. 事务回滚与旧版本字节码钉扎保护
+	static void testScenario15_TransactionRollbackAndPinning(String javac, File baseDir) throws Exception {
+		System.out.println("\n--- Scenario 15: 事务回滚与旧版本字节码钉扎保护 ---");
+		byte[] oldV1 = new byte[]{1, 2, 3, 4};
+		byte[] newV2 = new byte[]{5, 6, 7, 8};
+		byte[] freshAddedV3 = new byte[]{9, 10};
+
+		HotSwapAgent.AlignmentTransaction tx = new HotSwapAgent.AlignmentTransaction("testPin.PinHost");
+		tx.pendingAdds.put("testPin/PinHost$2", newV2);
+		tx.pendingAdds.put("testPin/PinHost$3", freshAddedV3);
+		tx.pinOldBytes.put("testPin/PinHost$2", oldV1);
+		tx.cacheUpdates.put("testPin.PinHost$2", newV2);
+		tx.targetClasses.add("testPin.PinHost$2");
+
+		// 执行回滚并要求钉扎旧字节码
+		tx.rollback(true);
+
+		check(!AnnotationTransformer.pendingAlignedClasses.containsKey("testPin/PinHost$3"), "Scenario 15: 回滚后新类 $3 从 pending 中彻底移除");
+		check(!AnnotationTransformer.pendingAlignedClasses.containsKey("testPin.PinHost$3"), "Scenario 15: 回滚后新类 $3 dot 键从 pending 中彻底移除");
+		check(Arrays.equals(AnnotationTransformer.pendingAlignedClasses.get("testPin/PinHost$2"), oldV1), "Scenario 15: 旧类 $2 旧版本字节码被成功钉扎在 pending 中");
+		check(Arrays.equals(AnnotationTransformer.pendingAlignedClasses.get("testPin.PinHost$2"), oldV1), "Scenario 15: 旧类 $2 dot 键被成功钉扎在 pending 中");
+		check(!HotSwapAgent.bytecodeCache.containsKey("testPin.PinHost$2") || !Arrays.equals(HotSwapAgent.bytecodeCache.get("testPin.PinHost$2"), newV2), "Scenario 15: bytecodeCache 未被失败/拒绝的事务污染");
+
+		// 事务提交模式验证
+		HotSwapAgent.AlignmentTransaction txOk = new HotSwapAgent.AlignmentTransaction("testPin.PinHostOk");
+		txOk.pendingAdds.put("testPin/PinHostOk$1", newV2);
+		txOk.cacheUpdates.put("testPin.PinHostOk$1", newV2);
+		txOk.commit();
+
+		check(Arrays.equals(AnnotationTransformer.pendingAlignedClasses.get("testPin/PinHostOk$1"), newV2), "Scenario 15: 事务提交成功写入 pending");
+		check(Arrays.equals(HotSwapAgent.bytecodeCache.get("testPin.PinHostOk$1"), newV2), "Scenario 15: 事务提交成功写入 bytecodeCache");
+
+		// 清理现场
+		AnnotationTransformer.pendingAlignedClasses.remove("testPin/PinHost$2");
+		AnnotationTransformer.pendingAlignedClasses.remove("testPin.PinHost$2");
+		AnnotationTransformer.pendingAlignedClasses.remove("testPin/PinHostOk$1");
+		AnnotationTransformer.pendingAlignedClasses.remove("testPin.PinHostOk$1");
+		HotSwapAgent.bytecodeCache.remove("testPin.PinHostOk$1");
 	}
 
 	static void runCmd(String... cmd) throws Exception {

@@ -244,6 +244,7 @@ public class HotSwapAgent {
 
 		// 记录所有对齐过程中产生的旧孤儿类（不得在本次重定义中被误更新）
 		Set<String> allOrphanClasses = new HashSet<>();
+		Map<String, AlignmentTransaction> transactions = new LinkedHashMap<>();
 
 		for (String hostName : hostClassesToAlign) {
 			String hostSlash = hostName.replace('.', '/');
@@ -277,6 +278,11 @@ public class HotSwapAgent {
 				continue;
 			}
 
+			AlignmentTransaction tx = new AlignmentTransaction(hostName);
+			for (Map.Entry<String, byte[]> entry : oldAnon.entrySet()) {
+				tx.pinOldBytes.put(entry.getKey(), entry.getValue());
+			}
+
 			byte[] hostBytes = newBatchBytes.get(hostName);
 			if (DEBUG) log("[ANON_ALIGN] Aligning anonymous classes for host: " + hostName + " (old=" + oldAnon.size() + ", new=" + newAnon.size() + ")");
 
@@ -298,7 +304,7 @@ public class HotSwapAgent {
 				newBatchBytes.remove(originalAnonName);
 			}
 
-			// 将对齐重命名后的新匿名类注入批次并注册到 pendingAligned
+			// 将对齐重命名后的新匿名类注入批次并登记到事务
 			Path hostPath = classToPath.get(hostName);
 			for (Map.Entry<String, byte[]> entry : res.alignedAnonClasses.entrySet()) {
 				String targetSlash = entry.getKey();
@@ -310,12 +316,11 @@ public class HotSwapAgent {
 					classToPath.put(targetDot, hostPath);
 				}
 
-				// 无论是否已加载，均注入 pendingAlignedClasses，以便未加载的类首次 load 时拦截磁盘产物
-				AnnotationTransformer.pendingAlignedClasses.put(targetSlash, alignedBytes);
-				AnnotationTransformer.pendingAlignedClasses.put(targetDot, alignedBytes);
-				// 关键：登记 pending 时立即写入 bytecodeCache，消除未加载类在后续重定义轮次中的旧侧身份窗口
-				bytecodeCache.put(targetDot, alignedBytes);
+				tx.pendingAdds.put(targetSlash, alignedBytes);
+				tx.cacheUpdates.put(targetDot, alignedBytes);
+				tx.targetClasses.add(targetDot);
 			}
+			transactions.put(hostName, tx);
 		}
 
 		for (Map.Entry<String, byte[]> batchEntry : newBatchBytes.entrySet()) {
@@ -396,6 +401,11 @@ public class HotSwapAgent {
 						ClassDiffUtil.logDiff(className, diff);
 						if (diff.hierarchyChanged) {
 							error("REJECTED: Class hierarchy change detected for " + className + ". JBR/DCEVM does not support changing superclass/interfaces reliably. Please RESTART application.");
+							AlignmentTransaction tx = transactions.get(className);
+							if (tx != null) {
+								tx.rollback(true);
+								transactions.remove(className);
+							}
 							// 直接跳过该类的重定义，避免抛出 UnsupportedOperationException
 							continue;
 						}
@@ -446,7 +456,7 @@ public class HotSwapAgent {
 		}
 
 		// 批量执行重定义（针对已加载类）
-		applyRedefinitions(definitions);
+		applyRedefinitions(definitions, transactions.values());
 		processAnnotations(definitions);
 		for (ClassDefinition def : definitions) {
 			try {
@@ -647,28 +657,113 @@ public class HotSwapAgent {
 	}
 
 	/**
-	 * 分块执行 Redefine，防止其中一个类出错导致所有类失败
+	 * 一次对齐操作的事务封装。
+	 *
+	 * <p>保证已加载类、未加载类的 pendingAlignedClasses 注入与 bytecodeCache 的提交具有原子性与一致性：
+	 * <ul>
+	 *   <li>重定义成功：整体提交（commit），将对齐类写入 pending 并更新 cache；</li>
+	 *   <li>重定义失败或跳过：整体回滚（rollback），撤销新版本的 pending 注入，
+	 *       并将生效旧版本字节码钉在 pending 中（{@code pinOldToPending}），防止旧宿主未来首次加载时读到磁盘上位移后的错误内容。</li>
+	 * </ul>
 	 */
-	private static void applyRedefinitions(List<ClassDefinition> definitions) {
-		if (definitions.isEmpty()) return;
+	public static class AlignmentTransaction {
+		public final String hostName;
+		public final Map<String, byte[]> pendingAdds = new LinkedHashMap<>();
+		public final Map<String, byte[]> cacheUpdates = new LinkedHashMap<>();
+		public final Map<String, byte[]> pinOldBytes = new LinkedHashMap<>();
+		public final Set<String> targetClasses = new LinkedHashSet<>();
+		public boolean committed = false;
+
+		public AlignmentTransaction(String hostName) {
+			this.hostName = hostName;
+		}
+
+		public void commit() {
+			if (committed) return;
+			committed = true;
+			for (Map.Entry<String, byte[]> entry : pendingAdds.entrySet()) {
+				String targetSlash = entry.getKey().replace('.', '/');
+				String targetDot = entry.getKey().replace('/', '.');
+				byte[] bytes = entry.getValue();
+				AnnotationTransformer.pendingAlignedClasses.put(targetSlash, bytes);
+				AnnotationTransformer.pendingAlignedClasses.put(targetDot, bytes);
+			}
+			for (Map.Entry<String, byte[]> entry : cacheUpdates.entrySet()) {
+				bytecodeCache.put(entry.getKey().replace('/', '.'), entry.getValue());
+			}
+		}
+
+		public void rollback(boolean pinOldToPending) {
+			if (committed) return;
+			for (String key : pendingAdds.keySet()) {
+				AnnotationTransformer.pendingAlignedClasses.remove(key.replace('.', '/'));
+				AnnotationTransformer.pendingAlignedClasses.remove(key.replace('/', '.'));
+			}
+			if (pinOldToPending) {
+				// 将被磁盘新文件覆盖但重定义未生效的旧版本字节码钉在 pending 中
+				for (Map.Entry<String, byte[]> entry : pinOldBytes.entrySet()) {
+					if (entry.getValue() != null) {
+						String slash = entry.getKey().replace('.', '/');
+						String dot = entry.getKey().replace('/', '.');
+						AnnotationTransformer.pendingAlignedClasses.put(slash, entry.getValue());
+						AnnotationTransformer.pendingAlignedClasses.put(dot, entry.getValue());
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * 分块执行 Redefine，防止其中一个类出错导致所有类失败，并依据重定义成败驱动事务提交或回滚
+	 */
+	private static void applyRedefinitions(List<ClassDefinition> definitions, Collection<AlignmentTransaction> transactions) {
+		if (definitions.isEmpty()) {
+			for (AlignmentTransaction tx : transactions) {
+				tx.commit();
+			}
+			return;
+		}
 		try {
 			inst.redefineClasses(definitions.toArray(new ClassDefinition[0]));
 			info("HotSwap successful: " + definitions.size() + " classes redefined.");
 			for (ClassDefinition def : definitions) {
 				bytecodeCache.put(def.getDefinitionClass().getName(), def.getDefinitionClassFile());
 			}
+			for (AlignmentTransaction tx : transactions) {
+				tx.commit();
+			}
 		} catch (Throwable t) {
 			error("Bulk Redefine failed, switching to individual mode...", t);
+			Set<String> successfulClasses = new HashSet<>();
 			for (ClassDefinition def : definitions) {
 				// 批量删除缓存
 				InitFix.afterRedefineFailed(def.getDefinitionClass());
 				try {
 					inst.redefineClasses(def);
 					bytecodeCache.put(def.getDefinitionClass().getName(), def.getDefinitionClassFile());
+					successfulClasses.add(def.getDefinitionClass().getName());
 					if (DEBUG) log("[OK] " + def.getDefinitionClass().getName());
 				} catch (Throwable e) {
 					error("[FAIL] " + def.getDefinitionClass().getName(), e);
 					InitFix.afterRedefineFailed(def.getDefinitionClass());
+				}
+			}
+			// 校验事务组的一致性
+			for (AlignmentTransaction tx : transactions) {
+				boolean hostOk = successfulClasses.contains(tx.hostName);
+				boolean allAnonsOk = true;
+				for (String target : tx.targetClasses) {
+					if (loadedClassesMap.containsKey(target) && !successfulClasses.contains(target)) {
+						allAnonsOk = false;
+					}
+				}
+				if (hostOk && allAnonsOk) {
+					tx.commit();
+				} else {
+					if (hostOk != allAnonsOk) {
+						error("[HOTSWAP-PARTIAL] Host " + tx.hostName + " and its anonymous classes redefined inconsistently! Rolling back transaction and pinning old bytecode.");
+					}
+					tx.rollback(true);
 				}
 			}
 		}

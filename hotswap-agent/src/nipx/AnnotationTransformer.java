@@ -72,8 +72,9 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		boolean modified = false;
 
 		// 加载期拦截：若属于已对齐但尚未加载的类，优先使用对齐后的字节码
+		byte[] pending = null;
 		if (classBeingRedefined == null) {
-			byte[] pending = pendingAlignedClasses.remove(className);
+			pending = pendingAlignedClasses.remove(className);
 			if (pending == null) {
 				pending = pendingAlignedClasses.remove(dotClassName);
 			} else {
@@ -81,7 +82,6 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			}
 			if (pending != null) {
 				classfileBuffer = pending;
-				bytecodeCache.put(dotClassName, pending);
 				modified = true;
 			}
 		}
@@ -116,12 +116,20 @@ public class AnnotationTransformer implements ClassFileTransformer {
 
 				if (DEBUG && modified) writeTo(className, bytes);
 
-				// info("Transformed: " + dotClassName + ":" + modified);
+				byte[] resultBytes = modified ? bytes : classfileBuffer;
+				if (classBeingRedefined == null && pending != null) {
+					bytecodeCache.put(dotClassName, resultBytes);
+				}
 				return modified ? bytes : null;
 			}
 		} catch (Throwable t) {
 			error("Transformer crashed for class: " + dotClassName, t);
 			return null;
+		}
+
+		byte[] resultBytes = modified ? bytes : classfileBuffer;
+		if (classBeingRedefined == null && pending != null) {
+			bytecodeCache.put(dotClassName, resultBytes);
 		}
 		return modified ? bytes : null;
 	}

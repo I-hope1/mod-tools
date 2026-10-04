@@ -351,21 +351,72 @@ public final class AnonClassAligner {
 			new ClassReader(hostBytes).accept(hostNode, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
 			if (hostNode.methods == null) return null;
 
+			List<MethodNode> instantiators = new ArrayList<>();
 			for (MethodNode mn : hostNode.methods) {
 				if (mn.instructions == null) continue;
 				for (org.objectweb.asm.tree.AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
 					if (insn.getOpcode() == Opcodes.NEW && insn instanceof org.objectweb.asm.tree.TypeInsnNode) {
 						org.objectweb.asm.tree.TypeInsnNode tin = (org.objectweb.asm.tree.TypeInsnNode) insn;
 						if (anonSlash.equals(tin.desc)) {
-							String norm = normalizeEnclosingMethod(mn.name);
-							if (norm != null && !norm.equals("null")) {
-								return norm;
-							}
+							instantiators.add(mn);
+							break;
 						}
 					}
 				}
 			}
+
+			if (instantiators.isEmpty()) {
+				HotSwapAgent.warn("[ANON_ALIGN] Could not find instantiator method in host " + hostSlash + " for anonymous class " + anonSlash);
+				return null;
+			}
+			if (instantiators.size() > 1) {
+				HotSwapAgent.warn("[ANON_ALIGN] Multiple instantiator methods found for " + anonSlash + ": " + instantiators.size() + " candidates. Picking first.");
+			}
+
+			MethodNode current = instantiators.get(0);
+			Set<String> visited = new HashSet<>();
+			visited.add(current.name);
+
+			// 顺着 indy 和方法调用向上追溯调用链，直到定位到真正的源码宿主方法名
+			while (current != null) {
+				String norm = normalizeEnclosingMethod(current.name);
+				if (norm != null && !norm.equals("null") && !norm.isEmpty() && !norm.startsWith("lambda$")) {
+					return norm;
+				}
+				MethodNode caller = findCallerMethod(hostNode, current.name, visited);
+				if (caller == null) {
+					if (norm != null && !norm.equals("null") && !norm.isEmpty()) {
+						return norm;
+					}
+					break;
+				}
+				visited.add(caller.name);
+				current = caller;
+			}
+			HotSwapAgent.warn("[ANON_ALIGN] Failed to trace call chain to source method for " + anonSlash + " (bottom=" + instantiators.get(0).name + ")");
 		} catch (Throwable ignored) { }
+		return null;
+	}
+
+	private static MethodNode findCallerMethod(ClassNode hostNode, String calleeMethodName, Set<String> visited) {
+		for (MethodNode mn : hostNode.methods) {
+			if (visited.contains(mn.name) || mn.instructions == null) continue;
+			for (org.objectweb.asm.tree.AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+				if (insn instanceof org.objectweb.asm.tree.InvokeDynamicInsnNode indy) {
+					for (Object bsmArg : indy.bsmArgs) {
+						if (bsmArg instanceof org.objectweb.asm.Handle h) {
+							if (calleeMethodName.equals(h.getName())) {
+								return mn;
+							}
+						}
+					}
+				} else if (insn instanceof org.objectweb.asm.tree.MethodInsnNode min) {
+					if (calleeMethodName.equals(min.name)) {
+						return mn;
+					}
+				}
+			}
+		}
 		return null;
 	}
 

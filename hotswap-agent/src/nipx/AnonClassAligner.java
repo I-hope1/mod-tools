@@ -128,6 +128,17 @@ public final class AnonClassAligner {
 		 * 下与 {@link #ambiguousMatches} 一起构成"缺乏唯一证据"的完整集合，任一非零即拒绝整个宿主组。</p>
 		 */
 		public int ambiguousPairs;
+		/**
+		 * 由**拓扑判据**决定并采纳的配对数（§4.1 Tier 3 拓扑过滤）。
+		 *
+		 * <p>刻意**不计入** {@link #tier3Matches}：后者表示"靠内容哈希/结构签名配上的"，
+		 * 混在一起以后就分不清某个配对是内容配的还是拓扑配的。</p>
+		 */
+		public int topologyMatches;
+		/** 拓扑过滤前：剩余新类在剩余旧类中的候选总数（诊断用，配合 debug 日志定位拒绝来源） */
+		public int topologyCandidatesBefore;
+		/** 拓扑过滤后：签名严格相等且仍在剩余集里的候选总数（诊断用） */
+		public int topologyCandidatesAfter;
 		public int newClasses;
 		public int orphanClasses;
 
@@ -137,6 +148,9 @@ public final class AnonClassAligner {
 			       ", T3=" + tier3Matches + ", T4=" + tier4Matches +
 			       ", T5=" + tier5Matches + ", ambiguous=" + ambiguousMatches +
 			       ", ambiguousPairs=" + ambiguousPairs +
+			       ", topology=" + topologyMatches +
+			       ", topoCandBefore=" + topologyCandidatesBefore +
+			       ", topoCandAfter=" + topologyCandidatesAfter +
 			       ", new=" + newClasses + ", orphans=" + orphanClasses + "]";
 		}
 	}
@@ -568,6 +582,134 @@ public final class AnonClassAligner {
 
 	//region Internal Matching Logic
 
+	/**
+	 * 拓扑签名（§4.1「Tier 3 多候选」判据 / §8.3-4）。
+	 *
+	 * <p><b>这是与内容哈希正交的独立维度，严禁折进指纹</b> —— 否则会违反 INV-1（自描述指纹），
+	 * 让"改一个后代"污染整条祖先链的哈希，`AnonClassReproTest` Scenario 25 会立刻变红。
+	 * 它同样**不得**回调其它 aligner（守 INV-2），只由 {@link #computeTopologySignature} 从
+	 * 单个 {@code ClassNode} + resolver 现算。</p>
+	 *
+	 * <p>字段刻意保持"粗粒度"：只回答"这个类创建了哪些孩子"，不做递归 topology hash ——
+	 * 递归形态正是 INV-1 反对的东西。</p>
+	 *
+	 * <p>{@code null} 签名表示**未知**（例如某个子类字节码取不到），与"全部计数为 0"必须区分：
+	 * 未知一律判"无信息"，不得当作与任何签名相等。</p>
+	 */
+	static final class TopologySignature {
+		/** 直接匿名子类个数（按名字层级：其直接父类正是本类） */
+		final int          anonChildren;
+		/** 更深的匿名后代个数 */
+		final int          anonDescendants;
+		/** {@code invokedynamic} 数量，即 lambda 创建点数量 */
+		final int          indySites;
+		/** 合成 {@code lambda$...} 方法个数 */
+		final int          lambdaMethods;
+		/** 直接匿名子类的 kind 多重集（排序后）：super + 接口，类名已做匿名类屏蔽 */
+		final List<String> childKinds;
+
+		TopologySignature(int anonChildren, int anonDescendants, int indySites, int lambdaMethods,
+		                  List<String> childKinds) {
+			this.anonChildren = anonChildren;
+			this.anonDescendants = anonDescendants;
+			this.indySites = indySites;
+			this.lambdaMethods = lambdaMethods;
+			this.childKinds = Collections.unmodifiableList(childKinds);
+		}
+
+		@Override public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof TopologySignature)) return false;
+			TopologySignature t = (TopologySignature) o;
+			return anonChildren == t.anonChildren
+				&& anonDescendants == t.anonDescendants
+				&& indySites == t.indySites
+				&& lambdaMethods == t.lambdaMethods
+				&& childKinds.equals(t.childKinds);
+		}
+
+		@Override public int hashCode() {
+			return Objects.hash(anonChildren, anonDescendants, indySites, lambdaMethods, childKinds);
+		}
+
+		@Override public String toString() {
+			return "(anonChild=" + anonChildren + ", anonDesc=" + anonDescendants
+				+ ", indy=" + indySites + ", lambdaM=" + lambdaMethods + ", kinds=" + childKinds + ")";
+		}
+	}
+
+	/**
+	 * 从单个 ClassNode 现算拓扑签名。**任何子类字节码取不到即返回 {@code null}（未知）**，
+	 * 绝不退化成 0 —— 否则夹具 M 那种"真的没有子节点"会被和"取不到"混为一谈。
+	 */
+	private static TopologySignature computeTopologySignature(ClassNode cn, String hostSlash,
+	                                                          Function<String, byte[]> resolver) {
+		if (cn == null || cn.methods == null) return null;
+		int anonChildren = 0, anonDescendants = 0, indySites = 0, lambdaMethods = 0;
+		Set<String> childNames = new LinkedHashSet<>();
+		for (MethodNode mn : cn.methods) {
+			if (mn.name != null && mn.name.startsWith("lambda$")) lambdaMethods++;
+			if (mn.instructions == null) continue;
+			for (org.objectweb.asm.tree.AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+				if (insn instanceof org.objectweb.asm.tree.InvokeDynamicInsnNode) {
+					indySites++;
+					continue;
+				}
+				if (insn.getOpcode() != Opcodes.NEW || !(insn instanceof org.objectweb.asm.tree.TypeInsnNode)) continue;
+				String target = ((org.objectweb.asm.tree.TypeInsnNode) insn).desc;
+				if (target == null || !isAnonymousClassName(hostSlash, target)) continue;
+				if (getParentName(hostSlash, target).equals(cn.name)) {
+					anonChildren++;
+					childNames.add(target);
+				} else if (target.startsWith(cn.name + "$")) {
+					anonDescendants++;
+				}
+			}
+		}
+		List<String> kinds = new ArrayList<>(childNames.size());
+		for (String child : childNames) {
+			byte[] cb = resolveBytes(resolver, child);
+			if (cb == null) return null;                       // 未知 ≠ 0
+			ClassNode cc = new ClassNode();
+			try {
+				new ClassReader(cb).accept(cc, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+			} catch (Throwable t) {
+				return null;
+			}
+			List<String> itf = cc.interfaces == null ? new ArrayList<>() : new ArrayList<>(cc.interfaces);
+			Collections.sort(itf);
+			StringBuilder sb = new StringBuilder(maskAnonRef(cc.superName, hostSlash));
+			for (String i : itf) sb.append(';').append(maskAnonRef(i, hostSlash));
+			kinds.add(sb.toString());
+		}
+		Collections.sort(kinds);
+		return new TopologySignature(anonChildren, anonDescendants, indySites, lambdaMethods, kinds);
+	}
+
+	/** 与 {@code parseInfos} 相同的解析回退顺序（斜杠名 → 点分名）。 */
+	private static byte[] resolveBytes(Function<String, byte[]> resolver, String internalName) {
+		if (resolver == null) return null;
+		byte[] b = resolver.apply(internalName);
+		if (b == null) b = resolver.apply(internalName.replace('/', '.'));
+		if (b == null) b = resolver.apply(internalName.replace('.', '/'));
+		return b;
+	}
+
+	/**
+	 * 把指向本宿主匿名类的内部名抹成**固定占位符** {@code #ANON#}。
+	 *
+	 * <p>与 {@code MethodFingerprinter.maskDescriptor} 同一条前缀规则，但这里刻意不用
+	 * {@code #ANON_<relId>#}：relId 是按"遇到顺序"分配的实例状态，新旧两侧的分配顺序未必对应，
+	 * 用它反而会引入比较不对称。本维度只需要屏蔽掉"会随位移改变"的编号。</p>
+	 *
+	 * <p>这条屏蔽是必须的，理由与 §3.1 那个缺陷同源：嵌套匿名类的父类/接口引用里嵌着会位移的名字，
+	 * 不屏蔽就会把结构相同的两个类误判为拓扑不等。</p>
+	 */
+	private static String maskAnonRef(String internalName, String hostSlash) {
+		if (internalName == null || hostSlash == null) return internalName;
+		return isAnonymousClassName(hostSlash, internalName) ? "#ANON#" : internalName;
+	}
+
 	static class AnonInfo {
 		final String name;
 		final byte[] bytecode;
@@ -579,6 +721,8 @@ public final class AnonClassAligner {
 		final List<String> fields;
 		final List<String> methods;
 		final int orderIndex;
+		/** 拓扑签名；{@code null} 表示未知（不得当作与任何签名相等） */
+		final TopologySignature topology;
 
 		AnonInfo(
 		 String name,
@@ -590,7 +734,8 @@ public final class AnonClassAligner {
 		 String outerMethodDesc,
 		 List<String> fields,
 		 List<String> methods,
-		 int orderIndex) {
+		 int orderIndex,
+		 TopologySignature topology) {
 			this.name = name;
 			this.bytecode = bytecode;
 			this.contentHash = contentHash;
@@ -601,6 +746,7 @@ public final class AnonClassAligner {
 			this.fields = fields;
 			this.methods = methods;
 			this.orderIndex = orderIndex;
+			this.topology = topology;
 		}
 
 		@Override
@@ -760,11 +906,13 @@ public final class AnonClassAligner {
 			if (bytes == null || bytes.length == 0) continue;
 
 			ClassNode cn = new ClassNode();
-			// 优化：parseInfos 仅需读取类结构签名与属性，使用 SKIP_CODE 避免全量解析指令体
-			new ClassReader(bytes).accept(cn, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+			// 这里**不能**再 SKIP_CODE：拓扑签名需要读指令流（NEW / invokedynamic）。
+			// 代价可控 —— 每个匿名类原先被 AnonClassHasher 完整解析一次，这里复用同一次结构解析。
+			new ClassReader(bytes).accept(cn, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
 			if (!isAnonymousClass(cn, hostSlash)) continue;
 
 			Long hash = AnonClassHasher.hash(name, bytes, hostSlash, resolver, hashCache, null, 0);
+			TopologySignature topology = computeTopologySignature(cn, hostSlash, resolver);
 
 			String superName = cn.superName != null ? cn.superName : "java/lang/Object";
 			List<String> interfaces = cn.interfaces != null ? new ArrayList<>(cn.interfaces) : new ArrayList<>();
@@ -814,7 +962,7 @@ public final class AnonClassAligner {
 			int orderIdx = parseIndex(hostSlash, name);
 			list.add(new AnonInfo(
 			 name, bytes, hash, superName, interfaces,
-			 outerMethod, outerMethodDesc, fields, methods, orderIdx
+			 outerMethod, outerMethodDesc, fields, methods, orderIdx, topology
 			));
 		}
 
@@ -843,14 +991,14 @@ public final class AnonClassAligner {
 		  && Objects.equals(n.contentHash, o.contentHash)
 		  && Objects.equals(n.outerMethod, o.outerMethod)
 		  && Objects.equals(n.outerMethodDesc, o.outerMethodDesc),
-		 true, hostSlash, startNanos
+		 true, false, hostSlash, startNanos
 		);
 
 		// Tier 2: 内容哈希全局精确相同 (禁止跨方法 minDiff，仅全类唯一孤本采纳，且强制要求 contentHash != null)
 		matchTier(2, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
 		 n.contentHash != null
 		  && Objects.equals(n.contentHash, o.contentHash),
-		 false, hostSlash, startNanos
+		 false, false, hostSlash, startNanos
 		);
 
 		// Tier 3: 结构签名相同（应对修改方法体导致的哈希变化，允许 minDiff 仲裁）
@@ -862,20 +1010,44 @@ public final class AnonClassAligner {
 		  && Objects.equals(n.interfaces, o.interfaces)
 		  && Objects.equals(n.fields, o.fields)
 		  && Objects.equals(n.methods, o.methods),
-		 true, hostSlash, startNanos
+		 true, true, hostSlash, startNanos
 		);
 
 		// Tier 4: 松散结构（同宿主方法 + 同基类与接口，禁止多候选 minDiff 盲猜，直接拒绝）
-		matchTier(4, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
+		//
+		// 注意谓词是 Tier 3 的**真超集**（少了 fields/methods 两项），这条包含关系正是
+		// "Tier 3 的拒绝不会被 Tier 4 绕过"的依据：双向唯一性对边数单调递减，同一剩余集上
+		// Tier 3 非双向唯一 ⇒ 边更多的 Tier 4 也非双向唯一。夹具 M 的"零配对"断言守住它。
+		MatchPredicate tier4Predicate = (n, o) ->
 		 Objects.equals(n.outerMethod, o.outerMethod)
 		  && Objects.equals(n.outerMethodDesc, o.outerMethodDesc)
 		  && Objects.equals(n.superName, o.superName)
-		  && Objects.equals(n.interfaces, o.interfaces),
-		 false, hostSlash, startNanos
+		  && Objects.equals(n.interfaces, o.interfaces);
+		matchTier(4, remainingNew, remainingOld, matchedNewToOld, stats, tier4Predicate,
+		 false, false, hostSlash, startNanos
 		);
 
 		// 注意：坚决移除旧版 Tier 5（按物理类名盲配）。若前 4 层均未匹配，
 		// 表明该类为新增类或旧类已删除，严格作为孤儿类保留或新类生成新编号，杜绝内存篡夺。
+
+		// 四层全部走完后，在**最终剩余集**上用最宽谓词（Tier 4）统计一次"缺乏唯一证据"的候选对。
+		//
+		// 只数一次是刻意的：Tier 2/3/4 的剩余集是同一批对象，逐层各数一次会把同一批候选
+		// 重复计入（实测 Tier 3+4 让夹具 M 报 2、夹具 L 报 8）。这里是 §4.3-① strict 熔断
+		// 与诊断的唯一口径。
+		if (stats != null && !remainingNew.isEmpty() && !remainingOld.isEmpty()) {
+			Map<AnonInfo, List<AnonInfo>> n2o = new LinkedHashMap<>();
+			Map<AnonInfo, List<AnonInfo>> o2n = new LinkedHashMap<>();
+			for (AnonInfo n : remainingNew) {
+				for (AnonInfo o : remainingOld) {
+					if (tier4Predicate.test(n, o)) {
+						n2o.computeIfAbsent(n, k -> new ArrayList<>()).add(o);
+						o2n.computeIfAbsent(o, k -> new ArrayList<>()).add(n);
+					}
+				}
+			}
+			stats.ambiguousPairs += countAmbiguous(remainingNew, remainingOld, n2o, o2n);
+		}
 
 		return matchedNewToOld;
 	}
@@ -917,6 +1089,7 @@ public final class AnonClassAligner {
 	 AlignmentStats stats,
 	 MatchPredicate predicate,
 	 boolean allowMinDiff,
+	 boolean topologyFilter,
 	 String hostSlash,
 	 long startNanos) {
 		if (remainingNew.isEmpty() || remainingOld.isEmpty()) return;
@@ -966,11 +1139,24 @@ public final class AnonClassAligner {
 		}
 
 		if (!allowMinDiff) {
-			// 低置信层（Tier 4）不允许 minDiff 盲猜：统计"仍有 >= 2 个候选"的歧义对，
-			// 供 §4.3-① 的 strict 熔断与诊断使用。非严格模式下这些类退化为新增/孤儿。
-			if (stats != null) {
-				stats.ambiguousPairs += countAmbiguous(remainingNew, remainingOld, newToOld, oldToNew);
-			}
+			// 低置信层（Tier 4）不允许 minDiff 盲猜：剩余候选留给调用方统一统计（见 matchHierarchical 末尾）。
+			return;
+		}
+
+		// ---- Tier 3：拓扑相等过滤取代 minDiff 仲裁（§4.1 / §8.3-4）----
+		//
+		// 为什么必须换：minDiff 用物理名序号，前插场景下"插在前面的新类"总以 diff=0 抢走旧身份
+		// —— 这是确定性但语义错误的 tie-breaker（`DeepNestProbe` depth 1 即可复现）。
+		// 为什么只在 Tier 3：Tier 1 的候选拥有**全等内容哈希**，选谁都不改变语义，minDiff 无害；
+		// 冒然改它会扩大回归面（实测全套 Tier 1 minDiff 命中为 0）。
+		//
+		// 为什么不需要额外"否决集"来防 Tier 4 绕过：Tier 4 的谓词是 Tier 3 的真超集
+		// （少了 fields/methods 两项），而双向唯一性对边数单调递减 —— 同一剩余集上 Tier 3 非双向唯一
+		// ⇒ 边更多的 Tier 4 必然也非双向唯一。夹具 M 的"零配对"断言即是这条不变量的守卫。
+		if (topologyFilter) {
+			applyTopologyFilter(remainingNew, remainingOld, newToOld, matchedNewToOld, stats, hostSlash);
+			// 过滤后仍未配对的候选：不再猜，按安全降级（新增/孤儿）处理。
+			// 统计留给调用方（见 matchHierarchical 末尾），避免与 Tier 4 重复计数。
 			return;
 		}
 		if (remainingNew.isEmpty() || remainingOld.isEmpty()) return;
@@ -1045,6 +1231,94 @@ public final class AnonClassAligner {
 			if (live >= 2) count++;
 		}
 		return count;
+	}
+
+	/**
+	 * Tier 3 的**拓扑相等过滤**（§4.1）：在"双向唯一"之后、minDiff 之前插入的正交判据。
+	 *
+	 * <p>规则（刻意只做**相等**，不做距离 —— 距离会引入调参空间）：</p>
+	 * <ol>
+	 *   <li>对每个剩余新类，只保留"拓扑签名与旧类**严格相等**"的候选；</li>
+	 *   <li>要求**双向唯一**：该旧类的存活候选里也只能有这一个新类（保持既有两趟制）；</li>
+	 *   <li>反复取这样的互唯配对直到不动点；</li>
+	 *   <li>剩下的（相等过滤后 0 个或 &gt;= 2 个候选，或签名未知）**一律不仲裁** —— 既不用
+	 *       minDiff 猜，也不去猜"距离最近"。</li>
+	 * </ol>
+	 *
+	 * <p>签名未知（子类字节码取不到）视为"不相等"，因此不会与任何候选配对 —— 这与"计数全为 0
+	 * 且真的相等"是两种不同情形，后者仍可能配对（夹具 M 里两个候选都等于旧类的空拓扑，
+	 * 于是过滤后剩 2 个 → 不仲裁）。</p>
+	 */
+	private static void applyTopologyFilter(
+	 Set<AnonInfo> remainingNew,
+	 Set<AnonInfo> remainingOld,
+	 Map<AnonInfo, List<AnonInfo>> newToOld,
+	 Map<AnonInfo, AnonInfo> matchedNewToOld,
+	 AlignmentStats stats,
+	 String hostSlash) {
+		boolean progress = true;
+		boolean firstPass = true;
+		while (progress) {
+			progress = false;
+			// 第一趟：每个剩余新类保留"拓扑严格相等且仍可用"的候选
+			Map<AnonInfo, List<AnonInfo>> survivors = new LinkedHashMap<>();
+			for (AnonInfo n : remainingNew) {
+				List<AnonInfo> all = newToOld.get(n);
+				List<AnonInfo> keep = new ArrayList<>();
+				int available = 0;
+				if (all != null) {
+					for (AnonInfo o : all) {
+						if (!remainingOld.contains(o)) continue;
+						available++;
+						if (n.topology == null || o.topology == null) continue;   // 未知 ≠ 相等
+						if (n.topology.equals(o.topology)) keep.add(o);
+					}
+				}
+				survivors.put(n, keep);
+				// 计数只在首轮做：诊断口径是"过滤前可用候选数 -> 过滤后候选数"
+				if (firstPass && stats != null) {
+					stats.topologyCandidatesBefore += available;
+					stats.topologyCandidatesAfter  += keep.size();
+				}
+				dbg("  tier3 topology filter: " + n.name + " topology=" + n.topology
+					+ " candidates " + available + " -> " + keep.size());
+			}
+			firstPass = false;
+
+			// 第二趟：先**收集**全部"双向唯一"的配对，再一次性应用。
+			//
+			// 两点理由：① 边遍历 remainingNew 边 remove 会抛 ConcurrentModificationException；
+			// ② 逐对贪心应用会让结果依赖遍历顺序。而所有双唯配对彼此互斥（若 (n,o) 双唯，
+			// 则不存在第二个 n' 的存活集含 o，也不存在 o' != o 在 n 的存活集里），
+			// 因此一次性应用是幂等且与顺序无关的 —— 这正是"反序遍历映射必须一致"的前提。
+			List<AnonInfo> winners  = new ArrayList<>();
+			List<AnonInfo> partners = new ArrayList<>();
+			for (Map.Entry<AnonInfo, List<AnonInfo>> e : survivors.entrySet()) {
+				List<AnonInfo> keep = e.getValue();
+				if (keep.size() != 1) continue;
+				AnonInfo o = keep.get(0);
+				int suitors = 0;
+				for (List<AnonInfo> l : survivors.values()) {
+					if (l.contains(o)) suitors++;
+				}
+				if (suitors != 1) continue;
+				winners.add(e.getKey());
+				partners.add(o);
+			}
+			for (int i = 0; i < winners.size(); i++) {
+				AnonInfo n = winners.get(i);
+				AnonInfo o = partners.get(i);
+				matchedNewToOld.put(n, o);
+				remainingNew.remove(n);
+				remainingOld.remove(o);
+				if (stats != null) stats.topologyMatches++;
+				progress = true;
+				if (HotSwapAgent.DEBUG) {
+					HotSwapAgent.info("[ANON_MATCH] Tier 3 topology paired: " + n.name + " -> " + o.name
+						+ " " + n.topology);
+				}
+			}
+		}
 	}
 
 	private static void recordTierMatch(AlignmentStats stats, int tier) {

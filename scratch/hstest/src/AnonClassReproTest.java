@@ -35,10 +35,23 @@ public class AnonClassReproTest {
 
 	static int passed = 0;
 	static int failed = 0;
+	static int known  = 0;
 
 	static void check(boolean ok, String msg) {
 		System.out.println((ok ? "   PASS  " : "   FAIL  ") + msg);
 		if (ok) passed++; else failed++;
+	}
+
+	/**
+	 * 已知限制条目：**当前行为符合"有意付出的保守代价"时打印 KNOWN**（套件保持绿），
+	 * 若该代价消失则打印 FAIL，强制作者更新基线。
+	 *
+	 * <p>注意方向与"先红后绿"相反：夹具 L 在旧实现下是**通过**的（minDiff 取恒等映射恰好正确），
+	 * 新实现才变成"拒绝配对"。KNOWN 钉住的是这份**新引入的保守代价**，不是缺陷。</p>
+	 */
+	static void known(String msg) {
+		System.out.println("   KNOWN " + msg);
+		known++;
 	}
 
 	static File findFile(String rel) {
@@ -108,11 +121,13 @@ public class AnonClassReproTest {
 			testScenario24_Javac8ParentScopedFallback(javac, baseDir);
 			// 测试 25 设计不变量 INV-1（自描述指纹）/ INV-2（禁止两个 aligner 互相递归）
 			testScenario25_DesignInvariants(javac, baseDir);
+			// 测试 26 Tier 3 拓扑相等过滤（取代 minDiff 仲裁）
+			testScenario26_Tier3TopologyFilter(javac, baseDir);
 		} finally {
 			deleteRecursively(baseDir);
 		}
 
-		System.out.println("AnonClassReproTest 汇总: 通过=" + passed + ", 失败=" + failed);
+		System.out.println("AnonClassReproTest 汇总: 通过=" + passed + ", 失败=" + failed + ", 已知限制=" + known);
 	}
 
 	static void deleteRecursively(File f) {
@@ -1609,18 +1624,23 @@ public class AnonClassReproTest {
 				"        extra.run(); x.run();\n" +
 				"    }\n}\n");
 			AnonClassAligner.Result aRelaxed = alignHost("testStrict/AmbA", dir, "a", a);
-			check(aRelaxed.stats.ambiguousMatches == 1,
-				"Scenario 23A: Tier 3 结构相同 + 1-to-N 时确实走了 minDiff 仲裁（ambiguousMatches="
-					+ aRelaxed.stats.ambiguousMatches + "）");
-			check("testStrict/AmbA$1".equals(aRelaxed.renameMap.get("testStrict/AmbA$1"))
-				&& "testStrict/AmbA$2".equals(aRelaxed.renameMap.get("testStrict/AmbA$2")),
-				"Scenario 23A: non-strict 保持现状 —— 插入类($1)抢走旧身份 $1，原类($2)落到新编号 $2");
+			check(aRelaxed.stats.ambiguousMatches == 0 && aRelaxed.stats.topologyMatches == 0,
+				"Scenario 23A: Tier 3 不再用 minDiff 仲裁（ambiguousMatches=" + aRelaxed.stats.ambiguousMatches
+					+ ", topologyMatches=" + aRelaxed.stats.topologyMatches + "）");
+			check(aRelaxed.stats.topologyCandidatesBefore == 2 && aRelaxed.stats.topologyCandidatesAfter == 2,
+				"Scenario 23A: 拓扑相等过滤后候选数为 2（before=" + aRelaxed.stats.topologyCandidatesBefore
+					+ " -> after=" + aRelaxed.stats.topologyCandidatesAfter + "）→ 不仲裁");
+			check("testStrict/AmbA$2".equals(aRelaxed.renameMap.get("testStrict/AmbA$1"))
+				&& "testStrict/AmbA$3".equals(aRelaxed.renameMap.get("testStrict/AmbA$2"))
+				&& aRelaxed.orphanOldClasses.contains("testStrict/AmbA$1"),
+				"Scenario 23A: 不再错配 —— 两个新类都不占旧槽（$1->$2, $2->$3），旧 $1 成孤儿保留旧语义 renameMap="
+					+ aRelaxed.renameMap);
 
 			StrictOutcome aStrict = alignStrict("testStrict/AmbA", dir, "a", a);
 			check(aStrict.reject != null && aStrict.result == null,
-				"Scenario 23A: strict=true 时 Tier 3 的 minDiff 仲裁升级为 Reject（不再静默错配、也不产出 rename）");
-			check(aStrict.reject != null && aStrict.reject.reason.contains("minDiff-arbitrated=1"),
-				"Scenario 23A: 拒绝原因明确指出是 minDiff 仲裁（reason="
+				"Scenario 23A: strict=true 时同一歧义升级为 Reject（不产出 rename）");
+			check(aStrict.reject != null && aStrict.reject.reason.contains("unresolved-after-bi-unique=1"),
+				"Scenario 23A: 拒绝原因给出缺乏唯一证据的候选对数（reason="
 					+ (aStrict.reject == null ? "null" : aStrict.reject.reason) + "）");
 
 			// ================= B. Tier 3 结构唯一：strict 不得影响 =================
@@ -1670,18 +1690,25 @@ public class AnonClassReproTest {
 				"        extra.run(); s.run(); x2.run();\n" +
 				"    }\n}\n");
 			AnonClassAligner.Result cRelaxed = alignHost("testStrict/MixedC", dir, "c", c);
-			check(cRelaxed.stats.tier1Matches >= 1 && cRelaxed.stats.ambiguousMatches == 1,
-				"Scenario 23C: 同一宿主里安全配对(T1=" + cRelaxed.stats.tier1Matches
-					+ ")与 minDiff 仲裁配对(ambiguous=" + cRelaxed.stats.ambiguousMatches + ")确实共存");
+			check(cRelaxed.stats.tier1Matches >= 1 && cRelaxed.stats.ambiguousMatches == 0
+					&& cRelaxed.stats.topologyCandidatesAfter == 2,
+				"Scenario 23C: 安全配对仍在（T1=" + cRelaxed.stats.tier1Matches
+					+ "），歧义对经拓扑过滤后剩 2 个候选 -> 不仲裁（ambiguousMatches="
+					+ cRelaxed.stats.ambiguousMatches + "）");
 			check("testStrict/MixedC$1".equals(cRelaxed.renameMap.get("testStrict/MixedC$2")),
-				"Scenario 23C: non-strict 下安全配对 $2(内容未变的 S) → 旧 $1 已写入 renameMap");
+				"Scenario 23C: 安全配对 $2(内容未变的 S) -> 旧 $1 不受歧义影响，依然成立");
+			check("testStrict/MixedC$3".equals(cRelaxed.renameMap.get("testStrict/MixedC$1"))
+					&& "testStrict/MixedC$4".equals(cRelaxed.renameMap.get("testStrict/MixedC$3"))
+					&& cRelaxed.orphanOldClasses.contains("testStrict/MixedC$2"),
+				"Scenario 23C: 歧义对不再错配 —— extra 与 X2 都不占旧槽 $2，旧 $2 成孤儿 renameMap="
+					+ cRelaxed.renameMap);
 
 			StrictOutcome cStrict = alignStrict("testStrict/MixedC", dir, "c", c);
 			check(cStrict.reject != null && cStrict.result == null,
 				"Scenario 23C: strict 下整个宿主组被拒绝（异常在 Result 构造之前抛出，故安全配对也不会落地）");
-			check(cStrict.reject != null && cStrict.reject.reason.contains("minDiff-arbitrated=1")
+			check(cStrict.reject != null && cStrict.reject.reason.contains("unresolved-after-bi-unique=1")
 					&& "testStrict/MixedC".equals(cStrict.reject.hostSlash),
-				"Scenario 23C: 拒绝携带宿主名与歧义计数，调用方 rejectHostGroup 据此丢弃宿主+全部匿名类（无半批次）");
+				"Scenario 23C: 拒绝携带宿主名与无证据候选对数，调用方 rejectHostGroup 据此丢弃宿主+全部匿名类（无半批次）");
 		} finally {
 			HotSwapAgent.ANON_STRICT = savedStrict;
 		}
@@ -1985,6 +2012,211 @@ public class AnonClassReproTest {
 
 	static String hex(Long h) {
 		return h == null ? "null" : Long.toHexString(h);
+	}
+
+	/**
+	 * Scenario 26: Tier 3 **拓扑相等过滤**取代 minDiff 仲裁（§4.1 / §8.3-4）。
+	 *
+	 * <p>背景：Tier 3 一旦出现多候选，`minDiff` 按物理名序号仲裁，而"插在前面的新类"总以 diff=0
+	 * 抢走旧身份 —— 确定性但语义错误的 tie-breaker（探针 `DeepNestProbe` depth 1 即可复现）。
+	 * 新规则：双向唯一之后只保留"拓扑签名与旧类严格相等"的候选；恰好一个且双向唯一才采纳，
+	 * 否则**不仲裁**（non-strict 降级为新增/孤儿，strict 拒绝宿主组）。</p>
+	 *
+	 * <p>三个夹具的职责：T = 拓扑可区分（期望判对）；M = 拓扑无信息（期望拒绝，且 Tier 4 不得绕过）；
+	 * L = minDiff 原本判对的合法 1-to-N（期望拒绝，作为**有意付出的保守代价**记 KNOWN）。</p>
+	 */
+	static void testScenario26_Tier3TopologyFilter(String javac, File baseDir) throws Exception {
+		System.out.println("\n--- Scenario 26: Tier 3 拓扑相等过滤取代 minDiff 仲裁 ---");
+		File dir = new File(baseDir, "s26");
+		dir.mkdirs();
+		boolean savedReverse = AnonClassAligner.TEST_REVERSE_ORDER;
+		try {
+			// ================= 夹具 T：拓扑可区分 → 期望判对 =================
+			String hostT = "testTopo/Topo";
+			File t1 = new File(dir, "tv1"), t2 = new File(dir, "tv2");
+			t1.mkdirs(); t2.mkdirs();
+			compileInto(javac, t1, new File(dir, "T1.java"), treeSource("testTopo", "Topo", 0, "A0"));
+			compileInto(javac, t2, new File(dir, "T2.java"), treeSource("testTopo", "Topo", 1, "A0b"));
+			AnonClassAligner.Result tRes = alignDirs(hostT, t1, t2);
+			check(tRes.stats.topologyMatches == 1 && tRes.stats.tier3Matches == 0
+					&& tRes.stats.tier4Matches == 0 && tRes.stats.ambiguousPairs == 0,
+				"Scenario 26/T: 由拓扑判据唯一裁定（topology=" + tRes.stats.topologyMatches
+					+ ", T3=" + tRes.stats.tier3Matches + ", T4=" + tRes.stats.tier4Matches
+					+ ", ambiguousPairs=" + tRes.stats.ambiguousPairs + "）");
+			check((hostT + "$1").equals(tRes.renameMap.get(hostT + "$2"))
+					&& (hostT + "$1$1").equals(tRes.renameMap.get(hostT + "$2$1"))
+					&& (hostT + "$2").equals(tRes.renameMap.get(hostT + "$1")),
+				"Scenario 26/T: 真 A0'($2) 继承旧身份 $1、嵌套类跟随 $2$1->$1$1、空壳($1) 拿未占用新号；"
+					+ " renameMap=" + tRes.renameMap);
+			check(tRes.orphanOldClasses.isEmpty(),
+				"Scenario 26/T: 零孤儿（旧 A0 与其嵌套类都被正确继承）");
+
+			AnonClassAligner.TEST_REVERSE_ORDER = true;
+			AnonClassAligner.Result tRev = alignDirs(hostT, t1, t2);
+			AnonClassAligner.TEST_REVERSE_ORDER = false;
+			check(tRes.renameMap.equals(tRev.renameMap),
+				"Scenario 26/T: 反序遍历下映射严格一致（规则不得隐含偏向物理序号）");
+
+			// ================= 夹具 M：拓扑无信息 → 期望拒绝，且 Tier 4 不得绕过 =================
+			String hostM = "testTopoM/TopoM";
+			File m1 = new File(dir, "mv1"), m2 = new File(dir, "mv2");
+			m1.mkdirs(); m2.mkdirs();
+			compileInto(javac, m1, new File(dir, "M1.java"), shellChainSource("testTopoM", "TopoM", false, "TAG"));
+			compileInto(javac, m2, new File(dir, "M2.java"), shellChainSource("testTopoM", "TopoM", true, "TAG2"));
+			AnonClassAligner.Result mRes = alignDirs(hostM, m1, m2);
+			check(mRes.stats.topologyCandidatesBefore == 2 && mRes.stats.topologyCandidatesAfter == 2,
+				"Scenario 26/M: 拓扑相等过滤后候选数仍为 2（before=" + mRes.stats.topologyCandidatesBefore
+					+ " -> after=" + mRes.stats.topologyCandidatesAfter + "）-> 不仲裁");
+			check((hostM + "$2").equals(mRes.renameMap.get(hostM + "$1"))
+					&& (hostM + "$3").equals(mRes.renameMap.get(hostM + "$2"))
+					&& mRes.orphanOldClasses.contains(hostM + "$1"),
+				"Scenario 26/M: 不再错配 —— 两个新类都不占旧槽（$1->$2, $2->$3），旧 $1 成孤儿保留旧语义；"
+					+ " renameMap=" + mRes.renameMap);
+			check(mRes.stats.tier4Matches == 0,
+				"Scenario 26/M: Tier 4 没有把拓扑刚否决的候选又配上（Tier 4 谓词是 Tier 3 的真超集，"
+					+ "非双向唯一性单调保持，故不可能绕过）");
+			check(mRes.stats.ambiguousPairs == 1,
+				"Scenario 26/M: 缺乏唯一证据的候选对数 = 1（旧类被两个新类争抢），供 strict 熔断与诊断");
+			AnonClassAligner.TEST_REVERSE_ORDER = true;
+			AnonClassAligner.Result mRev = alignDirs(hostM, m1, m2);
+			AnonClassAligner.TEST_REVERSE_ORDER = false;
+			check(mRes.renameMap.equals(mRev.renameMap),
+				"Scenario 26/M: 反序遍历下映射严格一致");
+
+			StrictOutcome mStrict = alignStrictDirs(hostM, m1, m2);
+			check(mStrict.reject != null && mStrict.result == null,
+				"Scenario 26/M: strict 模式下该宿主组被整体拒绝（AlignmentRejectedException）");
+
+			// ================= 夹具 L：minDiff 原本判对的合法 1-to-N → KNOWN 保守代价 =================
+			String hostL = "testTopoL/TopoL";
+			File l1 = new File(dir, "lv1"), l2 = new File(dir, "lv2");
+			l1.mkdirs(); l2.mkdirs();
+			compileInto(javac, l1, new File(dir, "L1.java"), twoSameAnonSource("testTopoL", "TopoL", "AAA", "BBB"));
+			compileInto(javac, l2, new File(dir, "L2.java"), twoSameAnonSource("testTopoL", "TopoL", "AAA2", "BBB2"));
+			AnonClassAligner.Result lRes = alignDirs(hostL, l1, l2);
+			boolean lRefused = lRes.orphanOldClasses.size() == 2 && lRes.stats.topologyMatches == 0
+				&& (hostL + "$3").equals(lRes.renameMap.get(hostL + "$1"))
+				&& (hostL + "$4").equals(lRes.renameMap.get(hostL + "$2"));
+			if (lRefused) {
+				known("Scenario 26/L: 两个同构匿名类原地改体被**拒绝配对**（拓扑过滤后候选数="
+					+ lRes.stats.topologyCandidatesAfter + "）—— 有意付出的保守代价：旧实现靠 minDiff 取"
+					+ "恒等映射恰好正确，代价是两条编辑本轮不作用于存活实例；根治需 Tier 1.5 相似度（§8.3-4）");
+			} else {
+				check(false, "Scenario 26/L: 不再被拒绝（renameMap=" + lRes.renameMap
+					+ "）—— 若因拓扑/相似度改进所致，请把本 KNOWN 条目转为 PASS 并同步基线");
+			}
+			check(lRes.stats.topologyCandidatesBefore == 4 && lRes.stats.topologyCandidatesAfter == 4,
+				"Scenario 26/L: 2x2 全等的候选计数（before=" + lRes.stats.topologyCandidatesBefore
+					+ " -> after=" + lRes.stats.topologyCandidatesAfter + "），拓扑在此**完全无信息**");
+
+			// ================= 反序变体：extra 插在 A0 **之后** =================
+			String hostTa = "testTopoA/TopoA";
+			File a1 = new File(dir, "av1"), a2 = new File(dir, "av2");
+			a1.mkdirs(); a2.mkdirs();
+			compileInto(javac, a1, new File(dir, "A1.java"), treeSource("testTopoA", "TopoA", 0, "A0"));
+			compileInto(javac, a2, new File(dir, "A2.java"), treeSource("testTopoA", "TopoA", 2, "A0b"));
+			AnonClassAligner.Result aRes = alignDirs(hostTa, a1, a2);
+			check(aRes.stats.topologyMatches == 1 && aRes.orphanOldClasses.isEmpty()
+					&& (hostTa + "$1").equals(aRes.renameMap.get(hostTa + "$1")),
+				"Scenario 26/反序变体: extra 插在后面时同样判对（A0' 保持旧身份 $1），结论不随位置改变；"
+					+ " renameMap=" + aRes.renameMap);
+			AnonClassAligner.TEST_REVERSE_ORDER = true;
+			AnonClassAligner.Result aRev = alignDirs(hostTa, a1, a2);
+			AnonClassAligner.TEST_REVERSE_ORDER = false;
+			check(aRes.renameMap.equals(aRev.renameMap),
+				"Scenario 26/反序变体: 反序遍历下映射严格一致");
+		} finally {
+			AnonClassAligner.TEST_REVERSE_ORDER = savedReverse;
+		}
+	}
+
+	/** 写源码并编译到指定输出目录。 */
+	static void compileInto(String javac, File out, File src, String source) throws Exception {
+		Files.writeString(src.toPath(), source);
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", out.getAbsolutePath(), src.getAbsolutePath());
+	}
+
+	/** 用两个输出目录作为旧/新侧跑一次 align（全部匿名类都参与，与生产路径一致）。 */
+	static AnonClassAligner.Result alignDirs(String hostSlash, File v1, File v2) throws Exception {
+		Function<String, byte[]> r1 = n -> readIfExists(new File(v1, n.replace('.', '/') + ".class"));
+		Function<String, byte[]> r2 = n -> readIfExists(new File(v2, n.replace('.', '/') + ".class"));
+		return AnonClassAligner.align(hostSlash,
+			Files.readAllBytes(new File(v2, hostSlash + ".class").toPath()),
+			anonClasses(v1, hostSlash), anonClasses(v2, hostSlash), r1, r2);
+	}
+
+	static StrictOutcome alignStrictDirs(String hostSlash, File v1, File v2) throws Exception {
+		StrictOutcome out = new StrictOutcome();
+		boolean saved = HotSwapAgent.ANON_STRICT;
+		try {
+			HotSwapAgent.ANON_STRICT = true;
+			out.result = alignDirs(hostSlash, v1, v2);
+		} catch (AnonClassAligner.AlignmentRejectedException e) {
+			out.reject = e;
+		} finally {
+			HotSwapAgent.ANON_STRICT = saved;
+		}
+		return out;
+	}
+
+	/**
+	 * 夹具 T / 反序变体源码：宿主 {@code setup()} 的 lambda 里创建匿名类 A0，A0 的方法里再有
+	 * lambda，该 lambda 里再创建嵌套匿名类 A1（即 {@code A0{L1{A1}}}）。
+	 *
+	 * @param extraPos 0 = 不插入；1 = 在 A0 **之前**插入无子节点的空壳；2 = 在 A0 **之后**插入
+	 */
+	static String treeSource(String pkg, String cls, int extraPos, String payload) {
+		String shell = "            new Worker() { void work() { System.out.println(\"NEW\"); } }.work();\n";
+		return "package " + pkg + ";\n" +
+			"class " + cls + " {\n" +
+			"    static class Worker { void work() {} }\n" +
+			"    static class Task {}\n" +
+			"    void setup() {\n" +
+			"        Runnable l0 = () -> {\n" +
+			(extraPos == 1 ? shell : "") +
+			"            new Worker() {\n" +
+			"                void work() {\n" +
+			"                    Runnable l1 = () -> { System.out.println(\"" + payload + "\"); new Task() {}; };\n" +
+			"                    l1.run();\n" +
+			"                }\n" +
+			"            }.work();\n" +
+			(extraPos == 2 ? shell : "") +
+			"        };\n" +
+			"        l0.run();\n" +
+			"    }\n" +
+			"}\n";
+	}
+
+	/**
+	 * 夹具 M 源码：可选在链**前**插入一个空壳匿名类；payload 控制内容哈希是否变化。
+	 *
+	 * <p>注意 payload 必须变化：否则新链与旧链**逐字节相同**，Tier 1 会直接命中，
+	 * 根本走不到 Tier 3 的多候选分支（这正是第一版夹具没复现出歧义的原因）。</p>
+	 */
+	static String shellChainSource(String pkg, String cls, boolean insertShell, String payload) {
+		return "package " + pkg + ";\n" +
+			"class " + cls + " {\n" +
+			"    void setup() {\n" +
+			(insertShell
+				? "        Runnable extra = new Runnable() { public void run() { System.out.println(\"EXTRA\"); } };\n"
+				  + "        extra.run();\n"
+				: "") +
+			"        Runnable n1 = new Runnable() { public void run() { System.out.println(\"" + payload + "\"); } };\n" +
+			"        n1.run();\n" +
+			"    }\n" +
+			"}\n";
+	}
+
+	/** 夹具 L 源码：两个结构/拓扑全等的同构匿名类，payload 可控。 */
+	static String twoSameAnonSource(String pkg, String cls, String p1, String p2) {
+		return "package " + pkg + ";\n" +
+			"class " + cls + " {\n" +
+			"    void setup() {\n" +
+			"        Runnable a = new Runnable() { public void run() { System.out.println(\"" + p1 + "\"); } };\n" +
+			"        Runnable b = new Runnable() { public void run() { System.out.println(\"" + p2 + "\"); } };\n" +
+			"        a.run(); b.run();\n" +
+			"    }\n" +
+			"}\n";
 	}
 
 	static void runCmd(String... cmd) throws Exception {

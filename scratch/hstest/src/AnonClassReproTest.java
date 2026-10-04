@@ -2109,6 +2109,44 @@ public class AnonClassReproTest {
 				"Scenario 26/L: 2x2 全等的候选计数（before=" + lRes.stats.topologyCandidatesBefore
 					+ " -> after=" + lRes.stats.topologyCandidatesAfter + "），拓扑在此**完全无信息**");
 
+			// ================= 夹具 E：拓扑只配上一对，剩余对是否被 Tier 4 用"排除法"配上 =================
+			// old{E1 有匿名子, E2 无子} / new{E1' 有匿名子(内容变), E2' 两个 lambda 站点}
+			// 拓扑：E1/E1' 相等；E2 的拓扑为空、E2' 的拓扑为 (0,0,2,2,[]) —— **不等**
+			// 因此拓扑过滤只能配上 (E1',E1)，剩 (E2',E2) 进入 Tier 4。
+			String hostE = "testElim/Elim";
+			File e1 = new File(dir, "ev1"), e2 = new File(dir, "ev2");
+			e1.mkdirs(); e2.mkdirs();
+			compileInto(javac, e1, new File(dir, "E1.java"), elimSource(false));
+			compileInto(javac, e2, new File(dir, "E2.java"), elimSource(true));
+			AnonClassAligner.Result eRes = alignDirs(hostE, e1, e2);
+			check(eRes.stats.topologyMatches == 1 && eRes.stats.ambiguousPairs == 0,
+				"Scenario 26/E: 拓扑只唯一配上一对（topology=" + eRes.stats.topologyMatches
+					+ "）；剩余一对在**缩小后的剩余集**里被 Tier 4 以双向唯一配上（T4="
+					+ eRes.stats.tier4Matches + "），最终无残留歧义（ambiguousPairs="
+					+ eRes.stats.ambiguousPairs + "）");
+			check(eRes.stats.tier4Matches == 1 && eRes.orphanOldClasses.isEmpty()
+					&& (hostE + "$2").equals(eRes.renameMap.get(hostE + "$2")),
+				"Scenario 26/E: 排除法配对的行为被**明确钉住**（不是偶然）：E2'(两个 lambda) 仍继承旧 E2；"
+					+ " 注意这是**谓词层面的排除法**（不涉及序号），但确实覆盖了拓扑对 (E2',E2) 的否决 —— "
+					+ " renameMap=" + eRes.renameMap);
+			StrictOutcome eStrict = alignStrictDirs(hostE, e1, e2);
+			check(eStrict.reject == null,
+				"Scenario 26/E: 因此 strict 在本形态下**接受**（最终剩余集无歧义）—— 与旧实现（Tier 3 仲裁 2 次 -> strict 拒绝）"
+					+ "相比这是一次**口径放宽**，已按你的要求显式钉住而非默认偶然");
+
+			// ================= 保守性损失必须可见：非 strict 拒绝要打 warn =================
+			List<String> warnsM = new ArrayList<>();
+			captureWarns(() -> { try { alignDirs(hostM, m1, m2); } catch (Exception ignored) { } }, warnsM);
+			check(warnsM.stream().anyMatch(w -> w.contains(hostM)
+					&& w.contains("RESTART") && w.contains("candidate pair(s) lack unique evidence")),
+				"Scenario 26/M: 非 strict 拒绝必须打 warn（含宿主名 + 候选数 + 需重启），"
+					+ "否则用户会以为热更已生效却看不到任何效果；warns=" + warnsM);
+			List<String> warnsL = new ArrayList<>();
+			final File fl1 = l1, fl2 = l2;
+			captureWarns(() -> { try { alignDirs(hostL, fl1, fl2); } catch (Exception ignored) { } }, warnsL);
+			check(warnsL.stream().anyMatch(w -> w.contains(hostL) && w.contains("RESTART")),
+				"Scenario 26/L: 夹具 L（原地改两个同构匿名类）同样必须打出这条 warn —— 这种编辑不罕见");
+
 			// ================= 反序变体：extra 插在 A0 **之后** =================
 			String hostTa = "testTopoA/TopoA";
 			File a1 = new File(dir, "av1"), a2 = new File(dir, "av2");
@@ -2217,6 +2255,53 @@ public class AnonClassReproTest {
 			"        a.run(); b.run();\n" +
 			"    }\n" +
 			"}\n";
+	}
+
+	/** 在替换后的 logger 下执行一次操作，收集 warn/error 文本（用于断言"保守性损失可见"）。 */
+	static void captureWarns(Runnable action, List<String> out) {
+		HotSwapAgent.Logger saved = HotSwapAgent.logger;
+		HotSwapAgent.logger = new HotSwapAgent.Logger() {
+			@Override public void log(String msg) { }
+			@Override public void info(String msg) { }
+			@Override public void warn(String msg) { out.add(msg); }
+			@Override public void error(String msg) { out.add("ERROR " + msg); }
+			@Override public void error(String msg, Throwable t) { out.add("ERROR " + msg); }
+		};
+		try {
+			action.run();
+		} finally {
+			HotSwapAgent.logger = saved;
+		}
+	}
+
+	/**
+	 * 夹具 E（排除法 / 拓扑只配上一对）：old{E1 有匿名子节点, E2 无子}，
+	 * new{E1' 有匿名子节点(内容变), E2' 有两个 lambda 站点}。
+	 */
+	static String elimSource(boolean v2) {
+		String b1 = v2
+			? "        Runnable n1 = new Runnable() { public void run() {\n" +
+			  "            Runnable n1x = () -> { System.out.println(\"N1\"); };\n" +
+			  "            n1x.run(); new Task() {};\n" +
+			  "        } };\n        n1.run();\n"
+			: "        Runnable o1 = new Runnable() { public void run() {\n" +
+			  "            Runnable o1x = () -> { System.out.println(\"O1\"); };\n" +
+			  "            o1x.run(); new Task() {};\n" +
+			  "        } };\n        o1.run();\n";
+		String b2 = v2
+			? "        Runnable n2 = new Runnable() { public void run() {\n" +
+			  "            Runnable n2x = () -> { System.out.println(\"N2\"); };\n" +
+			  "            Runnable n2y = () -> { System.out.println(\"N2b\"); };\n" +
+			  "            n2x.run(); n2y.run();\n" +
+			  "        } };\n        n2.run();\n"
+			: "        Runnable o2 = new Runnable() { public void run() { System.out.println(\"O2\"); } };\n" +
+			  "        o2.run();\n";
+		return "package testElim;\n" +
+			"class Elim {\n" +
+			"    static class Task {}\n" +
+			"    void setup() {\n" +
+			b1 + b2 +
+			"    }\n}\n";
 	}
 
 	static void runCmd(String... cmd) throws Exception {

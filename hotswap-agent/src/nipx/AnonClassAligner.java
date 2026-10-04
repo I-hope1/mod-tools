@@ -405,22 +405,30 @@ public final class AnonClassAligner {
 		// §4.3-① 严格模式：只要本轮存在**未被唯一证据证成**的候选配对，就熔断整个宿主组。
 		//
 		// 两个计数的含义（合起来才是"无法唯一证明"的完整集合）：
-		//   • ambiguousMatches —— 在**允许 minDiff 的层（Tier 1 / Tier 3）**由"距离最近"仲裁出来的配对。
-		//     它不是 nondeterministic bug，而是一个**确定性但语义错误**的 tie-breaker：序号偏向
-		//     "插在前面的新类"，于是插入类会抢走旧身份（详见 §4.1 注记的实测）。
-		//   • ambiguousPairs  —— 在**禁止仲裁的层（Tier 2 / Tier 4）**做完双向唯一配对后仍多对多、
-		//     只能退化为"新增/孤儿"的残留。
+		//   • ambiguousMatches —— 历史上用于统计"允许 minDiff 的层"（Tier 1）的仲裁次数。
+		//     Tier 3 的 minDiff 已被拓扑相等过滤取代，因此现在几乎恒为 0。
+		//   • ambiguousPairs  —— 四层走完后，在最宽谓词（Tier 4）下**仍未唯一确定**的候选对数。
+		//     非严格模式下这些类退化为"新增/孤儿"。
 		//
-		// strict 的定位是**安全门，不是匹配策略**：它不改变任何"双向唯一"配对的结论（那些不会计入上面
-		// 任一计数），也不改变非 strict 模式下的 minDiff 仲裁行为（那时仍只打 [WARN-ANON]）。
+		// strict 的定位是**安全门，不是匹配策略**：它不改变任何"双向唯一"配对（含拓扑判定）的结论。
 		if (HotSwapAgent.ANON_STRICT) {
 			int unproven = stats.ambiguousMatches + stats.ambiguousPairs;
 			if (unproven > 0) {
 				throw new AlignmentRejectedException(hostSlash,
 					"strict mode: " + unproven + " candidate pair(s) lack unique evidence"
-					+ " (minDiff-arbitrated=" + stats.ambiguousMatches + " at Tier 1/3,"
+					+ " (minDiff-arbitrated=" + stats.ambiguousMatches + " at Tier 1,"
 					+ " unresolved-after-bi-unique=" + stats.ambiguousPairs + " at Tier 2/4) (§4.3-1)");
 			}
+		} else if (stats.ambiguousPairs > 0) {
+			// ⚠️ 保守性损失必须**可见**：非严格模式下不仲裁意味着相关的旧匿名类保持为孤儿、
+			// 其**存活实例继续跑旧逻辑**。若这里不打日志，用户看到热更"成功"却没有任何效果，
+			// 会误以为已生效（曾评估的夹具 L：两个同构匿名类原地改体，两条编辑都不作用于存活实例）。
+			HotSwapAgent.warn("[ANON_ALIGN] Host " + hostSlash + ": " + stats.ambiguousPairs
+				+ " candidate pair(s) lack unique evidence; refused to guess"
+				+ " (topology-equal candidates " + stats.topologyCandidatesBefore
+				+ " -> " + stats.topologyCandidatesAfter + ", topology-decided " + stats.topologyMatches + ")."
+				+ " Affected old anonymous classes are kept as orphans, so their LIVE instances keep running"
+				+ " the OLD code — RESTART is required for those edits to affect existing instances.");
 		}
 
 		// 后置严格校验 (Validation Invariants)

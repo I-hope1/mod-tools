@@ -24,7 +24,7 @@ import java.util.function.Supplier;
  *   <li><b>孤儿 Lambda 智能自适应分流（{@link OrphanPolicy#SMART_ADAPTIVE}）：</b><br>
  *       对于在新版本中被彻底删除的“孤儿方法”，生成带调用栈探测的空壳方法：
  *       <ul>
- *         <li>若调用栈由 {@link nipx.ref.UpdateRef} 发起（UI / 定时轮询 / 事件监听）：主动抛出 {@link NoSuchMethodError}，
+ *         <li>若直接调用者为 {@link nipx.ref.UpdateRef} 的回调分发方法（UI / 定时轮询 / 事件监听）：主动抛出 {@link NoSuchMethodError}，
  *             驱动 {@code UpdateRef} 执行精准局部熔断（如注销回调 {@code el.update(null)}），彻底根除 60FPS 刷屏空转；</li>
  *         <li>若由普通业务代码发起（未受 UpdateRef 保护）：静默降级返回类型默认值（0 / null / false），绝不引发程序崩溃。</li>
  *       </ul>
@@ -59,7 +59,6 @@ import java.util.function.Supplier;
  * <p><b>可见性假设：</b>注入的幽灵桩通过 {@code INVOKESTATIC} 调用
  * {@link #onOrphanInvoked(String)}，因此目标类的类加载器必须能看到 {@code nipx.LambdaAligner}。
  * 父委派正常时成立。</p>
- *
  * @see nipx.ref.UpdateRef
  * @see nipx.LambdaRef
  * @see nipx.HotSwapAgent
@@ -110,8 +109,7 @@ public class LambdaAligner {
 	/**
 	 * 诊断开关：打开后打印配对决策的细节（谁在哪个阶段拿了哪个旧名字）。
 	 *
-	 * <p><b>为什么做成常设开关</b>：排查本对齐器的顺序问题时，临时插
-	 * 排查本对齐器的顺序问题时，临时插日志打印是必需的；但临时探针有两个反复出现的代价 ——
+	 * <p><b>为什么做成常设开关</b>：排查本对齐器的顺序问题时，临时插日志打印是必需的；但临时探针有两个反复出现的代价 ——
 	 * 忘了移除（污染生产日志），以及 <b>改了没生效却察觉不到</b>
 	 * （曾因 hstest 加载陈旧 jar，数轮结论都建立在旧字节码上）。
 	 * 做成开关后，排查只需设属性/环境变量，<b>不必改代码</b>。</p>
@@ -131,7 +129,7 @@ public class LambdaAligner {
 		String p = System.getProperty("nipx.lambdaAligner.debug");
 		if (p != null) return Boolean.parseBoolean(p) || "1".equals(p);
 		String e = System.getenv("NIPX_LAMBDA_ALIGNER_DEBUG");
-		return e != null && (Boolean.parseBoolean(e) || "1".equals(e));
+		return Boolean.parseBoolean(e) || "1".equals(e);
 	}
 
 	/** 诊断输出：仅在 {@link #DEBUG} 打开时打印，统一前缀便于 grep。 */
@@ -144,11 +142,13 @@ public class LambdaAligner {
 		int n = 0;
 		for (int idx = groups.nextEntry(-1); idx != -1; idx = groups.nextEntry(idx)) n++;
 		int[] order = new int[n];
-		int i = 0;
+		int   i     = 0;
 		for (int idx = groups.nextEntry(-1); idx != -1; idx = groups.nextEntry(idx)) order[i++] = idx;
 		if (TEST_REVERSE_GROUP_ORDER) {
 			for (int l = 0, r = n - 1; l < r; l++, r--) {
-				int t = order[l]; order[l] = order[r]; order[r] = t;
+				int t = order[l];
+				order[l] = order[r];
+				order[r] = t;
 			}
 		}
 		return order;
@@ -304,11 +304,10 @@ public class LambdaAligner {
 
 	/**
 	 * 对齐 Lambda 表达式的主入口方法。
-	 *
 	 * @param oldBytes <b>上一轮对齐后 JVM 里实际生效的字节码</b>（见类级 javadoc 的调用约定）
 	 * @param newBytes 本次新编译出的字节码
 	 * @return 对齐后的字节码；若没有任何重命名且无孤儿方法需要复活，返回原始 {@code newBytes}；
-	 *         若整个流程抛异常，也会记录日志后返回原始 {@code newBytes}（降级不崩溃）
+	 * 若整个流程抛异常，也会记录日志后返回原始 {@code newBytes}（降级不崩溃）
 	 */
 	public static byte[] align(byte[] oldBytes, byte[] newBytes) {
 		if (oldBytes == null || oldBytes.length == 0) return newBytes;
@@ -323,11 +322,10 @@ public class LambdaAligner {
 			ClassNode newCn = scan(newBytes, ctx, false);
 			if (!Objects.equals(oldCn.name, newCn.name)) {
 				throw new IllegalArgumentException(
-					"New class name does not match old class name: " + newCn.name + " != " + oldCn.name);
+				 "New class name does not match old class name: " + newCn.name + " != " + oldCn.name);
 			}
 			ctx.currentClass = oldCn.name;
 
-			LongObjectMap<List<SyntheticInfo>> oldGroups = ctx.oldGroups;
 			LongObjectMap<List<SyntheticInfo>> newGroups = ctx.newGroups;
 
 			// 【阶段一】多轮迭代匹配（含 settled 定稿机制）：
@@ -403,16 +401,16 @@ public class LambdaAligner {
 				for (SyntheticInfo ni : newGroup) {
 					if (ni.matched || !ni.renameable) continue;
 
-					String  key      = ni.name + ni.desc;
+					String key = ni.name + ni.desc;
 					boolean conflict = ctx.usedOldNames.contains(ni.name)
-					                || ctx.oldNameDescSet.contains(key);
+					                   || ctx.oldNameDescSet.contains(key);
 					if (conflict) {
 						String freshName;
 						do {
 							freshName = ni.logicalName + (freshId++);
 						} while (ctx.usedOldNames.contains(freshName)
-						      || ctx.existingNewNames.contains(freshName)
-						      || ctx.oldNameDescSet.contains(freshName + ni.desc));
+						         || ctx.existingNewNames.contains(freshName)
+						         || ctx.oldNameDescSet.contains(freshName + ni.desc));
 
 						recordRename(ctx, ni, freshName);
 						ctx.usedOldNames.add(freshName);
@@ -433,20 +431,24 @@ public class LambdaAligner {
 			if (ctx.renameMap.isEmpty()) {
 				// 无重命名：直接复用 scan 阶段已经建好的 ClassNode
 				alignedBytes = newBytes;
-				alignedCn    = newCn;
+				alignedCn = newCn;
 			} else {
-				alignedCn    = applyTransform(newBytes, ctx);
+				alignedCn = applyTransform(newBytes, ctx);
 				alignedBytes = writeClass(alignedCn);
 			}
 
 			// 从 alignedCn 直接收集 presentKeys，避免 resurrectOrphanedLambdas 再读一遍
 			Set<String> presentKeys = collectMethodKeys(alignedCn);
 
+			// 后置廉价校验：确保本地 indy 句柄引用的目标方法实际存在
+			validateIndyTargets(alignedCn, presentKeys);
+
 			LAST_STATS = new AlignmentStats(ctx.step1Pairs, ctx.passAPairs, ctx.passBPairs);
 			// 传入 oldCn（已解析过一次）—— 避免 resurrectOrphanedLambdas 二次读 oldBytes
 			return resurrectOrphanedLambdas(oldCn, alignedBytes, presentKeys, ctx);
-		} catch (Exception e) {
-			// 降级：不崩溃，返回原始字节码。
+		} catch (Exception | LinkageError | StackOverflowError e) {
+			LAST_STATS = null;
+			// 降级：不崩溃，返回原始字节码。捕获 Exception 与 LinkageError、StackOverflowError 等。
 			// 默认只记一行（热更失败不该刷屏）；DEBUG 下走 Logger 的 (msg, Throwable)
 			// 重载打完整堆栈 —— 而不是直接 printStackTrace，保持输出统一经日志系统。
 			if (DEBUG) {
@@ -591,14 +593,11 @@ public class LambdaAligner {
 	private static boolean calleesPairTo(SyntheticInfo ni, SyntheticInfo oi) {
 		if (ni.children.isEmpty() || oi.children.isEmpty()) return true;
 		if (ni.children.size() != oi.children.size()) return false;
-		for (int i = 0; i < ni.children.size(); i++) {
-			SyntheticInfo ci = ni.childInfos.get(i);
-			String want = oi.children.get(i);
-			if (ci == null) return true;                  // 信息不足，不额外限制
+		for (SyntheticInfo ci : ni.childInfos) {
+			if (ci == null) continue;                  // 信息不足，跳过该子
+			// 关键修复：采用集合归属校验（与 sameChildOwnership 语义统一，消除方法体内同级子 lambda 颠倒顺序引发的误杀）
 			if (ci.matchedWith != null) {
-				if (!ci.matchedWith.name.equals(want)) return false;
-			} else if (!ci.name.equals(want)) {
-				return false;
+				if (!oi.children.contains(ci.matchedWith.name)) return false;
 			}
 		}
 		return true;
@@ -625,7 +624,7 @@ public class LambdaAligner {
 				// 这是"祖先链被死锁"那类问题的现场证据：父被未落定的子挡住。
 				// 若子已确认无候选被标为 settled，则不再阻挡父，允许父保住名字。
 				dbg(() -> "SKIP(parent has unmatched child) parent=" + ni.name
-					+ " child=" + child + " (childMatched=false, settled=false)");
+				          + " child=" + child + " (childMatched=false, settled=false)");
 				return true;
 			}
 		}
@@ -645,18 +644,30 @@ public class LambdaAligner {
 	 * 永不触发，只会给人虚假的安全感。本校验改用<b>引用归属</b>，是独立信息。</p>
 	 *
 	 * <p>违反时撤销该配对：旧方法走幽灵、新方法走阶段二拿避障名，把静默错位降级为显式熔断。</p>
-	 *
 	 * @return 撤销的配对数
 	 */
 	private static int verifyRefConsistency(MatchContext ctx) {
-		int undone = 0;
-		for (int idx : groupOrder(ctx.newGroups)) {
-			List<SyntheticInfo> newGroup = ctx.newGroups.valueAt(idx);
-			if (newGroup == null) continue;
-			for (SyntheticInfo ni : newGroup) {
+		int totalUndone = 0;
+		// 两阶段固定点收敛：消除检查顺序带来的撤销差异（Bug 3 修复）
+		while (true) {
+			List<SyntheticInfo> toRevoke = new ArrayList<>();
+			for (int idx : groupOrder(ctx.newGroups)) {
+				List<SyntheticInfo> newGroup = ctx.newGroups.valueAt(idx);
+				if (newGroup == null) continue;
+				for (SyntheticInfo ni : newGroup) {
+					SyntheticInfo oi = ni.matchedWith;
+					if (oi == null) continue;
+					if (!sameChildOwnership(ctx, ni, oi)) {
+						toRevoke.add(ni);
+					}
+				}
+			}
+
+			if (toRevoke.isEmpty()) break;
+
+			for (SyntheticInfo ni : toRevoke) {
 				SyntheticInfo oi = ni.matchedWith;
 				if (oi == null) continue;
-				if (sameChildOwnership(ctx, ni, oi)) continue;
 
 				// 撤销：清掉改名登记与双方的匹配状态。
 				// 注意**不回滚** simpleNameWitness / renameBySimpleName：那两张表记录的是
@@ -671,13 +682,13 @@ public class LambdaAligner {
 				ni.matched = false;
 				oi.matched = false;
 				ctx.usedOldNames.remove(oi.name);
-				undone++;
+				totalUndone++;
 				HotSwapAgent.warn("[LambdaAligner] 引用一致性被违反，撤销配对：" + ni.name
-					+ " 的子 " + ni.children + " 与 " + oi.name + " 的子 " + oi.children
-					+ " 不一致（静默错位已降级为熔断）");
+				                  + " 的子 " + ni.children + " 与 " + oi.name + " 的子 " + oi.children
+				                  + " 不一致（静默错位已降级为熔断）");
 			}
 		}
-		return undone;
+		return totalUndone;
 	}
 
 	/**
@@ -705,23 +716,26 @@ public class LambdaAligner {
 				String blockedBy = null;
 				for (String c : ni.children) {
 					SyntheticInfo ci = ctx.childIndex.get(c);
-					if (ci != null && !ci.matched && !ci.settled) { blockedBy = c; break; }
+					if (ci != null && !ci.matched && !ci.settled) {
+						blockedBy = c;
+						break;
+					}
 				}
 				long cand = countCompatCandidates(ctx, ni);
 				long leafCand = blockedBy != null ? countCompatCandidates(ctx,
-					ctx.childIndex.get(blockedBy)) : -1;
+				 ctx.childIndex.get(blockedBy)) : -1;
 
 				if (blockedBy != null) {
-					String b = blockedBy;
-					long lc = leafCand;
+					String b  = blockedBy;
+					long   lc = leafCand;
 					dbg(() -> "BLOCKED parent=" + ni.name + " by child=" + b
-						+ "(childMatched=false, 旧侧候选数=" + lc + ")"
-						+ " parentHash=" + ni.hash + " parentSem=" + ni.semanticHash
-						+ " parentCand=" + cand);
+					          + "(childMatched=false, 旧侧候选数=" + lc + ")"
+					          + " parentHash=" + ni.hash + " parentSem=" + ni.semanticHash
+					          + " parentCand=" + cand);
 				} else {
 					dbg(() -> "NO-CANDIDATE " + ni.name
-						+ " hash=" + ni.hash + " sem=" + ni.semanticHash
-						+ " 旧侧候选数=" + cand);
+					          + " hash=" + ni.hash + " sem=" + ni.semanticHash
+					          + " 旧侧候选数=" + cand);
 				}
 			}
 		}
@@ -763,7 +777,7 @@ public class LambdaAligner {
 	private static boolean sameChildOwnership(MatchContext ctx, SyntheticInfo ni, SyntheticInfo oi) {
 		for (String c : ni.children) {
 			SyntheticInfo ci = infoByName(ctx, false, c);
-			if (ci == null) return true;                       // 信息不足：不判违规
+			if (ci == null) continue;                          // 信息不足：跳过该子
 			if (ci.matchedWith == null) continue;              // 未配对：无从判断，跳过
 			// 已配对的子必须归到对方引用过的旧名字上
 			if (!oi.children.contains(ci.matchedWith.name)) return false;
@@ -801,13 +815,12 @@ public class LambdaAligner {
 
 	/**
 	 * 执行阶段一的全部匹配趟（Step 1 证据匹配 -> Step 2 A 趟形状深度匹配 -> Step 2 B 趟顺序兜底）。
-	 *
 	 * @return 本轮是否至少产生了一次新配对
 	 */
 	private static boolean matchAllPasses(MatchContext ctx) {
-		LongObjectMap<List<SyntheticInfo>> oldGroups = ctx.oldGroups;
-		LongObjectMap<List<SyntheticInfo>> newGroups = ctx.newGroups;
-		boolean anyProgressed = false;
+		LongObjectMap<List<SyntheticInfo>> oldGroups     = ctx.oldGroups;
+		LongObjectMap<List<SyntheticInfo>> newGroups     = ctx.newGroups;
+		boolean                            anyProgressed = false;
 
 		// 1. Step 1（同组同 hash）+ 跨组指纹（证据匹配，迭代至收敛）
 		boolean progressed;
@@ -854,7 +867,6 @@ public class LambdaAligner {
 
 	/**
 	 * Step 1a：同组、同 hash、同名 —— 证据最强的一档。
-	 *
 	 * @return 本趟是否至少配对了一个方法（供层级迭代判断是否需要再跑一轮）
 	 */
 	private static boolean step1a(MatchContext ctx, List<SyntheticInfo> newGroup, List<SyntheticInfo> oldGroup) {
@@ -919,7 +931,7 @@ public class LambdaAligner {
 	/** 配对并登记：把 {@code ni} 改名为 {@code oi} 的名字。 */
 	private static void pair(MatchContext ctx, SyntheticInfo ni, SyntheticInfo oi, String pass) {
 		dbg(() -> "[" + pass + "] PAIR " + ni.name + "(shape=" + ni.shape + " depth=" + ni.upDepth + ")"
-			+ " -> " + oi.name + "(shape=" + oi.shape + " depth=" + oi.upDepth + ")");
+		          + " -> " + oi.name + "(shape=" + oi.shape + " depth=" + oi.upDepth + ")");
 		recordRename(ctx, ni, oi.name);
 		ni.matchedWith = oi;
 		ni.matched = true;
@@ -938,7 +950,6 @@ public class LambdaAligner {
 	 *
 	 * <p>深度与 shape 都由两侧各自的 indy 关系算出、与匹配状态无关，所以这里对叶子可直接
 	 * 判定，不与 {@link #hasUnmatchedChild} 互等。</p>
-	 *
 	 * @return 本趟是否至少配成一对
 	 */
 	private static boolean step2PassA(MatchContext ctx, List<SyntheticInfo> newGroup,
@@ -957,15 +968,19 @@ public class LambdaAligner {
 				if (oi.upDepth != ni.upDepth) continue;   // 深度必须相等
 				if (!sameNestingLevel(ni, oi)) continue;  // 形状必须相等
 				if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
-				if (oi.name.equals(ni.name)) { bestOld = oi; break; }   // 同名者优先
+				if (!calleesPairTo(ni, oi)) continue;     // 必须满足结构证据（后代修改时的关键防护）
+				if (oi.name.equals(ni.name)) {
+					bestOld = oi;
+					break;
+				}   // 同名者优先
 				if (bestOld == null) bestOld = oi;
 			}
 			if (bestOld == null) continue;
 
 			dbg(() -> "A-PASS ni=" + ni.name + " depth=" + ni.upDepth + " shape=" + ni.shape
-				+ " oldCandidates=" + oldGroup.stream()
-					.map(o -> o.name + ":d" + o.upDepth + ":" + o.shape
-						+ (o.matched ? ":M" : "") + (o.ghost ? ":G" : "")).toList());
+			          + " oldCandidates=" + oldGroup.stream()
+			           .map(o -> o.name + ":d" + o.upDepth + ":" + o.shape
+			                     + (o.matched ? ":M" : "") + (o.ghost ? ":G" : "")).toList());
 			if (!ni.name.equals(bestOld.name) && ni.hash != bestOld.hash) {
 				warnPositionalMismatch(ctx.currentClass, bestOld, ni.name, ni.desc);
 			}
@@ -981,7 +996,6 @@ public class LambdaAligner {
 	 *
 	 * <p>A 趟（{@link #step2PassA}）已先在**全类**上跑完并配掉"深度 + shape 都相等"的对，
 	 * 这里再用放宽的候选条件兜底。两趟分开的原因见 {@link #step2PassA}。</p>
-	 *
 	 * @return 本趟是否至少配对了一个方法
 	 */
 	private static boolean step2(MatchContext ctx, List<SyntheticInfo> newGroup, List<SyntheticInfo> oldGroup) {
@@ -992,7 +1006,7 @@ public class LambdaAligner {
 
 			SyntheticInfo bestOld = null;
 
-			// 第一优先级：组内同名且签名逻辑等价
+			// 第一优先级：组内同名且签名逻辑等价，且子结构吻合
 			//
 			// 两道约束缺一不可：
 			//   • oi.matched    —— 旧方法只能被用一次；
@@ -1002,17 +1016,20 @@ public class LambdaAligner {
 			// 会被登记给两个不同描述符的新方法，renameMap 里一个键覆盖另一个，
 			// 结果新方法内部对被改名的子的引用指向了别处。实测见 scratch/hstest/deep2/ 变体乙：
 			// 新的叶子占了旧 $2，而新外层内部引用的 $2 实际指向新的中层。
-			if (bestOld == null)
 			for (SyntheticInfo oi : oldGroup) {
 				if (oi.matched || oi.ghost) continue;
 				if (!oi.renameable) continue;   // 与 ni 上的限制对称
 				if (ctx.usedOldNames.contains(oi.name)) continue;
 				if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
 				if (!sameNestingLevel(ni, oi)) continue;
-				if (oi.name.equals(ni.name)) { bestOld = oi; break; }
+				if (!calleesPairTo(ni, oi)) continue;
+				if (oi.name.equals(ni.name)) {
+					bestOld = oi;
+					break;
+				}
 			}
 
-			// 第二优先级：第一个签名逻辑等价的未匹配旧方法
+			// 第二优先级：签名逻辑等价且子结构吻合的未匹配旧方法
 			if (bestOld == null) {
 				for (SyntheticInfo oi : oldGroup) {
 					if (oi.matched || oi.ghost) continue;
@@ -1020,6 +1037,7 @@ public class LambdaAligner {
 					if (ctx.usedOldNames.contains(oi.name)) continue;
 					if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
 					if (!sameNestingLevel(ni, oi)) continue;
+					if (!calleesPairTo(ni, oi)) continue;
 					bestOld = oi;
 					break;
 				}
@@ -1098,8 +1116,8 @@ public class LambdaAligner {
 	 */
 	private static boolean matchByFingerprintAcrossGroups(MatchContext ctx) {
 		boolean progressed = false;
-		var newGroups = ctx.newGroups;
-		var oldGroups = ctx.oldGroups;
+		var     newGroups  = ctx.newGroups;
+		var     oldGroups  = ctx.oldGroups;
 
 		for (int idx : groupOrder(newGroups)) {
 			List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
@@ -1118,12 +1136,14 @@ public class LambdaAligner {
 				}
 				// 第二优先级：全类范围内指纹相同
 				if (bestOld == null) {
-					outer:
 					for (int k : groupOrder(oldGroups)) {
 						List<SyntheticInfo> g = oldGroups.valueAt(k);
 						if (g == null || g == sameGroup) continue;
 						SyntheticInfo oi = firstFingerprintMatch(ctx, g, ni, true);
-						if (oi != null) { bestOld = oi; break outer; }
+						if (oi != null) {
+							bestOld = oi;
+							break;
+						}
 					}
 				}
 				if (bestOld == null) continue;
@@ -1138,7 +1158,6 @@ public class LambdaAligner {
 
 	/**
 	 * 在 {@code group} 中找第一个与 {@code ni} 指纹相同且未被匹配的旧方法。
-	 *
 	 * @param preferSameName 是否优先命中与 {@code ni} 同名的候选（同名意味着
 	 *                       "编译期序号都没变"，是更强的证据）
 	 * @return 命中的旧方法信息；没有则返回 {@code null}
@@ -1175,7 +1194,7 @@ public class LambdaAligner {
 
 	/** 顺序回退告警去重缓存：同一处错配只报一次。 */
 	private static final Set<String> WARNED_REALIGNMENTS =
-		Collections.newSetFromMap(new ConcurrentHashMap<>());
+	 Collections.newSetFromMap(new ConcurrentHashMap<>());
 
 	/**
 	 * 清空"只报一次"的去重缓存（{@link #WARNED_REALIGNMENTS} 与
@@ -1222,11 +1241,11 @@ public class LambdaAligner {
 		if (!WARNED_REALIGNMENTS.add(key)) return;
 
 		HotSwapAgent.warn("[LambdaAligner] 顺序回退配对但方法体不一致 " + owner
-			+ "：旧 " + oi.name + oi.desc + " <- 新 " + newName + newDesc
-			+ "。同一逻辑组内存在多个同形 lambda 时，插入/删除会使其序号整体位移，"
-			+ "此时旧名字会被交给一个语义不同的方法：老 CallSite **不会抛异常**，"
-			+ "而是安静地执行新方法体（实测确认：deep2 变体乙里旧 $2 承载了 doB2 的语义）。"
-			+ "建议把每个 lambda 放进独立的私有方法，让身份由结构而非位置决定。");
+		                  + "：旧 " + oi.name + oi.desc + " <- 新 " + newName + newDesc
+		                  + "。同一逻辑组内存在多个同形 lambda 时，插入/删除会使其序号整体位移，"
+		                  + "此时旧名字会被交给一个语义不同的方法：老 CallSite **不会抛异常**，"
+		                  + "而是安静地执行新方法体（实测确认：deep2 变体乙里旧 $2 承载了 doB2 的语义）。"
+		                  + "建议把每个 lambda 放进独立的私有方法，让身份由结构而非位置决定。");
 	}
 	//endregion
 
@@ -1295,11 +1314,33 @@ public class LambdaAligner {
 		return cw.toByteArray();
 	}
 
-	/** 收集一个类里所有方法的 {@code name + desc}。 */
+	/** 收集一个类里所有方法的 {@code name + desc}，并校验方法键唯一性（防重复定义引发 ClassFormatError）。 */
 	private static Set<String> collectMethodKeys(ClassNode cn) {
 		Set<String> keys = new HashSet<>(cn.methods.size() * 2);
-		for (MethodNode mn : cn.methods) keys.add(mn.name + mn.desc);
+		for (MethodNode mn : cn.methods) {
+			if (!keys.add(mn.name + mn.desc)) {
+				throw new IllegalStateException("Duplicate method after align: " + mn.name + mn.desc);
+			}
+		}
 		return keys;
+	}
+
+	/** 后置廉价结构校验：确保类内所有指向本类的 invokedynamic 目标方法实际存在。 */
+	private static void validateIndyTargets(ClassNode cn, Set<String> presentKeys) {
+		for (MethodNode mn : cn.methods) {
+			for (AbstractInsnNode insn : mn.instructions) {
+				if (insn instanceof InvokeDynamicInsnNode indy) {
+					if (indy.bsmArgs != null && indy.bsmArgs.length > 1 && indy.bsmArgs[1] instanceof Handle h) {
+						if (cn.name.equals(h.getOwner()) && MethodFingerprinter.isSyntheticName(h.getName())) {
+							String key = h.getName() + h.getDesc();
+							if (!presentKeys.contains(key)) {
+								throw new IllegalStateException("Missing indy target method: " + key + " in " + cn.name);
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 
 	/**
@@ -1352,7 +1393,10 @@ public class LambdaAligner {
 			Set<Integer> seen = new HashSet<>();
 			boolean      ok   = true;
 			for (int k : newKeys) {
-				if (!seen.add(k)) { ok = false; break; }
+				if (!seen.add(k)) {
+					ok = false;
+					break;
+				}
 			}
 			if (!ok) {
 				warnSkipSwitch(mn, "重算后出现 hashCode 碰撞");
@@ -1372,7 +1416,7 @@ public class LambdaAligner {
 				newKeyList.add(newKeys[i]);
 			}
 			sw.labels = newLabels;
-			sw.keys   = newKeyList;
+			sw.keys = newKeyList;
 		}
 	}
 
@@ -1387,8 +1431,8 @@ public class LambdaAligner {
 		}
 		if (!(p instanceof MethodInsnNode mi)) return false;
 		return "java/lang/String".equals(mi.owner)
-			&& "hashCode".equals(mi.name)
-			&& "()I".equals(mi.desc);
+		       && "hashCode".equals(mi.name)
+		       && "()I".equals(mi.desc);
 	}
 
 	/**
@@ -1437,9 +1481,9 @@ public class LambdaAligner {
 			if (n instanceof LabelNode l && boundaries.contains(l)) break;
 
 			if (n instanceof MethodInsnNode mi
-				&& "java/lang/String".equals(mi.owner)
-				&& "equals".equals(mi.name)
-				&& "(Ljava/lang/Object;)Z".equals(mi.desc)) {
+			    && "java/lang/String".equals(mi.owner)
+			    && "equals".equals(mi.name)
+			    && "(Ljava/lang/Object;)Z".equals(mi.desc)) {
 
 				AbstractInsnNode prev = previousRealInsn(mi);
 
@@ -1452,8 +1496,8 @@ public class LambdaAligner {
 				}
 
 				if (prev instanceof LdcInsnNode ldc
-					&& ldc.cst instanceof String s
-					&& MethodFingerprinter.isSyntheticName(s)) {
+				    && ldc.cst instanceof String s
+				    && MethodFingerprinter.isSyntheticName(s)) {
 					if (found == null) {
 						found = s;
 					} else if (!found.equals(s)) {
@@ -1467,11 +1511,11 @@ public class LambdaAligner {
 			// 遇到无条件跳转或返回指令：当前 case 逻辑已终结，立即截断
 			int op = n.getOpcode();
 			if (op == Opcodes.GOTO
-				|| op == Opcodes.RETURN
-				|| op == Opcodes.IRETURN || op == Opcodes.LRETURN
-				|| op == Opcodes.FRETURN || op == Opcodes.DRETURN
-				|| op == Opcodes.ARETURN
-				|| op == Opcodes.ATHROW) {
+			    || op == Opcodes.RETURN
+			    || op == Opcodes.IRETURN || op == Opcodes.LRETURN
+			    || op == Opcodes.FRETURN || op == Opcodes.DRETURN
+			    || op == Opcodes.ARETURN
+			    || op == Opcodes.ATHROW) {
 				break;
 			}
 		}
@@ -1497,7 +1541,7 @@ public class LambdaAligner {
 	/** 放弃修复时留痕，避免“静默失效”。 */
 	private static void warnSkipSwitch(MethodNode mn, String reason) {
 		HotSwapAgent.info("[LambdaAligner] 跳过 $deserializeLambda$ 的 switch 修复（"
-			+ mn.name + mn.desc + "）：" + reason);
+		                  + mn.name + mn.desc + "）：" + reason);
 	}
 
 	/**
@@ -1519,7 +1563,6 @@ public class LambdaAligner {
 	 * {@code presentKeys}（只需 {@code name + desc}）；
 	 * （c）供 {@link #resurrectOrphanedLambdas} 提取孤儿方法的签名头，
 	 * 避免再次读取 {@code oldBytes}。</p>
-	 *
 	 * @param bytes 要扫描的字节码
 	 * @param ctx   匹配上下文
 	 * @param isOld 是否为旧版本
@@ -1530,12 +1573,11 @@ public class LambdaAligner {
 		// SKIP_DEBUG：不解析行号 / 局部变量表；SKIP_FRAMES：不解析 StackMapTable。
 		// 二者对逻辑指纹都没有贡献，跳过可减少内存与解析时间。
 		new ClassReader(bytes).accept(cn,
-			ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+		 ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
 
 		for (MethodNode mn : cn.methods) {
 			// —— 无条件登记到避障集：让 fresh name 不会撞到类中任何已有方法 ——
-			if (isOld) ctx.oldNameDescSet.add(mn.name + mn.desc);
-			else       ctx.existingNewNames.add(mn.name);
+			if (isOld) { ctx.oldNameDescSet.add(mn.name + mn.desc); } else ctx.existingNewNames.add(mn.name);
 
 			if (mn.name.startsWith("<")) continue;
 			if ((mn.access & Opcodes.ACC_BRIDGE) != 0) continue;
@@ -1553,7 +1595,7 @@ public class LambdaAligner {
 			// 回放指令流；传入的 Label 与 collectValidLabels 取出的实例一致
 			mn.accept(fp);
 
-			String  logicalName = extractLogicalName(mn.name);
+			String logicalName = extractLogicalName(mn.name);
 			// access$ 是跨类引用，本对齐器只做“保名不改名”。
 			//
 			// 这里进一步收窄为"必须命中 lambda 系名字模式"，而不只是"带 ACC_SYNTHETIC"。
@@ -1567,18 +1609,18 @@ public class LambdaAligner {
 			//
 			// 收窄后这些方法只登记进避障集（scan 开头无条件登记 name / name+desc），
 			// 阶段二生成避障名时仍会避开它们，但不再参与任何匹配与改名。
-			boolean renameable  = matchesPattern && !mn.name.startsWith("access$");
-			SyntheticInfo info  = new SyntheticInfo(
-				mn.name, mn.desc, mn.access, fp.getHash(), logicalName, renameable);
+			boolean renameable = matchesPattern && !mn.name.startsWith("access$");
+			SyntheticInfo info = new SyntheticInfo(
+			 mn.name, mn.desc, mn.access, fp.getHash(), logicalName, renameable);
 			// 幽灵空壳（上一轮为兜住老 CallSite 而注入的空方法）标记为"不参与匹配"：
 			// 它必须留在 oldGroups 里供孤儿计算复现，但名字已经是"死名字"，
 			// 不能再被当成某个新 lambda 的目标 —— 否则会把它挤到别的名字上去。
 			info.ghost = isGhostMethod(mn);
 			info.children = collectChildLambdaNames(mn, cn.name);
-			if (!isOld) putNameIndex(ctx, ctx.childIndex, info);
+			if (!isOld) putNameIndex(ctx.childIndex, info);
 			// 完整名字索引（两侧各一份），供 infoByName 做 O(1) 查找。
 			// 这里就地填充即可：scan 的循环体已经走完该名字对应的 SyntheticInfo 构建。
-			putNameIndex(ctx, isOld ? ctx.oldNameIndex : ctx.newNameIndex, info);
+			putNameIndex(isOld ? ctx.oldNameIndex : ctx.newNameIndex, info);
 			groupByLogic(isOld ? ctx.oldGroups : ctx.newGroups, info, cn.name);
 		}
 
@@ -1623,14 +1665,23 @@ public class LambdaAligner {
 				if (g == null) continue;
 				for (SyntheticInfo info : g) {
 					List<String> shapes = new ArrayList<>(info.children.size());
-					boolean ready = true;
+					boolean      ready  = true;
 					for (String c : info.children) {
 						SyntheticInfo ci = infoByName(ctx, isOld, c);
-						if (ci == null || ci.ghost) { shapes.add("()"); continue; }   // 幽灵 = 无子
-						if (ci.shape == null) { ready = false; break; }               // 子未定稿
+						if (ci == null || ci.ghost) {
+							shapes.add("()");
+							continue;
+						}   // 幽灵 = 无子
+						if (ci.shape == null) {
+							ready = false;
+							break;
+						}               // 子未定稿
 						shapes.add(ci.shape);
 					}
-					if (!ready) { pending = true; continue; }
+					if (!ready) {
+						pending = true;
+						continue;
+					}
 					Collections.sort(shapes);
 
 					shapeBuf.setLength(0);
@@ -1641,7 +1692,7 @@ public class LambdaAligner {
 					// 轻量短路：与既有值相同则不生成 String。
 					// contentEquals 在 String 一侧调用，参数是 CharSequence（StringBuilder 满足）。
 					if (info.shape != null && info.shape.length() == shapeBuf.length()
-						&& info.shape.contentEquals(shapeBuf)) {
+					    && info.shape.contentEquals(shapeBuf)) {
 						continue;
 					}
 					info.shape = shapeBuf.toString();
@@ -1653,7 +1704,7 @@ public class LambdaAligner {
 				// 明确区分"没算完"与"算完了"：这里留下的是**未定稿**（形状可能为 null），
 				// 而不是一个看似合法的错值。
 				HotSwapAgent.warn("[LambdaAligner] 子树形状在 " + (isOld ? "old" : "new")
-					+ " 侧 64 轮未收敛（存在环或异常引用），沿用当前值；未定稿者保持 null");
+				                  + " 侧 64 轮未收敛（存在环或异常引用），沿用当前值；未定稿者保持 null");
 			}
 		}
 		// 仍为 null 的（理论上只在成环时出现）退化为叶子形状，保证后续比较不 NPE。
@@ -1693,33 +1744,45 @@ public class LambdaAligner {
 					for (SyntheticInfo info : g) {
 						if (info.ghost) continue;
 						List<String> rs = referrers.get(info.name);
-						int nd;
+						int          nd;
 						if (rs == null || rs.isEmpty()) {
 							// 没有任何 lambda 引用它：若它本身是 lambda 合成方法，
 							// 说明被普通方法（build()）直接引用 -> 深度 0。
 							nd = 0;
 						} else {
-							int max = -1;
+							int     max        = -1;
 							boolean pendingRef = false;
 							for (String r : rs) {
 								SyntheticInfo ri = infoByName(ctx, isOld, r);
-								if (ri == null) { pendingRef = true; continue; }
-								if (ri.upDepth < 0) { pendingRef = true; continue; }
+								if (ri == null) {
+									pendingRef = true;
+									continue;
+								}
+								if (ri.upDepth < 0) {
+									pendingRef = true;
+									continue;
+								}
 								if (ri.upDepth > max) max = ri.upDepth;
 							}
-							if (pendingRef) { pending = true; continue; }   // 引用者未定稿 -> 本轮跳过
+							if (pendingRef) {
+								pending = true;
+								continue;
+							}   // 引用者未定稿 -> 本轮跳过
 							nd = max + 1;
 						}
-						if (nd != info.upDepth) { info.upDepth = nd; changed = true; }
+						if (nd != info.upDepth) {
+							info.upDepth = nd;
+							changed = true;
+						}
 					}
 				}
-				// 与 computeShapes 一致：收敛判据是"没有未定稿 且 无变化"。
+				// 与形状定点计算一致：收敛判据是"没有未定稿 且 无变化"。
 				// 原先只判 changed，于是"引用者未定稿"（成环等）时第一轮即静默 break，
 				// upDepth 停在 -1，而那行告警**永远打不出来** —— 未收敛被完全静默。
 				if (!changed && !pending) break;
 				if (round == 63) {
 					HotSwapAgent.warn("[LambdaAligner] 上行深度在 " + (isOld ? "old" : "new")
-						+ " 侧 64 轮未收敛（可能存在环），未定稿者保持 -1");
+					                  + " 侧 64 轮未收敛（可能存在环），未定稿者保持 -1");
 				}
 			}
 		}
@@ -1755,7 +1818,10 @@ public class LambdaAligner {
 						// 幽灵仍留在 groups 里供孤儿计算复现，但语义指纹计算把它当"无此子"。
 						if (ci.ghost) continue;
 						long cs = ci.semanticHash != 0 ? ci.semanticHash : ci.hash;
-						if (ci.semanticHash == 0 && !ci.children.isEmpty()) { sem = 0; break; }
+						if (ci.semanticHash == 0 && !ci.children.isEmpty()) {
+							sem = 0;
+							break;
+						}
 						sem = Utils.compositeHash(Long.toString(sem), Long.toString(cs));
 					}
 					if (sem != 0 && sem != info.semanticHash) {
@@ -1771,7 +1837,7 @@ public class LambdaAligner {
 				// 真出现环时，宁可让少数方法按当前（可能不完整的）语义指纹参与匹配，
 				// 也不能让整次热更失败。
 				HotSwapAgent.warn("[LambdaAligner] 递归语义指纹在 " + className
-					+ " 上 64 轮未收敛，沿用当前值继续（结果可能不够精确，但不影响可用性）");
+				                  + " 上 64 轮未收敛，沿用当前值继续（结果可能不够精确，但不影响可用性）");
 			}
 		}
 	}
@@ -1785,22 +1851,20 @@ public class LambdaAligner {
 	 *
 	 * <p>两个都是活方法的同名不同描述符：仍后写覆盖，并在 DEBUG 下留痕。</p>
 	 */
-	private static void putNameIndex(MatchContext ctx, Map<String, SyntheticInfo> index, SyntheticInfo info) {
+	private static void putNameIndex(Map<String, SyntheticInfo> index, SyntheticInfo info) {
 		SyntheticInfo prev = index.get(info.name);
-		if (prev == null) {
+		if (prev == null || (prev.ghost && !info.ghost)) {
+			// 新写入，或已有幽灵、后遇到活方法：活方法覆盖幽灵
 			index.put(info.name, info);
-		} else if (prev.ghost && !info.ghost) {
-			// 已有幽灵，后遇到活方法：活方法覆盖幽灵
-			index.put(info.name, info);
-		} else if (!prev.ghost && info.ghost) {
-			// 已有活方法，后遇到幽灵：保留活方法，不被幽灵覆盖
-		} else {
-			if (!prev.ghost && !info.ghost && !prev.desc.equals(info.desc)) {
+		} else if (!info.ghost) {
+			// 两个都是活方法：后写覆盖，并在同名不同 desc 时留痕
+			if (!prev.desc.equals(info.desc)) {
 				dbg(() -> "COLLISION: same-name live methods with different desc: " + info.name
-					+ " " + prev.desc + " vs " + info.desc);
+				          + " " + prev.desc + " vs " + info.desc);
 			}
 			index.put(info.name, info);
 		}
+		// 若已有活方法且当前为幽灵（!prev.ghost && info.ghost）：保留活方法，静默忽略幽灵
 	}
 
 	/** 在已扫描的旧/新分组里按名字找 SyntheticInfo（供子指纹计算使用）。 */
@@ -1855,7 +1919,6 @@ public class LambdaAligner {
 	 * {@code signature} / {@code exceptions} 这些方法头字段——它们不受
 	 * {@code SKIP_*} 影响。方法体（Code 属性）由 {@link #injectDummyBody}
 	 * 重新生成，不会拷贝 {@code oldCn} 中的原始指令。</p>
-	 *
 	 * @param oldCn       已解析的旧类节点（由 {@code align} 中的 {@code scan} 提供）
 	 * @param newBytes    经过重命名处理后的新版本字节码
 	 * @param presentKeys 新版本里实际存在的所有方法键（{@code name + desc}）
@@ -1871,6 +1934,7 @@ public class LambdaAligner {
 			List<SyntheticInfo> oldGroup = oldGroups.valueAt(idx);
 			if (oldGroup == null) continue;
 			for (SyntheticInfo oi : oldGroup) {
+				if (!oi.renameable) continue; // 关键修复：只对真正可改名的 Lambda 系方法幽灵化，普通合成方法（如 access$/$default）让其自然缺失
 				String key = oi.name + oi.desc;
 				if (!presentKeys.contains(key)) orphanedKeys.add(key);
 			}
@@ -1908,7 +1972,7 @@ public class LambdaAligner {
 			ghosted.append(mn.name);
 		}
 		HotSwapAgent.info("[LambdaAligner] " + oldCn.name + " 幽灵化 " + toInject.size()
-			+ " 个方法（老 CallSite 将走熔断/降级）：" + ghosted);
+		                  + " 个方法（老 CallSite 将走熔断/降级）：" + ghosted);
 
 		// 3. 以空壳形式追加到新类末尾
 		ClassReader cr = new ClassReader(newBytes);
@@ -1923,8 +1987,8 @@ public class LambdaAligner {
 					// 空壳方法必须带 Code 属性，强制清掉 abstract / native
 					int access = mn.access & ~(Opcodes.ACC_ABSTRACT | Opcodes.ACC_NATIVE);
 					MethodVisitor dummy = super.visitMethod(
-						access, mn.name, mn.desc, mn.signature,
-						mn.exceptions == null ? null : mn.exceptions.toArray(new String[0]));
+					 access, mn.name, mn.desc, mn.signature,
+					 mn.exceptions == null ? null : mn.exceptions.toArray(new String[0]));
 					if (dummy != null) {
 						injectDummyBody(dummy, className, mn.name, mn.desc);
 					}
@@ -1947,10 +2011,7 @@ public class LambdaAligner {
 	 *   <li>若为 UpdateRef 保护的调用：Java 静态方法直接抛出 {@link NoSuchMethodError} 展开栈中断执行；</li>
 	 *   <li>若为普通业务调用：Java 静态方法去重打印警告日志后正常返回，随后由生成的字节码 100% 线性返回类型默认值（0 / null / false）。</li>
 	 * </ul>
-	 * 从而在 Java 17+ / 21 等平台环境下，无需 StackMapTable 即可 100% 通过 JVM 类验证。
-	 * （本类实际用了 {@code instanceof} 模式匹配与 {@link java.util.stream.Stream#toList()}，
-	 * 均需 Java 16+；文首"Java 7+"的旧说法已不成立，{@link StackWalker} 的降级分支因此
-	 * 主要是历史兜底而非当前最低版本要求。）
+	 * 从而在各版本 JVM 下无需 StackMapTable 即可 100% 通过类验证。
 	 * </p>
 	 */
 	private static void injectDummyBody(MethodVisitor mv, String className, String name, String desc) {
@@ -1966,8 +2027,8 @@ public class LambdaAligner {
 		//   • 不需要 ThreadLocal 缓冲，也不需要 synchronized。
 		mv.visitLdcInsn(locationOf(className, name, desc));
 		mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-			Type.getInternalName(LambdaAligner.class),
-			"onOrphanInvoked", "(Ljava/lang/String;)V", false);
+		 Type.getInternalName(LambdaAligner.class),
+		 "onOrphanInvoked", "(Ljava/lang/String;)V", false);
 
 		// 2. 100% 线性无分支返回类型默认值（若上面抛出异常则直接展开调用栈，根本不会执行到此）
 		injectDefaultReturnValue(mv, returnType, desc);
@@ -2025,13 +2086,13 @@ public class LambdaAligner {
 	 * 其 hash 在 JVM 中已缓存，因此查找是 O(1)、**不分配**、且无需任何全局锁。</p>
 	 */
 	private static final Set<String> LOGGED_ORPHANS =
-		Collections.newSetFromMap(new ConcurrentHashMap<>());
+	 Collections.newSetFromMap(new ConcurrentHashMap<>());
 
 	/** 日志去重。{@code add} 返回 true 表示本次是首次，才打印。 */
 	private static void logOrphanOnce(String location) {
 		if (LOGGED_ORPHANS.add(location)) {
 			HotSwapAgent.warn("[LambdaAligner] orphaned lambda invoked: " + location
-				+ " (subsequent invocations will be muted)");
+			                  + " (subsequent invocations will be muted)");
 		}
 	}
 
@@ -2048,7 +2109,6 @@ public class LambdaAligner {
 	 *
 	 * <p><b>可见性要求</b>：桩代码通过 {@code INVOKESTATIC} 调用本方法，因此目标类的
 	 * 类加载器必须能看到 {@code nipx.LambdaAligner}。父委派正常时成立。</p>
-	 *
 	 * @param location 形如 {@code com.example.Foo#lambda$build$0()V} 的常量
 	 */
 	public static void onOrphanInvoked(String location) {
@@ -2108,28 +2168,18 @@ public class LambdaAligner {
 	 * 再跳过透明帧取调用者"处理，语义与 StackWalker 路径一致。
 	 * 桌面 JVM 上该分支实际不可达（本类最低要求 Java 16+，而 StackWalker 自 Java 9 起可用），
 	 * 保留它是为了 Android 等没有 StackWalker 的运行时。</p>
-	 *
 	 * @return 若直接调用者为 UpdateRef 的 run 系方法（或兜底命中）则返回 true
 	 */
 	public static boolean isCalledByUpdateRef() {
 		try {
 			if (StackWalkerHolder.IS_SUPPORTED) {
-				// 定位幽灵桩入口
-				// 跳过 onOrphanInvoked 自身与桩
-				// 穿透代理/隐藏帧
-				return Boolean.TRUE.equals(StackWalkerHolder.WALKER.walk(s -> s
-				 .dropWhile(f -> !isOrphanEntry(f))        // 定位幽灵桩入口
-				 .skip(2)                                  // 跳过 onOrphanInvoked 自身与桩
-				 .filter(f -> !isTransparentFrame(f.getClassName()))  // 穿透代理/隐藏帧
-				 .findFirst()
-				 .map(f -> isUpdateRefInvoke(f.getClassName(), f.getMethodName()))
-				 .orElse(false)));
+				return StackWalkerHolder.checkUpdateRef();
 			}
-		} catch (Throwable ignored) {}
+		} catch (Throwable ignored) { }
 
 		try {
-			StackTraceElement[] t = new Throwable().getStackTrace();
-			int entry = -1;
+			StackTraceElement[] t     = new Throwable().getStackTrace();
+			int                 entry = -1;
 			for (int i = 0; i < t.length; i++) {
 				if (SELF.equals(t[i].getClassName()) && "onOrphanInvoked".equals(t[i].getMethodName())) {
 					entry = i;
@@ -2142,17 +2192,12 @@ public class LambdaAligner {
 			while (skip < t.length && isTransparentFrame(t[skip].getClassName())) skip++;
 			if (skip >= t.length) return false;
 			return isUpdateRefInvoke(t[skip].getClassName(), t[skip].getMethodName());
-		} catch (Throwable ignored) {}
+		} catch (Throwable ignored) { }
 		return false;
 	}
 
 	/** 本类的全限定名，用于在栈帧里定位幽灵桩入口。 */
 	private static final String SELF = LambdaAligner.class.getName();
-
-	/** 该帧是否为幽灵桩入口（本类的 {@code onOrphanInvoked}）。 */
-	private static boolean isOrphanEntry(StackWalker.StackFrame f) {
-		return SELF.equals(f.getClassName()) && "onOrphanInvoked".equals(f.getMethodName());
-	}
 
 	/**
 	 * 透明帧：桩与真实调用者之间由 {@code invokedynamic} 生成的代理类帧。
@@ -2172,9 +2217,9 @@ public class LambdaAligner {
 		if (className == null || className.isEmpty()) return false;
 		// 刻意只用**类名**（不取 Class 对象），因此无需 RETAIN_CLASS_REFERENCE，
 		// 也避免为判断而触发类加载。
-		return className.indexOf("$$Lambda") >= 0
-			|| className.indexOf("$$$Lambda") >= 0
-			|| className.startsWith("jdk.internal.reflect.");
+		return className.contains("$$Lambda")
+		       || className.contains("$$$Lambda")
+		       || className.startsWith("jdk.internal.reflect.");
 	}
 
 	/**
@@ -2201,9 +2246,28 @@ public class LambdaAligner {
 			try {
 				walker = StackWalker.getInstance();
 				supported = true;
-			} catch (Throwable ignored) {}
+			} catch (Throwable ignored) { }
 			IS_SUPPORTED = supported;
 			WALKER = walker;
+		}
+
+		static boolean checkUpdateRef() {
+			if (!IS_SUPPORTED || WALKER == null) return false;
+			// 定位幽灵桩入口
+			// 跳过 onOrphanInvoked 自身与桩
+			// 穿透代理/隐藏帧
+			return Boolean.TRUE.equals(WALKER.walk(s -> s
+			 .dropWhile(f -> !isOrphanEntry(f))        // 定位幽灵桩入口
+			 .skip(2)                                  // 跳过 onOrphanInvoked 自身与桩
+			 .filter(f -> !isTransparentFrame(f.getClassName()))  // 穿透代理/隐藏帧
+			 .findFirst()
+			 .map(f -> isUpdateRefInvoke(f.getClassName(), f.getMethodName()))
+			 .orElse(false)));
+		}
+
+		/** 该帧是否为幽灵桩入口（LambdaAligner 的 {@code onOrphanInvoked}）。 */
+		private static boolean isOrphanEntry(StackWalker.StackFrame f) {
+			return SELF.equals(f.getClassName()) && "onOrphanInvoked".equals(f.getMethodName());
 		}
 	}
 	//endregion
@@ -2232,8 +2296,8 @@ public class LambdaAligner {
 	private static boolean isGhostMethod(MethodNode mn) {
 		for (AbstractInsnNode n : mn.instructions) {
 			if (n instanceof MethodInsnNode mi
-				&& mi.owner.equals(Type.getInternalName(LambdaAligner.class))
-				&& mi.name.equals("onOrphanInvoked")) {
+			    && mi.owner.equals(Type.getInternalName(LambdaAligner.class))
+			    && mi.name.equals("onOrphanInvoked")) {
 				return true;
 			}
 		}
@@ -2265,7 +2329,6 @@ public class LambdaAligner {
 	 * 不抹平“捕获列表本身发生变化”导致的描述符差异（例如新版本少捕获了一个局部变量）。
 	 * 那种情况需要真正的方法适配器（老签名 → 新签名的桥接转发），属于独立议题；
 	 * 本方法至少保证“名字被保住”，不再退化成避障名。</p>
-	 *
 	 * @param owner 当前类的内部名（形如 {@code com/example/Foo}）
 	 * @param a     参与比对的方法信息
 	 * @param b     参与比对的方法信息
@@ -2346,7 +2409,7 @@ public class LambdaAligner {
 	 * 描述符里含完整参数类型，所以同名但参数类型不同的重载也不会互相污染。</p>
 	 */
 	private static void groupByLogic(
-		LongObjectMap<List<SyntheticInfo>> target, SyntheticInfo info, String owner) {
+	 LongObjectMap<List<SyntheticInfo>> target, SyntheticInfo info, String owner) {
 		String              normalizedDesc = normalizeStaticShape(owner, info.isStatic(), info.desc);
 		long                key            = Utils.compositeHash(info.logicalName, normalizedDesc);
 		List<SyntheticInfo> list           = target.get(key);
@@ -2435,9 +2498,8 @@ public class LambdaAligner {
 		 *
 		 * <p>形状与内容无关，所以"编辑叶子方法体"不会改变它（不会重现上一轮那个
 		 * "祖先因后代被编辑而失去证据"的问题），但它能区分外层与中层。</p>
-		 */
-		/**
-		 * 子树形状；{@code null} 表示<b>尚未定稿</b>。
+		 *
+		 * <p>{@code null} 表示<b>尚未定稿</b>。</p>
 		 *
 		 * <p><b>为什么用 null 而不是 "()"</b>：{@code "()"} 本身就是叶子的合法形状。
 		 * 若用它兼作"未算完"的哨兵，父读到未定稿的子时无法与"真叶子"区分，会算出一个
@@ -2463,15 +2525,15 @@ public class LambdaAligner {
 		int upDepth = -1;
 
 		SyntheticInfo(String name, String desc, int access, long hash, String logicalName, boolean renameable) {
-			this.name        = name;
-			this.desc        = desc;
-			this.access      = access;
-			this.hash        = hash;
+			this.name = name;
+			this.desc = desc;
+			this.access = access;
+			this.hash = hash;
 			this.logicalName = logicalName;
-			this.renameable  = renameable;
-			this.matched     = false;
-			this.settled     = false;
-			this.ghost       = false;
+			this.renameable = renameable;
+			this.matched = false;
+			this.settled = false;
+			this.ghost = false;
 		}
 
 		boolean isStatic() {

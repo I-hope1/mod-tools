@@ -94,6 +94,8 @@ public class AnonClassReproTest {
 			testScenario17_CallerTracingOwnerValidation(javac, baseDir);
 			// 测试 18 多层嵌套匿名类末尾前缀保护（确证缺陷 3 修复）
 			testScenario18_NestedAnonymousClassPrefixRetention(javac, baseDir);
+			// 测试 19 级联树拓扑对齐与蜕变测试套件（Milestone 2 核心引擎）
+			testScenario19_CascadingTreeAndMetamorphicSuite(javac, baseDir);
 		} finally {
 			deleteRecursively(baseDir);
 		}
@@ -1125,6 +1127,165 @@ public class AnonClassReproTest {
 		AnonClassAligner.Result resShift = AnonClassAligner.align("testPrefix/NestPrefixCase", hostBytes, oldShift, newShift);
 		String targetShift = resShift.renameMap.get("testPrefix/NestPrefixCase$2$1");
 		check(targetShift != null && targetShift.startsWith("testPrefix/NestPrefixCase$1$"), "Scenario 18: 父被重命名时未匹配子类前缀跟随映射后的父名 (新 $2$1 映射为 " + targetShift + " 而非错误的 $2$*)");
+	}
+
+	static void testScenario19_CascadingTreeAndMetamorphicSuite(String javac, File baseDir) throws Exception {
+		File dir = new File(baseDir, "s19");
+		dir.mkdirs();
+
+		// 1. 编译 V1 (包含两棵子树：Save -> WorkerSave, Delete -> WorkerDelete)
+		File f1 = new File(dir, "CascadeSubjectV1.java");
+		Files.writeString(f1.toPath(),
+			"package testCascade;\n" +
+			"class CascadeSubject {\n" +
+			"    public String test() {\n" +
+			"        Runnable r1 = new Runnable() {\n" +
+			"            public void run() {\n" +
+			"                String tag = \"TAG_SAVE\";\n" +
+			"                Runnable w1 = new Runnable() { public void run() { String sub = \"TAG_WORKER_SAVE\"; } };\n" +
+			"            }\n" +
+			"        };\n" +
+			"        Runnable r2 = new Runnable() {\n" +
+			"            public void run() {\n" +
+			"                String tag = \"TAG_DELETE\";\n" +
+			"                Runnable w2 = new Runnable() { public void run() { String sub = \"TAG_WORKER_DEL\"; } };\n" +
+			"            }\n" +
+			"        };\n" +
+			"        return \"V1\";\n" +
+			"    }\n" +
+			"}\n");
+		File out1 = new File(dir, "out1");
+		out1.mkdirs();
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", out1.getAbsolutePath(), f1.getAbsolutePath());
+
+		// 2. 编译 V2 (头部插入 Audit，导致 Save 与 Delete 整体位移)
+		File f2 = new File(dir, "CascadeSubjectV2.java");
+		Files.writeString(f2.toPath(),
+			"package testCascade;\n" +
+			"class CascadeSubject {\n" +
+			"    public String test() {\n" +
+			"        Runnable rAudit = new Runnable() {\n" + // 新增 $1: Audit
+			"            public void run() { String tag = \"TAG_AUDIT\"; }\n" +
+			"        };\n" +
+			"        Runnable r1 = new Runnable() {\n" + // 位移为 $2: Save -> $2$1
+			"            public void run() {\n" +
+			"                String tag = \"TAG_SAVE\";\n" +
+			"                Runnable w1 = new Runnable() { public void run() { String sub = \"TAG_WORKER_SAVE\"; } };\n" +
+			"            }\n" +
+			"        };\n" +
+			"        Runnable r2 = new Runnable() {\n" + // 位移为 $3: Delete -> $3$1
+			"            public void run() {\n" +
+			"                String tag = \"TAG_DELETE\";\n" +
+			"                Runnable w2 = new Runnable() { public void run() { String sub = \"TAG_WORKER_DEL\"; } };\n" +
+			"            }\n" +
+			"        };\n" +
+			"        return \"V2\";\n" +
+			"    }\n" +
+			"}\n");
+		File out2 = new File(dir, "out2");
+		out2.mkdirs();
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", out2.getAbsolutePath(), f2.getAbsolutePath());
+
+		// 读取字节码
+		byte[] hostV2 = Files.readAllBytes(new File(out2, "testCascade/CascadeSubject.class").toPath());
+		Map<String, byte[]> oldAnon = new LinkedHashMap<>();
+		oldAnon.put("testCascade/CascadeSubject$1", Files.readAllBytes(new File(out1, "testCascade/CascadeSubject$1.class").toPath()));
+		oldAnon.put("testCascade/CascadeSubject$1$1", Files.readAllBytes(new File(out1, "testCascade/CascadeSubject$1$1.class").toPath()));
+		oldAnon.put("testCascade/CascadeSubject$2", Files.readAllBytes(new File(out1, "testCascade/CascadeSubject$2.class").toPath()));
+		oldAnon.put("testCascade/CascadeSubject$2$1", Files.readAllBytes(new File(out1, "testCascade/CascadeSubject$2$1.class").toPath()));
+
+		Map<String, byte[]> newAnon = new LinkedHashMap<>();
+		newAnon.put("testCascade/CascadeSubject$1", Files.readAllBytes(new File(out2, "testCascade/CascadeSubject$1.class").toPath())); // Audit
+		newAnon.put("testCascade/CascadeSubject$2", Files.readAllBytes(new File(out2, "testCascade/CascadeSubject$2.class").toPath())); // Save
+		newAnon.put("testCascade/CascadeSubject$2$1", Files.readAllBytes(new File(out2, "testCascade/CascadeSubject$2$1.class").toPath())); // WorkerSave
+		newAnon.put("testCascade/CascadeSubject$3", Files.readAllBytes(new File(out2, "testCascade/CascadeSubject$3.class").toPath())); // Delete
+		newAnon.put("testCascade/CascadeSubject$3$1", Files.readAllBytes(new File(out2, "testCascade/CascadeSubject$3$1.class").toPath())); // WorkerDel
+
+		// 验证 1: 级联树自顶向下推进与作用域收敛
+		AnonClassAligner.Result res = AnonClassAligner.alignCascading("testCascade/CascadeSubject", hostV2, oldAnon, newAnon, null, null);
+		Map<String, String> m = res.renameMap;
+
+		check("testCascade/CascadeSubject$1".equals(m.get("testCascade/CascadeSubject$2")),
+			"Scenario 19: Level 1 新 Save($2) 精准映射到旧 Save($1)");
+		check("testCascade/CascadeSubject$2".equals(m.get("testCascade/CascadeSubject$3")),
+			"Scenario 19: Level 1 新 Delete($3) 精准映射到旧 Delete($2)");
+		check("testCascade/CascadeSubject$3".equals(m.get("testCascade/CascadeSubject$1")),
+			"Scenario 19: Level 1 全新 Audit($1) 分配未占用编号 ($3)");
+
+		check("testCascade/CascadeSubject$1$1".equals(m.get("testCascade/CascadeSubject$2$1")),
+			"Scenario 19: Level 2 作用域收敛 - WorkerSave($2$1) 精准对齐到旧 WorkerSave($1$1)");
+		check("testCascade/CascadeSubject$2$1".equals(m.get("testCascade/CascadeSubject$3$1")),
+			"Scenario 19: Level 2 作用域收敛 - WorkerDel($3$1) 精准对齐到旧 WorkerDel($2$1)");
+
+		// 验证 2: 蜕变测试 - 语义标记置换不变性 (Permutation Invariance)
+		List<String> newKeys = new ArrayList<>(newAnon.keySet());
+		List<String> oldKeys = new ArrayList<>(oldAnon.keySet());
+		boolean permPassed = true;
+		for (int seed = 1; seed <= 5; seed++) {
+			Collections.shuffle(newKeys, new Random(seed * 42L));
+			Collections.shuffle(oldKeys, new Random(seed * 99L));
+			Map<String, byte[]> shuffledNew = new LinkedHashMap<>();
+			for (String k : newKeys) shuffledNew.put(k, newAnon.get(k));
+			Map<String, byte[]> shuffledOld = new LinkedHashMap<>();
+			for (String k : oldKeys) shuffledOld.put(k, oldAnon.get(k));
+
+			AnonClassAligner.Result permRes = AnonClassAligner.align("testCascade/CascadeSubject", hostV2, shuffledOld, shuffledNew);
+			if (!permRes.renameMap.equals(res.renameMap)) {
+				permPassed = false;
+				break;
+			}
+		}
+		check(permPassed, "Scenario 19: 蜕变测试 - 随机打乱输入序列后的置换不变性 100% 成立");
+
+		// 验证 3: 蜕变测试 - 幂等性 (Idempotence)
+		AnonClassAligner.Result idemRes = AnonClassAligner.align("testCascade/CascadeSubject", hostV2, newAnon, newAnon);
+		boolean isIdentity = true;
+		for (Map.Entry<String, String> e : idemRes.renameMap.entrySet()) {
+			if (!e.getKey().equals(e.getValue())) isIdentity = false;
+		}
+		check(isIdentity, "Scenario 19: 蜕变测试 - 同一版本连续对齐的幂等性成立（恒等映射）");
+
+		// 验证 4: 蜕变测试 - 尾部追加不变性 (Append Invariance)
+		Map<String, byte[]> appendedNew = new LinkedHashMap<>(newAnon);
+		// 构造尾部全新类 $4 (带有独立字节码)
+		appendedNew.put("testCascade/CascadeSubject$4", Files.readAllBytes(new File(out2, "testCascade/CascadeSubject$1.class").toPath()));
+		AnonClassAligner.Result appRes = AnonClassAligner.align("testCascade/CascadeSubject", hostV2, oldAnon, appendedNew);
+		boolean appendInvariant = true;
+		for (Map.Entry<String, String> e : res.renameMap.entrySet()) {
+			if (!e.getValue().equals(appRes.renameMap.get(e.getKey()))) {
+				appendInvariant = false;
+				break;
+			}
+		}
+		check(appendInvariant, "Scenario 19: 蜕变测试 - 尾部追加全新匿名类不扰动原有所有层级映射");
+
+		// 验证 5: 严格准入分类器 - 具名局部类与枚举排除校验 (D8)
+		org.objectweb.asm.tree.ClassNode localCn = new org.objectweb.asm.tree.ClassNode();
+		localCn.name = "testCascade/CascadeSubject$1Local";
+		localCn.access = org.objectweb.asm.Opcodes.ACC_SUPER;
+		org.objectweb.asm.tree.InnerClassNode icn = new org.objectweb.asm.tree.InnerClassNode(
+			"testCascade/CascadeSubject$1Local", "testCascade/CascadeSubject", "Local", 0
+		);
+		localCn.innerClasses = Collections.singletonList(icn);
+		check(!AnonClassAligner.isAnonymousClass(localCn, "testCascade/CascadeSubject"),
+			"Scenario 19: 严格准入分类器 - 成功识别并排除具名局部类 (Foo$1Local)");
+
+		org.objectweb.asm.tree.ClassNode enumCn = new org.objectweb.asm.tree.ClassNode();
+		enumCn.name = "testCascade/CascadeSubject$1";
+		enumCn.access = org.objectweb.asm.Opcodes.ACC_ENUM;
+		check(!AnonClassAligner.isAnonymousClass(enumCn, "testCascade/CascadeSubject"),
+			"Scenario 19: 严格准入分类器 - 成功识别并排除枚举类型 (ACC_ENUM)");
+
+		// 验证 6: 后置校验单射性与前缀不变量防护 (D12)
+		Map<String, String> badMap = new HashMap<>();
+		badMap.put("testCascade/CascadeSubject$2$1", "testCascade/CascadeSubject$3$1"); // 父是 $1，子却跑到 $3 下
+		boolean rejectCaught = false;
+		try {
+			AnonClassAligner.validateRenameMap(badMap, "testCascade/CascadeSubject");
+		} catch (IllegalStateException expected) {
+			rejectCaught = true;
+		}
+		check(rejectCaught, "Scenario 19: 后置校验 - 前缀不变量破坏时触发异常防护");
 	}
 
 	static void runCmd(String... cmd) throws Exception {

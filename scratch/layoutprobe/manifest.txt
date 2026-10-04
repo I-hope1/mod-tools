@@ -1,0 +1,4 @@
+Premain-Class: LayoutAgent
+Agent-Class: LayoutAgent
+Can-Redefine-Classes: true
+Can-Retransform-Classes: true

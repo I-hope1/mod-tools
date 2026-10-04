@@ -246,14 +246,22 @@ renameMap.put(n.name, candidate);
 
 > **实现注记**：**没有显式的 `<initializer>` / `<clinit>` / `<init>` 作用域标签**。实际做法是：`normalizeEnclosingMethod` 先把 `cn.outerMethod` 归约（剥掉 `lambda$` / Kotlin `$lambda` 前缀与编号），若仍为空则调 `resolveHostMethodForAnon` 在宿主类里反向扫 `NEW` 指令找实例化方法并沿调用链回溯；回溯不到就保持 `null`。于是"同作用域"退化为"`outerMethod` 与 `outerMethodDesc` 都相等"（`null == null` 也算相等），Tier 1/3/4 的谓词正是这么写的 —— 对非方法上下文这一退化**可用**，但没有构造器/初始化块三态区分，因此"字段初始化器里两个同构匿名类"与"静态块里两个同构匿名类"之间的隔离，实际靠 `orderIndex` + 结构谓词，而不是靠作用域类别。
 >
-> **⚠️ 已实测的缺口（javac 8 回退路径在嵌套层失效）**：上面那条回退扫描走的是**宿主类**的 `ClassNode`，而嵌套匿名类的实例化点位于**它的直接父匿名类**里。探针 `DeepNestProbe` 的交替嵌套实验：
+> **⚠️ 曾存在的缺口（javac 8 嵌套层）—— 已修复**：上面那条回退扫描原本走的是**宿主类**的 `ClassNode`，而嵌套匿名类的实例化点位于**它的直接父匿名类**里。探针 `DeepNestProbe` 的交替嵌套实验：
 >
 > | 类 | `EnclosingMethod` | 用宿主 `deep/Alt` 扫 | 用父类 `deep/Alt$1` 扫 |
 > |:---|:---|:---|:---|
 > | `Alt$1`（A0） | `Alt.run()V` | ✅ `run()V` | ✅ `run()V` |
 > | `Alt$1$1`（A1，在 A0 的 lambda 内） | `Alt$1.work()V` | ❌ `null` | ✅ `work()V` |
 >
-> **影响面要说准**：该扫描只在 `cn.outerMethod` 为空或归约成 `"null"` 时才触发（javac 11+ 直接给出源码方法名，所以生产路径多数情况下**不走**它）；真正会走到的是 **javac 8 的 `lambda$null$0`** 形态 —— 而 javac 8 恰好是"嵌套匿名类 + 多层 lambda"最容易触发它的组合。修法很小：`parseInfos` 里按 `getParentName(hostSlash, name)` 取直接父类的 `ClassNode`（第 1 层仍用宿主），约 10 行。
+> **触发条件被实测收窄到一个精确形态**：该扫描只在 `cn.outerMethod` 为空或归约成字面量 `"null"` 时才触发。`lambda$work$0`（lambda 直接写在方法体里）会被归约成 `"work"`，**不触发**；真正触发的是 javac 8 对"**lambda 套在 lambda 里**"生成的 `lambda$null$N` —— 而归约后两侧都变成字面量 `"null"`，于是**方法作用域这个判据被抹平**。
+>
+> **后果（可复现的跨方法错配）**：同一父匿名类里两个方法各含一条 `lambda→lambda→匿名类` 链，两条链结构全等、v2 把**方法声明顺序反转**且两侧方法体都改（Tier 1 失效）。修复前两侧 `outerMethod` 都是 `"null"` → 2×2 歧义 → minDiff 按物理序号仲裁，而**恒等映射的 `|Δ|` 全为 0**，所以必然产出恒等映射 —— 两条链跨方法错配。修复后 `outerMethod` 分别为 `alpha` / `beta` → Tier 3 双向唯一、跨方法正确。
+>
+> **修复**：`parseInfos` 改用 `getParentName(hostSlash, name)` 对应的**直接父类** `ClassNode`（level 1 时父类即宿主，复用已解析的 `hostNode`；父类节点按需解析并缓存）。影响面极小：javac 11+ 的 `EnclosingMethod` 本就给出源码方法名，走不到这条分支。
+>
+> **回归证据**：`AnonClassReproTest` Scenario 24（6 条断言，用真实 javac 8）：靶子存在（`lambda$null$N` → `"null"`）、宿主扫描返回 null、父类扫描能区分 `alpha`/`beta`、端到端跨方法正确（`$1$1→$1$2`、`$1$2→$1$1`）、`ambiguousMatches == 0` 且无孤儿无新增。
+>
+> **顺带确认的命名事实**：该实验同时证明 **javac 8 的嵌套命名也是 `Alt$1$1`**（不是平铺），所以 §3.6 的"`$` 段级联 = 匿名类包含树"对 javac 8 成立。
 
 ### 3.6 Lambda 与匿名类的边界：为什么不需要一棵异构树 `[设计澄清 + 一条不变量]`
 
@@ -612,7 +620,7 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 | §3.2 宿主粗粒度签名隔离                            | ➖ 已偏离-有意保留 | `#ANON_COARSE` 未实现且不应按字面实现，见 §3.2 注记                                                       |
 | §3.3 未匹配子类前缀派生                            | ✅                 | `alignCascading` 的 `level > 1` 分支；Scenario 18/19                                                      |
 | §3.4 调用链三要素比对 + 深度 32                    | ✅                 | `findCallerMethod`；Scenario 12/17                                                                        |
-| §3.5 非方法上下文宿主归类                          | 🔶                 | 靠 `outerMethod == null` 退化，无 `<initializer>`/`<clinit>`/`<init>` 三态。**另：回退扫描走宿主节点，嵌套层失效**（§3.5 注记） |
+| §3.5 非方法上下文宿主归类                          | 🔶                 | 靠 `outerMethod == null` 退化，无 `<initializer>`/`<clinit>`/`<init>` 三态。**回退扫描上下文已修**：改用直接父类节点（javac 8 `lambda$null$N` + 嵌套匿名类，Scenario 24 守卫） |
 | §3.6 Lambda/匿名类边界（INV-1 自描述指纹 / INV-2 禁止互相递归） | 🔶         | INV-2 成立；INV-1 在匿名类侧成立**但属偶然**（`AnonClassHasher` 无自递归），lambda 侧是 1 层折叠（即 §3.1 排除项 4 的偏离）；见 §3.6 |
 | §3.6 提案的"异构拓扑树"                            | ➖ 不需要          | 实测 javac 中 lambda **不构成命名层级**（`Alt$1$1` 而非 `Alt$1$1$1`），匿名类包含树已由 `$` 前缀完全表达；无须合并两棵树（§3.6） |
 | §4.1 Tier 1 / 2 / 3 / 4                            | 🔶                 | `matchTier` + 双向唯一 + minDiff。**新发现缺陷：Tier 3 的 minDiff 在"前插 + 改体"下系统性错配**（§4.1 注记） |
@@ -642,9 +650,9 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 本系统的回归门槛**不在 Gradle 的 `test` 任务里**，而是 `scratch/hstest` 下的一组 main 程序，经 `suite.sh` 由 `:hstestRun`（`Exec`，走 Git Bash）驱动，并已挂在根项目的 `check` 上：
 
 * **入口**：`./gradlew check` → `:hstestRun` → `scratch/hstest/suite.sh`。
-* **本主题直接相关**：`AnonClassTest`（Save/Delete 静默对调防线）、`AnonClassReproTest`（**22 场景**，§1~§4 的绝大多数断言来自它；Scenario 21 专测 §4.3 拒绝通道与 §6.3/§6.4 闸门与开关，Scenario 22 专测嵌套匿名类的内容哈希可用性与设计不变量）。
+* **本主题直接相关**：`AnonClassTest`（Save/Delete 静默对调防线）、`AnonClassReproTest`（**24 场景**，§1~§4 的绝大多数断言来自它；Scenario 21 专测 §4.3 拒绝通道与 §6.3/§6.4 闸门与开关，Scenario 22 专测嵌套匿名类的内容哈希可用性与设计不变量，Scenario 23 专测 strict 的行为边界，Scenario 24 专测 javac 8 回退扫描上下文）。
 * **同一次运行还包括**（Lambda 对齐主题，与本主题共用夹具与哈希器）：`SemAssert`、`CompeteDeleteTest`、`PassBTest`、`NameIndexTest`、`FixtureATest`、`XGroupTest`。
-* **数量基线**：`scratch/hstest/expected-count.txt` 记录 `<通过> <失败> <已知限制>` 三元组，实测值与基线不符即构建失败；另有"一条断言都没执行即判 FAIL"的空绿金丝雀。当前基线 `228 0 3`。
+* **数量基线**：`scratch/hstest/expected-count.txt` 记录 `<通过> <失败> <已知限制>` 三元组，实测值与基线不符即构建失败；另有"一条断言都没执行即判 FAIL"的空绿金丝雀。当前基线 `245 0 3`。
 * **注意**：`AnonClassReproTest` 的夹具由脚本按 JDK 版本分别编译（同包同名不能混编），且 `hstestRun` 依赖 `hotswap-agent` 的 **jar 重建** —— hstest 的 `runtimeClasspath` 解析到的是 `build/libs` 下的 jar 而非 `classes` 目录，少了这一步会静默跑陈旧产物。
 
 ### 8.3 建议的实施优先级
@@ -655,7 +663,7 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 2. ~~**§4.3 对齐期异常路径的宿主级拒绝**（`[HOTSWAP-REJECT]` + 宿主组整体移出本批）~~ ✅ **已完成**（统一拒绝通道 `AlignmentRejectedException` → `HotSwapAgent.rejectHostGroup`；见 §4.3 注记里对"半提交"疑点的更正）。属**事务完整性**问题，与算法保守性不是一个层级。
 3. ~~**修 `AnonClassHasher` 未屏蔽的方法描述符**~~ ✅ **已完成**（改为走 `MethodFingerprinter.maskDescriptor`，定向屏蔽；嵌套匿名类**全层恢复 Tier 1**，`T1` 由恒为 1 变为等于嵌套层数）。守卫断言已进 `check`：`AnonClassReproTest` Scenario 22（4 层嵌套 T1=4 / T4=0；描述符定向性反例；层级守卫）。附带收益：不再依赖"不比字段表"的 Tier 4，等于把 §7.2 风险 1 的暴露面收窄一大半。
 4. **决定 Tier 3 minDiff 策略**（§4.1 注记的实测缺陷：前插 + 改体 → 静默错配；depth 1 已可复现，探针 `DeepNestProbe` 的 2 条 FAIL 即此）。三选一：① `strict` 也覆盖 `ambiguousMatches > 0`（3 行，但默认仍不安全）；② Tier 3 多候选不再仲裁、降级给 Tier 4（保守安全，牺牲部分正当匹配）；③ 落地 **Tier 1.5 相似度 + 后代拓扑维度**（根本修法，能把该场景**判对**而非判成歧义 —— §3.6 已论证"后代拓扑"就是 §4.1 例子真正需要的第二判据）。**建议先做 ①止血，再评估 ③**。
-5. **`parseInfos` 改用直接父类节点做实例化点扫描**（§3.5 注记实测缺口，约 10 行；影响 javac 8 的 `lambda$null$0` + 嵌套匿名类组合）。
+5. ~~**`parseInfos` 改用直接父类节点做实例化点扫描**~~ ✅ **已完成**（level 1 复用 `hostNode`，嵌套层按需解析并缓存直接父类节点）。靶子经实测收窄为 javac 8 的 `lambda$null$N`（`lambda$work$0` 不触发）；修复前该形态下两侧 `outerMethod` 都停在 `"null"`、方法作用域判据被抹平，导致"方法顺序反转 + 两侧改体"时两条同构链**跨方法错配**。守卫断言已进 `check`：`AnonClassReproTest` Scenario 24（真实 javac 8，6 条）。附带确认 javac 8 的嵌套命名同样是 `$1$1`。
 6. **把 INV-1 / INV-2 写进代码注释与测试**（§3.6）：当前 INV-1 靠"`AnonClassHasher` 恰好没有自递归"成立，随时可能被一次"顺手修复"破坏。建议加一条断言：新增一个子匿名类后，父匿名类的 `contentHash` **必须不变**。
 7. **§7.2 风险 1 升级为实例状态布局安全门**（分级：纯加字段放行 + 日志；删字段 / 改类型 / 改静态性拒绝配对）。理由是它**不是边角路径而是默认路径**（见 §7.2 注记），且后果是"老实例状态被错布局解释"，比配错名字更重。建议这道门做在**事务/重定义层**（顺带覆盖具名类），对齐器只额外拒绝"用户没要求改字段却在背后发生的布局变化"。**建议先补真机实验**：在 `scratch/hstest/src/LiveDcevmTest.java` 的 JBR + `-XX:+AllowEnhancedClassRedefinition` 路径上跑一例"捕获变量类型变更后原地重定义"，看 JBR 是拒绝、复制旧值、还是静默错解释 —— 三种结果对应三种门。
 8. **§2.1 枚举 Switch 映射表排除 + §2.2 第 4 类保留名接入**（`align` 增 `Set<String> reserved` 参数）。两者都能写确定性的负向断言。

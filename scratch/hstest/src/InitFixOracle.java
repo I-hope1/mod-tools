@@ -105,6 +105,7 @@ public class InitFixOracle {
 		scenario("§8 P0-2 误杀白名单：Logger 工厂新增静态字段 → 放行", InitFixOracle::caseLoggerWhitelist);
 		scenario("§4.3 Nest 成员二次写入：内部类改源字段 → 阻断", InitFixOracle::caseNestSecondWrite);
 		scenario("§5.3 ClassDiff 合成字段过滤：$nipx$ 标记不入 added*Fields，业务字段仍检出", InitFixOracle::caseInternalMarkerFilter);
+		scenario("§4.2 bit 4：ThreadLocal 新增字段可补；读取 ThreadLocal.get() 的切片 → 阻断", InitFixOracle::caseThreadLocal);
 
 		System.out.println();
 		System.out.println("通过 " + passed + " 条；失败 " + failed + " 条；合计 " + (passed + failed) + " 条");
@@ -495,6 +496,102 @@ public class InitFixOracle {
 			+ diff.addedInstanceFields);
 	}
 
+	// ==================== 场景 11：§4.2 bit 4 ThreadLocal ====================
+
+	static final String CASE_K_V1 = """
+		package oracle;
+		public class CaseK {
+			public CaseK(String seed) { }
+		}
+		""";
+
+	static final String CASE_K_V2 = """
+		package oracle;
+		public class CaseK {
+			private ThreadLocal<StringBuilder> buf = ThreadLocal.withInitial(StringBuilder::new);
+			public CaseK(String seed) { }
+			public StringBuilder buf() { return buf.get(); }
+		}
+		""";
+
+	static final String CASE_L_V1 = """
+		package oracle;
+		public class CaseL {
+			private final ThreadLocal<StringBuilder> tl = ThreadLocal.withInitial(StringBuilder::new);
+			public CaseL(String seed) { tl.get().append(seed); }
+		}
+		""";
+
+	static final String CASE_L_V2 = """
+		package oracle;
+		public class CaseL {
+			private final ThreadLocal<StringBuilder> tl = ThreadLocal.withInitial(StringBuilder::new);
+			private String snapshot;
+			public CaseL(String seed) { tl.get().append(seed); this.snapshot = tl.get().toString(); }
+		}
+		""";
+
+	static void caseThreadLocal() throws Exception {
+		// ---- 正向：withInitial 只是分配，不读线程状态，作为新增字段初始化式必须放行 ----
+		Fixture fk = loadFixture("oracle.CaseK", CASE_K_V1, CASE_K_V2);
+		Object ck = construct(fk.host, "seed");
+		Object sk = construct(fk.host, "seed");
+		resetToDefault(fk.host, sk, "buf", "Ljava/lang/ThreadLocal;");
+		InstanceTracker.register(sk);
+
+		InitFix.PatchReport rk = fk.transform();
+		expect(rk, false, "buf", InitFix.FieldStatus.ACCEPTED, null);
+		check(rk.patchGenerated(), "CaseK：ThreadLocal 新增字段确实进了补丁");
+		fk.apply();
+
+		check(read(fk.host, sk, "buf") instanceof ThreadLocal,
+			"CaseK：补丁后 buf 是可用的 ThreadLocal（实际 " + read(fk.host, sk, "buf") + "）");
+		StringBuilder gotK  = (StringBuilder) fk.host.getMethod("buf").invoke(sk);
+		StringBuilder wantK = (StringBuilder) fk.host.getMethod("buf").invoke(ck);
+		check(wantK.toString().equals(gotK.toString()),
+			"CaseK：线程副本行为与正常构造实例一致（构造器=\"" + wantK + "\"，补丁=\"" + gotK + "\"）");
+
+		// ---- 负向：切片读取 ThreadLocal.get()，补丁线程 != 构造线程 → 必须阻断 ----
+		Fixture fl = loadFixture("oracle.CaseL", CASE_L_V1, CASE_L_V2);
+		Object cl = onOtherThread(() -> construct(fl.host, "abc"));   // 线程 A 构造
+		Object sl = onOtherThread(() -> construct(fl.host, "abc"));   // 线程 A 构造
+		resetToDefault(fl.host, sl, "snapshot", "Ljava/lang/String;");
+		InstanceTracker.register(sl);
+
+		check("abc".equals(read(fl.host, cl, "snapshot")),
+			"CaseL 前置条件：构造线程上的 snapshot == \"abc\"（实际 "
+			+ describe(read(fl.host, cl, "snapshot")) + "）——补丁若在别的线程重算就会拿到空副本");
+
+		InitFix.PatchReport rl = fl.transform();
+		expect(rl, false, "snapshot", InitFix.FieldStatus.REJECTED, "thread-local heap state");
+		check(!rl.patchGenerated(), "CaseL：线程局部读取不再生成任何补丁");
+		fl.apply();
+		check(read(fl.host, sl, "snapshot") == null,
+			"CaseL：存量实例的 snapshot 保持默认值，未被线程相关的重算污染（实际 "
+			+ describe(read(fl.host, sl, "snapshot")) + "）");
+	}
+
+	interface ThrowingSupplier {
+		Object get() throws Exception;
+	}
+
+	/** 在另一条线程上构造实例，用来制造"构造线程 != 补丁线程"，这是生产环境的常态。 */
+	static Object onOtherThread(ThrowingSupplier body) throws Exception {
+		java.util.concurrent.atomic.AtomicReference<Object> ref = new java.util.concurrent.atomic.AtomicReference<>();
+		java.util.concurrent.atomic.AtomicReference<Throwable> err = new java.util.concurrent.atomic.AtomicReference<>();
+		Thread t = new Thread(() -> {
+			try {
+				ref.set(body.get());
+			} catch (Throwable e) {
+				err.set(e);
+			}
+		}, "oracle-ctor");
+		t.start();
+		t.join();
+		if (err.get() != null) throw new IllegalStateException(err.get());
+		return ref.get();
+	}
+
 	// ==================== 夹具装配 ====================
 
 	static final class Fixture {
@@ -699,6 +796,7 @@ public class InitFixOracle {
 			long off = Reflect.UNSAFE.objectFieldOffset(f);
 			switch (desc) {
 				case "Ljava/lang/String;" -> Reflect.UNSAFE.putObject(target, off, null);
+				case "Ljava/lang/ThreadLocal;" -> Reflect.UNSAFE.putObject(target, off, null);
 				case "I" -> Reflect.UNSAFE.putInt(target, off, 0);
 				case "J" -> Reflect.UNSAFE.putLong(target, off, 0L);
 				case "Z" -> Reflect.UNSAFE.putBoolean(target, off, false);

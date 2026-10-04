@@ -1231,6 +1231,23 @@ public class InitFix {
 	 "org/slf4j/Logger", "java/util/logging/Logger",
 	 "org/apache/logging/log4j/Logger", "org/apache/commons/logging/Log");
 
+	/** ThreadLocal 家族（{@code InheritableThreadLocal} 复用的是同一套方法名）。 */
+	private static final Set<String> THREAD_LOCAL_OWNERS = Set.of(
+	 "java/lang/ThreadLocal", "java/lang/InheritableThreadLocal");
+
+	/**
+	 * ThreadLocal 家族里依赖"执行线程"的方法：{@code get}/{@code initialValue}/{@code childValue}
+	 * 读的是<b>当前线程</b>的副本（§4.2 bit 4 {@code READS_MUTABLE}），{@code set}/{@code remove}
+	 * 变异堆状态（bit 5 {@code MUTATES_HEAP}）。
+	 *
+	 * <p>补丁永远在热更线程上执行，而实例是在应用线程上构造的 —— 两者不是同一条线程，
+	 * 重算必然读到另一份（通常是空的）副本。实测：构造线程上 {@code snapshot="abc"}，
+	 * 补丁线程算出 {@code ""} 并静默写入，属"宁可不补"要拦的那类。
+	 * {@code withInitial} 只是分配一个新的 ThreadLocal，不读任何线程状态，保持放行。</p>
+	 */
+	private static final Set<String> THREAD_LOCAL_STATEFUL = Set.of(
+	 "get", "set", "remove", "initialValue", "childValue");
+
 	/**
 	 * P0 版最小效应判定。
 	 *
@@ -1243,7 +1260,8 @@ public class InitFix {
 	 *       Kotlin {@code Intrinsics}、不可变集合工厂 —— 优先级高于第 3 步的包级黑名单，
 	 *       这正是"严防误杀基础集合构造与 Logger"的落点；</li>
 	 *   <li><b>黑名单</b>：非确定性（时间/随机/identityHashCode/默认时区与字符集）、
-	 *       反射与动态调用、进程与类加载、文件/网络 IO、日志输出；</li>
+	 *       线程局部堆状态（ThreadLocal 的 get/set/remove）、反射与动态调用、
+	 *       进程与类加载、文件/网络 IO、日志输出；</li>
 	 *   <li>未命中者 P0 一律放行 —— 这一步只做"明确危险"的负向拦截，
 	 *       真正的白名单准入（{@code ALLOWED_MASK}）在 P2 落地。</li>
 	 * </ol>
@@ -1308,9 +1326,14 @@ public class InitFix {
 		return false;
 	}
 
-	/** 黑名单：非确定性 / 环境依赖 / 反射 / 进程 / IO / 日志输出。 */
+	/** 黑名单：非确定性 / 线程局部状态 / 环境依赖 / 反射 / 进程 / IO / 日志输出。 */
 	private static String blacklistedCallReason(MethodInsnNode m) {
 		String owner = m.owner, name = m.name;
+
+		if (THREAD_LOCAL_OWNERS.contains(owner) && THREAD_LOCAL_STATEFUL.contains(name)) {
+			return "thread-local heap state " + owner + "." + name
+			     + " (值取决于执行线程，补丁在热更线程上重算会读脏)";
+		}
 
 		if ("java/lang/System".equals(owner)) {
 			switch (name) {

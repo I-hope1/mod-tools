@@ -174,6 +174,64 @@ public class InitFix {
 	 Collections.synchronizedMap(new WeakHashMap<>());
 
 	/**
+	 * 待补字段台账 {@code FieldLedger}（{@code docs/INIT_FIX.md} §3.4）：
+	 * {@code Class -> (字段名 -> 未补原因)}。
+	 *
+	 * <p>解决的问题：redefine 一旦成功，类结构就<b>不可逆</b> —— 宿主类已在物理内存里
+	 * 携带了新字段，而字段可能没被补上（分析期被拒、运行期抛异常、依赖失败、或 redefine
+	 * 本身失败）。如果不记账，下一轮的候选集只看"本轮 Diff 新增字段"，这些字段就会被永久遗忘
+	 * （它们已经"存在"了，再也不会出现在 Diff 里）。</p>
+	 *
+	 * <p>键是弱引用的 {@code Class<?>}，值是纯字符串 —— 与 {@link #PENDING}/{@link #REPORTS}
+	 * 同一策略：不阻止类卸载、不给 Metaspace 添强引用。类被回收后台账自动消失。</p>
+	 */
+	private static final Map<Class<?>, Map<String, String>> LEDGER =
+	 Collections.synchronizedMap(new WeakHashMap<>());
+
+	/** 台账里的一条未决字段。 */
+	public record UnpatchedField(String fieldName, String reason) { }
+
+	/** 只读视图：当前台账里该宿主的未决字段（测试与诊断用）。 */
+	public static Set<UnpatchedField> getUnpatchedFields(Class<?> host) {
+		if (host == null) return Set.of();
+		synchronized (LEDGER) {
+			Map<String, String> m = LEDGER.get(host);
+			if (m == null || m.isEmpty()) return Set.of();
+			Set<UnpatchedField> out = new LinkedHashSet<>();
+			m.forEach((k, v) -> out.add(new UnpatchedField(k, v)));
+			return out;
+		}
+	}
+
+	private static Map<String, String> ledgerSnapshot(Class<?> host) {
+		synchronized (LEDGER) {
+			Map<String, String> m = LEDGER.get(host);
+			return m == null ? Map.of() : new LinkedHashMap<>(m);
+		}
+	}
+
+	/** 记入台账（同名字段覆盖原因，保留最新一次）。 */
+	private static void ledgerPut(Class<?> host, String fieldName, String reason) {
+		if (host == null || fieldName == null) return;
+		String r = reason == null ? "unpatched" : reason;
+		if (r.length() > 200) r = r.substring(0, 200) + "...";
+		synchronized (LEDGER) {
+			LEDGER.computeIfAbsent(host, k -> new LinkedHashMap<>()).put(fieldName, r);
+		}
+	}
+
+	/** 出账：字段本轮已解决（补上、或判定无需补）。 */
+	private static void ledgerRemove(Class<?> host, String fieldName) {
+		if (host == null) return;
+		synchronized (LEDGER) {
+			Map<String, String> m = LEDGER.get(host);
+			if (m == null) return;
+			m.remove(fieldName);
+			if (m.isEmpty()) LEDGER.remove(host);
+		}
+	}
+
+	/**
 	 * 统一的补丁 bridge bootstrap：{@link HotswapBridge} 按 {@code kind} 分派到
 	 * protected 成员桥接或新增字段的条件 CAS 写。
 	 * <p>bsmArgs 布局：{@code [int kind, int opcode, Class owner, Class host]}。</p>
@@ -354,19 +412,28 @@ public class InitFix {
 		Set<String> addedStaticFields   = diff.addedStaticFields;
 		Set<String> addedInstanceFields = diff.addedInstanceFields;
 
+		Map<String, String> pending = ledgerSnapshot(host);
 		if (addedStaticFields.isEmpty() && addedInstanceFields.isEmpty()
-		    && !hasReinitAnnotation(newBytes)) {
+		    && !hasReinitAnnotation(newBytes) && pending.isEmpty()) {
 			REPORTS.put(host, new PatchReport(Map.of(), Map.of(), false));
 			return;
+		}
+		if (!pending.isEmpty()) {
+			log("FieldLedger: retrying " + pending.size() + " unpatched field(s) of "
+			    + diff.newClass.name + ": " + pending);
 		}
 
 		String className = diff.newClass.name;
 		try {
 			BuiltPatch built = buildPatch(host, newBytes, className,
-			                              addedStaticFields, addedInstanceFields);
+			                              addedStaticFields, addedInstanceFields, pending);
 			// if (built == null) return;
 
 			REPORTS.put(host, built.report());
+			// 分析级台账：被拒的记入（下轮重试），放行/零值等价的出账。
+			// 运行期失败由 applyPatch 追加记入 —— 两者顺序天然正确（applyPatch 在后）。
+			ledgerUpdateFromReport(host, built.report());
+
 			if (!built.hasPatch()) return;
 
 			List<WeakReference<Object>> snapshot =
@@ -411,7 +478,8 @@ public class InitFix {
 
 	private static BuiltPatch buildPatch(
 	 Class<?> host, byte[] newBytes, String className,
-	 Set<String> addedStaticFields, Set<String> addedInstanceFields) {
+	 Set<String> addedStaticFields, Set<String> addedInstanceFields,
+	 Map<String, String> pendingLedger) {
 
 		ClassNode newClass = new ClassNode();
 		new ClassReader(newBytes).accept(newClass, 0);
@@ -468,6 +536,28 @@ public class InitFix {
 		if (!reinitFields.isEmpty()) {
 			log("@HotswapReinit 扩展候选集 for " + className
 			    + ": instance=" + targetInstanceFields + ", static=" + targetStaticFields);
+		}
+
+		// §3.4 台账并集：候选字段集合 = 本轮 Diff 新增字段 ∪ 台账内未决字段（∪ 注解字段）。
+		// 这些字段的写入语句仍在构造函数/<clinit> 里，所以仍走同一套提取与安全门；
+		// 之所以必须显式并回来，是因为它们已经"存在"于旧字节码，永远不会再出现在 Diff 里。
+		int retried = 0;
+		for (String f : pendingLedger.keySet()) {
+			FieldNode fn = fieldNodes.get(f);
+			if (fn == null) {
+				// 字段已从新版本里消失：无法再补，按已解决出账（避免台账里留死条目）
+				ledgerRemove(host, f);
+				log("FieldLedger: dropping " + className + "." + f
+				    + " (field no longer declared)");
+				continue;
+			}
+			boolean isStatic = (fn.access & Opcodes.ACC_STATIC) != 0;
+			(isStatic ? targetStaticFields : targetInstanceFields).add(f);
+			retried++;
+		}
+		if (retried > 0) {
+			log("FieldLedger: " + retried + " field(s) of " + className
+			    + " re-entered the candidate set: " + pendingLedger.keySet());
 		}
 
 		// ==================== 实例字段提取 ====================
@@ -990,6 +1080,28 @@ public class InitFix {
 			// 读不了就当没有注解：与"宁可不补"一致
 		}
 		return found[0];
+	}
+
+	/** 分析级台账更新：被拒 → 记入（下轮重试）；放行/T0 零值等价 → 出账。 */
+	private static void ledgerUpdateFromReport(Class<?> host, PatchReport report) {
+		if (report == null) return;
+		for (Map.Entry<String, FieldDecision> e : report.instanceFields().entrySet()) {
+			ledgerApply(host, e.getKey(), e.getValue());
+		}
+		for (Map.Entry<String, FieldDecision> e : report.staticFields().entrySet()) {
+			ledgerApply(host, e.getKey(), e.getValue());
+		}
+	}
+
+	private static void ledgerApply(Class<?> host, String fieldName, FieldDecision decision) {
+		if (decision == null) return;
+		if (decision.status() == FieldStatus.REJECTED) {
+			ledgerPut(host, fieldName, decision.reason());
+		} else {
+			// ACCEPTED：补丁已生成（真正写没写成功由 applyPatch 决定）
+			// NOTHING_TO_PATCH：本来就不需要补 —— 两者都不该留在台账里
+			ledgerRemove(host, fieldName);
+		}
 	}
 
 	// ==================== Analyzer 封装 ====================
@@ -2240,6 +2352,12 @@ public class InitFix {
 		try {
 			applyPatch(clazz, patch);
 		} catch (Throwable e) {
+			// applyPatch 半途夭折（例如 LinkageError 熔断）：我们不知道哪些字段已经写成功，
+			// 只能保守地把整个计划记入台账 —— 下一轮条件 CAS 会跳过已写入的值，
+			// OVERWRITE 字段重写同一个值也是幂等的。
+			for (FieldPatchTask task : patch.plan().allTasks()) {
+				ledgerPut(clazz, task.fieldName(), "patch aborted: " + e);
+			}
 			HotSwapAgent.error("Field init patch failed: " + e.getMessage(), e);
 		}
 	}
@@ -2248,8 +2366,14 @@ public class InitFix {
 		if (clazz == null) return;
 		PendingPatch dropped = PENDING.remove(clazz);
 		if (dropped != null) {
+			// §3.4 的核心场景：redefine 失败，但补丁计划已经生成、类结构随时可能推进；
+			// 这些字段一个都没补，必须记账，否则它们再也不会出现在 Diff 里。
+			for (FieldPatchTask task : dropped.plan().allTasks()) {
+				ledgerPut(clazz, task.fieldName(), "redefine failed; patch never applied");
+			}
 			log("Dropped pending field init patch for " + clazz.getName()
-			    + " after redefine failure");
+			    + " after redefine failure; " + dropped.plan().allTasks().size()
+			    + " field(s) recorded in FieldLedger");
 		}
 	}
 
@@ -2301,6 +2425,7 @@ public class InitFix {
 
 		Set<String> failedFields = new LinkedHashSet<>();
 		Set<String> skippedFields = new LinkedHashSet<>();
+		Map<String, String> failureReasons = new LinkedHashMap<>();
 
 		// ---- 静态字段：整个补丁只跑一次 ----
 		if (!plan.staticTasks().isEmpty()) {
@@ -2308,7 +2433,7 @@ public class InitFix {
 			                  + ", fields=" + plan.staticTasks().size());
 			long start = System.nanoTime();
 			runTasks(host, plan.staticTasks(), staticHandles, null,
-			         failedFields, skippedFields);
+			         failedFields, skippedFields, failureReasons);
 			long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
 			HotSwapAgent.info("Static field init patch for " + host.getName()
 			                  + " done in " + elapsedMs + "ms");
@@ -2323,7 +2448,7 @@ public class InitFix {
 			long start = System.nanoTime();
 			for (Object ins : alive) {
 				runTasks(host, plan.instanceTasks(), instanceHandles, ins,
-				         failedFields, skippedFields);
+				         failedFields, skippedFields, failureReasons);
 			}
 			long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
 
@@ -2343,10 +2468,18 @@ public class InitFix {
 		}
 
 		if (!failedFields.isEmpty() || !skippedFields.isEmpty()) {
+			// §3.4 待补台账：本轮没补上的字段记入，下一轮候选集自动并回来。
+			for (String f : failedFields) {
+				ledgerPut(host, f, "runtime failure: "
+				 + failureReasons.getOrDefault(f, "patch execution failed"));
+			}
+			for (String f : skippedFields) {
+				ledgerPut(host, f, "skipped: "
+				 + failureReasons.getOrDefault(f, "a dependency field failed to patch"));
+			}
 			HotSwapAgent.warn("Field init patch incomplete for " + host.getName()
 			                  + ": failed=" + failedFields + ", skipped=" + skippedFields
-			                  + "（待补字段台账 FieldLedger 见 P1-③：本轮基线已随 redefine 推进，"
-			                  + "未记账就会在下一轮遗忘这些字段）");
+			                  + "（已记入 FieldLedger，下一轮热更会重新纳入候选）");
 		}
 	}
 
@@ -2357,12 +2490,15 @@ public class InitFix {
 	 */
 	private static void runTasks(
 	 Class<?> host, List<FieldPatchTask> tasks, Map<String, MethodHandle> handles,
-	 Object target, Set<String> failedFields, Set<String> skippedFields) {
+	 Object target, Set<String> failedFields, Set<String> skippedFields,
+	 Map<String, String> failureReasons) {
 
 		for (FieldPatchTask task : tasks) {
 			if (!Collections.disjoint(task.dependencies(), failedFields)
 			    || !Collections.disjoint(task.dependencies(), skippedFields)) {
 				skippedFields.add(task.fieldName());
+				failureReasons.putIfAbsent(task.fieldName(), "dependency failed: "
+				 + intersection(task.dependencies(), failedFields, skippedFields));
 				HotSwapAgent.warn("Skipping field init for " + host.getName() + "."
 				                  + task.fieldName() + " because a dependency failed");
 				continue;
@@ -2370,6 +2506,7 @@ public class InitFix {
 			MethodHandle mh = handles.get(task.fieldName());
 			if (mh == null) {
 				skippedFields.add(task.fieldName());
+				failureReasons.putIfAbsent(task.fieldName(), "no MethodHandle for method");
 				continue;
 			}
 			try {
@@ -2379,12 +2516,21 @@ public class InitFix {
 				throw le;   // §1.2 熔断：类元数据假设已被打破，继续修补没有意义
 			} catch (Throwable t) {
 				failedFields.add(task.fieldName());
+				failureReasons.putIfAbsent(task.fieldName(), String.valueOf(t));
 				if (DETAILED_FAILURE_LOGS.incrementAndGet() <= MAX_DETAILED_FAILURES) {
 					HotSwapAgent.error("Field init patch failed for " + host.getName()
 					                   + "." + task.fieldName() + ": " + t.getMessage(), t);
 				}
 			}
 		}
+	}
+
+	private static Set<String> intersection(Set<String> deps, Set<String> a, Set<String> b) {
+		Set<String> out = new LinkedHashSet<>();
+		for (String d : deps) {
+			if (a.contains(d) || b.contains(d)) out.add(d);
+		}
+		return out;
 	}
 
 	private static Set<String> union(Set<String> a, Set<String> b, Set<String> c) {

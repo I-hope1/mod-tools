@@ -114,9 +114,10 @@ public interface ClassHierarchyOracle {
 * **失败策略矩阵**：
   * `ABORT_ON_FATAL`（默认）：单字段逻辑异常跳过；若触发 `LinkageError`、VM 崩溃性故障或 HIGH 风险（非零基本类型）字段被拒，**立即中止，放弃提交阶段 C**。
   * `ABORT_ON_ANY`（严格）：任何字段修补失败即中止全流程。
-* **待补字段台账（`FieldLedger`，解决基线推进遗忘缺陷）**：
+* **待补字段台账（`FieldLedger`，解决基线推进遗忘缺陷）**：`[已实现]`
   * 阶段 A 提交成功后类结构即不可逆。一旦阶段 B 中止，宿主类已在物理内存中携带新字段。
   * 系统在持久化上下文维护 `FieldLedger: Class -> Set<UnpatchedField>`。中止后，基线哈希推进至阶段 A，未成功修补的字段记入台账。下一轮热更时，**候选字段集合 = 本轮 Diff 新增字段 $\cup$ 台账内未决字段**，确保因故障或用户修正表达式后重新提交的字段能被再次处理。
+  * **实现注记**：台账键是<b>弱引用 `Class<?>`</b>、值是纯字符串（字段名 + 原因，不持有类引用，与 `PENDING`/`REPORTS` 同策略）。四种情形记账：分析期被拒（`REJECTED`）、运行期补丁抛异常、依赖字段失败而跳过、redefine 本身失败（计划已生成但一个都没补）。成功（`ACCEPTED` 且驱动未报错）或判定"无需补"（`NOTHING_TO_PATCH`）即出账；字段已从新版本消失也出账。候选集并回时仍走同一套安全门 —— 台账只负责"不要遗忘"，不负责"放行"。
 
 ### 3.5 批处理原子拓扑排序 `[目标规范]`
 若类 `X` 的新增字段表达式读取类 `Y` 的新增字段，两类打包为同一事务批次：
@@ -212,7 +213,10 @@ public final class PatchDriver {
 * **条件 CAS 写入（`KIND_CONDITIONAL`）**：`HotswapBridge` 解析物理偏移量，仅在内存值为类型默认零值时写入。
 * **强制写入（`KIND_FORCE`，`@HotswapReinit(mode = OVERWRITE)`）**：无条件 volatile 写。必须经 `Unsafe` 而不是 `putfield` —— `final` 字段只允许在声明类的构造器里赋值，而补丁是宿主的 hidden nestmate，直接 `putfield` 会在链接期抛 `IllegalAccessError`。
 * **合成标记字段过滤契约**：`ClassDiffUtil` 层统一过滤携带 `ACC_SYNTHETIC` 与 `$nipx$` 前缀的标记字段（如 `forceStaticLambdas` 生成的 `$nipx$lambdasForced`），防止与业务新增字段混淆。
-* **每字段独立静态方法（§5.1）尚未实现**：目前仍是单个 `initStatic()` / `initInstance(Object)` 承载全部字段的直线代码 —— 这意味着一行抛异常会跳过其后的所有字段。逐字段驱动是 P1 的第 1 项。
+* **每字段独立静态方法（§5.1）已实现**：每个放行字段生成 `init$F(LHost;)V` /
+  `initStatic$F()V`，由宿主 `PatchDriver` 逐字段调度（§5.2）。方法边界即异常边界，
+  所以单字段失败只影响该字段与其下游；若把所有切片串回一个方法，一行异常会跳过其后
+  全部字段（实测见 Oracle 场景 15）。
 
 ---
 
@@ -378,19 +382,22 @@ public class Counter {
 | §1.2 五条不变量 | ✅ | `InitFix`（`isInitialized` 守卫、`PENDING` 弱键 + 5min TTL、`PatchReport` 解耦、`LinkageError` 熔断、`afterRedefineFailed`） |
 | §2.1 `ClassHierarchyOracle` | 🔶 | `InitFix.NestView`（只读字节码）已覆盖 Nest 部分；`isProtectedCrossPackageAccess` 仍走 `Class.forName` |
 | §2.2 `PatchPlan` 基线指纹 | ⬜ | — |
-| §3 两阶段 Schema-First / §3.2 阶段 A / §3.4 `FieldLedger` / §3.5 跨类批次 | ⬜ | 单阶段；类内拓扑排序已实现 |
+| §3 两阶段 Schema-First / §3.2 阶段 A | ⬜ | 单阶段 |
+| §3.4 失败策略矩阵（`ABORT_ON_FATAL`/`ABORT_ON_ANY`） | 🔶 | 单字段失败跳过 + 依赖失败跳过 + `LinkageError` 熔断已具备；"中止并放弃提交阶段 C"依赖两阶段 |
+| §3.4 待补字段台账 `FieldLedger` | ✅ | `InitFix.LEDGER`（弱键 Class → 字段名→原因）+ `getUnpatchedFields`；候选集 = 本轮新增 ∪ 台账未决 ∪ 注解字段 |
+| §3.5 跨类批次拓扑排序 | ⬜ | 类内拓扑排序已实现 |
 | §3.3 构造器尾部插桩 | ⬜（缝隙已实测刻画，见 §3.3 注记） | — |
 | §4.1 T0 / T1 / T2 / T3 / T4 | T0 ✅、T1 🔶、T2 🔶、T3 ✅、T4 ⬜ | `FieldStatus.NOTHING_TO_PATCH`、`ConstantValue` 通道、`checkSafe`、§4.2 P0 防御 |
 | §4.2 效应掩码 | 🔶（bit 3/6 已覆盖；bit 4/5 子集） | `InitFix.effectReason` / `blacklistedCallReason` / `builderMutatorReason`，见 §4.2 注记 |
 | §4.3 参数回溯不可变证明 | ✅ | `scanParamFields` + `sourceFieldNotImmutableReason` + `NestView` |
 | §4.4 多根构造器共识 | ✅ | 指纹一致即放行（原先"参数依赖 + 多根一律拒绝"的守卫已移除） |
-| §5.1 每字段独立静态方法 / §5.2 `PatchDriver` | ⬜ | 仍为单个 `initStatic()`/`initInstance(Object)` |
+| §5.1 每字段独立静态方法 / §5.2 `PatchDriver` | ✅ | `init$F(LHost;)V` / `initStatic$F()V` + `PatchPlan`/`FieldPatchTask` + 宿主逐字段驱动（`asType` 适配、依赖失败跳过、`LinkageError` 熔断） |
 | §5.3 条件 CAS / 合成字段过滤 | ✅ | `KIND_CONDITIONAL`；`KIND_FORCE` 为 `@HotswapReinit(OVERWRITE)` 追加；`ClassDiffUtil.isInternalMarkerField` |
 | §6 JVMTI 多态堆检索 | ✅（Native 底座） | `LibTool.getInstances` |
 | §1.1 `@HotswapReinit` 字段级存量覆写 | ✅ | `nipx.annotation.HotswapReinit` + `KIND_FORCE` + T0/后续加工检查豁免 + 豁免时 warn |
 | §8 P2 `@HotswapInit`（T4） | ⬜ | — |
 
-**回归测试**：`hstestInitFixOracle`（已挂 `check`）14 个场景 / 97 条断言，覆盖正向值比对（`InstanceTracker.register → transform → afterRedefine` 全公开 API）与负向阻断断言；`./gradlew check` 会跑。
+**回归测试**：`hstestInitFixOracle`（已挂 `check`）16 个场景 / 114 条断言，覆盖正向值比对（`InstanceTracker.register → transform → afterRedefine` 全公开 API）、负向阻断断言、逐字段驱动的失败隔离、以及 `FieldLedger` 的两轮往返；`./gradlew check` 会跑。
 
 ### 8.1 分阶段规划
 
@@ -404,10 +411,10 @@ public class Counter {
   1. **[运行时验证]** 在目标 JVM（JBR 17/21）上实测连续两次 Schema Redefine（阶段 A $\rightarrow$ 阶段 C）的可行性与 GC 停顿；
   2. **[阶段 A 成员链接验证]** 验证阶段 A 预注入全新私有方法、Lambda 与内部类后，伴生类在阶段 B 链接调用的合法性与稳定性；
   3. **[性能基准]** 压测基于 `IterateOverInstancesOfClass` 的 C++ Native 代码在百万级对象下的耗时与内存开销。
-* **P1（两阶段协议与架构解耦）**：`[未开始]`
-  1. 伴生类重构为“每字段独立静态单方法 + 宿主 `PatchDriver` 用户态调度”模型；
-  2. 落地 Schema-First 两阶段重定义流水线与 `ABORT_ON_FATAL` 事务中止机制；
-  3. 引入**待补字段台账（`FieldLedger`）**，闭合阶段 A 中止后的基线遗忘缺陷；
+* **P1（两阶段协议与架构解耦）**：`[进行中]`
+  1. ~~伴生类重构为“每字段独立静态单方法 + 宿主 `PatchDriver` 用户态调度”模型~~ `[已完成]`；
+  2. 落地 Schema-First 两阶段重定义流水线与 `ABORT_ON_FATAL` 事务中止机制；`[待 P0.5-② 门槛]`
+  3. ~~引入**待补字段台账（`FieldLedger`）**，闭合阶段 A 中止后的基线遗忘缺陷~~ `[已完成]`（候选集 = 本轮 Diff 新增 ∪ 台账未决；分析期被拒、运行期抛异常、依赖失败、redefine 失败四种情形都记账，成功即出账）；
   4. 将 `Analyzer` 库化抽取为纯函数模块。
 * **P2（代数模型与业务逃生体系）**：`[部分提前落地]`
   1. 落地 8 位正交效应位集合（Effect Bitmask）与局部对象变异逃逸分析；🔶 已提前落地 bit 3/6 与 bit 4/5 的子集（见 §4.2 注记）；

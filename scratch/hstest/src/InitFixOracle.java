@@ -29,9 +29,11 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * InitFix 差分 Oracle（{@code docs/INIT_FIX.md} §8 P0-5）。
@@ -111,6 +113,7 @@ public class InitFixOracle {
 		scenario("§3.2 边界：构造器里的独立语句不进切片（REJECT 边界在哪）", InitFixOracle::caseStatementOutsideSlice);
 		scenario("§1.1 @HotswapReinit：解锁构造器读取 / 强制覆写 / CONDITIONAL 不覆写 / T0 绕过", InitFixOracle::caseHotswapReinit);
 		scenario("§5.1/§5.2 逐字段驱动：单字段失败不牵连后续字段，依赖失败显式跳过", InitFixOracle::casePerFieldDriver);
+		scenario("§3.4 FieldLedger：被拒字段记入台账，下一轮无新增字段时仍被重试", InitFixOracle::caseFieldLedger);
 
 		System.out.println();
 		System.out.println("通过 " + passed + " 条；失败 " + failed + " 条；合计 " + (passed + failed) + " 条");
@@ -1078,6 +1081,85 @@ public class InitFixOracle {
 			"CaseU：依赖失败被显式告警（实际 warns=" + agentWarnings.size() + " 条）");
 	}
 
+	// ==================== 场景 16：§3.4 FieldLedger ====================
+
+	/** V1：原始版本（`raw` 是包级私有、非 final）。 */
+	static final String CASE_V_V1 = """
+		package oracle;
+		public class CaseV {
+			String raw;
+			public CaseV(String raw) { this.raw = raw; }
+			public String raw() { return raw; }
+		}
+		""";
+
+	/** V2：新增 `clean = raw.trim()` —— 源字段不可证明不可变（§4.3 条件 A/B 均不满足）→ 拒绝。 */
+	static final String CASE_V_V2 = """
+		package oracle;
+		public class CaseV {
+			String raw;
+			private String clean;
+			public CaseV(String raw) { this.raw = raw; this.clean = raw.trim(); }
+			public String raw() { return raw; }
+		}
+		""";
+
+	/** V3：用户把 `raw` 修成 `private final` —— **没有任何新增字段**，只有台账能让 clean 重试。 */
+	static final String CASE_V_V3 = """
+		package oracle;
+		public class CaseV {
+			private final String raw;
+			private String clean;
+			public CaseV(String raw) { this.raw = raw; this.clean = raw.trim(); }
+			public String raw() { return raw; }
+		}
+		""";
+
+	static void caseFieldLedger() throws Exception {
+		String dot = "oracle.CaseV";
+		byte[] b1 = compile(Map.of(dot, CASE_V_V1)).get(dot);
+		byte[] b2 = compile(Map.of(dot, CASE_V_V2)).get(dot);
+		byte[] b3 = compile(Map.of(dot, CASE_V_V3)).get(dot);
+
+		Class<?> host = Class.forName(dot, true, new ByteLoader(Map.of(dot, b2)));
+		HotSwapAgent.bytecodeCache.put(dot, b2);
+
+		// ---- 第 1 轮：clean 被拒 → 必须记入台账 ----
+		InitFix.transform(host, b2, ClassDiffUtil.diff(b1, b2));
+		InitFix.PatchReport r1 = InitFix.getLastReport(host);
+		expect(r1, false, "clean", InitFix.FieldStatus.REJECTED, "not final and not private");
+		check(!r1.patchGenerated(), "CaseV 第 1 轮：未生成补丁");
+		check(unpatched(host).contains("clean"),
+			"CaseV 第 1 轮：clean 已记入 FieldLedger（实际 " + InitFix.getUnpatchedFields(host) + "）");
+
+		// ---- 前置条件：第 2 轮的 Diff 里没有任何新增字段 ----
+		ClassDiffUtil.ClassDiff d23 = ClassDiffUtil.diff(b2, b3);
+		check(d23.addedInstanceFields.isEmpty() && d23.addedStaticFields.isEmpty(),
+			"CaseV 前置条件：第 2 轮 Diff 无新增字段 —— 没有台账就永远不会再看 clean 一眼");
+
+		// ---- 第 2 轮：只有台账把 clean 并回候选集 ----
+		Object control = construct(host, "  abc  ");
+		Object subject = construct(host, "  abc  ");
+		resetToDefault(host, subject, "clean", "Ljava/lang/String;");
+		InstanceTracker.register(subject);
+
+		InitFix.transform(host, b3, ClassDiffUtil.diff(b2, b3));
+		InitFix.PatchReport r2 = InitFix.getLastReport(host);
+		expect(r2, false, "clean", InitFix.FieldStatus.ACCEPTED, null);
+		check(r2.patchGenerated(), "CaseV 第 2 轮：台账让 clean 重新进入候选集并生成补丁");
+
+		InitFix.afterRedefine(host);
+		expectValue(host, subject, control, "clean");
+		check(InitFix.getUnpatchedFields(host).isEmpty(),
+			"CaseV 第 2 轮：成功后已出账（实际 " + InitFix.getUnpatchedFields(host) + "）");
+	}
+
+	static Set<String> unpatched(Class<?> host) {
+		Set<String> out = new LinkedHashSet<>();
+		for (InitFix.UnpatchedField u : InitFix.getUnpatchedFields(host)) out.add(u.fieldName());
+		return out;
+	}
+
 	// ==================== 夹具装配 ====================
 
 	static final class Fixture {
@@ -1242,9 +1324,13 @@ public class InitFixOracle {
 
 	/** 正向值比对：被补丁字段必须等于控制组构造器算出的值。 */
 	static void expectValue(Fixture fx, Object subject, Object control, String field) {
-		Object want = read(fx.host, control, field);
-		Object got  = read(fx.host, subject, field);
-		check(Objects.equals(want, got), fx.dotName + "." + field
+		expectValue(fx.host, subject, control, field);
+	}
+
+	static void expectValue(Class<?> host, Object subject, Object control, String field) {
+		Object want = read(host, control, field);
+		Object got  = read(host, subject, field);
+		check(Objects.equals(want, got), host.getName() + "." + field
 		      + " 补丁值 == 构造器值（构造器=" + describe(want) + "，补丁=" + describe(got) + "）");
 	}
 

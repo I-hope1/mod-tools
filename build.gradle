@@ -574,6 +574,27 @@ def hstestEntry = { String name, String cls, List<String> fixtureArgs ->
 
 hstestEntry("SemAssert", "SemAssert", [])
 
+// InitFix 差分 Oracle（docs/INIT_FIX.md §8 P0-5）。
+//
+// 与 SemAssert 不同，它**不需要**任何外部 javac：夹具用 javax.tools 在内存里编译，
+// 因此可以作为 check 的常驻门槛。但必须依赖 hotswap-agent 的 jar 重建 ——
+// runtimeClasspath 解析到的是 build/libs 下的 jar，而不是 classes 目录
+// （见 hstestRun 上方同一坑的注释），少了 dependsOn jar 会跑出陈旧结果。
+tasks.register("hstestInitFixOracle", JavaExec) {
+	group = "verification"
+	description = "运行 InitFix 差分 Oracle（正向值比对 + 负向阻断断言）"
+	dependsOn tasks.named("hstestClasses")
+	dependsOn project(":hotswap-agent").tasks.named("jar")
+	dependsOn project(":jni-agent").tasks.named("jar")
+	classpath = sourceSets.hstest.runtimeClasspath
+	mainClass = "InitFixOracle"
+	// InitFix 直接引用 jdk.internal.misc.Unsafe（`Unsafe UNSAFE = Unsafe.getUnsafe()`），
+	// 因此运行期必须显式导出该包 —— 生产环境的 launcher 也是这么给的（见 .idea/compiler.xml
+	// 与游戏启动参数里的 --add-exports java.base/jdk.internal.misc=ALL-UNNAMED）。
+	jvmArgs("--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED")
+}
+tasks.named("check") { dependsOn tasks.named("hstestInitFixOracle") }
+
 // 自检：验证 "套件内断言失败 -> 进程非零退出" 的整条链。
 //
 // 为什么不是 hstestCanary：那是一个无条件失败的 Gradle 任务，只证明"Gradle 任务失败

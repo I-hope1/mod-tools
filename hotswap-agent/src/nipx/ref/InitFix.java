@@ -9,6 +9,7 @@ import org.objectweb.asm.tree.*;
 import org.objectweb.asm.tree.analysis.*;
 import org.objectweb.asm.tree.analysis.Frame;
 
+import java.io.InputStream;
 import java.lang.invoke.*;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.ref.WeakReference;
@@ -41,12 +42,19 @@ import static nipx.HotSwapAgent.log;
  *
  * <h2>提取流程</h2>
  * <ol>
+ *   <li><b>T0 零值等价（§4.1）</b>：先判定字段是否"存量本来就是默认值"——显式
+ *       {@code = null}/{@code = 0}/{@code = false}、仅声明未赋值、{@code ConstantValue}
+ *       按位为零。命中者标记 {@link FieldStatus#NOTHING_TO_PATCH}，零开销放行、不告警、
+ *       不生成补丁（浮点按位判定，{@code -0.0f}/{@code NaN} 不算零值）。</li>
  *   <li><b>提取</b>：对每个 {@code <init>}/{@code <clinit>} 里的目标 PUTFIELD/PUTSTATIC，
  *       用 {@link AliasInterpreter} 做反向数据依赖切片，再检查区间内不得有表达式树外的
  *       指令。{@link #checkSafe} 判定控制依赖、try/catch 相交、局部变量依赖、
- *       INVOKESPECIAL/indy handle 的可用性、protected 跨包访问是否可桥接。</li>
+ *       INVOKESPECIAL/indy handle 的可用性、protected 跨包访问是否可桥接，
+ *       以及 §4.2 的<b>最小效应防御</b>（非确定性/环境依赖/IO/日志输出黑名单 +
+ *       集合无参构造与 Logger 的白名单）。被拒的真实原因会透传进
+ *       {@link PatchReport}，不再是笼统的"no safe initialization expression"。</li>
  *   <li><b>单字段判定</b>：{@link #fingerprintMismatchReason} 校验多构造器下表达式一致；
- *       根构造器覆盖完整性；参数依赖 + 多根构造器组合被拒绝。</li>
+ *       根构造器覆盖完整性；§4.4 允许"多根构造器 + 参数回溯"在指纹完全一致时放行。</li>
  *   <li><b>闭包迭代</b>：后续加工检查 + 依赖闭包，反复移除不合格字段直到不动点。</li>
  *   <li><b>拓扑排序</b>：{@link #topoSortFields} 按依赖排序，成环则整组拒绝。</li>
  *   <li><b>生成</b>：protected 桥接、私有调用改写、字段写入改写、hidden class 装配。</li>
@@ -60,6 +68,10 @@ import static nipx.HotSwapAgent.log;
  * <ul>
  *   <li><b>pattern 无条件执行</b>：复用 {@link #checkControlDependency}。</li>
  *   <li><b>参数类型与字段描述符一致</b>：避免替换后栈类型不匹配 VerifyError。</li>
+ *   <li><b>源字段不可变（§4.3 条件 A/B）</b>：{@code f} 带 {@code ACC_FINAL}，或者
+ *       {@code f} 是 {@code private} 且全 Nest 范围内除本次 pattern 外不存在第二处
+ *       {@code PUTFIELD}（{@link NestView} 只读字节码做证明，不触发类加载）。
+ *       补丁在 redefine 之后执行，读到的是字段<b>当前</b>值，所以这条证明是改写等价性的前提。</li>
  *   <li><b>槽位单赋值</b>：pattern 前后都不得被 xSTORE 覆盖或 IINC 自增（long/double 占 2 槽）。</li>
  *   <li><b>字段不被二次写入</b>：pattern 之后同一字段不得再被 PUTFIELD。</li>
  * </ul>
@@ -70,14 +82,16 @@ import static nipx.HotSwapAgent.log;
  *       子类看不到。</li>
  *   <li><b>Kotlin 防御式写法与 inline 函数</b>：{@code ?.}/{@code ?:}/{@code sumOf}
  *       展开为跳转与局部临时变量，被 checkSafe 拒绝。</li>
- *   <li><b>运行期状态变迁</b>：GETFIELD 读到的是当前值，不是构造时的值。</li>
+ *   <li><b>运行期状态变迁</b>：GETFIELD 读到的是当前值，不是构造时的值。源字段侧由 §4.3
+ *       条件 A/B 证明兜住；但依赖链更深处的字段（见下一条）仍然只是"当前值"。</li>
  *   <li><b>间接依赖</b>：依赖检查只看提取片段里的直接 GETFIELD/GETSTATIC。
  *       若 {@code a = compute()} 而 {@code compute()} 读了被拒绝的新增字段 b，
  *       a 会静默拿到 b 的默认值。</li>
  *   <li><b>this 逃逸</b>：{@code names = new ArrayList<>(); init();} 中 init 可能通过
  *       this 访问 names 并加工，静态上看不出来。</li>
- *   <li><b>跨实例字段覆写检测</b>：{@link #scanParamFields} 对同名字段的二次 PUTFIELD
- *       一律视为覆写，不区分 receiver。</li>
+ *   <li><b>跨实例字段覆写检测</b>：{@link #scanParamFields} 的"private 单写"证明覆盖全 Nest，
+ *       但不区分 receiver（{@code Outer.this.f} 与 {@code this.f} 一视同仁），
+ *       且 Nest 成员字节码读不全时一律按"无法证明"拒绝。</li>
  *   <li><b>static final 的 JIT 常量折叠</b>：redefine 到补丁执行之间，若新方法恰好被
  *       JIT 编译，static final 的默认值可能被常量折叠。</li>
  *   <li><b>逐实例补丁非原子</b>：循环里抛异常的实例处于部分初始化状态，日志能看到，
@@ -90,9 +104,14 @@ import static nipx.HotSwapAgent.log;
  *
  * <h2>报告</h2>
  * <p>{@link #buildPatch} 对每个 {@code addedInstanceFields}/{@code addedStaticFields} 里的
- * 字段都生成一条 {@link FieldDecision}，包括在第一阶段提取就被拒（未进入
- * {@code instanceExtracts}/{@code staticExtracts}）的字段——它们的决策是
- * {@code "no safe initialization expression found in ..."}。</p>
+ * 字段都生成一条 {@link FieldDecision}：</p>
+ * <ul>
+ *   <li>{@link FieldStatus#ACCEPTED}：已生成补丁代码；</li>
+ *   <li>{@link FieldStatus#NOTHING_TO_PATCH}：§4.1 T0 零值等价，本来就不需要补丁；</li>
+ *   <li>{@link FieldStatus#REJECTED}：{@link FieldDecision#reason()} 给出<b>提取期记录的真实原因</b>
+ *       （含被拒构造器参数槽位的根因），而不是笼统的
+ *       {@code "no safe initialization expression found in ..."}。</li>
+ * </ul>
  */
 public class InitFix {
 	private static final String STATIC_PATCH_METHOD   = "initStatic";
@@ -169,11 +188,44 @@ public class InitFix {
 
 	private record ParamField(FieldNode field, int slot) { }
 
+	/**
+	 * 一次构造器参数扫描的结果。
+	 *
+	 * @param accepted 可用作参数回溯的槽位映射
+	 * @param rejected 被拒的槽位 -> 拒绝原因（按槽位记录，供 {@link #checkSafe}
+	 *                 把"真实原因"透传进 {@link PatchReport}，而不是笼统的
+	 *                 "depends on local variables"）
+	 */
+	private record ParamScan(Map<Integer, ParamField> accepted, Map<Integer, String> rejected) {
+		static final ParamScan EMPTY = new ParamScan(Map.of(), Map.of());
+	}
+
+	/** 单个字段的放行决策状态。 */
+	public enum FieldStatus {
+		/** 已生成补丁代码。 */
+		ACCEPTED,
+		/**
+		 * T0 零值等价（{@code docs/INIT_FIX.md} §4.1）：存量实例与静态环境本来就是该类型的
+		 * 默认值，零开销放行，不生成补丁，也不告警。
+		 */
+		NOTHING_TO_PATCH,
+		/** 未通过安全门，未生成补丁；{@link FieldDecision#reason()} 给出原因。 */
+		REJECTED
+	}
+
 	/** 单个字段的放行决策。 */
-	public record FieldDecision(boolean accepted, String reason) {
-		public static final FieldDecision ACCEPTED = new FieldDecision(true, null);
+	public record FieldDecision(FieldStatus status, String reason) {
+		public static final FieldDecision ACCEPTED = new FieldDecision(FieldStatus.ACCEPTED, null);
+		public static final FieldDecision NOTHING_TO_PATCH =
+		 new FieldDecision(FieldStatus.NOTHING_TO_PATCH, null);
+
 		public static FieldDecision rejected(String reason) {
-			return new FieldDecision(false, reason);
+			return new FieldDecision(FieldStatus.REJECTED, reason);
+		}
+
+		/** @return 是否已为该字段生成补丁代码 */
+		public boolean accepted() {
+			return status == FieldStatus.ACCEPTED;
 		}
 	}
 
@@ -293,13 +345,19 @@ public class InitFix {
 			    + " independent root constructors");
 		}
 
+		// 宿主 Nest 视图：§4.3 的"全 Nest 单写证明"与 §4.1 T0 的"无写入"判定都基于它。
+		// 全程只读字节码，不调用 Class.forName，避免在 transform 线程上触发类加载死锁。
+		NestView nest = NestView.of(host, newClass);
+
 		// ==================== 实例字段提取 ====================
 		Map<String, List<FieldExtract>> instanceExtracts = new LinkedHashMap<>();
 		Set<String> selfAssignedFields = new HashSet<>();
+		Map<String, String> instanceReasons = new LinkedHashMap<>();
 		for (MethodNode init : initMethods) {
 			log("Extracting field init for " + className + "." + init.name + "()");
 			boolean fromRoot = isRootConstructor(newClass, init, rootCtorCache);
-			Map<Integer, ParamField> paramFields = scanParamFields(newClass, init);
+			ParamScan scan = scanParamFields(host, newClass, init, nest);
+			Map<Integer, ParamField> paramFields = scan.accepted();
 			if (!paramFields.isEmpty()) {
 				StringBuilder slots = new StringBuilder();
 				for (Map.Entry<Integer, ParamField> en : paramFields.entrySet()) {
@@ -311,7 +369,7 @@ public class InitFix {
 			}
 			Map<String, FieldExtract> perField = extractFieldInits(
 			 host, className, init, addedInstanceFields, false, privateMethods,
-			 paramFields, fromRoot, selfAssignedFields);
+			 paramFields, scan.rejected(), fromRoot, selfAssignedFields, instanceReasons);
 
 			for (Map.Entry<String, FieldExtract> fe : perField.entrySet()) {
 				instanceExtracts
@@ -322,10 +380,11 @@ public class InitFix {
 
 		// ==================== 静态字段提取 ====================
 		Map<String, List<FieldExtract>> staticExtracts = new LinkedHashMap<>();
+		Map<String, String> staticReasons = new LinkedHashMap<>();
 		if (clinitMethod != null) {
 			Map<String, FieldExtract> perField = extractFieldInits(
 			 host, className, clinitMethod, addedStaticFields,
-			 true, privateMethods, Map.of(), true, null);
+			 true, privateMethods, Map.of(), Map.of(), true, null, staticReasons);
 			for (Map.Entry<String, FieldExtract> fe : perField.entrySet()) {
 				staticExtracts
 				 .computeIfAbsent(fe.getKey(), x -> new ArrayList<>())
@@ -353,15 +412,44 @@ public class InitFix {
 		List<MethodNode> staticScanMethods = new ArrayList<>(initMethods);
 		if (clinitMethod != null) staticScanMethods.add(clinitMethod);
 
+		// ==================== 阶段 0.5：T0 零值等价过滤（§4.1） ====================
+		// 显式 = null / = 0 / = false、仅声明未赋值、以及 static ConstantValue 按位为零的字段，
+		// 存量实例与静态环境本来就是默认值：零开销放行，不生成补丁（也不会生成恒等 CAS 写）。
+		// 浮点按位判定，-0.0f / -0.0d / NaN 的位模式非零，不算零值等价。
+		Set<String> zeroInstanceFields = new LinkedHashSet<>();
+		for (String f : addedInstanceFields) {
+			if (selfAssignedFields.contains(f)) continue;
+			if (isZeroEquivalentField(nest, newClass, fieldNodes.get(f), false, instanceExtracts)) {
+				zeroInstanceFields.add(f);
+			}
+		}
+		Set<String> zeroStaticFields = new LinkedHashSet<>();
+		for (String f : addedStaticFields) {
+			if (isZeroEquivalentField(nest, newClass, fieldNodes.get(f), true, staticExtracts)) {
+				zeroStaticFields.add(f);
+			}
+		}
+		for (String f : zeroInstanceFields) instanceExtracts.remove(f);
+		for (String f : zeroStaticFields) staticExtracts.remove(f);
+		if (!zeroInstanceFields.isEmpty() || !zeroStaticFields.isEmpty()) {
+			log("Nothing to patch (zero-value equivalent) in " + className
+			    + ": instance=" + zeroInstanceFields + ", static=" + zeroStaticFields);
+		}
+
 		// ==================== 阶段 1：单字段判定（实例） ====================
 		// 先把所有待处理字段标记为拒绝；有 extract 的会在此后覆盖为 ACCEPTED 或被具体原因拒绝。
 		// 这样即便某字段在 extractFieldInits 里就被拒（不进 instanceExtracts），
-		// PatchReport 里依然有它的一条决策记录。
+		// PatchReport 里依然有它的一条决策记录，且原因是提取期记录下来的真实原因。
 		Map<String, FieldDecision> instanceDecisions = new LinkedHashMap<>();
 		for (String f : addedInstanceFields) {
+			if (zeroInstanceFields.contains(f)) {
+				instanceDecisions.put(f, FieldDecision.NOTHING_TO_PATCH);
+				continue;
+			}
 			String reason = selfAssignedFields.contains(f)
 			 ? "self-assignment from constructor parameter (patch would be a no-op)"
-			 : "no safe initialization expression found in constructors";
+			 : instanceReasons.getOrDefault(f,
+			   "no safe initialization expression found in constructors");
 			instanceDecisions.put(f, FieldDecision.rejected(reason));
 		}
 		Set<String> acceptedInstance = new LinkedHashSet<>();
@@ -370,10 +458,8 @@ public class InitFix {
 			List<FieldExtract> extracts = e.getValue();
 
 			int fromRootCount = 0;
-			boolean anyDependsOnParam = false;
 			for (FieldExtract fe : extracts) {
 				if (fe.fromRootCtor()) fromRootCount++;
-				if (fe.dependsOnParam()) anyDependsOnParam = true;
 			}
 
 			String refuseReason;
@@ -382,10 +468,11 @@ public class InitFix {
 			} else if (rootCtorCount > 1 && fromRootCount < rootCtorCount) {
 				refuseReason = "field is only initialized in " + fromRootCount
 				             + " of " + rootCtorCount + " root constructors";
-			} else if (anyDependsOnParam && rootCtorCount > 1) {
-				refuseReason = "depends on constructor parameters and class has "
-				             + rootCtorCount + " independent root constructors";
 			} else {
+				// §4.4 构造器共识放宽：多根构造器 + 参数回溯并非绝对禁止。
+				// 上面的分支已保证所有根构造器都覆盖了该字段，只要参数替换完成后的
+				// 指令指纹 100% 一致，各构造路径的初始语义就是同构的，可以安全放行。
+				// （源字段的不可变性由 §4.3 的证明在 scanParamFields 阶段保证。）
 				refuseReason = fingerprintMismatchReason(extracts);
 			}
 
@@ -401,11 +488,16 @@ public class InitFix {
 		}
 
 		// ==================== 静态字段：接受 clinit 的提取结果 ====================
-		// 同上：先全部标记拒绝，再让 extract 命中的字段覆盖。
+		// 同上：先全部标记拒绝（带提取期记录的真实原因），再让 extract 命中的字段覆盖。
 		Map<String, FieldDecision> staticDecisions = new LinkedHashMap<>();
 		for (String f : addedStaticFields) {
+			if (zeroStaticFields.contains(f)) {
+				staticDecisions.put(f, FieldDecision.NOTHING_TO_PATCH);
+				continue;
+			}
 			staticDecisions.put(f, FieldDecision.rejected(
-			 "no safe initialization expression found in <clinit>"));
+			 staticReasons.getOrDefault(f,
+			  "no safe initialization expression found in <clinit>")));
 		}
 		Set<String> acceptedStatic = new LinkedHashSet<>();
 		for (String f : staticExtracts.keySet()) {
@@ -895,12 +987,438 @@ public class InitFix {
 		return null;
 	}
 
+	// ==================== 宿主 Nest 视图（§4.3 / §4.1 的字节码底座） ====================
+
+	/**
+	 * 宿主的 Nest 视图：宿主 + 全部 Nest 成员的 {@link ClassNode}。
+	 *
+	 * <p>用于两件事：{@code docs/INIT_FIX.md} §4.3 的"全 Nest 单写证明"，以及 §4.1 T0
+	 * 的"该字段在任何地方都没被写过"判定。</p>
+	 *
+	 * <p><b>只读字节码，绝不 {@code Class.forName}</b>：优先取
+	 * {@link HotSwapAgent#bytecodeCache}（内存里当前生效的新版本），退化为 ClassLoader
+	 * 资源流。任一成员读不到时 {@link #complete()} 为 false，调用方必须按"无法证明"处理
+	 * （拒绝），而不是当作"没有第二处写入"。</p>
+	 */
+	private static final class NestView {
+		private final List<ClassNode> nodes;
+		private final boolean         complete;
+
+		private NestView(List<ClassNode> nodes, boolean complete) {
+			this.nodes = nodes;
+			this.complete = complete;
+		}
+
+		static NestView of(Class<?> host, ClassNode hostClass) {
+			ClassLoader loader = host == null ? null : host.getClassLoader();
+
+			ClassNode root = hostClass;
+			if (hostClass.nestHostClass != null) {
+				ClassNode hostNode = parseMember(hostClass.nestHostClass, loader);
+				if (hostNode == null) return new NestView(List.of(hostClass), false);
+				root = hostNode;
+			}
+
+			Map<String, ClassNode> byName = new LinkedHashMap<>();
+			byName.put(root.name, root);
+			byName.put(hostClass.name, hostClass);
+
+			boolean complete = true;
+			if (root.nestMembers != null) {
+				for (String member : root.nestMembers) {
+					if (byName.containsKey(member)) continue;
+					ClassNode node = parseMember(member, loader);
+					if (node == null) {
+						complete = false;
+						continue;
+					}
+					byName.put(member, node);
+				}
+			}
+			return new NestView(new ArrayList<>(byName.values()), complete);
+		}
+
+		private static ClassNode parseMember(String internalName, ClassLoader loader) {
+			byte[] bytes = HotSwapAgent.bytecodeCache.get(internalName.replace('/', '.'));
+			if (bytes == null && loader != null) {
+				try (InputStream in = loader.getResourceAsStream(internalName + ".class")) {
+					if (in != null) bytes = in.readAllBytes();
+				} catch (Throwable ignored) {
+					// 读不到就是读不到，交给调用方按"无法证明"处理
+				}
+			}
+			if (bytes == null) return null;
+			try {
+				ClassNode cn = new ClassNode();
+				new ClassReader(bytes).accept(cn, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+				return cn;
+			} catch (Throwable t) {
+				return null;
+			}
+		}
+
+		boolean complete() { return complete; }
+
+		/**
+		 * 统计 Nest 内针对指定字段的写指令总数。
+		 * <p>只有 {@link #complete()} 为 true 时结果才可用于"零写入"断言。</p>
+		 */
+		int countPuts(String ownerInternal, String name, String desc, int putOp) {
+			int n = 0;
+			for (ClassNode c : nodes) {
+				for (MethodNode m : c.methods) {
+					for (AbstractInsnNode i : m.instructions) {
+						if (!(i instanceof FieldInsnNode f)) continue;
+						if (f.getOpcode() != putOp) continue;
+						if (!f.owner.equals(ownerInternal)
+						    || !f.name.equals(name)
+						    || !f.desc.equals(desc)) continue;
+						n++;
+					}
+				}
+			}
+			return n;
+		}
+
+		/**
+		 * 找出 Nest 内除 {@code self} 之外的第一处写指令。
+		 * @return {@code 类.方法描述符} 形式的位置；null 表示不存在第二处写入
+		 */
+		String firstOtherPut(String ownerInternal, String name, String desc,
+		                     int putOp, FieldInsnNode self) {
+			for (ClassNode c : nodes) {
+				for (MethodNode m : c.methods) {
+					for (AbstractInsnNode i : m.instructions) {
+						if (!(i instanceof FieldInsnNode f)) continue;
+						if (f.getOpcode() != putOp) continue;
+						if (f == self) continue;
+						if (!f.owner.equals(ownerInternal)
+						    || !f.name.equals(name)
+						    || !f.desc.equals(desc)) continue;
+						return c.name + "." + m.name + m.desc;
+					}
+				}
+			}
+			return null;
+		}
+	}
+
+	// ==================== T0 零值等价（§4.1） ====================
+
+	/**
+	 * T0 判定：该新增字段是否"零值等价"——存量实例与静态环境本来就已经是默认值。
+	 *
+	 * <p>判据：</p>
+	 * <ol>
+	 *   <li>静态字段带 {@code ConstantValue}：按位判零（{@code static final String S = ""}
+	 *       <b>不是</b>零值，因为存量静态环境里是 {@code null}）；</li>
+	 *   <li>全 Nest 范围内没有任何写指令：仅声明未赋值，类型默认值即最终值；</li>
+	 *   <li>该字段的每一次写都能拿到安全切片，且切片都是"压入类型零值 + 写字段"。</li>
+	 * </ol>
+	 *
+	 * <p>浮点按位判定：{@code -0.0f} / {@code -0.0d} / {@code NaN} 的位模式非零，
+	 * 因此<b>不</b>算零值等价（§4.1 明确排除）。第 3 条要求"切片数与写指令数相等"，
+	 * 避免出现"只看得到零值那次写、看不到另一次危险写"的静默误判。</p>
+	 */
+	private static boolean isZeroEquivalentField(
+	 NestView nest, ClassNode newClass, FieldNode field, boolean isStatic,
+	 Map<String, List<FieldExtract>> extracts) {
+
+		if (field == null) return false;
+
+		if (isStatic && field.value != null) {
+			return isZeroConstant(field.value);
+		}
+		if (!nest.complete()) return false;
+
+		int putOp = isStatic ? Opcodes.PUTSTATIC : Opcodes.PUTFIELD;
+		int writes = nest.countPuts(newClass.name, field.name, field.desc, putOp);
+		if (writes == 0) return true;
+
+		List<FieldExtract> feList = extracts.get(field.name);
+		if (feList == null || feList.size() != writes) return false;
+
+		for (FieldExtract fe : feList) {
+			if (!isZeroValueExtract(fe.instructions(), isStatic, field.desc)) return false;
+		}
+		return true;
+	}
+
+	/** 按位判零的 {@code ConstantValue}（引用常量只有 {@code null} 才是零值，而 null 不落属性）。 */
+	private static boolean isZeroConstant(Object cst) {
+		if (cst instanceof Integer i) return i == 0;
+		if (cst instanceof Long l) return l == 0L;
+		if (cst instanceof Float f) return Float.floatToRawIntBits(f) == 0;
+		if (cst instanceof Double d) return Double.doubleToRawLongBits(d) == 0;
+		if (cst instanceof Short s) return s == 0;
+		if (cst instanceof Byte b) return b == 0;
+		if (cst instanceof Character c) return c == '\u0000';
+		if (cst instanceof Boolean b) return !b;
+		return false;
+	}
+
+	/**
+	 * 切片是否就是"压入类型零值 + 写字段"。
+	 * <p>实例字段的期望形态是 {@code [ALOAD 0, <零值>, PUTFIELD]}，
+	 * 静态字段是 {@code [<零值>, PUTSTATIC]}（切片经过提取器裁剪，已不含 label/frame）。</p>
+	 */
+	private static boolean isZeroValueExtract(
+	 List<AbstractInsnNode> insns, boolean isStatic, String desc) {
+
+		int expected = isStatic ? 2 : 3;
+		if (insns.size() != expected) return false;
+
+		int valueIdx = isStatic ? 0 : 1;
+		int putIdx   = isStatic ? 1 : 2;
+
+		if (!isStatic) {
+			if (!(insns.get(0) instanceof VarInsnNode v
+			      && v.getOpcode() == Opcodes.ALOAD && v.var == 0)) return false;
+		}
+		if (!(insns.get(putIdx) instanceof FieldInsnNode f)
+		    || f.getOpcode() != (isStatic ? Opcodes.PUTSTATIC : Opcodes.PUTFIELD)) return false;
+
+		return isZeroConstantInsn(insns.get(valueIdx), desc);
+	}
+
+	/** 单条指令是否是字段描述符对应的类型零值。 */
+	private static boolean isZeroConstantInsn(AbstractInsnNode n, String desc) {
+		if (n == null || desc == null || desc.isEmpty()) return false;
+
+		char c = desc.charAt(0);
+		boolean ref  = c == 'L' || c == '[';
+		boolean isJ  = c == 'J';
+		boolean isF  = c == 'F';
+		boolean isD  = c == 'D';
+		boolean isI  = !ref && !isJ && !isF && !isD;   // Z/B/C/S/I
+
+		if (ref) return n.getOpcode() == Opcodes.ACONST_NULL;
+		if (n.getOpcode() == Opcodes.ICONST_0) return isI;
+		if (n.getOpcode() == Opcodes.LCONST_0) return isJ;
+		if (n.getOpcode() == Opcodes.FCONST_0) return isF;
+		if (n.getOpcode() == Opcodes.DCONST_0) return isD;
+
+		if (n instanceof LdcInsnNode ldc) {
+			Object cst = ldc.cst;
+			if (cst instanceof Integer i) return isI && i == 0;
+			if (cst instanceof Long l) return isJ && l == 0L;
+			if (cst instanceof Float f) return isF && Float.floatToRawIntBits(f) == 0;
+			if (cst instanceof Double d) return isD && Double.doubleToRawLongBits(d) == 0;
+		}
+		return false;
+	}
+
+	// ==================== P0 最小效应防御（§4.2 的完整 8 位掩码属于 P2） ====================
+
+	/** 基础集合的无参构造：{@code ALLOC_PURE}，永不拦截（§8 P0-2 要求"严防误杀"）。 */
+	private static final Set<String> PURE_NOARG_CTOR_OWNERS = Set.of(
+	 "java/util/ArrayList", "java/util/LinkedList", "java/util/Vector", "java/util/Stack",
+	 "java/util/HashMap", "java/util/LinkedHashMap", "java/util/TreeMap", "java/util/Hashtable",
+	 "java/util/WeakHashMap", "java/util/IdentityHashMap",
+	 "java/util/HashSet", "java/util/LinkedHashSet", "java/util/TreeSet",
+	 "java/util/ArrayDeque", "java/util/PriorityQueue",
+	 "java/util/concurrent/ConcurrentHashMap", "java/util/concurrent/ConcurrentLinkedQueue",
+	 "java/util/concurrent/CopyOnWriteArrayList", "java/util/concurrent/CopyOnWriteArraySet",
+	 "java/lang/StringBuilder", "java/lang/StringBuffer");
+
+	/** Logger 工厂：新增 {@code private static final Logger LOG = ...} 字段依赖它。 */
+	private static final Set<String> LOGGER_FACTORY_OWNERS = Set.of(
+	 "org/slf4j/LoggerFactory", "java/util/logging/Logger",
+	 "org/apache/logging/log4j/LogManager", "org/apache/commons/logging/LogFactory");
+
+	/** Logger 类型：其 {@code isXxxEnabled}/{@code getXxx} 是纯查询，放行；落地方法走黑名单。 */
+	private static final Set<String> LOGGER_TYPES = Set.of(
+	 "org/slf4j/Logger", "java/util/logging/Logger",
+	 "org/apache/logging/log4j/Logger", "org/apache/commons/logging/Log");
+
+	/**
+	 * P0 版最小效应判定。
+	 *
+	 * <p>判决顺序：</p>
+	 * <ol>
+	 *   <li><b>精确危险重载</b>：环境依赖的个别重载（无参 {@code String.toUpperCase()}、
+	 *       默认字符集的 {@code getBytes()}/{@code new String(byte[])}、{@code String.format}、
+	 *       {@code String.intern()}）；</li>
+	 *   <li><b>白名单</b>：基础集合无参构造、Logger 工厂与纯查询、{@code Objects.requireNonNull}、
+	 *       Kotlin {@code Intrinsics}、不可变集合工厂 —— 优先级高于第 3 步的包级黑名单，
+	 *       这正是"严防误杀基础集合构造与 Logger"的落点；</li>
+	 *   <li><b>黑名单</b>：非确定性（时间/随机/identityHashCode/默认时区与字符集）、
+	 *       反射与动态调用、进程与类加载、文件/网络 IO、日志输出；</li>
+	 *   <li>未命中者 P0 一律放行 —— 这一步只做"明确危险"的负向拦截，
+	 *       真正的白名单准入（{@code ALLOWED_MASK}）在 P2 落地。</li>
+	 * </ol>
+	 *
+	 * @return null 表示放行；否则返回拒绝原因
+	 */
+	private static String effectReason(AbstractInsnNode n) {
+		if (n instanceof MethodInsnNode m) {
+			if (isImpureOverload(m)) {
+				return "environment-dependent call " + m.owner + "." + m.name + m.desc;
+			}
+			if (isWhitelistedCall(m)) return null;
+			return blacklistedCallReason(m);
+		}
+		if (n instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETSTATIC) {
+			if ("java/lang/System".equals(f.owner)
+			    && ("out".equals(f.name) || "err".equals(f.name) || "in".equals(f.name))) {
+				return "reads process-global stream java/lang/System." + f.name;
+			}
+			if ("java/io/File".equals(f.owner) && f.name.startsWith("separator")) {
+				return "reads platform-dependent java/io/File." + f.name;
+			}
+		}
+		return null;
+	}
+
+	/** §4.2 bit 3 的典型例子：同名重载里依赖默认 Locale / 默认 Charset 的那几个。 */
+	private static boolean isImpureOverload(MethodInsnNode m) {
+		if (!"java/lang/String".equals(m.owner)) return false;
+		String name = m.name, desc = m.desc;
+		if ("<init>".equals(name)) {
+			return desc.equals("([B)V") || desc.equals("([BII)V");
+		}
+		if ("toUpperCase".equals(name) || "toLowerCase".equals(name)) {
+			return desc.equals("()Ljava/lang/String;");
+		}
+		if ("getBytes".equals(name)) return desc.equals("()[B");
+		if ("format".equals(name) || "formatted".equals(name)) return true;
+		return "intern".equals(name);
+	}
+
+	/** 误杀白名单：命中即放行，优先于包级黑名单。 */
+	private static boolean isWhitelistedCall(MethodInsnNode m) {
+		if ("<init>".equals(m.name) && "()V".equals(m.desc)
+		    && PURE_NOARG_CTOR_OWNERS.contains(m.owner)) return true;
+
+		if ("java/util/Objects".equals(m.owner) && m.name.startsWith("requireNonNull")) return true;
+		if ("java/lang/Object".equals(m.owner) && "getClass".equals(m.name)) return true;
+		if ("java/lang/System".equals(m.owner) && "arraycopy".equals(m.name)) return true;
+		if (m.owner.startsWith("kotlin/jvm/internal/Intrinsics")) return true;
+		if ("java/util/Collections".equals(m.owner)
+		    && (m.name.startsWith("empty") || m.name.startsWith("singleton")
+		        || m.name.startsWith("unmodifiable"))) return true;
+		if ("java/util/Arrays".equals(m.owner)
+		    && (m.name.startsWith("asList") || m.name.startsWith("copyOf"))) return true;
+
+		// Logger：工厂与纯查询放行；落地方法（info/debug/log/...）不在此列，走黑名单。
+		if (m.getOpcode() == Opcodes.INVOKESTATIC && LOGGER_FACTORY_OWNERS.contains(m.owner)
+		    && ("getLogger".equals(m.name) || "getLog".equals(m.name))) return true;
+		if (LOGGER_TYPES.contains(m.owner)
+		    && (m.name.startsWith("is") || m.name.startsWith("get"))) return true;
+		return false;
+	}
+
+	/** 黑名单：非确定性 / 环境依赖 / 反射 / 进程 / IO / 日志输出。 */
+	private static String blacklistedCallReason(MethodInsnNode m) {
+		String owner = m.owner, name = m.name;
+
+		if ("java/lang/System".equals(owner)) {
+			switch (name) {
+				case "currentTimeMillis", "nanoTime", "identityHashCode", "lineSeparator",
+				     "getProperty", "getProperties", "getenv", "console", "gc", "exit",
+				     "getSecurityManager", "setProperty", "setProperties":
+					return "non-deterministic/environment-dependent call java/lang/System." + name;
+				default:
+					break;
+			}
+			return null;
+		}
+		if ("java/lang/Math".equals(owner) && "random".equals(name)) {
+			return "non-deterministic random source java/lang/Math.random";
+		}
+		if ("java/util/Random".equals(owner) || "java/util/SplittableRandom".equals(owner)
+		    || "java/util/concurrent/ThreadLocalRandom".equals(owner)
+		    || "java/security/SecureRandom".equals(owner) || owner.startsWith("java/security/")) {
+			return "non-deterministic random source " + owner;
+		}
+		if ("java/util/UUID".equals(owner) && "randomUUID".equals(name)) {
+			return "non-deterministic java/util/UUID.randomUUID";
+		}
+		if ("java/lang/Thread".equals(owner)) {
+			return "thread/environment state " + owner + "." + name;
+		}
+		if ("java/lang/Object".equals(owner) && ("hashCode".equals(name) || "toString".equals(name))) {
+			return "identity-dependent dispatch java/lang/Object." + name;
+		}
+		if ("java/util/Date".equals(owner) || "java/util/Calendar".equals(owner)
+		    || "java/time/Clock".equals(owner)) {
+			return "reads wall clock " + owner + "." + name;
+		}
+		if (isWallClockNow(owner, name)) {
+			return "reads wall clock " + owner + "." + name;
+		}
+		if ("java/util/Locale".equals(owner) && "getDefault".equals(name)) {
+			return "reads default locale java/util/Locale.getDefault";
+		}
+		if ("java/util/TimeZone".equals(owner) && "getDefault".equals(name)) {
+			return "reads default time zone java/util/TimeZone.getDefault";
+		}
+		if ("java/nio/charset/Charset".equals(owner) && "defaultCharset".equals(name)) {
+			return "reads default charset java/nio/charset/Charset.defaultCharset";
+		}
+		if (("java/lang/Integer".equals(owner) || "java/lang/Long".equals(owner)
+		     || "java/lang/Boolean".equals(owner))
+		    && ("getInteger".equals(name) || "getLong".equals(name) || "getBoolean".equals(name))) {
+			return "reads system property " + owner + "." + name;
+		}
+
+		if (owner.startsWith("java/lang/reflect/") || owner.startsWith("java/lang/invoke/")) {
+			return "reflective/dynamic call " + owner + "." + name;
+		}
+		if ("java/lang/Class".equals(owner)
+		    && ("forName".equals(name) || "newInstance".equals(name)
+		        || name.startsWith("getResource") || "getClassLoader".equals(name)
+		        || "getProtectionDomain".equals(name) || "desiredAssertionStatus".equals(name))) {
+			return "reflective/environment-dependent call java/lang/Class." + name;
+		}
+		if ("java/lang/Runtime".equals(owner) || "java/lang/ProcessBuilder".equals(owner)
+		    || "java/lang/Process".equals(owner) || "java/lang/ClassLoader".equals(owner)) {
+			return "process/loader call " + owner + "." + name;
+		}
+		if (owner.startsWith("java/io/") || owner.startsWith("java/net/")
+		    || owner.startsWith("java/nio/file/") || owner.startsWith("java/nio/channels/")) {
+			return "I/O call " + owner + "." + name;
+		}
+		if (owner.startsWith("java/util/logging/") || owner.startsWith("org/slf4j/")
+		    || owner.startsWith("org/apache/logging/")
+		    || owner.startsWith("org/apache/commons/logging/")) {
+			return "logging output (IO_SYS) " + owner + "." + name;
+		}
+		return null;
+	}
+
+	/** {@code LocalDate.now()} / {@code Instant.now()} 之类的挂钟读取。 */
+	private static boolean isWallClockNow(String owner, String name) {
+		if (!"now".equals(name)) return false;
+		return owner.startsWith("java/time/") || owner.startsWith("java/time/chrono/");
+	}
+
 	// ==================== 构造器参数 -> 字段扫描 ====================
 
-	private static Map<Integer, ParamField> scanParamFields(
-	 ClassNode hostClass, MethodNode init) {
+	/**
+	 * 扫描 {@code <init>} 里 {@code ALOAD 0; XLOAD n; PUTFIELD this.f} 形态的
+	 * "参数持久化到字段"模式，建立 {@code slot -> field} 回溯映射。
+	 *
+	 * <p><b>§4.3 源字段不可变证明</b>：映射成立后，切片段里的 {@code ALOAD n} 会被改写为
+	 * {@code ALOAD 0; GETFIELD this.f}。补丁在 redefine 之后才执行，读到的是字段
+	 * <b>当前</b>值而非构造时的值，所以只有当 {@code f} 在构造完成后不可能再变时改写才等价：</p>
+	 * <ol>
+	 *   <li><b>条件 A</b>：{@code f} 带 {@code ACC_FINAL}（JVM 只允许在构造器内写入）；</li>
+	 *   <li><b>条件 B</b>：{@code f} 非 final，但为 {@code private}，且{@link NestView 全 Nest 范围内}
+	 *       除本次 pattern 外不存在第二处 {@code PUTFIELD}（排除 setter 二次修改、其它构造器写入、
+	 *       内部类跨实例写入）。证明通过后该字段的读取在效应审查中按 {@code READS_FINAL} 等价处理。</li>
+	 * </ol>
+	 * <p>二者都不满足时拒绝映射 —— 宁可不补，也不能拿被改过的值去算。</p>
+	 *
+	 * @param host 宿主类（仅用于取 ClassLoader 读 Nest 成员资源，<b>不做</b> {@code Class.forName}）
+	 * @param nest 宿主 Nest 视图
+	 * @return 可用映射 + 被拒槽位的真实原因（原因会被透传进 {@link PatchReport}）
+	 */
+	private static ParamScan scanParamFields(
+	 Class<?> host, ClassNode hostClass, MethodNode init, NestView nest) {
 
 		Map<Integer, ParamField> map = new HashMap<>();
+		Map<Integer, String> rejected = new LinkedHashMap<>();
 		InsnList insns = init.instructions;
 		List<AbstractInsnNode> real = filterReal(insns);
 
@@ -924,6 +1442,7 @@ public class InitFix {
 			int putOrig   = insns.indexOf(c);
 			String ctrlReason = checkControlDependency(insns, startOrig, putOrig);
 			if (ctrlReason != null) {
+				rejectParamSlot(rejected, slot, "pattern has control dependency: " + ctrlReason);
 				log("Skipping constructor param slot " + slot + " in "
 				    + hostClass.name + ".<init>: pattern has control dependency: "
 				    + ctrlReason);
@@ -933,9 +1452,32 @@ public class InitFix {
 			// 参数类型必须与字段描述符严格一致，否则替换成 GETFIELD 后
 			// 后续指令期望的类型会不匹配，触发 VerifyError
 			if (!paramTypeMatches(init.desc, slot, fc.desc)) {
+				rejectParamSlot(rejected, slot, "parameter type != field type " + fc.desc);
 				log("Skipping constructor param slot " + slot + " in "
 				    + hostClass.name + ".<init>: parameter type != field type "
 				    + fc.desc);
+				continue;
+			}
+
+			// §4.3：源字段必须可证明不可变
+			FieldNode source = null;
+			for (FieldNode fn : hostClass.fields) {
+				if (fn.name.equals(fc.name) && fn.desc.equals(fc.desc)) {
+					source = fn;
+					break;
+				}
+			}
+			if (source == null) {
+				rejectParamSlot(rejected, slot, "source field declaration not found");
+				continue;
+			}
+			String immutableReason = sourceFieldNotImmutableReason(hostClass, source, fc, nest);
+			if (immutableReason != null) {
+				rejectParamSlot(rejected, slot, "source field '" + source.name
+				 + "' is not provably immutable: " + immutableReason);
+				log("Skipping constructor param slot " + slot + " in "
+				    + hostClass.name + ".<init>: source field '" + source.name
+				    + "' is not provably immutable: " + immutableReason);
 				continue;
 			}
 
@@ -963,6 +1505,7 @@ public class InitFix {
 				}
 			}
 			if (unsafeReason != null) {
+				rejectParamSlot(rejected, slot, unsafeReason);
 				log("Skipping constructor param slot " + slot + " in "
 				    + hostClass.name + ".<init>: " + unsafeReason);
 				continue;
@@ -994,19 +1537,52 @@ public class InitFix {
 				}
 			}
 			if (unsafeReason != null) {
+				rejectParamSlot(rejected, slot, unsafeReason);
 				log("Skipping constructor param slot " + slot + " in "
 				    + hostClass.name + ".<init>: " + unsafeReason);
 				continue;
 			}
 
-			for (FieldNode fn : hostClass.fields) {
-				if (fn.name.equals(fc.name) && fn.desc.equals(fc.desc)) {
-					map.put(slot, new ParamField(fn, slot));
-					break;
-				}
-			}
+			map.put(slot, new ParamField(source, slot));
 		}
-		return map;
+		return new ParamScan(map, rejected);
+	}
+
+	/** 记录被拒槽位的原因（首次为准，保留最贴近根因的那条）。 */
+	private static void rejectParamSlot(Map<Integer, String> rejected, int slot, String reason) {
+		if (rejected != null) rejected.putIfAbsent(slot, reason);
+	}
+
+	/** 记录字段被拒的真实原因（首次为准）。 */
+	private static void recordReason(Map<String, String> outReasons, String field, String reason) {
+		if (outReasons != null) outReasons.putIfAbsent(field, reason);
+	}
+
+	/**
+	 * §4.3 源字段不可变证明。
+	 *
+	 * @param pattern 本次触发映射的 {@code PUTFIELD}（Nest 扫描时按对象身份排除）
+	 * @return null 表示可证明构造后不再变化；否则返回拒绝原因
+	 */
+	private static String sourceFieldNotImmutableReason(
+	 ClassNode hostClass, FieldNode field, FieldInsnNode pattern, NestView nest) {
+
+		// 条件 A：final（JVM 只允许在声明类构造器内写入）
+		if ((field.access & Opcodes.ACC_FINAL) != 0) return null;
+
+		// 条件 B：private + 全 Nest 单写
+		if ((field.access & Opcodes.ACC_PRIVATE) == 0) {
+			return "not final and not private (条件 A/B 均不满足)";
+		}
+		if (!nest.complete()) {
+			return "cannot read every nest member to prove a single write";
+		}
+		String where = nest.firstOtherPut(hostClass.name, field.name, field.desc,
+		                                  Opcodes.PUTFIELD, pattern);
+		if (where != null) {
+			return "private but written again at " + where;
+		}
+		return null;
 	}
 
 	/**
@@ -1392,8 +1968,9 @@ public class InitFix {
 	private static Map<String, FieldExtract> extractFieldInits(
 	 Class<?> host, String className, MethodNode method, Set<String> targetFields,
 	 boolean isStatic, Set<String> privateMethods,
-	 Map<Integer, ParamField> paramFields, boolean fromRootCtor,
-	 Set<String> outSelfAssigned) {
+	 Map<Integer, ParamField> paramFields, Map<Integer, String> rejectedParamSlots,
+	 boolean fromRootCtor, Set<String> outSelfAssigned,
+	 Map<String, String> outReasons) {
 
 		if (method == null || targetFields.isEmpty()) return Map.of();
 
@@ -1403,6 +1980,12 @@ public class InitFix {
 		} catch (AnalyzerException e) {
 			HotSwapAgent.warn("Analysis failed for " + method.name + method.desc
 			                  + ": " + e.getMessage());
+			if (outReasons != null) {
+				for (String f : targetFields) {
+					outReasons.putIfAbsent(f, "bytecode analysis failed in "
+					  + method.name + method.desc + ": " + e.getMessage());
+				}
+			}
 			return Map.of();
 		}
 
@@ -1423,10 +2006,18 @@ public class InitFix {
 			if (refusedFields.contains(f.name)) continue;
 
 			Frame<SourceValue> frame = frames[i];
-			if (frame == null) continue;
+			if (frame == null) {
+				recordReason(outReasons, f.name,
+				 "no stack frame at the write site in " + method.name + method.desc);
+				continue;
+			}
 
 			int stackSize = frame.getStackSize();
-			if (isStatic ? stackSize < 1 : stackSize < 2) continue;
+			if (isStatic ? stackSize < 1 : stackSize < 2) {
+				recordReason(outReasons, f.name,
+				 "unexpected stack shape at the write site in " + method.name + method.desc);
+				continue;
+			}
 
 			SourceValue value    = frame.getStack(stackSize - 1);
 			SourceValue receiver = isStatic ? null : frame.getStack(stackSize - 2);
@@ -1456,7 +2047,7 @@ public class InitFix {
 				} else {
 					unsafeReason = checkSafe(host, className, method, insns, jumpTargets,
 					 receiver, collected, minIdx, i, isStatic, privateMethods,
-					 paramFields, localProtected);
+					 paramFields, rejectedParamSlots, localProtected);
 					if (unsafeReason == null && !isStackBalanced(frames, minIdx, i, isStatic)) {
 						unsafeReason = "unbalanced stack after extraction";
 					}
@@ -1468,15 +2059,21 @@ public class InitFix {
 
 			if (unsafeReason != null) {
 				HotSwapAgent.warn("Field '" + f.name + "' initialization skipped: " + unsafeReason);
+				recordReason(outReasons, f.name,
+				 "no safe initialization expression in " + method.name + method.desc
+				 + ": " + unsafeReason);
 				continue;
 			}
 
 			if (perFieldCollected.containsKey(f.name)) {
+				String reason = "multiple safe writes to the same field in "
+				              + className + "." + method.name + "()";
 				log("Field '" + f.name + "' has multiple safe PUTFIELD in "
 				    + className + "." + method.name + "(): refusing");
 				perFieldCollected.remove(f.name);
 				perFieldProtected.remove(f.name);
 				refusedFields.add(f.name);
+				recordReason(outReasons, f.name, reason);
 				continue;
 			}
 			perFieldCollected.put(f.name, collected);
@@ -1525,6 +2122,8 @@ public class InitFix {
 				log("Field '" + fieldName + "' is self-assigned from its own constructor "
 				    + "parameter in " + className + "." + method.name
 				    + "(); patch would be a no-op. Refusing.");
+				recordReason(outReasons, fieldName,
+				 "self-assignment from its own constructor parameter");
 				continue;
 			}
 			perField.put(fieldName, new FieldExtract(
@@ -1682,6 +2281,7 @@ public class InitFix {
 	                                int minIdx, int putIdx, boolean isStatic,
 	                                Set<String> privateMethods,
 	                                Map<Integer, ParamField> paramFields,
+	                                Map<Integer, String> rejectedParamSlots,
 	                                Map<AbstractInsnNode, ProtectedAccess> outProtectedAccesses) {
 		if (!isStatic) {
 			if (receiver == null || receiver.insns.size() != 1) return "unexpected receiver";
@@ -1728,6 +2328,12 @@ public class InitFix {
 					// this，放行
 				} else if (isLoadOfParam(v) && paramFields.containsKey(v.var)) {
 					// 构造器参数，克隆阶段会替换为 ALOAD 0; GETFIELD
+				} else if (isLoadOfParam(v) && rejectedParamSlots != null
+				           && rejectedParamSlots.containsKey(v.var)) {
+					// 该槽位本来是"参数->字段"模式的候选，但被 §4.3 不可变证明或
+					// 单赋值检查拒掉了：把真实原因透传出去，而不是笼统的"局部变量"。
+					return "constructor parameter slot " + v.var
+					     + " cannot be back-tracked: " + rejectedParamSlots.get(v.var);
 				} else {
 					return "depends on local variables";
 				}
@@ -1735,6 +2341,10 @@ public class InitFix {
 			if (n.getOpcode() == Opcodes.IINC) {
 				return "depends on local variables";
 			}
+
+			// §4.2 的最小效应防御（P0 版）：明确非确定性 / 环境依赖 / IO 的调用直接拒绝。
+			String effect = effectReason(n);
+			if (effect != null) return effect;
 
 			if (n instanceof MethodInsnNode m
 			    && m.getOpcode() == Opcodes.INVOKESPECIAL
@@ -1874,7 +2484,7 @@ public class InitFix {
 
 		if (ownerInternal.isEmpty() || ownerInternal.charAt(0) == '[') return Boolean.FALSE;
 
-		Class<?> owner;
+	Class<?> owner;
 		try {
 			owner = Class.forName(ownerInternal.replace('/', '.'),
 			                      false, host.getClassLoader());

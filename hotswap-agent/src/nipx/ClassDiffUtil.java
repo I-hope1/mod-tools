@@ -204,12 +204,14 @@ public final class ClassDiffUtil {
 		var oldFieldsMap = ctx.fieldMap;
 		// 将旧版本所有字段放入映射表，key为字段名和描述符的复合哈希
 		for (FieldNode f : oldC.fields) {
+			if (isInternalMarkerField(f)) continue;
 			boolean isStatic = (f.access & Opcodes.ACC_STATIC) != 0;
 			oldFieldsMap.put(Utils.compositeHash(f.name, f.desc), (isStatic ? "*" : "") + f.name);
 		}
 
 		// 遍历新版本字段
 		for (FieldNode newF : newC.fields) {
+			if (isInternalMarkerField(newF)) continue;
 			long    key         = Utils.compositeHash(newF.name, newF.desc);
 			String  oldVal      = oldFieldsMap.remove(key);
 			boolean newIsStatic = (newF.access & Opcodes.ACC_STATIC) != 0;
@@ -263,6 +265,27 @@ public final class ClassDiffUtil {
 		});
 
 		return d;
+	}
+
+	/**
+	 * 内部合成标记字段过滤（{@code docs/INIT_FIX.md} §5.3）。
+	 *
+	 * <p>热更管线自己往类里塞的字段不是业务变更，必须从 Diff 里剔除，否则会被
+	 * {@code InitFix} 当成"新增字段"去做字段初始化补丁：</p>
+	 * <ul>
+	 *   <li><b>{@code $nipx$} 前缀</b>：{@code AnnotationTransformer.forceStaticLambdas}
+	 *       的幂等标记字段 {@code $nipx$lambdasForced}；</li>
+	 *   <li><b>{@code ACC_SYNTHETIC}</b>：javac / Kotlin 生成的
+	 *       {@code this$0}、{@code $stable} 之类内部字段。</li>
+	 * </ul>
+	 *
+	 * <p>对 {@code oldClass} 与 {@code newClass} 两侧对称过滤，因此这类字段既不进
+	 * {@code changedFields}，也不进 {@code addedInstanceFields}/{@code addedStaticFields}，
+	 * 同时不会让 {@link ClassDiff#structureChanged()} 出现假阳性。</p>
+	 */
+	private static boolean isInternalMarkerField(FieldNode f) {
+		return (f.access & Opcodes.ACC_SYNTHETIC) != 0
+		       || (f.name != null && f.name.startsWith("$nipx$"));
 	}
 
 	/**

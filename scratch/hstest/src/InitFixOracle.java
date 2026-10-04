@@ -107,6 +107,7 @@ public class InitFixOracle {
 		scenario("§5.3 ClassDiff 合成字段过滤：$nipx$ 标记不入 added*Fields，业务字段仍检出", InitFixOracle::caseInternalMarkerFilter);
 		scenario("§4.2 bit 4：ThreadLocal 新增字段可补；读取 ThreadLocal.get() 的切片 → 阻断", InitFixOracle::caseThreadLocal);
 		scenario("§4.2 bit 4/5：可复用缓存字段 + setLength(0) → 阻断；切片内 NEW 的 builder → 放行", InitFixOracle::caseReusableBuilderCache);
+		scenario("§3.2 边界：构造器里的独立语句不进切片（REJECT 边界在哪）", InitFixOracle::caseStatementOutsideSlice);
 
 		System.out.println();
 		System.out.println("通过 " + passed + " 条；失败 " + failed + " 条；合计 " + (passed + failed) + " 条");
@@ -710,6 +711,124 @@ public class InitFixOracle {
 			+ describe(read(fs.host, ss, "key")) + "）");
 	}
 
+	// ==================== 场景 13：构造器里的独立语句不进切片 ====================
+
+	static final String CASE_T1_V1 = """
+		package oracle;
+		public class CaseT1 {
+			public CaseT1() { }
+		}
+		""";
+
+	static final String CASE_T1_V2 = """
+		package oracle;
+		public class CaseT1 {
+			private ThreadLocal<StringBuilder> sb = ThreadLocal.withInitial(StringBuilder::new);
+			public CaseT1() { sb.get().append("aass"); }
+			public StringBuilder view() { return sb.get(); }
+		}
+		""";
+
+	static final String CASE_T2_V2 = """
+		package oracle;
+		public class CaseT2 {
+			private ThreadLocal<StringBuilder> sb = ThreadLocal.withInitial(StringBuilder::new);
+			private String key;
+			public CaseT2() {
+				sb.get().append("aass");
+				this.key = sb.get().toString();
+			}
+		}
+		""";
+
+	static final String CASE_T3_V1 = """
+		package oracle;
+		public class CaseT3 {
+			public CaseT3() { }
+		}
+		""";
+
+	static final String CASE_T3_V2 = """
+		package oracle;
+		public class CaseT3 {
+			private final StringBuilder sb = new StringBuilder();
+			public CaseT3() { sb.append("aass"); }
+		}
+		""";
+
+	static final String CASE_T4_V1 = """
+		package oracle;
+		public class CaseT4 {
+			public CaseT4() { }
+		}
+		""";
+
+	static final String CASE_T4_V2 = """
+		package oracle;
+		public class CaseT4 {
+			private String s = "x";
+			public CaseT4() { String t = s + "y"; if (t.isEmpty()) System.out.print(""); }
+		}
+		""";
+
+	/**
+	 * 直接回答"新增 ThreadLocal&lt;StringBuilder&gt; sb，构造器里 sb.get().append("aass"); 会不会 reject"：
+	 * <b>会</b>，而且拦它的是既有的"后续加工检查"（{@code subsequentProcessingReason}），
+	 * 不是我这两轮新加的效应/接收者规则。
+	 *
+	 * <p>原因：该检查扫描<b>整个构造器</b>（不只是切片），只要出现对新增字段的
+	 * {@code GETFIELD} 而该读取不在提取片段内，且字段类型既非基本类型也不在不可变名单里，
+	 * 就判 {@code field read outside any accepted extraction} 拒绝。判据背后的语义是：
+	 * 补丁只重放字段初始化式、不会重放构造器里的语句，所以构造器一旦"用过"这个字段，
+	 * 存量实例的状态就必然与正常构造的实例分叉 —— 宁可不补。</p>
+	 *
+	 * <p>代价（实测）：拒绝意味着存量实例的该字段保持 {@code null}，之后调用
+	 * {@code sb.get()} 会 NPE。所以对 scratch 缓存，实践建议是<b>不要在构造器里碰它</b>
+	 * ——只放在方法里用（见场景 11 的 CaseK，那种形态是 ACCEPTED 的）。</p>
+	 *
+	 * <p>对照组 CaseT4：同样的"构造器里读新增字段"，但字段类型是 {@code String}
+	 * （不可变）→ 豁免放行。这条划清了边界的类型敏感性。</p>
+	 */
+	static void caseStatementOutsideSlice() throws Exception {
+		// T1：ThreadLocal 新增字段 + 构造器里 sb.get().append(...)
+		Fixture f1 = loadFixture("oracle.CaseT1", CASE_T1_V1, CASE_T1_V2);
+		Object s1 = construct(f1.host);
+		resetToDefault(f1.host, s1, "sb", "Ljava/lang/ThreadLocal;");
+		InstanceTracker.register(s1);
+
+		InitFix.PatchReport r1 = f1.transform();
+		expect(r1, false, "sb", InitFix.FieldStatus.REJECTED, "field read outside any accepted extraction");
+		check(!r1.patchGenerated(), "CaseT1：构造器里碰过缓存 → 整个字段不再生成补丁");
+		f1.apply();
+		check(read(f1.host, s1, "sb") == null,
+			"CaseT1：拒绝的代价 —— 存量实例的 sb 仍是 null（之后 sb.get() 会 NPE）");
+
+		// T3：StringBuilder 新增字段 + 构造器里 sb.append(...)
+		Fixture f3 = loadFixture("oracle.CaseT3", CASE_T3_V1, CASE_T3_V2);
+		Object s3 = construct(f3.host);
+		resetToDefault(f3.host, s3, "sb", "Ljava/lang/StringBuilder;");
+		InstanceTracker.register(s3);
+
+		InitFix.PatchReport r3 = f3.transform();
+		expect(r3, false, "sb", InitFix.FieldStatus.REJECTED, "field read outside any accepted extraction");
+		check(!r3.patchGenerated(), "CaseT3：同样因构造器里的读取被判拒绝");
+		check("aass".contentEquals((StringBuilder) read(f3.host, construct(f3.host), "sb")),
+			"CaseT3 前置条件：新实例的 sb == \"aass\"（构造器语句对新实例照常生效）");
+
+		// T2：把缓存读取结果赋给另一个新增字段 → 走效应规则（thread-local）拒绝
+		Fixture f2 = loadFixture("oracle.CaseT2",
+			CASE_T1_V1.replace("CaseT1", "CaseT2"), CASE_T2_V2);
+		InitFix.PatchReport r2 = f2.transform();
+		expect(r2, false, "key", InitFix.FieldStatus.REJECTED, "thread-local heap state");
+		check(!r2.patchGenerated(), "CaseT2：把缓存值写进新增字段同样不生成补丁");
+
+		// T4：对照 —— 构造器里读新增字段，但类型是 String（不可变）→ 豁免放行
+		Fixture f4 = loadFixture("oracle.CaseT4", CASE_T4_V1, CASE_T4_V2);
+		InitFix.PatchReport r4 = f4.transform();
+		expect(r4, false, "s", InitFix.FieldStatus.ACCEPTED, null);
+		check(r4.patchGenerated(), "CaseT4：不可变类型的新增字段被构造器读取 → 仍然放行（边界是类型敏感的）");
+	}
+
 	// ==================== 夹具装配 ====================
 
 	static final class Fixture {
@@ -912,9 +1031,12 @@ public class InitFixOracle {
 		try {
 			Field f = host.getDeclaredField(field);
 			long off = Reflect.UNSAFE.objectFieldOffset(f);
+			char c = desc.charAt(0);
+			if (c == 'L' || c == '[') {
+				Reflect.UNSAFE.putObject(target, off, null);
+				return;
+			}
 			switch (desc) {
-				case "Ljava/lang/String;" -> Reflect.UNSAFE.putObject(target, off, null);
-				case "Ljava/lang/ThreadLocal;" -> Reflect.UNSAFE.putObject(target, off, null);
 				case "I" -> Reflect.UNSAFE.putInt(target, off, 0);
 				case "J" -> Reflect.UNSAFE.putLong(target, off, 0L);
 				case "Z" -> Reflect.UNSAFE.putBoolean(target, off, false);

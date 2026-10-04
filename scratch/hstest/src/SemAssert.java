@@ -207,10 +207,19 @@ public class SemAssert {
 	}
 
 	static String findNameBySem(Map<String, String> map, String sem) {
+		String found = null;
 		for (Map.Entry<String, String> e : map.entrySet()) {
-			if (sem.equals(e.getValue())) return e.getKey();
+			if (sem.equals(e.getValue())) {
+				if (found != null) {
+					throw new IllegalStateException("方法语义不唯一: " + sem + "，现有映射: " + map);
+				}
+				found = e.getKey();
+			}
 		}
-		throw new NoSuchElementException("未能在方法语义映射中找到: " + sem + "，现有映射: " + map);
+		if (found == null) {
+			throw new NoSuchElementException("未能在方法语义映射中找到: " + sem + "，现有映射: " + map);
+		}
+		return found;
 	}
 
 	public static void main(String[] args) throws Exception {

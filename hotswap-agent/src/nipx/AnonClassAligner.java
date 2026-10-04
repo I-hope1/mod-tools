@@ -1,0 +1,414 @@
+package nipx;
+
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.commons.ClassRemapper;
+import org.objectweb.asm.commons.SimpleRemapper;
+import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FieldNode;
+import org.objectweb.asm.tree.MethodNode;
+
+import java.util.*;
+import java.util.function.Function;
+
+/**
+ * 匿名类对齐器 (Anonymous Class Aligner)。
+ *
+ * <p>在 DCEVM / JBR 增强重定义环境下，匿名内部类编号按源码出现顺序生成（{@code Foo$1}, {@code Foo$2} ...）。
+ * 当在前部插入、删除、重排匿名类时，编译产物的编号发生位移，导致 DCEVM 将 JVM 中已存活的旧实例
+ * 物理迁移到内容完全不同的新类上，造成静默内存污染与错配。
+ *
+ * <p>本对齐器作为纯字节码函数，通过多级特征比对建立新旧匿名类的身份对应关系：
+ * <ol>
+ *   <li><b>Tier 1 (内容哈希 + 宿主方法)</b>：{@link AnonClassHasher} 内容哈希与所在宿主方法均精确相同；</li>
+ *   <li><b>Tier 2 (全局内容哈希)</b>：跨方法或初始化块中内容哈希精确唯一匹配；</li>
+ *   <li><b>Tier 3 (结构签名)</b>：同宿主方法、同基类与接口、同字段与方法签名（应对修改方法体导致的哈希漂移）；</li>
+ *   <li><b>Tier 4 (松散结构)</b>：同宿主方法、同基类与接口类型；</li>
+ *   <li><b>Tier 5 (位置回退)</b>：同名且基类接口相同。</li>
+ * </ol>
+ *
+ * <p>对齐后使用 ASM {@link ClassRemapper} 对新匿名类字节码及宿主类中的所有引用（包括字节码指令、
+ * {@code InnerClasses}、{@code EnclosingMethod}、{@code NestHost}/{@code NestMembers}）
+ * 进行一致性重命名，未被匹配的旧类作为孤儿在 JVM 中保留不动以维护旧实例引用。
+ */
+public final class AnonClassAligner {
+
+	public static class Result {
+		/** 对齐重命名后的宿主类字节码（若输入了 hostBytes） */
+		public final byte[] alignedHostBytes;
+		/** 对齐重命名后的所有新匿名类：目标对齐内部名 -> 对齐字节码 */
+		public final Map<String, byte[]> alignedAnonClasses;
+		/** 重命名映射表：原编译内部名 -> 目标对齐内部名 */
+		public final Map<String, String> renameMap;
+		/** 未被匹配上的旧匿名类（孤儿类内部名），应在 JVM 中保留不动不触发重定义 */
+		public final Set<String> orphanOldClasses;
+
+		public Result(
+		 byte[] alignedHostBytes,
+		 Map<String, byte[]> alignedAnonClasses,
+		 Map<String, String> renameMap,
+		 Set<String> orphanOldClasses) {
+			this.alignedHostBytes = alignedHostBytes;
+			this.alignedAnonClasses = Collections.unmodifiableMap(alignedAnonClasses);
+			this.renameMap = Collections.unmodifiableMap(renameMap);
+			this.orphanOldClasses = Collections.unmodifiableSet(orphanOldClasses);
+		}
+	}
+
+	private AnonClassAligner() { }
+
+	/**
+	 * 对齐匿名类并重写宿主与匿名类字节码。
+	 *
+	 * @param hostClassName 宿主外层类类名（支持点分或斜杠格式，如 {@code com/example/Foo}）
+	 * @param newHostBytes  新编译的宿主类字节码（可为 null）
+	 * @param oldAnonClasses 旧版本匿名类字节码表（内部名或点分名 -> 字节码）
+	 * @param newAnonClasses 新编译的匿名类字节码表（内部名或点分名 -> 字节码）
+	 * @return 对齐结果 {@link Result}
+	 */
+	public static Result align(
+	 String hostClassName,
+	 byte[] newHostBytes,
+	 Map<String, byte[]> oldAnonClasses,
+	 Map<String, byte[]> newAnonClasses) {
+		return align(hostClassName, newHostBytes, oldAnonClasses, newAnonClasses, null, null);
+	}
+
+	/**
+	 * 对齐匿名类并重写宿主与匿名类字节码（带字节码解析器）。
+	 */
+	public static Result align(
+	 String hostClassName,
+	 byte[] newHostBytes,
+	 Map<String, byte[]> oldAnonClasses,
+	 Map<String, byte[]> newAnonClasses,
+	 Function<String, byte[]> oldResolver,
+	 Function<String, byte[]> newResolver) {
+		if (hostClassName == null) {
+			throw new IllegalArgumentException("hostClassName cannot be null");
+		}
+		final String hostSlash = hostClassName.replace('.', '/');
+
+		// 归一化输入 Map 为内部名
+		Map<String, byte[]> normOld = normalizeMap(oldAnonClasses, hostSlash);
+		Map<String, byte[]> normNew = normalizeMap(newAnonClasses, hostSlash);
+
+		// 解析新旧匿名类特征
+		List<AnonInfo> oldInfos = parseInfos(hostSlash, normOld, oldResolver != null ? oldResolver : normOld::get);
+		List<AnonInfo> newInfos = parseInfos(hostSlash, normNew, newResolver != null ? newResolver : normNew::get);
+
+		// 多级匹配
+		Map<AnonInfo, AnonInfo> matchedNewToOld = matchHierarchical(oldInfos, newInfos);
+
+		// 构建 renameMap
+		Map<String, String> renameMap = new LinkedHashMap<>();
+		Set<String> takenTargetNames = new HashSet<>(normOld.keySet());
+
+		// 1. 已匹配项建立映射
+		for (Map.Entry<AnonInfo, AnonInfo> entry : matchedNewToOld.entrySet()) {
+			AnonInfo n = entry.getKey();
+			AnonInfo o = entry.getValue();
+			renameMap.put(n.name, o.name);
+		}
+
+		// 2. 为未匹配的新匿名类分配不冲突的目标名称
+		for (AnonInfo n : newInfos) {
+			if (!renameMap.containsKey(n.name)) {
+				// 寻找最小未占用的编号：优先分配从 1 起始且不在旧类、也不在已有目标名里的名称
+				int idx = 1;
+				String candidate;
+				do {
+					candidate = hostSlash + "$" + idx;
+					idx++;
+				} while (takenTargetNames.contains(candidate));
+				takenTargetNames.add(candidate);
+				renameMap.put(n.name, candidate);
+			}
+		}
+
+		// 收集旧类孤儿
+		Set<String> matchedOldNames = new HashSet<>();
+		for (AnonInfo o : matchedNewToOld.values()) {
+			matchedOldNames.add(o.name);
+		}
+		Set<String> orphanOldClasses = new LinkedHashSet<>();
+		for (AnonInfo o : oldInfos) {
+			if (!matchedOldNames.contains(o.name)) {
+				orphanOldClasses.add(o.name);
+			}
+		}
+
+		// 应用 ClassRemapper 重写所有新匿名类字节码
+		Map<String, byte[]> alignedAnonClasses = new LinkedHashMap<>();
+		for (AnonInfo n : newInfos) {
+			String targetName = renameMap.get(n.name);
+			byte[] remapped = remapClass(n.bytecode, renameMap);
+			alignedAnonClasses.put(targetName, remapped);
+		}
+
+		// 应用 ClassRemapper 重写宿主类字节码
+		byte[] alignedHostBytes = newHostBytes != null ? remapClass(newHostBytes, renameMap) : null;
+
+		return new Result(alignedHostBytes, alignedAnonClasses, renameMap, orphanOldClasses);
+	}
+
+	/**
+	 * 使用 ASM ClassRemapper 重写单个类的字节码。
+	 */
+	public static byte[] remapClass(byte[] classBytes, Map<String, String> renameMap) {
+		if (classBytes == null || classBytes.length == 0 || renameMap == null || renameMap.isEmpty()) {
+			return classBytes;
+		}
+		boolean hasNonIdentity = false;
+		for (Map.Entry<String, String> entry : renameMap.entrySet()) {
+			if (!entry.getKey().equals(entry.getValue())) {
+				hasNonIdentity = true;
+				break;
+			}
+		}
+		if (!hasNonIdentity) {
+			return classBytes;
+		}
+
+		ClassReader cr = new ClassReader(classBytes);
+		ClassWriter cw = new ClassWriter(0);
+		ClassRemapper remapper = new ClassRemapper(cw, new SimpleRemapper(renameMap));
+		cr.accept(remapper, 0);
+		return cw.toByteArray();
+	}
+
+	/**
+	 * 判断一个类名是否属于宿主类的匿名内部类。
+	 */
+	public static boolean isAnonymousClassName(String hostClassName, String className) {
+		if (hostClassName == null || className == null) return false;
+		String host = hostClassName.replace('.', '/');
+		String cls = className.replace('.', '/');
+		if (!cls.startsWith(host + "$")) return false;
+		String suffix = cls.substring(host.length() + 1);
+		if (suffix.isEmpty()) return false;
+		for (int i = 0; i < suffix.length(); i++) {
+			char ch = suffix.charAt(i);
+			if (!Character.isDigit(ch) && ch != '$') {
+				return false;
+			}
+		}
+		return !suffix.contains("$$") && !suffix.startsWith("$") && !suffix.endsWith("$");
+	}
+
+	public static int parseIndex(String hostClassName, String className) {
+		if (!isAnonymousClassName(hostClassName, className)) return -1;
+		int lastDollar = className.lastIndexOf('$');
+		if (lastDollar < 0 || lastDollar + 1 >= className.length()) return -1;
+		try {
+			return Integer.parseInt(className.substring(lastDollar + 1));
+		} catch (NumberFormatException e) {
+			return -1;
+		}
+	}
+
+	//region Internal Matching Logic
+
+	static class AnonInfo {
+		final String name;
+		final byte[] bytecode;
+		final Long contentHash;
+		final String superName;
+		final List<String> interfaces;
+		final String outerMethod;
+		final String outerMethodDesc;
+		final List<String> fields;
+		final List<String> methods;
+		final int orderIndex;
+
+		AnonInfo(
+		 String name,
+		 byte[] bytecode,
+		 Long contentHash,
+		 String superName,
+		 List<String> interfaces,
+		 String outerMethod,
+		 String outerMethodDesc,
+		 List<String> fields,
+		 List<String> methods,
+		 int orderIndex) {
+			this.name = name;
+			this.bytecode = bytecode;
+			this.contentHash = contentHash;
+			this.superName = superName;
+			this.interfaces = interfaces;
+			this.outerMethod = outerMethod;
+			this.outerMethodDesc = outerMethodDesc;
+			this.fields = fields;
+			this.methods = methods;
+			this.orderIndex = orderIndex;
+		}
+
+		@Override
+		public String toString() {
+			return name + "(#hash=" + contentHash + ", outer=" + outerMethod + ", order=" + orderIndex + ")";
+		}
+	}
+
+	private static Map<String, byte[]> normalizeMap(Map<String, byte[]> input, String hostSlash) {
+		Map<String, byte[]> result = new LinkedHashMap<>();
+		if (input == null) return result;
+		for (Map.Entry<String, byte[]> entry : input.entrySet()) {
+			String name = entry.getKey().replace('.', '/');
+			if (isAnonymousClassName(hostSlash, name)) {
+				result.put(name, entry.getValue());
+			}
+		}
+		return result;
+	}
+
+	private static List<AnonInfo> parseInfos(
+	 String hostSlash,
+	 Map<String, byte[]> classes,
+	 Function<String, byte[]> resolver) {
+		List<AnonInfo> list = new ArrayList<>();
+		Map<String, Long> hashCache = new HashMap<>();
+
+		for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
+			String name = entry.getKey();
+			byte[] bytes = entry.getValue();
+			if (bytes == null || bytes.length == 0) continue;
+
+			ClassNode cn = new ClassNode();
+			new ClassReader(bytes).accept(cn, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+
+			Long hash = AnonClassHasher.hash(name, bytes, hostSlash, resolver, hashCache, null, 0);
+
+			String superName = cn.superName != null ? cn.superName : "java/lang/Object";
+			List<String> interfaces = cn.interfaces != null ? new ArrayList<>(cn.interfaces) : new ArrayList<>();
+			Collections.sort(interfaces);
+
+			String outerMethod = cn.outerMethod;
+			String outerMethodDesc = cn.outerMethodDesc;
+
+			List<String> fields = new ArrayList<>();
+			if (cn.fields != null) {
+				for (FieldNode fn : cn.fields) {
+					fields.add(fn.name + ":" + fn.desc);
+				}
+				Collections.sort(fields);
+			}
+
+			List<String> methods = new ArrayList<>();
+			if (cn.methods != null) {
+				for (MethodNode mn : cn.methods) {
+					// 排除合成方法
+					if ((mn.access & Opcodes.ACC_SYNTHETIC) == 0) {
+						methods.add(mn.name + ":" + mn.desc);
+					}
+				}
+				Collections.sort(methods);
+			}
+
+			int orderIdx = parseIndex(hostSlash, name);
+			list.add(new AnonInfo(
+			 name, bytes, hash, superName, interfaces,
+			 outerMethod, outerMethodDesc, fields, methods, orderIdx
+			));
+		}
+
+		// 按 orderIndex 排序
+		list.sort(Comparator.comparingInt(a -> a.orderIndex));
+		return list;
+	}
+
+	private static Map<AnonInfo, AnonInfo> matchHierarchical(List<AnonInfo> oldList, List<AnonInfo> newList) {
+		Map<AnonInfo, AnonInfo> matchedNewToOld = new LinkedHashMap<>();
+		Set<AnonInfo> remainingOld = new LinkedHashSet<>(oldList);
+		Set<AnonInfo> remainingNew = new LinkedHashSet<>(newList);
+
+		// Tier 1: 内容哈希精确相同 + 宿主方法相同
+		matchTier(remainingNew, remainingOld, matchedNewToOld, (n, o) ->
+		 Objects.equals(n.contentHash, o.contentHash)
+		  && Objects.equals(n.outerMethod, o.outerMethod)
+		  && Objects.equals(n.outerMethodDesc, o.outerMethodDesc)
+		);
+
+		// Tier 2: 内容哈希全局精确相同
+		matchTier(remainingNew, remainingOld, matchedNewToOld, (n, o) ->
+		 Objects.equals(n.contentHash, o.contentHash)
+		);
+
+		// Tier 3: 结构签名相同（应对修改方法体导致的哈希变化）
+		// 同宿主方法、同父类、同接口、同字段、同声明方法
+		matchTier(remainingNew, remainingOld, matchedNewToOld, (n, o) ->
+		 Objects.equals(n.outerMethod, o.outerMethod)
+		  && Objects.equals(n.outerMethodDesc, o.outerMethodDesc)
+		  && Objects.equals(n.superName, o.superName)
+		  && Objects.equals(n.interfaces, o.interfaces)
+		  && Objects.equals(n.fields, o.fields)
+		  && Objects.equals(n.methods, o.methods)
+		);
+
+		// Tier 4: 松散结构（同宿主方法 + 同基类与接口）
+		matchTier(remainingNew, remainingOld, matchedNewToOld, (n, o) ->
+		 Objects.equals(n.outerMethod, o.outerMethod)
+		  && Objects.equals(n.outerMethodDesc, o.outerMethodDesc)
+		  && Objects.equals(n.superName, o.superName)
+		  && Objects.equals(n.interfaces, o.interfaces)
+		);
+
+		// Tier 5: 位置回退（同名且同基类接口）
+		matchTier(remainingNew, remainingOld, matchedNewToOld, (n, o) ->
+		 Objects.equals(n.name, o.name)
+		  && Objects.equals(n.superName, o.superName)
+		  && Objects.equals(n.interfaces, o.interfaces)
+		);
+
+		return matchedNewToOld;
+	}
+
+	@FunctionalInterface
+	private interface MatchPredicate {
+		boolean test(AnonInfo n, AnonInfo o);
+	}
+
+	private static void matchTier(
+	 Set<AnonInfo> remainingNew,
+	 Set<AnonInfo> remainingOld,
+	 Map<AnonInfo, AnonInfo> matchedNewToOld,
+	 MatchPredicate predicate) {
+		if (remainingNew.isEmpty() || remainingOld.isEmpty()) return;
+
+		List<AnonInfo> toRemoveNew = new ArrayList<>();
+		for (AnonInfo n : remainingNew) {
+			List<AnonInfo> candidates = new ArrayList<>();
+			for (AnonInfo o : remainingOld) {
+				if (predicate.test(n, o)) {
+					candidates.add(o);
+				}
+			}
+			if (candidates.size() == 1) {
+				AnonInfo best = candidates.get(0);
+				matchedNewToOld.put(n, best);
+				remainingOld.remove(best);
+				toRemoveNew.add(n);
+			} else if (candidates.size() > 1) {
+				// 多个匹配：按相对相对次序或序号差值最小选择
+				AnonInfo best = null;
+				int minDiff = Integer.MAX_VALUE;
+				for (AnonInfo c : candidates) {
+					int diff = Math.abs(c.orderIndex - n.orderIndex);
+					if (diff < minDiff) {
+						minDiff = diff;
+						best = c;
+					}
+				}
+				if (best != null) {
+					matchedNewToOld.put(n, best);
+					remainingOld.remove(best);
+					toRemoveNew.add(n);
+				}
+			}
+		}
+		remainingNew.removeAll(toRemoveNew);
+	}
+
+	//endregion
+}

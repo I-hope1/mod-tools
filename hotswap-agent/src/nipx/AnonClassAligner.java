@@ -160,11 +160,13 @@ public final class AnonClassAligner {
 		// 2. 为未匹配的新匿名类分配不冲突的目标名称
 		for (AnonInfo n : newInfos) {
 			if (!renameMap.containsKey(n.name)) {
-				// 寻找最小未占用的编号：优先分配从 1 起始且不在旧类、也不在已有目标名里的名称
+				// 寻找最小未占用的编号：保留父前缀路径（防止多层嵌套 Foo$1$1 被错误打平成一级类 Foo$3）
+				int lastDollar = n.name.lastIndexOf('$');
+				String prefix = lastDollar > 0 ? n.name.substring(0, lastDollar) : hostSlash;
 				int idx = 1;
 				String candidate;
 				do {
-					candidate = hostSlash + "$" + idx;
+					candidate = prefix + "$" + idx;
 					idx++;
 				} while (takenTargetNames.contains(candidate));
 				takenTargetNames.add(candidate);
@@ -338,7 +340,7 @@ public final class AnonClassAligner {
 		return outerMethod;
 	}
 
-	private static String resolveHostMethodForAnon(String hostSlash, String anonSlash, Function<String, byte[]> resolver) {
+	public static String resolveHostMethodForAnon(String hostSlash, String anonSlash, Function<String, byte[]> resolver) {
 		if (resolver == null || hostSlash == null || anonSlash == null) return null;
 		try {
 			byte[] hostBytes = resolver.apply(hostSlash);
@@ -405,13 +407,13 @@ public final class AnonClassAligner {
 				if (insn instanceof org.objectweb.asm.tree.InvokeDynamicInsnNode indy) {
 					for (Object bsmArg : indy.bsmArgs) {
 						if (bsmArg instanceof org.objectweb.asm.Handle h) {
-							if (calleeMethodName.equals(h.getName())) {
+							if (hostNode.name.equals(h.getOwner()) && calleeMethodName.equals(h.getName())) {
 								return mn;
 							}
 						}
 					}
 				} else if (insn instanceof org.objectweb.asm.tree.MethodInsnNode min) {
-					if (calleeMethodName.equals(min.name)) {
+					if (hostNode.name.equals(min.owner) && calleeMethodName.equals(min.name)) {
 						return mn;
 					}
 				}
@@ -541,6 +543,30 @@ public final class AnonClassAligner {
 		boolean test(AnonInfo n, AnonInfo o);
 	}
 
+	private static class CandidatePair {
+		final AnonInfo n;
+		final AnonInfo o;
+		final int diff;
+
+		CandidatePair(AnonInfo n, AnonInfo o) {
+			this.n = n;
+			this.o = o;
+			this.diff = Math.abs(n.orderIndex - o.orderIndex);
+		}
+	}
+
+	private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
+		int cmp = Integer.compare(p1.diff, p2.diff);
+		if (cmp != 0) return cmp;
+		cmp = Integer.compare(p1.n.orderIndex, p2.n.orderIndex);
+		if (cmp != 0) return cmp;
+		cmp = Integer.compare(p1.o.orderIndex, p2.o.orderIndex);
+		if (cmp != 0) return cmp;
+		cmp = p1.n.name.compareTo(p2.n.name);
+		if (cmp != 0) return cmp;
+		return p1.o.name.compareTo(p2.o.name);
+	};
+
 	private static void matchTier(
 	 int tier,
 	 Set<AnonInfo> remainingNew,
@@ -550,50 +576,86 @@ public final class AnonClassAligner {
 	 MatchPredicate predicate) {
 		if (remainingNew.isEmpty() || remainingOld.isEmpty()) return;
 
-		List<AnonInfo> toRemoveNew = new ArrayList<>();
+		Map<AnonInfo, List<AnonInfo>> newToOld = new LinkedHashMap<>();
+		Map<AnonInfo, List<AnonInfo>> oldToNew = new LinkedHashMap<>();
 		for (AnonInfo n : remainingNew) {
-			List<AnonInfo> candidates = new ArrayList<>();
 			for (AnonInfo o : remainingOld) {
 				if (predicate.test(n, o)) {
-					candidates.add(o);
-				}
-			}
-			if (candidates.size() == 1) {
-				AnonInfo best = candidates.get(0);
-				matchedNewToOld.put(n, best);
-				remainingOld.remove(best);
-				toRemoveNew.add(n);
-				recordTierMatch(stats, tier);
-				if (HotSwapAgent.DEBUG || tier >= 4) {
-					HotSwapAgent.info("[ANON_MATCH] Tier " + tier + " paired: " + n.name + " -> " + best.name);
-				}
-			} else if (candidates.size() > 1) {
-				stats.ambiguousMatches++;
-				System.err.println("[WARN-ANON] Ambiguous anonymous class match in Tier " + tier +
-				                   " for " + n.name + " (" + candidates.size() + " candidates). " +
-				                   "Falling back to relative positional order.");
-				// 多个匹配：按相对序号差值最小选择
-				AnonInfo best = null;
-				int minDiff = Integer.MAX_VALUE;
-				for (AnonInfo c : candidates) {
-					int diff = Math.abs(c.orderIndex - n.orderIndex);
-					if (diff < minDiff) {
-						minDiff = diff;
-						best = c;
-					}
-				}
-				if (best != null) {
-					matchedNewToOld.put(n, best);
-					remainingOld.remove(best);
-					toRemoveNew.add(n);
-					recordTierMatch(stats, tier);
-					if (HotSwapAgent.DEBUG || tier >= 4) {
-						HotSwapAgent.info("[ANON_MATCH] Tier " + tier + " fallback paired: " + n.name + " -> " + best.name);
-					}
+					newToOld.computeIfAbsent(n, k -> new ArrayList<>()).add(o);
+					oldToNew.computeIfAbsent(o, k -> new ArrayList<>()).add(n);
 				}
 			}
 		}
-		remainingNew.removeAll(toRemoveNew);
+
+		if (newToOld.isEmpty()) return;
+
+		// 第一趟：双向互为唯一候选（Bi-directional Unique Matching）
+		// 消除单向唯一误判导致的遍历顺序依赖
+		List<AnonInfo> uniqueNew = new ArrayList<>();
+		List<AnonInfo> uniqueOld = new ArrayList<>();
+		for (Map.Entry<AnonInfo, List<AnonInfo>> entry : newToOld.entrySet()) {
+			AnonInfo n = entry.getKey();
+			List<AnonInfo> oldList = entry.getValue();
+			if (oldList.size() == 1) {
+				AnonInfo o = oldList.get(0);
+				List<AnonInfo> newList = oldToNew.get(o);
+				if (newList != null && newList.size() == 1) {
+					uniqueNew.add(n);
+					uniqueOld.add(o);
+				}
+			}
+		}
+
+		for (int i = 0; i < uniqueNew.size(); i++) {
+			AnonInfo n = uniqueNew.get(i);
+			AnonInfo o = uniqueOld.get(i);
+			matchedNewToOld.put(n, o);
+			remainingOld.remove(o);
+			remainingNew.remove(n);
+			recordTierMatch(stats, tier);
+			if (HotSwapAgent.DEBUG || tier >= 4) {
+				HotSwapAgent.info("[ANON_MATCH] Tier " + tier + " bi-unique paired: " + n.name + " -> " + o.name);
+			}
+		}
+
+		if (remainingNew.isEmpty() || remainingOld.isEmpty()) return;
+
+		// 第二趟：存在 1-to-N 或 N-to-1 歧义候选，按 minDiff 绝对确定性仲裁（具备完全的顺序无关性）
+		List<CandidatePair> conflictPairs = new ArrayList<>();
+		for (AnonInfo n : remainingNew) {
+			List<AnonInfo> oldList = newToOld.get(n);
+			if (oldList == null) continue;
+			for (AnonInfo o : oldList) {
+				if (remainingOld.contains(o)) {
+					conflictPairs.add(new CandidatePair(n, o));
+				}
+			}
+		}
+
+		if (conflictPairs.isEmpty()) return;
+		conflictPairs.sort(PAIR_COMPARATOR);
+
+		Set<AnonInfo> usedNew = new HashSet<>();
+		Set<AnonInfo> usedOld = new HashSet<>();
+		for (CandidatePair pair : conflictPairs) {
+			if (usedNew.contains(pair.n) || usedOld.contains(pair.o)) continue;
+			if (!remainingNew.contains(pair.n) || !remainingOld.contains(pair.o)) continue;
+
+			usedNew.add(pair.n);
+			usedOld.add(pair.o);
+			matchedNewToOld.put(pair.n, pair.o);
+			remainingNew.remove(pair.n);
+			remainingOld.remove(pair.o);
+
+			stats.ambiguousMatches++;
+			recordTierMatch(stats, tier);
+			System.err.println("[WARN-ANON] Ambiguous anonymous class match in Tier " + tier +
+			                   " resolved by minDiff: " + pair.n.name + " -> " + pair.o.name +
+			                   " (diff=" + pair.diff + ")");
+			if (HotSwapAgent.DEBUG || tier >= 4) {
+				HotSwapAgent.info("[ANON_MATCH] Tier " + tier + " fallback paired (diff=" + pair.diff + "): " + pair.n.name + " -> " + pair.o.name);
+			}
+		}
 	}
 
 	private static void recordTierMatch(AlignmentStats stats, int tier) {

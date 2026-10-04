@@ -88,6 +88,12 @@ public class AnonClassReproTest {
 			testScenario14_NestedAnonymousClasses(javac, baseDir);
 			// 测试 15 事务回滚与旧版本字节码钉扎保护
 			testScenario15_TransactionRollbackAndPinning(javac, baseDir);
+			// 测试 16 双向唯一匹配与遍历顺序无关性验证（确证真 Bug 1 修复）
+			testScenario16_BidirectionalMatchingAndOrderIndependence(javac, baseDir);
+			// 测试 17 宿主方法逆向追溯时的 owner 归属强校验（确证真 Bug 2 修复）
+			testScenario17_CallerTracingOwnerValidation(javac, baseDir);
+			// 测试 18 多层嵌套匿名类末尾前缀保护（确证缺陷 3 修复）
+			testScenario18_NestedAnonymousClassPrefixRetention(javac, baseDir);
 		} finally {
 			deleteRecursively(baseDir);
 		}
@@ -968,6 +974,145 @@ public class AnonClassReproTest {
 		AnnotationTransformer.pendingAlignedClasses.remove("testPin/PinHostOk$1");
 		AnnotationTransformer.pendingAlignedClasses.remove("testPin.PinHostOk$1");
 		HotSwapAgent.bytecodeCache.remove("testPin.PinHostOk$1");
+	}
+
+	// 16. 双向唯一匹配与遍历顺序无关性验证（确证真 Bug 1 修复）
+	static void testScenario16_BidirectionalMatchingAndOrderIndependence(String javac, File baseDir) throws Exception {
+		System.out.println("\n--- Scenario 16: 双向唯一匹配与遍历顺序无关性验证 ---");
+		File dir = new File(baseDir, "s16");
+		dir.mkdirs();
+		File fV1 = new File(dir, "BiMatchV1.java");
+		File fV2 = new File(dir, "BiMatchV2.java");
+
+		Files.writeString(fV1.toPath(),
+			"package testBiMatch;\n" +
+			"class BiCase {\n" +
+			"    public void run2() {\n" +
+			"        Runnable r2 = new Runnable() { public void run() { doWork(); } };\n" +
+			"    }\n" +
+			"    void doWork() {}\n" +
+			"}\n");
+
+		Files.writeString(fV2.toPath(),
+			"package testBiMatch;\n" +
+			"class BiCase {\n" +
+			"    public void run1() {\n" +
+			"        Runnable r1 = new Runnable() { public void run() { doWork(); } };\n" +
+			"    }\n" +
+			"    public void run2() {\n" +
+			"        Runnable r2 = new Runnable() { public void run() { doWork(); } };\n" +
+			"    }\n" +
+			"    void doWork() {}\n" +
+			"}\n");
+
+		File outV1 = new File(dir, "out_v1");
+		File outV2 = new File(dir, "out_v2");
+		outV1.mkdirs();
+		outV2.mkdirs();
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.getAbsolutePath(), fV1.getAbsolutePath());
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.getAbsolutePath(), fV2.getAbsolutePath());
+
+		byte[] v1_1 = Files.readAllBytes(new File(outV1, "testBiMatch/BiCase$1.class").toPath());
+		byte[] v2_1 = Files.readAllBytes(new File(outV2, "testBiMatch/BiCase$1.class").toPath());
+		byte[] v2_2 = Files.readAllBytes(new File(outV2, "testBiMatch/BiCase$2.class").toPath());
+		byte[] v2Host = Files.readAllBytes(new File(outV2, "testBiMatch/BiCase.class").toPath());
+
+		// 模拟用户确证的 Bug 场景：旧侧只有 Foo$2
+		// 新侧有同构的新增 Foo$1 与原本对应的 Foo$2
+		Map<String, byte[]> oldAnon = new HashMap<>();
+		oldAnon.put("testBiMatch/BiCase$2", v1_1);
+
+		Map<String, byte[]> newAnon = new HashMap<>();
+		newAnon.put("testBiMatch/BiCase$1", v2_1);
+		newAnon.put("testBiMatch/BiCase$2", v2_2);
+
+		AnonClassAligner.TEST_REVERSE_ORDER = false;
+		AnonClassAligner.Result resFwd = AnonClassAligner.align("testBiMatch/BiCase", v2Host, oldAnon, newAnon);
+
+		AnonClassAligner.TEST_REVERSE_ORDER = true;
+		AnonClassAligner.Result resRev = AnonClassAligner.align("testBiMatch/BiCase", v2Host, oldAnon, newAnon);
+		AnonClassAligner.TEST_REVERSE_ORDER = false;
+
+		check(Objects.equals(resFwd.renameMap.get("testBiMatch/BiCase$2"), "testBiMatch/BiCase$2"), "Scenario 16: 正序下旧 $2 必须配对给新 $2 (而非被 $1 单向拔除抢走)");
+		check(Objects.equals(resRev.renameMap.get("testBiMatch/BiCase$2"), "testBiMatch/BiCase$2"), "Scenario 16: 反序下旧 $2 同样配对给新 $2");
+		check(Objects.equals(resFwd.renameMap, resRev.renameMap), "Scenario 16: 双向唯一匹配彻底消除遍历顺序依赖 (正反序映射严格相等)");
+	}
+
+	// 17. 宿主方法逆向追溯时的 owner 归属强校验（确证真 Bug 2 修复）
+	static void testScenario17_CallerTracingOwnerValidation(String javac, File baseDir) throws Exception {
+		System.out.println("\n--- Scenario 17: 宿主方法逆向追溯时的 owner 归属强校验 ---");
+		File dir = new File(baseDir, "s17");
+		dir.mkdirs();
+		File f = new File(dir, "OwnerCase.java");
+		Files.writeString(f.toPath(),
+			"package testOwner;\n" +
+			"class Helper {\n" +
+			"    public static void runJob() {}\n" +
+			"}\n" +
+			"class OwnerCase {\n" +
+			"    public void wrongMethod() {\n" +
+			"        Helper.runJob(); // 同名调用，但 owner 是外部 Helper 类！\n" +
+			"    }\n" +
+			"    public void realCaller() {\n" +
+			"        Runnable r = () -> { Runnable inner = new Runnable() { public void run() { doWork(); } }; };\n" +
+			"    }\n" +
+			"    void doWork() {}\n" +
+			"}\n");
+		File out = new File(dir, "out");
+		out.mkdirs();
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", out.getAbsolutePath(), f.getAbsolutePath());
+
+		byte[] hostBytes = Files.readAllBytes(new File(out, "testOwner/OwnerCase.class").toPath());
+		byte[] anonBytes = Files.readAllBytes(new File(out, "testOwner/OwnerCase$1.class").toPath());
+
+		String hostMethod = AnonClassAligner.resolveHostMethodForAnon("testOwner/OwnerCase", "testOwner/OwnerCase$1", name -> {
+			if (name.equals("testOwner/OwnerCase")) return hostBytes;
+			if (name.equals("testOwner/OwnerCase$1")) return anonBytes;
+			return null;
+		});
+
+		check("realCaller".equals(hostMethod), "Scenario 17: findCallerMethod 正确过滤外部类的同名方法，准确定位宿主 realCaller (而非被 wrongMethod 劫持)");
+	}
+
+	// 18. 多层嵌套匿名类末尾前缀保护（确证缺陷 3 修复）
+	static void testScenario18_NestedAnonymousClassPrefixRetention(String javac, File baseDir) throws Exception {
+		System.out.println("\n--- Scenario 18: 多层嵌套匿名类末尾前缀保护 ---");
+		File dir = new File(baseDir, "s18");
+		dir.mkdirs();
+		File f = new File(dir, "NestPrefixCase.java");
+		Files.writeString(f.toPath(),
+			"package testPrefix;\n" +
+			"class NestPrefixCase {\n" +
+			"    public void setup() {\n" +
+			"        Runnable r1 = new Runnable() {\n" +
+			"            public void run() {\n" +
+			"                Runnable rInner = new Runnable() { public void run() { doSub(); } };\n" +
+			"            }\n" +
+			"        };\n" +
+			"    }\n" +
+			"    void doSub() {}\n" +
+			"}\n");
+		File out = new File(dir, "out");
+		out.mkdirs();
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", out.getAbsolutePath(), f.getAbsolutePath());
+
+		byte[] hostBytes = Files.readAllBytes(new File(out, "testPrefix/NestPrefixCase.class").toPath());
+		byte[] v1 = Files.readAllBytes(new File(out, "testPrefix/NestPrefixCase$1.class").toPath());
+		byte[] v1_1 = Files.readAllBytes(new File(out, "testPrefix/NestPrefixCase$1$1.class").toPath());
+
+		// 模拟新增了嵌套子类，但在旧侧完全未匹配
+		Map<String, byte[]> oldAnon = new HashMap<>();
+		oldAnon.put("testPrefix/NestPrefixCase$1", v1);
+
+		Map<String, byte[]> newAnon = new HashMap<>();
+		newAnon.put("testPrefix/NestPrefixCase$1", v1);
+		newAnon.put("testPrefix/NestPrefixCase$1$1", v1_1); // 嵌套子类为未匹配类
+
+		AnonClassAligner.Result res = AnonClassAligner.align("testPrefix/NestPrefixCase", hostBytes, oldAnon, newAnon);
+		String target = res.renameMap.get("testPrefix/NestPrefixCase$1$1");
+
+		check(target != null, "Scenario 18: 未匹配的嵌套匿名类成功分配目标类名");
+		check(target.startsWith("testPrefix/NestPrefixCase$1$"), "Scenario 18: 嵌套类目标名称保留父前缀路径 (分配为 " + target + " 而非打平为 NestPrefixCase$2)");
 	}
 
 	static void runCmd(String... cmd) throws Exception {

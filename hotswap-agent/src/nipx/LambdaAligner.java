@@ -887,6 +887,9 @@ public class LambdaAligner {
 			for (SyntheticInfo oi : oldGroup) {
 				if (!acceptCandidate(ctx, ni, oi)) continue;
 				if (!oi.name.equals(ni.name)) continue;
+				if (isAmbiguousAnonCollision(newGroup, oldGroup, ni, oi)) {
+					warnAnonMaskedCollision(ctx.currentClass, oi, ni.name, ni.desc);
+				}
 				pair(ctx, ni, oi, "STEP1");
 				ctx.step1Pairs++;
 				progressed = true;
@@ -903,6 +906,9 @@ public class LambdaAligner {
 			if (hasUnmatchedChild(ctx, ni)) continue;
 			for (SyntheticInfo oi : oldGroup) {
 				if (!acceptCandidate(ctx, ni, oi)) continue;
+				if (isAmbiguousAnonCollision(newGroup, oldGroup, ni, oi)) {
+					warnAnonMaskedCollision(ctx.currentClass, oi, ni.name, ni.desc);
+				}
 				pair(ctx, ni, oi, "STEP1");
 				ctx.step1Pairs++;
 				progressed = true;
@@ -1254,6 +1260,41 @@ public class LambdaAligner {
 		                  + "此时旧名字会被交给一个语义不同的方法：老 CallSite **不会抛异常**，"
 		                  + "而是安静地执行新方法体（实测确认：deep2 变体乙里旧 $2 承载了 doB2 的语义）。"
 		                  + "建议把每个 lambda 放进独立的私有方法，让身份由结构而非位置决定。");
+	}
+
+	private static boolean hasMultipleAnonMaskedWithSameHash(List<SyntheticInfo> list, long hash) {
+		if (list == null) return false;
+		int count = 0;
+		for (SyntheticInfo info : list) {
+			if (info.hash == hash && info.anonMasked) {
+				if (++count >= 2) return true;
+			}
+		}
+		return false;
+	}
+
+	private static boolean isAmbiguousAnonCollision(List<SyntheticInfo> newGroup, List<SyntheticInfo> oldGroup,
+	                                               SyntheticInfo ni, SyntheticInfo oi) {
+		if (!ni.anonMasked && !oi.anonMasked) return false;
+		return hasMultipleAnonMaskedWithSameHash(newGroup, ni.hash)
+		       || hasMultipleAnonMaskedWithSameHash(oldGroup, oi.hash);
+	}
+
+	/**
+	 * 匿名类归一化碰撞风险告警。
+	 *
+	 * <p>当同组内有 ≥2 个同 hash 且对匿名类进行了归一化屏蔽的候选时触发。
+	 * 多个 lambda 仅通过实例化的匿名内部类区分时，指纹会被过度归一化为相同值，
+	 * 若发生新增、删除或重排，可能因同名优先或顺序位移导致方法语义错位。</p>
+	 */
+	private static void warnAnonMaskedCollision(String owner, SyntheticInfo oi, String newName, String newDesc) {
+		String key = owner + "#ANON#" + newName + "<-" + oi.name;
+		if (!WARNED_REALIGNMENTS.add(key)) return;
+
+		HotSwapAgent.warn("[LambdaAligner] 匿名类归一化导致同组同指纹配对存在歧义 " + owner
+		                  + "：旧 " + oi.name + oi.desc + " <- 新 " + newName + newDesc
+		                  + "。同组内存在多个同形且包含匿名类的 lambda（同指纹），若发生新增、删除或重排可能导致方法语义错位。"
+		                  + "建议将匿名类提取为具名内部类或独立方法以确保语义稳定。");
 	}
 	//endregion
 
@@ -1620,6 +1661,7 @@ public class LambdaAligner {
 			boolean renameable = matchesPattern && !mn.name.startsWith("access$");
 			SyntheticInfo info = new SyntheticInfo(
 			 mn.name, mn.desc, mn.access, fp.getHash(), logicalName, renameable);
+			info.anonMasked = fp.hasMaskedAnon();
 			// 幽灵空壳（上一轮为兜住老 CallSite 而注入的空方法）标记为"不参与匹配"：
 			// 它必须留在 oldGroups 里供孤儿计算复现，但名字已经是"死名字"，
 			// 不能再被当成某个新 lambda 的目标 —— 否则会把它挤到别的名字上去。
@@ -2531,6 +2573,9 @@ public class LambdaAligner {
 		 * 它是纯结构信息，编辑方法体不会改变它，与 {@link #shape} 对称。</p>
 		 */
 		int upDepth = -1;
+
+		/** 指纹计算中是否对匿名类进行了归一化屏蔽（#ANON_relId#）。 */
+		boolean anonMasked = false;
 
 		SyntheticInfo(String name, String desc, int access, long hash, String logicalName, boolean renameable) {
 			this.name = name;

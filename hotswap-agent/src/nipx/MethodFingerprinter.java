@@ -84,6 +84,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 		nextLabelId = 0;
 		anonClassIds.clear();
 		nextAnonId = 0;
+		anonMasked = false;
 		validLabels = null;
 		currentClassName = null;
 	}
@@ -121,6 +122,12 @@ public final class MethodFingerprinter extends MethodVisitor {
 
 	private final Map<String, Integer> anonClassIds = new HashMap<>();
 	private       int                  nextAnonId   = 0;
+	/** 当前方法指纹计算中是否对匿名类进行了归一化屏蔽。 */
+	private       boolean              anonMasked   = false;
+
+	public boolean hasMaskedAnon() {
+		return anonMasked;
+	}
 
 	/**
 	 * 核心统一拦截器：处理所有出现的内部类名称。
@@ -153,6 +160,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 		String suffix = owner.substring(currentClassName.length() + 1);
 		if (!isUnstableNestedSuffix(suffix)) return owner;
 		int relId = anonClassIds.computeIfAbsent(owner, k -> nextAnonId++);
+		anonMasked = true;
 		return "#ANON_" + relId + "#";
 	}
 

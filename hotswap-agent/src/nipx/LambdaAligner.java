@@ -277,6 +277,8 @@ public class LambdaAligner {
 		 */
 		final Map<String, SyntheticInfo> oldNameIndex = new HashMap<>(64);
 		final Map<String, SyntheticInfo> newNameIndex = new HashMap<>(64);
+		final Map<String, Long>          oldAnonHashes = new HashMap<>(16);
+		final Map<String, Long>          newAnonHashes = new HashMap<>(16);
 
 		int step1Pairs;
 		int passAPairs;
@@ -294,6 +296,8 @@ public class LambdaAligner {
 			usedOldNames.clear();
 			existingNewNames.clear();
 			oldNameDescSet.clear();
+			oldAnonHashes.clear();
+			newAnonHashes.clear();
 			fingerprinter.reset();
 			currentClass = null;
 			oldGroups.clear();
@@ -318,6 +322,21 @@ public class LambdaAligner {
 	 * 若整个流程抛异常，也会记录日志后返回原始 {@code newBytes}（降级不崩溃）
 	 */
 	public static byte[] align(byte[] oldBytes, byte[] newBytes) {
+		return align(oldBytes, newBytes, null, null);
+	}
+
+	/**
+	 * 对齐 Lambda 表达式的主入口方法（含匿名类字节码解析器）。
+	 *
+	 * @param oldBytes            上一轮实际生效的字节码
+	 * @param newBytes            本次新编译出的字节码
+	 * @param oldBytecodeResolver 旧侧字节码解析器（传入类内部名，返回对应字节码；可为 null）
+	 * @param newBytecodeResolver 新侧字节码解析器（传入类内部名，返回对应字节码；可为 null）
+	 * @return 对齐后的字节码
+	 */
+	public static byte[] align(byte[] oldBytes, byte[] newBytes,
+	                           java.util.function.Function<String, byte[]> oldBytecodeResolver,
+	                           java.util.function.Function<String, byte[]> newBytecodeResolver) {
 		if (oldBytes == null || oldBytes.length == 0) return newBytes;
 
 		MatchContext ctx = CONTEXT.get();
@@ -326,8 +345,8 @@ public class LambdaAligner {
 
 			// 一次读取即拿到 ClassNode：oldCn 会被 resurrectOrphanedLambdas 复用，
 			// newCn 会在“无重命名”路径下直接提供 presentKeys。
-			ClassNode oldCn = scan(oldBytes, ctx, true);
-			ClassNode newCn = scan(newBytes, ctx, false);
+			ClassNode oldCn = scan(oldBytes, ctx, true, oldBytecodeResolver);
+			ClassNode newCn = scan(newBytes, ctx, false, newBytecodeResolver);
 			if (!Objects.equals(oldCn.name, newCn.name)) {
 				throw new IllegalArgumentException(
 				 "New class name does not match old class name: " + newCn.name + " != " + oldCn.name);
@@ -1617,12 +1636,64 @@ public class LambdaAligner {
 	 * @param isOld 是否为旧版本
 	 * @return 该类的 {@link ClassNode}
 	 */
-	private static ClassNode scan(byte[] bytes, MatchContext ctx, boolean isOld) {
+	/**
+	 * 收集方法体内直接引用的属于当前宿主类的匿名类内部名。
+	 */
+	private static Set<String> referencedAnonClasses(MethodNode mn, String hostClassName) {
+		Set<String> set = null;
+		for (AbstractInsnNode insn : mn.instructions) {
+			String owner = null;
+			if (insn instanceof TypeInsnNode tin) {
+				owner = tin.desc;
+			} else if (insn instanceof MethodInsnNode min) {
+				owner = min.owner;
+			} else if (insn instanceof FieldInsnNode fin) {
+				owner = fin.owner;
+			} else if (insn instanceof LdcInsnNode ldc && ldc.cst instanceof Type t) {
+				if (t.getSort() == Type.OBJECT) owner = t.getInternalName();
+			}
+			if (owner != null && isAnonClassOf(owner, hostClassName)) {
+				if (set == null) set = new HashSet<>(4);
+				set.add(owner);
+			}
+		}
+		return set == null ? Collections.emptySet() : set;
+	}
+
+	private static boolean isAnonClassOf(String className, String hostClassName) {
+		if (className == null) return false;
+		if (className.startsWith("[")) {
+			int idx = className.lastIndexOf('[');
+			if (idx + 2 < className.length() && className.charAt(idx + 1) == 'L' && className.endsWith(";")) {
+				className = className.substring(idx + 2, className.length() - 1);
+			}
+		}
+		if (!className.startsWith(hostClassName + "$")) return false;
+		String suffix = className.substring(hostClassName.length() + 1);
+		return MethodFingerprinter.isUnstableNestedSuffix(suffix);
+	}
+
+	private static ClassNode scan(byte[] bytes, MatchContext ctx, boolean isOld,
+	                              java.util.function.Function<String, byte[]> resolver) {
 		ClassNode cn = new ClassNode();
 		// SKIP_DEBUG：不解析行号 / 局部变量表；SKIP_FRAMES：不解析 StackMapTable。
 		// 二者对逻辑指纹都没有贡献，跳过可减少内存与解析时间。
 		new ClassReader(bytes).accept(cn,
 		 ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+
+		// 预计算方法体引用的匿名类内容哈希，供 MethodFingerprinter 只查表，避免单例重入与重复计算
+		Map<String, Long> anonHashes = isOld ? ctx.oldAnonHashes : ctx.newAnonHashes;
+		if (resolver != null) {
+			Set<String> visiting = new HashSet<>();
+			for (MethodNode mn : cn.methods) {
+				for (String anon : referencedAnonClasses(mn, cn.name)) {
+					if (!anonHashes.containsKey(anon)) {
+						Long h = AnonClassHasher.hash(anon, null, cn.name, resolver, anonHashes, visiting, 0);
+						if (h != null) anonHashes.put(anon, h);
+					}
+				}
+			}
+		}
 
 		for (MethodNode mn : cn.methods) {
 			// —— 无条件登记到避障集：让 fresh name 不会撞到类中任何已有方法 ——
@@ -1640,6 +1711,7 @@ public class LambdaAligner {
 			fp.reset();
 			fp.setContext(cn.name);
 			fp.setValidLabels(collectValidLabels(mn));
+			fp.setAnonHashes(anonHashes);
 
 			// 回放指令流；传入的 Label 与 collectValidLabels 取出的实例一致
 			mn.accept(fp);

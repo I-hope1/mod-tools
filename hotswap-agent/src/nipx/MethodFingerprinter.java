@@ -85,6 +85,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 		anonClassIds.clear();
 		nextAnonId = 0;
 		anonMasked = false;
+		anonHashes = null;
 		validLabels = null;
 		currentClassName = null;
 	}
@@ -124,9 +125,15 @@ public final class MethodFingerprinter extends MethodVisitor {
 	private       int                  nextAnonId   = 0;
 	/** 当前方法指纹计算中是否对匿名类进行了归一化屏蔽。 */
 	private       boolean              anonMasked   = false;
+	/** 预计算的匿名类内容结构哈希（类内部名 -> 64位哈希），用于增强指纹区分度。 */
+	private       Map<String, Long>    anonHashes;
 
 	public boolean hasMaskedAnon() {
 		return anonMasked;
+	}
+
+	public void setAnonHashes(Map<String, Long> anonHashes) {
+		this.anonHashes = anonHashes;
 	}
 
 	/**
@@ -161,7 +168,9 @@ public final class MethodFingerprinter extends MethodVisitor {
 		if (!isUnstableNestedSuffix(suffix)) return owner;
 		int relId = anonClassIds.computeIfAbsent(owner, k -> nextAnonId++);
 		anonMasked = true;
-		return "#ANON_" + relId + "#";
+		Long h = anonHashes != null ? anonHashes.get(owner) : null;
+		return h != null ? "#ANON_" + relId + "_" + Long.toHexString(h) + "#"
+		                 : "#ANON_" + relId + "#";
 	}
 
 	/**
@@ -176,7 +185,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 	 *   <li>{@code Builder}→ 具名内部类，稳定</li>
 	 * </ul>
 	 */
-	private static boolean isUnstableNestedSuffix(String suffix) {
+	static boolean isUnstableNestedSuffix(String suffix) {
 		int lastSep = suffix.lastIndexOf('$');
 		int start   = lastSep + 1;
 		if (start >= suffix.length()) return false;

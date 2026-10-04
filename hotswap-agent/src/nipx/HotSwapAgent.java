@@ -219,6 +219,15 @@ public class HotSwapAgent {
 		int skippedCount  = 0;
 		int injectedCount = 0;
 
+		Map<String, byte[]> newBatchBytes = new HashMap<>(changedFiles.size());
+		for (Path p : changedFiles) {
+			try {
+				byte[] bc = Files.readAllBytes(p);
+				String cn = Utils.getClassNameASM(bc);
+				if (cn != null) newBatchBytes.put(cn, bc);
+			} catch (Throwable ignored) { }
+		}
+
 		for (Path path : changedFiles) {
 			if (DEBUG) log("Processing changes: " + path);
 			try {
@@ -285,7 +294,11 @@ public class HotSwapAgent {
 								newBytecode = AnnotationTransformer.forceStaticLambdas(
 									newBytecode, slashClassName, targetClass.getClassLoader());
 							}
-							newBytecode = LambdaAligner.align(oldBytecode, newBytecode);
+							java.util.function.Function<String, byte[]> oldResolver =
+								name -> bytecodeCache.get(name.replace('/', '.'));
+							java.util.function.Function<String, byte[]> newResolver =
+								name -> newBatchBytes.get(name.replace('/', '.'));
+							newBytecode = LambdaAligner.align(oldBytecode, newBytecode, oldResolver, newResolver);
 						}
 					}
 					bytecodeCache.put(className, newBytecode);

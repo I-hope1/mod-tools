@@ -37,6 +37,13 @@ import java.util.function.Supplier;
  * 对齐后的名字，对齐基准却是 v2 编译出的名字），第三次热更会重新触发
  * {@link NoSuchMethodError}；同时上一轮注入的空壳不在原始产物里，也会被漏掉。</p>
  *
+ * <p><b>运行环境前提（DCEVM / JBR）：</b>标准 JVM HotSwap（JVM TI 规范）严禁修改类的结构
+ * （Schema Change，新增或删除方法与字段会无条件触发 {@link UnsupportedOperationException}）。
+ * 本对齐器的全套机制（包括方法避障改名、幽灵桩方法补齐注入、新 Lambda 识别）<b>完全建立在
+ * DCEVM 或 JetBrains Runtime (JBR) 等增强热重载虚拟机的支持之上</b>。
+ * 在标准 JVM 环境下，任何涉及方法增删的类编辑重定义都会被底层 JVM 直接拒绝，
+ * 无法通过字节码改写生效。</p>
+ *
  * <p><b>失败降级：</b>整个 {@link #align} 过程被一层 try/catch 包住。若因输入
  * 不合法、ASM 内部异常等任何 {@code Exception} 导致对齐失败，会记录一条日志并
  * 返回原始 {@code newBytes}（降级为“不崩溃”）。这意味着热更成功但老 CallSite

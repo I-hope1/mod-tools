@@ -20,6 +20,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static nipx.HotSwapAgent.log;
 
@@ -74,7 +75,14 @@ import static nipx.HotSwapAgent.log;
  *       根构造器覆盖完整性；§4.4 允许"多根构造器 + 参数回溯"在指纹完全一致时放行。</li>
  *   <li><b>闭包迭代</b>：后续加工检查 + 依赖闭包，反复移除不合格字段直到不动点。</li>
  *   <li><b>拓扑排序</b>：{@link #topoSortFields} 按依赖排序，成环则整组拒绝。</li>
- *   <li><b>生成</b>：protected 桥接、私有调用改写、字段写入改写、hidden class 装配。</li>
+ *   <li><b>生成</b>：protected 桥接、私有调用改写、字段写入改写、<b>每字段一个独立静态直线
+ *       方法</b>（§5.1）、hidden class 装配。
+ *       <p>之所以做成"每字段一个方法"而不是把所有切片串进一个方法：方法边界就是异常边界。
+ *       串成一个方法时，其中一个切片抛异常（例如它调的辅助方法炸了）会让<b>其后所有字段</b>
+ *       都被跳过；而每字段一个方法后，宿主 {@link PatchPlan 驱动}就能逐字段 try/catch，
+ *       失败隔离且能记账。反过来，若想在单方法内做隔离就得写 try/catch → 异常表 →
+ *       StackMapTable → 伴生类必须 {@code COMPUTE_FRAMES}，正是 §5.1 要避免的
+ *       "类加载期帧计算死锁"。每个方法的体仍是纯直线代码，{@code COMPUTE_MAXS} 足够。</p></li>
  * </ol>
  *
  * <h2>构造器参数回溯</h2>
@@ -131,12 +139,18 @@ import static nipx.HotSwapAgent.log;
  * </ul>
  */
 public class InitFix {
-	private static final String STATIC_PATCH_METHOD   = "initStatic";
-	private static final String INSTANCE_PATCH_METHOD = "initInstance";
+	private static final String STATIC_PATCH_PREFIX   = "initStatic$";
+	private static final String INSTANCE_PATCH_PREFIX = "init$";
 	private static final String PATCH_SUFFIX          = "$$HotswapPatch";
 
 	private static final long PENDING_TTL_NANOS = TimeUnit.MINUTES.toNanos(5);
 	private static final int  MAX_DETAILED_FAILURES = 5;
+
+	/**
+	 * 详细失败日志的全局配额：逐实例驱动下同一轮可能有成千上万个实例各自失败，
+	 * 逐个打栈会淹没日志（{@code docs/INIT_FIX.md} §5.2 的 {@code handleFieldException}）。
+	 */
+	private static final AtomicInteger DETAILED_FAILURE_LOGS = new AtomicInteger();
 
 	/** {@code @HotswapReinit} 的描述符（纯字符串匹配，不加载注解类）。 */
 	private static final String REINIT_DESC = "Lnipx/annotation/HotswapReinit;";
@@ -178,25 +192,70 @@ public class InitFix {
 	 + ")Ljava/lang/invoke/CallSite;",
 	 false);
 
-	private record BuiltPatch(byte[] bytes, boolean hasStatic, boolean hasInstance, PatchReport report) {
+	private record BuiltPatch(byte[] bytes, PatchPlan plan, PatchReport report) {
 		boolean hasPatch() { return bytes != null; }
 	}
 
+	/**
+	 * 单个字段的补丁任务（{@code docs/INIT_FIX.md} §5.2）。
+	 *
+	 * @param methodName   伴生类里承载该字段的独立静态方法名
+	 * @param fieldName    字段名（报告/失败台账的键）
+	 * @param isStatic     静态字段（方法无参，整个补丁只调用一次）
+	 * @param dependencies 本字段切片读取的其它<b>本轮受补</b>字段
+	 */
+	public record FieldPatchTask(
+	 String methodName, String fieldName, boolean isStatic, Set<String> dependencies) {
+
+		public FieldPatchTask {
+			dependencies = dependencies == null ? Set.of() : Set.copyOf(dependencies);
+		}
+	}
+
+	/**
+	 * 一次热更的补丁计划：按拓扑序排列的逐字段任务（§5.1 每字段独立静态方法 +
+	 * §5.2 宿主驱动调度）。
+	 */
+	public record PatchPlan(List<FieldPatchTask> instanceTasks, List<FieldPatchTask> staticTasks) {
+		public static final PatchPlan EMPTY = new PatchPlan(List.of(), List.of());
+
+		public PatchPlan {
+			instanceTasks = instanceTasks == null ? List.of() : List.copyOf(instanceTasks);
+			staticTasks   = staticTasks   == null ? List.of() : List.copyOf(staticTasks);
+		}
+
+		public boolean isEmpty() { return instanceTasks.isEmpty() && staticTasks.isEmpty(); }
+
+		public boolean hasStatic()   { return !staticTasks.isEmpty(); }
+		public boolean hasInstance() { return !instanceTasks.isEmpty(); }
+
+		public List<FieldPatchTask> allTasks() {
+			List<FieldPatchTask> all = new ArrayList<>(staticTasks.size() + instanceTasks.size());
+			all.addAll(staticTasks);
+			all.addAll(instanceTasks);
+			return all;
+		}
+	}
+
 	private record PendingPatch(
-	 byte[] bytes, boolean hasStatic, boolean hasInstance,
+	 PatchPlan plan,
+	 byte[] bytes,
 	 List<WeakReference<Object>> instanceSnapshot,
 	 long createdNanos) {
 
 		PendingPatch {
-			if (hasInstance && instanceSnapshot == null) {
+			if (!plan.instanceTasks().isEmpty() && instanceSnapshot == null) {
 				throw new IllegalStateException(
-				 "hasInstance requires a non-null instance snapshot");
+				 "instance tasks require a non-null instance snapshot");
 			}
 		}
 
+		boolean hasStatic()   { return plan.hasStatic(); }
+		boolean hasInstance() { return plan.hasInstance(); }
+
 		PendingPatch withSnapshot(List<WeakReference<Object>> snapshot) {
 			return new PendingPatch(
-			 bytes, hasStatic, hasInstance,
+			 plan, bytes,
 			 new ArrayList<>(snapshot),
 			 System.nanoTime());
 		}
@@ -311,11 +370,10 @@ public class InitFix {
 			if (!built.hasPatch()) return;
 
 			List<WeakReference<Object>> snapshot =
-			 built.hasInstance() ? snapshotInstances(host) : null;
+			 built.plan().hasInstance() ? snapshotInstances(host) : null;
 
 			PendingPatch patch = new PendingPatch(
-			 built.bytes(), built.hasStatic(), built.hasInstance(),
-			 snapshot, System.nanoTime());
+			 built.plan(), built.bytes(), snapshot, System.nanoTime());
 			PENDING.put(host, patch);
 		} catch (Throwable e) {
 			HotSwapAgent.error("Field init patch generation failed for " + className
@@ -673,53 +731,13 @@ public class InitFix {
 			}
 		}
 
-		// ==================== 阶段 3：写出选中的提取 ====================
-		List<AbstractInsnNode> initInsns = new ArrayList<>();
-		Map<AbstractInsnNode, ProtectedAccess> initProtected = new HashMap<>();
-		for (String fieldName : orderedInstance) {
-			List<FieldExtract> extracts = instanceExtracts.get(fieldName);
-			FieldExtract chosen = null;
-			for (FieldExtract fe : extracts) {
-				if (fe.fromRootCtor()) { chosen = fe; break; }
-			}
-			if (chosen == null) chosen = extracts.get(0);
-			initInsns.addAll(chosen.instructions());
-			initProtected.putAll(chosen.protectedAccesses());
-		}
-
-		List<AbstractInsnNode> clinitInsns = new ArrayList<>();
-		Map<AbstractInsnNode, ProtectedAccess> clinitProtected = new HashMap<>();
-		for (String fieldName : orderedStatic) {
-			FieldExtract fe = staticExtracts.get(fieldName).get(0);
-			clinitInsns.addAll(fe.instructions());
-			clinitProtected.putAll(fe.protectedAccesses());
-		}
-
-
-		PatchReport report = new PatchReport(
-		 Collections.unmodifiableMap(instanceDecisions),
-		 Collections.unmodifiableMap(staticDecisions),
-		 !initInsns.isEmpty() || !clinitInsns.isEmpty());
-
-		if (initInsns.isEmpty() && clinitInsns.isEmpty()) {
-			return new BuiltPatch(null, false, false, report);
-		}
-
+		// ==================== 阶段 3：逐字段发射（§5.1 每字段独立静态方法） ====================
+		// 每个放行字段单独一个静态直线方法：一行抛异常只影响该字段，不会像"单方法承载全部
+		// 字段"那样跳过其后所有字段（§5.2 的驱动依赖这一点做失败隔离）。
 		String hostInternal = Type.getInternalName(host);
-		initInsns   = rewriteProtectedAccesses(hostInternal, initInsns, initProtected);
-		clinitInsns = rewriteProtectedAccesses(hostInternal, clinitInsns, clinitProtected);
-
-		initInsns   = rewritePrivateInvokes(className, initInsns);
-		clinitInsns = rewritePrivateInvokes(className, clinitInsns);
-
 		Set<String> conditionalFields = new HashSet<>(targetInstanceFields);
 		conditionalFields.addAll(targetStaticFields);
 		conditionalFields.removeAll(forceWriteFields);
-		initInsns   = rewriteFieldPuts(className, initInsns, conditionalFields, forceWriteFields);
-		clinitInsns = rewriteFieldPuts(className, clinitInsns, conditionalFields, forceWriteFields);
-
-		boolean hasStatic   = !clinitInsns.isEmpty();
-		boolean hasInstance = !initInsns.isEmpty();
 
 		ClassNode patch = new ClassNode();
 		patch.version = Math.max(hostVersion, Opcodes.V11);
@@ -727,30 +745,107 @@ public class InitFix {
 		patch.name = className + PATCH_SUFFIX;
 		patch.superName = "java/lang/Object";
 
-		if (hasStatic) {
-			MethodNode m = new MethodNode(
-			 Opcodes.ACC_STATIC | Opcodes.ACC_PUBLIC,
-			 STATIC_PATCH_METHOD, "()V", null, null);
-			for (AbstractInsnNode i : clinitInsns) m.instructions.add(i);
-			m.instructions.add(new InsnNode(Opcodes.RETURN));
-			patch.methods.add(m);
+		Set<String> usedMethodNames = new HashSet<>();
+		List<FieldPatchTask> instanceTasks = new ArrayList<>();
+		List<FieldPatchTask> staticTasks   = new ArrayList<>();
+
+		for (String fieldName : orderedInstance) {
+			FieldExtract chosen = null;
+			for (FieldExtract fe : instanceExtracts.get(fieldName)) {
+				if (fe.fromRootCtor()) { chosen = fe; break; }
+			}
+			if (chosen == null) chosen = instanceExtracts.get(fieldName).get(0);
+
+			String method = uniqueMethodName(INSTANCE_PATCH_PREFIX, fieldName, usedMethodNames);
+			List<AbstractInsnNode> body = rewriteFieldSlice(
+			 hostInternal, className, new ArrayList<>(chosen.instructions()),
+			 chosen.protectedAccesses(), conditionalFields, forceWriteFields);
+			patch.methods.add(straightLineMethod(method, "(L" + className + ";)", body));
+			instanceTasks.add(new FieldPatchTask(method, fieldName, false,
+			 dependencyOf(fieldName, instanceExtracts, className, acceptedInstance)));
 		}
 
-		if (hasInstance) {
-			MethodNode m = new MethodNode(
-			 Opcodes.ACC_STATIC | Opcodes.ACC_PUBLIC,
-			 INSTANCE_PATCH_METHOD, "(Ljava/lang/Object;)V", null, null);
-			m.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
-			m.instructions.add(new TypeInsnNode(Opcodes.CHECKCAST, className));
-			m.instructions.add(new VarInsnNode(Opcodes.ASTORE, 0));
-			for (AbstractInsnNode i : initInsns) m.instructions.add(i);
-			m.instructions.add(new InsnNode(Opcodes.RETURN));
-			patch.methods.add(m);
+		for (String fieldName : orderedStatic) {
+			FieldExtract fe = staticExtracts.get(fieldName).get(0);
+			String method = uniqueMethodName(STATIC_PATCH_PREFIX, fieldName, usedMethodNames);
+			List<AbstractInsnNode> body = rewriteFieldSlice(
+			 hostInternal, className, new ArrayList<>(fe.instructions()),
+			 fe.protectedAccesses(), conditionalFields, forceWriteFields);
+			patch.methods.add(straightLineMethod(method, "()", body));
+			staticTasks.add(new FieldPatchTask(method, fieldName, true,
+			 dependencyOf(fieldName, staticExtracts, className, acceptedStatic)));
+		}
+
+		PatchPlan plan = new PatchPlan(instanceTasks, staticTasks);
+
+		PatchReport report = new PatchReport(
+		 Collections.unmodifiableMap(instanceDecisions),
+		 Collections.unmodifiableMap(staticDecisions),
+		 !plan.isEmpty());
+
+		if (plan.isEmpty()) {
+			return new BuiltPatch(null, PatchPlan.EMPTY, report);
 		}
 
 		ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
 		patch.accept(cw);
-		return new BuiltPatch(cw.toByteArray(), hasStatic, hasInstance, report);
+		return new BuiltPatch(cw.toByteArray(), plan, report);
+	}
+
+	/** 一个字段的完整补丁体：protected 桥接 → 私有调用改写 → 写入协议改写。 */
+	private static List<AbstractInsnNode> rewriteFieldSlice(
+	 String hostInternal, String className, List<AbstractInsnNode> insns,
+	 Map<AbstractInsnNode, ProtectedAccess> protectedAccesses,
+	 Set<String> conditionalFields, Set<String> forceFields) {
+
+		insns = rewriteProtectedAccesses(hostInternal, insns, protectedAccesses);
+		insns = rewritePrivateInvokes(className, insns);
+		insns = rewriteFieldPuts(className, insns, conditionalFields, forceFields);
+		return insns;
+	}
+
+	/** 生成一个静态直线方法：{@code methodName(desc)V}，体内为切片 + RETURN。 */
+	private static MethodNode straightLineMethod(
+	 String methodName, String argDesc, List<AbstractInsnNode> body) {
+		MethodNode m = new MethodNode(
+		 Opcodes.ACC_STATIC | Opcodes.ACC_PUBLIC,
+		 methodName, argDesc + "V", null, null);
+		for (AbstractInsnNode i : body) m.instructions.add(i);
+		m.instructions.add(new InsnNode(Opcodes.RETURN));
+		return m;
+	}
+
+	/** 字段名里可能含 {@code . ; [ / < >} 等非法方法名字符（混淆器/字节码注入），替换掉。 */
+	private static String uniqueMethodName(String prefix, String fieldName, Set<String> used) {
+		StringBuilder sb = new StringBuilder(prefix);
+		for (int i = 0; i < fieldName.length(); i++) {
+			char c = fieldName.charAt(i);
+			sb.append(c == '.' || c == ';' || c == '[' || c == '/' || c == '<' || c == '>' ? '_' : c);
+		}
+		String base = sb.toString();
+		String name = base;
+		for (int n = 2; !used.add(name); n++) name = base + "$" + n;
+		return name;
+	}
+
+	/** 该字段切片读取的、同样在本轮受补的其它字段（§5.2 的依赖失败传播用）。 */
+	private static Set<String> dependencyOf(
+	 String fieldName, Map<String, List<FieldExtract>> extracts,
+	 String className, Set<String> acceptedFields) {
+
+		Set<String> deps = new LinkedHashSet<>();
+		List<FieldExtract> feList = extracts.get(fieldName);
+		if (feList == null) return deps;
+		for (FieldExtract fe : feList) {
+			for (AbstractInsnNode n : fe.instructions()) {
+				if (!(n instanceof FieldInsnNode fld)) continue;
+				if (!fld.owner.equals(className)) continue;
+				if (fld.name.equals(fieldName) || !acceptedFields.contains(fld.name)) continue;
+				int op = fld.getOpcode();
+				if (op == Opcodes.GETFIELD || op == Opcodes.GETSTATIC) deps.add(fld.name);
+			}
+		}
+		return deps;
 	}
 
 	// ==================== 拓扑排序 ====================
@@ -2158,6 +2253,16 @@ public class InitFix {
 		}
 	}
 
+	/**
+	 * 宿主侧补丁驱动器（{@code docs/INIT_FIX.md} §5.2）。
+	 *
+	 * <p>逐字段调度：每个字段一个独立的静态直线方法，失败只影响该字段与其下游，
+	 * 不会像"单方法承载全部字段"那样由一行异常跳过其后所有字段。依赖字段失败的
+	 * 字段会被显式跳过并记账（{@code FieldLedger} 的雏形，见 P1-③）。</p>
+	 *
+	 * <p>{@code LinkageError} 仍然上抛熔断（§1.2 不变量 4）：它意味着类元数据假设已被
+	 * JVM 打破，继续修补没有意义。</p>
+	 */
 	private static void applyPatch(Class<?> host, PendingPatch patch) throws Throwable {
 		if (!isInitialized(host)) {
 			log("Skip field init patch, class not initialized (or initializing/failed): "
@@ -2165,10 +2270,11 @@ public class InitFix {
 			return;
 		}
 
+		PatchPlan plan = patch.plan();
 		List<Object> alive = null;
-		if (patch.hasInstance()) {
+		if (plan.hasInstance()) {
 			alive = collectInstancesForPatch(patch);
-			if (alive.isEmpty() && !patch.hasStatic()) {
+			if (alive.isEmpty() && !plan.hasStatic()) {
 				log("No live instances and no static patch needed for " + host.getName()
 				    + ", skip");
 				return;
@@ -2178,61 +2284,55 @@ public class InitFix {
 		Lookup   h  = Reflect.defineHiddenClass(host, patch.bytes());
 		Class<?> pc = h.lookupClass();
 
-		if (patch.hasStatic()) {
-			HotSwapAgent.info("Applying static field init patch to " + host.getName());
-			MethodHandle mh = h.findStatic(pc, STATIC_PATCH_METHOD,
-			 MethodType.methodType(void.class));
+		// 必须在取 Handle 时就 asType 适配：init$F 的形参是宿主类型，驱动手里只有 Object。
+		Map<String, MethodHandle> instanceHandles = new LinkedHashMap<>();
+		for (FieldPatchTask task : plan.instanceTasks()) {
+			MethodHandle mh = h.findStatic(pc, task.methodName(),
+			 MethodType.methodType(void.class, host));
+			instanceHandles.put(task.fieldName(),
+			 mh.asType(MethodType.methodType(void.class, Object.class)));
+		}
+
+		Map<String, MethodHandle> staticHandles = new LinkedHashMap<>();
+		for (FieldPatchTask task : plan.staticTasks()) {
+			staticHandles.put(task.fieldName(),
+			 h.findStatic(pc, task.methodName(), MethodType.methodType(void.class)));
+		}
+
+		Set<String> failedFields = new LinkedHashSet<>();
+		Set<String> skippedFields = new LinkedHashSet<>();
+
+		// ---- 静态字段：整个补丁只跑一次 ----
+		if (!plan.staticTasks().isEmpty()) {
+			HotSwapAgent.info("Applying static field init patch to " + host.getName()
+			                  + ", fields=" + plan.staticTasks().size());
 			long start = System.nanoTime();
-			mh.invoke();
+			runTasks(host, plan.staticTasks(), staticHandles, null,
+			         failedFields, skippedFields);
 			long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
 			HotSwapAgent.info("Static field init patch for " + host.getName()
 			                  + " done in " + elapsedMs + "ms");
 		}
 
-		if (patch.hasInstance()) {
-			if (alive.isEmpty()) return;
-
+		// ---- 实例字段：逐实例、逐字段 ----
+		if (plan.hasInstance() && alive != null && !alive.isEmpty()) {
 			HotSwapAgent.info("Applying instance field init patch to " + host.getName()
-			                  + ", count=" + alive.size());
-			MethodHandle mh = h.findStatic(pc, INSTANCE_PATCH_METHOD,
-			 MethodType.methodType(void.class, Object.class));
+			                  + ", count=" + alive.size()
+			                  + ", fields=" + plan.instanceTasks().size());
 
-			long start        = System.nanoTime();
-			int  ok           = 0;
-			int  failed       = 0;
-			int  skipped      = 0;
-			int  detailedErrs = 0;
+			long start = System.nanoTime();
 			for (Object ins : alive) {
-				try {
-					mh.invoke(ins);
-					ok++;
-				} catch (LinkageError le) {
-					HotSwapAgent.error("init patch aborted on LinkageError after "
-					                   + ok + " ok, " + failed + " failed: "
-					                   + le.getMessage(), le);
-					skipped = alive.size() - ok - failed - 1;
-					failed++;
-					break;
-				} catch (Throwable t) {
-					failed++;
-					if (++detailedErrs <= MAX_DETAILED_FAILURES) {
-						HotSwapAgent.error("init patch failed on one instance: "
-						                   + t.getMessage(), t);
-					}
-				}
+				runTasks(host, plan.instanceTasks(), instanceHandles, ins,
+				         failedFields, skippedFields);
 			}
 			long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
 
 			StringBuilder sb = new StringBuilder("Instance field init patch for ")
 			 .append(host.getName())
-			 .append(" done: ok=").append(ok)
-			 .append(", failed=").append(failed);
-			if (skipped > 0) sb.append(", skipped=").append(skipped);
-			if (failed > detailedErrs) {
-				sb.append(" (detailed stacks suppressed for ")
-				  .append(failed - detailedErrs).append(" of them)");
-			}
-			sb.append(", elapsed=").append(elapsedMs).append("ms");
+			 .append(" done: fields=").append(plan.instanceTasks().size())
+			 .append(", failedFields=").append(failedFields)
+			 .append(", skippedFields=").append(skippedFields)
+			 .append(", elapsed=").append(elapsedMs).append("ms");
 			HotSwapAgent.info(sb.toString());
 
 			if (elapsedMs > 1000) {
@@ -2241,7 +2341,60 @@ public class InitFix {
 				                  + "ms, hotswap thread was blocked");
 			}
 		}
+
+		if (!failedFields.isEmpty() || !skippedFields.isEmpty()) {
+			HotSwapAgent.warn("Field init patch incomplete for " + host.getName()
+			                  + ": failed=" + failedFields + ", skipped=" + skippedFields
+			                  + "（待补字段台账 FieldLedger 见 P1-③：本轮基线已随 redefine 推进，"
+			                  + "未记账就会在下一轮遗忘这些字段）");
+		}
 	}
+
+	/**
+	 * 按拓扑序执行一组字段任务。
+	 *
+	 * @param target 实例字段时为对象，静态字段时忽略
+	 */
+	private static void runTasks(
+	 Class<?> host, List<FieldPatchTask> tasks, Map<String, MethodHandle> handles,
+	 Object target, Set<String> failedFields, Set<String> skippedFields) {
+
+		for (FieldPatchTask task : tasks) {
+			if (!Collections.disjoint(task.dependencies(), failedFields)
+			    || !Collections.disjoint(task.dependencies(), skippedFields)) {
+				skippedFields.add(task.fieldName());
+				HotSwapAgent.warn("Skipping field init for " + host.getName() + "."
+				                  + task.fieldName() + " because a dependency failed");
+				continue;
+			}
+			MethodHandle mh = handles.get(task.fieldName());
+			if (mh == null) {
+				skippedFields.add(task.fieldName());
+				continue;
+			}
+			try {
+				if (target == null) mh.invokeExact();
+				else mh.invokeExact(target);
+			} catch (LinkageError le) {
+				throw le;   // §1.2 熔断：类元数据假设已被打破，继续修补没有意义
+			} catch (Throwable t) {
+				failedFields.add(task.fieldName());
+				if (DETAILED_FAILURE_LOGS.incrementAndGet() <= MAX_DETAILED_FAILURES) {
+					HotSwapAgent.error("Field init patch failed for " + host.getName()
+					                   + "." + task.fieldName() + ": " + t.getMessage(), t);
+				}
+			}
+		}
+	}
+
+	private static Set<String> union(Set<String> a, Set<String> b, Set<String> c) {
+		Set<String> out = new LinkedHashSet<>();
+		if (a != null) out.addAll(a);
+		out.addAll(b);
+		out.addAll(c);
+		return out;
+	}
+	// (union 由 §3.4 的 FieldLedger 使用；P1-③ 落地前保留为工具方法)
 
 	private static List<Object> collectInstancesForPatch(PendingPatch patch) {
 		List<WeakReference<Object>> snapshot = patch.instanceSnapshot();

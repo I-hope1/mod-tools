@@ -110,6 +110,7 @@ public class InitFixOracle {
 		scenario("§4.2 bit 4/5：可复用缓存字段 + setLength(0) → 阻断；切片内 NEW 的 builder → 放行", InitFixOracle::caseReusableBuilderCache);
 		scenario("§3.2 边界：构造器里的独立语句不进切片（REJECT 边界在哪）", InitFixOracle::caseStatementOutsideSlice);
 		scenario("§1.1 @HotswapReinit：解锁构造器读取 / 强制覆写 / CONDITIONAL 不覆写 / T0 绕过", InitFixOracle::caseHotswapReinit);
+		scenario("§5.1/§5.2 逐字段驱动：单字段失败不牵连后续字段，依赖失败显式跳过", InitFixOracle::casePerFieldDriver);
 
 		System.out.println();
 		System.out.println("通过 " + passed + " 条；失败 " + failed + " 条；合计 " + (passed + failed) + " 条");
@@ -1003,6 +1004,78 @@ public class InitFixOracle {
 		check(Integer.valueOf(0).equals(read(f4.host, s4, "retries")),
 			"CaseN4：显式重置为零值没有被 T0 吞掉（期望 0，实际 "
 			+ describe(read(f4.host, s4, "retries")) + "）");
+	}
+
+	// ==================== 场景 15：§5.1/§5.2 逐字段驱动 ====================
+
+	/**
+	 * 三个新增字段，其中 {@code bad} 的切片在<b>补丁执行期</b>抛异常（由静态开关控制），
+	 * {@code other} 正常，{@code derived} 依赖 {@code bad}。
+	 *
+	 * <p>这正是"单个方法与逐字段方法"的判别实验：旧实现把三个字段串在同一个静态直线方法里
+	 * （顺序 bad → derived → other），{@code bad} 一抛异常，<b>后面的字段全部被跳过</b>；
+	 * 逐字段驱动则只有 {@code bad} 与其下游 {@code derived} 失败，{@code other} 照常修补。</p>
+	 *
+	 * <p>开关放在 {@code pick()} 内部：构造期 {@code FAIL=false} 正常构造，
+	 * 打补丁前置 true，于是异常只发生在补丁侧；而且 {@code pick()} 里的分支不在切片内，
+	 * 不会破坏直线假设。</p>
+	 */
+	static final String CASE_U_V1 = """
+		package oracle;
+		public class CaseU {
+			public  static boolean FAIL;
+			public CaseU(String seed) { }
+			public  static void failNow(boolean v) { FAIL = v; }
+			private static String pick() { if (FAIL) throw new IllegalStateException("boom"); return "x"; }
+		}
+		""";
+
+	static final String CASE_U_V2 = """
+		package oracle;
+		public class CaseU {
+			public  static boolean FAIL;
+			private String bad     = pick();
+			private String derived = this.bad + "!";
+			private String other   = "ok";
+			public CaseU(String seed) { }
+			public  static void failNow(boolean v) { FAIL = v; }
+			private static String pick() { if (FAIL) throw new IllegalStateException("boom"); return "x"; }
+		}
+		""";
+
+	static void casePerFieldDriver() throws Exception {
+		Fixture fx = loadFixture("oracle.CaseU", CASE_U_V1, CASE_U_V2);
+		Object subject = construct(fx.host, "seed");
+		resetToDefault(fx.host, subject, "bad", "Ljava/lang/String;");
+		resetToDefault(fx.host, subject, "derived", "Ljava/lang/String;");
+		resetToDefault(fx.host, subject, "other", "Ljava/lang/String;");
+		InstanceTracker.register(subject);
+
+		InitFix.PatchReport report = fx.transform();
+		// 三个字段都通过了静态审查（能提到安全切片），补丁因此生成
+		expect(report, false, "bad", InitFix.FieldStatus.ACCEPTED, null);
+		expect(report, false, "derived", InitFix.FieldStatus.ACCEPTED, null);
+		expect(report, false, "other", InitFix.FieldStatus.ACCEPTED, null);
+		check(report.patchGenerated(), "CaseU：三个字段都进了补丁计划");
+
+		// 打补丁前置开关：bad 的切片将在补丁执行期抛异常
+		fx.host.getMethod("failNow", boolean.class).invoke(null, true);
+
+		fx.apply();
+
+		// 核心断言：bad 抛异常，但 other 依然被修补 —— 这正是逐字段驱动的意义
+		check(read(fx.host, subject, "bad") == null,
+			"CaseU：bad 的补丁抛异常，字段保持默认值（实际 "
+			+ describe(read(fx.host, subject, "bad")) + "）");
+		check("ok".equals(read(fx.host, subject, "other")),
+			"CaseU：bad 抛异常没有牵连 other（期望 ok，实际 "
+			+ describe(read(fx.host, subject, "other")) + "）");
+		check(read(fx.host, subject, "derived") == null,
+			"CaseU：依赖 bad 的 derived 被显式跳过，未用默认值参与计算（实际 "
+			+ describe(read(fx.host, subject, "derived")) + "）");
+		check(agentWarnings.stream().anyMatch(w -> w.contains("CaseU.derived")
+		      && w.contains("dependency failed")),
+			"CaseU：依赖失败被显式告警（实际 warns=" + agentWarnings.size() + " 条）");
 	}
 
 	// ==================== 夹具装配 ====================

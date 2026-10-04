@@ -29,10 +29,13 @@ import java.util.*;
  * {@code access$} 例外 —— 它在本对齐器中保名不改名，其名字是稳定信息，
  * 保留它才能区分“调用不同 accessor 的两个 lambda”。</p>
  *
- * <p><b>关于匿名嵌套类归一化</b>：所有可能引用类名/描述符的入口 —— 指令操作数、
- * 字段/方法 owner、方法描述符、异常表 type、LDC 常量等 —— 都必须经过
- * {@link #maskAnonymousClass} 或 {@link #maskDescriptor}，否则“插入匿名
- * object : XXX 导致编号位移”会连带污染指纹。</p>
+ * <p><b>关于匿名嵌套类归一化与已知限制</b>：所有可能引用类名/描述符的入口 —— 指令操作数、
+ * 字段/方法 owner、方法描述符、异常表 type、LDC 常量等 —— 都经过
+ * {@link #maskAnonymousClass} 或 {@link #maskDescriptor} 将匿名类序号替换为方法内相对 ID
+ * （如 {@code #ANON_0#}），防止外部插入匿名类导致序号位移污染指纹。
+ * <b>已知限制（过度归一化代价）</b>：若多个 Lambda 方法体结构同构，仅实例化的匿名内部类不同（如各自实例化不同的
+ * {@code Runnable} 回调），它们的指纹会被归一化为完全相同的值。当这些 Lambda 本身发生插入、删除或重排时，
+ * 对齐器无法仅凭指纹区分它们，需结合对齐器的碰撞排查与告警机制。</p>
  */
 @SuppressWarnings("unused")
 public final class MethodFingerprinter extends MethodVisitor {

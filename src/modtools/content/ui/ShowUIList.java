@@ -287,6 +287,7 @@ public class ShowUIList extends Content {
 		String  prefix = stylesClass.getSimpleName() + ".";
 		Field[] fields = getStyleFields(stylesClass);
 		for (Field field : fields) {
+			if (field.isSynthetic() || field.getName().startsWith("$nipx$")) continue;
 			if (!Modifier.isStatic(field.getModifiers())) continue;
 			Object obj = null;
 			try {

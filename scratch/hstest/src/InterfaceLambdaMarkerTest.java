@@ -3,13 +3,21 @@ import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
+import org.objectweb.asm.tree.MethodNode;
+
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Proxy;
 
 import java.util.Arrays;
 
 public class InterfaceLambdaMarkerTest {
-	interface LambdaFixture {
-		default Runnable make() {
+	public interface LambdaFixture {
+		default Runnable capturing() {
 			return () -> consume(this);
+		}
+
+		default Runnable nonCapturing() {
+			return () -> consume(null);
 		}
 
 		static void consume(LambdaFixture value) {
@@ -26,6 +34,11 @@ public class InterfaceLambdaMarkerTest {
 		}
 	}
 
+	private static void check(boolean condition, String message) {
+		System.out.println((condition ? "   PASS  " : "   FAIL  ") + message);
+		if (!condition) throw new AssertionError(message);
+	}
+
 	public static void main(String[] args) throws Exception {
 		String slashName = LambdaFixture.class.getName().replace('.', '/');
 		byte[] original;
@@ -36,9 +49,7 @@ public class InterfaceLambdaMarkerTest {
 
 		byte[] transformed = AnnotationTransformer.forceStaticLambdas(
 			original, slashName, InterfaceLambdaMarkerTest.class.getClassLoader());
-		if (Arrays.equals(original, transformed)) {
-			throw new AssertionError("fixture was not transformed");
-		}
+		check(!Arrays.equals(original, transformed), "interface lambda fixture transformed");
 
 		ClassNode node = new ClassNode();
 		new ClassReader(transformed).accept(node, 0);
@@ -50,19 +61,35 @@ public class InterfaceLambdaMarkerTest {
 			}
 		}
 		int required = Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL | Opcodes.ACC_SYNTHETIC;
-		if (markerAccess != required) {
-			throw new AssertionError("expected interface marker flags 0x1019, got 0x"
-				+ Integer.toHexString(markerAccess));
+		check(markerAccess == required, "interface marker flags are exactly 0x1019 (actual 0x"
+			+ Integer.toHexString(markerAccess) + ")");
+
+		boolean staticLambdaHasExplicitReceiver = false;
+		for (MethodNode method : node.methods) {
+			if (!method.name.startsWith("lambda$nonCapturing$") || (method.access & Opcodes.ACC_STATIC) == 0) continue;
+			org.objectweb.asm.Type[] arguments = org.objectweb.asm.Type.getArgumentTypes(method.desc);
+			staticLambdaHasExplicitReceiver = arguments.length > 0
+				&& arguments[0].getDescriptor().equals("L" + slashName + ";");
+			if (staticLambdaHasExplicitReceiver) break;
 		}
+		check(staticLambdaHasExplicitReceiver,
+			"non-capturing lambda was rewritten static with interface receiver parameter");
 
 		byte[] transformedAgain = AnnotationTransformer.forceStaticLambdas(
 			transformed, slashName, InterfaceLambdaMarkerTest.class.getClassLoader());
-		if (!Arrays.equals(transformed, transformedAgain)) {
-			throw new AssertionError("transformation is not idempotent");
-		}
+		check(Arrays.equals(transformed, transformedAgain), "transformation is byte-for-byte idempotent");
 
-		Class<?> defined = new ByteLoader(InterfaceLambdaMarkerTest.class.getClassLoader()).define(transformed);
-		if (!defined.isInterface()) throw new AssertionError("defined class is not an interface");
-		System.out.println("interface marker flags, class loading, and idempotence OK");
+		ByteLoader loader = new ByteLoader(InterfaceLambdaMarkerTest.class.getClassLoader());
+		Class<?> defined = loader.define(transformed);
+		Class.forName(defined.getName(), true, loader);
+		check(defined.isInterface(), "transformed interface verifies, links, and initializes");
+
+		Object instance = Proxy.newProxyInstance(loader, new Class<?>[]{defined},
+			(proxy, method, arguments) -> InvocationHandler.invokeDefault(proxy, method, arguments));
+		for (String methodName : new String[]{"capturing", "nonCapturing"}) {
+			Runnable lambda = (Runnable) defined.getMethod(methodName).invoke(instance);
+			lambda.run();
+		}
+		check(true, "capturing and non-capturing lambdas link and execute");
 	}
 }

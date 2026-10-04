@@ -98,6 +98,12 @@ public class AnonClassReproTest {
 			testScenario19_CascadingTreeAndMetamorphicSuite(javac, baseDir);
 			// 测试 20 深度白盒漏洞复现与防御验证（7 大修复项确证）
 			testScenario20_WhiteboxVulnerabilityReproAndDefense(javac, baseDir);
+			// 测试 21 安全门与熔断（§6.3 数量上限/软超时、§6.4 strict、§4.3 拒绝通道）
+			testScenario21_SafetyGatesAndCircuitBreaker(javac, baseDir);
+			// 测试 22 嵌套匿名类的内容哈希可用性 + 设计不变量（描述符定向屏蔽、Lambda 不加层级）
+			testScenario22_NestedContentHashAvailability(javac, baseDir);
+			// 测试 23 strict 是安全门而非匹配策略（Tier 3 minDiff 止血 + 拒绝粒度）
+			testScenario23_StrictIsSafetyGateNotPolicy(javac, baseDir);
 		} finally {
 			deleteRecursively(baseDir);
 		}
@@ -1354,6 +1360,420 @@ public class AnonClassReproTest {
 		);
 		check(emi != null && "run".equals(emi.name) && "()V".equals(emi.desc),
 			"Scenario 20: resolveHostMethodForAnon 同时精准恢复方法名与方法描述符 (run:()V)");
+	}
+
+	/**
+	 * Scenario 21: §6.3/§6.4 安全门与熔断。
+	 *
+	 * <p>夹具刻意构造 Tier 4 歧义：新侧只有一个匿名类 P，旧侧有 Q、R 两个匿名类，
+	 * 三者同宿主方法 / 同基类(`Runnable`) / 同接口，但字段表两两不同（因此 Tier 3 全部失败），
+	 * 于是 Tier 4 上 P 同时匹配 Q 和 R —— 双向唯一不成立，即"低置信度同构平局"（§4.3-①）。</p>
+	 */
+	static void testScenario21_SafetyGatesAndCircuitBreaker(String javac, File baseDir) throws Exception {
+		System.out.println("\n--- Scenario 21: 安全门与熔断（§6.3 数量上限/软超时、§6.4 strict） ---");
+		File dir = new File(baseDir, "s21");
+		dir.mkdirs();
+
+		// 旧侧：两个同宿主方法、同基类接口、字段表各不相同的匿名类
+		File fOld = new File(dir, "GateAmb.java");
+		Files.writeString(fOld.toPath(),
+			"package testGate;\n" +
+			"class GateAmb {\n" +
+			"    public void setup() {\n" +
+			"        Runnable q = new Runnable() { int q = 1; public void run() { q++; } };\n" +
+			"        Runnable r = new Runnable() { long r = 2L; public void run() { r++; } };\n" +
+			"    }\n" +
+			"}\n");
+		File outOld = new File(dir, "outOld");
+		outOld.mkdirs();
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outOld.getAbsolutePath(), fOld.getAbsolutePath());
+
+		// 新侧：只剩一个匿名类，字段表与 Q、R 都不同 -> Tier 4 一对二歧义
+		File fNew = new File(dir, "GateAmbNew.java");
+		Files.writeString(fNew.toPath(),
+			"package testGate;\n" +
+			"class GateAmb {\n" +
+			"    public void setup() {\n" +
+			"        Runnable p = new Runnable() { String p = \"3\"; public void run() { p.trim(); } };\n" +
+			"    }\n" +
+			"}\n");
+		File outNew = new File(dir, "outNew");
+		outNew.mkdirs();
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outNew.getAbsolutePath(), fNew.getAbsolutePath());
+
+		byte[] hostOld = Files.readAllBytes(new File(outOld, "testGate/GateAmb.class").toPath());
+		byte[] hostNew = Files.readAllBytes(new File(outNew, "testGate/GateAmb.class").toPath());
+
+		Function<String, byte[]> oldRes = n -> readIfExists(new File(outOld, n.replace('.', '/') + ".class"));
+		Function<String, byte[]> newRes = n -> readIfExists(new File(outNew, n.replace('.', '/') + ".class"));
+
+		Map<String, byte[]> oldAnon = new LinkedHashMap<>();
+		oldAnon.put("testGate/GateAmb$1", Files.readAllBytes(new File(outOld, "testGate/GateAmb$1.class").toPath()));
+		oldAnon.put("testGate/GateAmb$2", Files.readAllBytes(new File(outOld, "testGate/GateAmb$2.class").toPath()));
+		Map<String, byte[]> newAnon = new LinkedHashMap<>();
+		newAnon.put("testGate/GateAmb$1", Files.readAllBytes(new File(outNew, "testGate/GateAmb$1.class").toPath()));
+
+		// ---- 前置事实：非严格模式下这是"不配对 + 2 个孤儿"，而不是抛异常 ----
+		AnonClassAligner.Result relaxed = AnonClassAligner.align(
+			"testGate/GateAmb", hostNew, oldAnon, newAnon, oldRes, newRes);
+		check(relaxed.stats.ambiguousPairs > 0,
+			"Scenario 21: Tier 4 一对二歧义被统计到 stats.ambiguousPairs (=" + relaxed.stats.ambiguousPairs + ")");
+		check(relaxed.orphanOldClasses.size() == 2 && relaxed.stats.newClasses == 1,
+			"Scenario 21: 非严格模式下歧义退化为「不配对 + 新增/孤儿」，绝不按名字盲配");
+
+		// ---- 1) strict 模式：歧义 -> 整体拒绝宿主组（§4.3-①） ----
+		boolean savedStrict = HotSwapAgent.ANON_STRICT;
+		AnonClassAligner.AlignmentRejectedException strictReject = null;
+		try {
+			HotSwapAgent.ANON_STRICT = true;
+			AnonClassAligner.align("testGate/GateAmb", hostNew, oldAnon, newAnon, oldRes, newRes);
+		} catch (AnonClassAligner.AlignmentRejectedException e) {
+			strictReject = e;
+		} finally {
+			HotSwapAgent.ANON_STRICT = savedStrict;
+		}
+		check(strictReject != null,
+			"Scenario 21: strict 模式下 Tier 4 歧义触发 AlignmentRejectedException（§4.3-①）");
+		check(strictReject != null && "testGate/GateAmb".equals(strictReject.hostSlash),
+			"Scenario 21: 拒绝异常携带宿主内部名，供 [HOTSWAP-REJECT] 告警定位");
+		check(strictReject instanceof IllegalStateException,
+			"Scenario 21: 拒绝异常继承 IllegalStateException，保持既有调用方兼容性");
+
+		// ---- 2) 数量硬上限（§6.3-2） ----
+		int savedMax = AnonClassAligner.MAX_ANON_PER_HOST;
+		AnonClassAligner.AlignmentRejectedException capReject = null;
+		try {
+			AnonClassAligner.MAX_ANON_PER_HOST = 1;
+			AnonClassAligner.align("testGate/GateAmb", hostNew, oldAnon, newAnon, oldRes, newRes);
+		} catch (AnonClassAligner.AlignmentRejectedException e) {
+			capReject = e;
+		} finally {
+			AnonClassAligner.MAX_ANON_PER_HOST = savedMax;
+		}
+		check(capReject != null && capReject.reason.contains("MAX_ANON_PER_HOST"),
+			"Scenario 21: 匿名类数量超过 MAX_ANON_PER_HOST 时整体拒绝（§6.3-2）");
+
+		// ---- 3) 软超时（§6.3-3） ----
+		long savedTimeout = AnonClassAligner.ALIGN_TIMEOUT_MS;
+		AnonClassAligner.AlignmentRejectedException timeoutReject = null;
+		try {
+			AnonClassAligner.ALIGN_TIMEOUT_MS = 0L;
+			AnonClassAligner.align("testGate/GateAmb", hostNew, oldAnon, newAnon, oldRes, newRes);
+		} catch (AnonClassAligner.AlignmentRejectedException e) {
+			timeoutReject = e;
+		} finally {
+			AnonClassAligner.ALIGN_TIMEOUT_MS = savedTimeout;
+		}
+		check(timeoutReject != null && timeoutReject.reason.contains("soft timeout"),
+			"Scenario 21: 超出 ALIGN_TIMEOUT_MS 软超时窗口时整体拒绝（§6.3-3）");
+
+		// ---- 4) 后置校验失败也走同一个拒绝通道（§4.3-③） ----
+		AnonClassAligner.AlignmentRejectedException validationReject = null;
+		try {
+			Map<String, String> badMap = new LinkedHashMap<>();
+			badMap.put("testGate/GateAmb$1", "testGate/GateAmb$1");
+			badMap.put("testGate/GateAmb$2", "testGate/GateAmb$1");
+			AnonClassAligner.validateRenameMap(badMap, "testGate/GateAmb");
+		} catch (AnonClassAligner.AlignmentRejectedException e) {
+			validationReject = e;
+		}
+		check(validationReject != null && validationReject.reason.contains("non-injective"),
+			"Scenario 21: 后置校验（非单射）复用同一拒绝通道，供调用方统一回滚（§4.3-③）");
+
+		// ---- 5) 门恢复后的正常路径不受影响 ----
+		AnonClassAligner.Result restored = AnonClassAligner.align(
+			"testGate/GateAmb", hostNew, oldAnon, newAnon, oldRes, newRes);
+		check(restored.stats.orphanClasses == 2 && AnonClassAligner.MAX_ANON_PER_HOST == 128,
+			"Scenario 21: 门限恢复默认后正常返回（无残留状态污染）");
+	}
+
+	static byte[] readIfExists(File f) {
+		try {
+			return f.exists() ? Files.readAllBytes(f.toPath()) : null;
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
+	/**
+	 * Scenario 22: 嵌套匿名类的**内容哈希可用性**与两条设计不变量。
+	 *
+	 * <p>背景（探针 {@code DeepNestProbe} 实测）：`AnonClassHasher` 组装非合成方法签名时原本使用
+	 * **未屏蔽的原始描述符**，而嵌套匿名类的构造器形如 `<init>(LHost$1;)V` —— 父类一移位，
+	 * 子类哈希必变，导致 depth ≥ 2 的每一层都只能靠 **Tier 4**（不比字段表的那层）配对。
+	 * 本场景把它锁死：内容不变时**每一层都必须靠 Tier 1 命中**。</p>
+	 */
+	static void testScenario22_NestedContentHashAvailability(String javac, File baseDir) throws Exception {
+		System.out.println("\n--- Scenario 22: 嵌套匿名类的内容哈希可用性 + 设计不变量 ---");
+		File dir = new File(baseDir, "s22");
+		dir.mkdirs();
+
+		// v1: 4 层嵌套匿名类链
+		File fV1 = new File(dir, "DeepNestV1.java");
+		Files.writeString(fV1.toPath(), deepNestSource("testDeep", "DeepNest", 4, false));
+		File outV1 = new File(dir, "v1");
+		outV1.mkdirs();
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.getAbsolutePath(), fV1.getAbsolutePath());
+
+		// v2: 顶层**插入**一个额外匿名类，使整条链物理编号位移（链本身内容不变）
+		File fV2 = new File(dir, "DeepNestV2.java");
+		Files.writeString(fV2.toPath(), deepNestSource("testDeep", "DeepNest", 4, true));
+		File outV2 = new File(dir, "v2");
+		outV2.mkdirs();
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.getAbsolutePath(), fV2.getAbsolutePath());
+
+		byte[] hostV2 = Files.readAllBytes(new File(outV2, "testDeep/DeepNest.class").toPath());
+		Map<String, byte[]> oldAnon = anonClasses(outV1, "testDeep/DeepNest");
+		Map<String, byte[]> newAnon = anonClasses(outV2, "testDeep/DeepNest");
+		Function<String, byte[]> oldRes = n -> readIfExists(new File(outV1, n.replace('.', '/') + ".class"));
+		Function<String, byte[]> newRes = n -> readIfExists(new File(outV2, n.replace('.', '/') + ".class"));
+
+		AnonClassAligner.Result res = AnonClassAligner.align(
+			"testDeep/DeepNest", hostV2, oldAnon, newAnon, oldRes, newRes);
+		check(res.stats.tier1Matches == 4,
+			"Scenario 22: 4 层嵌套在内容不变时必须全部靠 Tier 1 命中（实测 T1=" + res.stats.tier1Matches
+				+ "，修复前恒为 1）");
+		check(res.orphanOldClasses.isEmpty() && res.stats.newClasses == 1,
+			"Scenario 22: 插入的顶层新类判为新增、4 层链全部配对且无孤儿");
+		check(res.stats.tier4Matches == 0,
+			"Scenario 22: 内容未变时不得退化到不比字段表的 Tier 4（实测 T4=" + res.stats.tier4Matches + "）");
+
+		// 定向屏蔽守卫：不引用匿名类的描述符差异必须保留（否则候选域被无端扩大）
+		File fDesc = new File(dir, "Desc.java");
+		Files.writeString(fDesc.toPath(),
+			"package testDeep;\n" +
+			"class Desc {\n" +
+			"    interface I { void m(Object x); }\n" +
+			"    void go() {\n" +
+			"        I a = new I() { public void m(Object x) {}  public void extra(int v) {} };\n" +
+			"        I b = new I() { public void m(Object x) {}  public void extra(String v) {} };\n" +
+			"    }\n" +
+			"}\n");
+		File outDesc = new File(dir, "desc");
+		outDesc.mkdirs();
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outDesc.getAbsolutePath(), fDesc.getAbsolutePath());
+		Function<String, byte[]> descRes = n -> readIfExists(new File(outDesc, n.replace('.', '/') + ".class"));
+		Long hInt = AnonClassHasher.hash("testDeep/Desc$1", descRes.apply("testDeep/Desc$1"), "testDeep/Desc", descRes, null, null, 0);
+		Long hStr = AnonClassHasher.hash("testDeep/Desc$2", descRes.apply("testDeep/Desc$2"), "testDeep/Desc", descRes, null, null, 0);
+		check(hInt != null && hStr != null && !hInt.equals(hStr),
+			"Scenario 22: 描述符屏蔽必须定向 —— extra(I)V 与 extra(Ljava/lang/String;)V 不含匿名类引用，仍须可区分");
+
+		// INV-3 守卫：Lambda 不构成命名层级（javac 实测 Alt$1$1，而非 Alt$1$1$1）
+		String host = "testDeep/DeepNest";
+		check("testDeep/DeepNest$1".equals(AnonClassAligner.getParentName(host, "testDeep/DeepNest$1$1"))
+			&& AnonClassAligner.getHierarchyLevel(host, "testDeep/DeepNest$1") == 1
+			&& AnonClassAligner.getHierarchyLevel(host, "testDeep/DeepNest$1$1") == 2,
+			"Scenario 22: 层级必须按匿名类二进制名数 $ 段（A0=1、A1=2）；若变成 3 说明有人引入了 Lambda 层级");
+	}
+
+	/**
+	 * Scenario 23: `strict` 是**安全门**而不是匹配策略 —— 三类行为边界。
+	 *
+	 * <p>背景（§4.1 注记 + 探针 `DeepNestProbe`）：Tier 1/3 允许 minDiff 仲裁时，`CandidatePair.diff`
+	 * 用的是物理名序号，于是"插在前面的新类"总是以 diff=0 抢走旧身份（depth 1 即可复现）。这是
+	 * **确定性但语义错误**的 tie-breaker，不是随机 bug。</p>
+	 *
+	 * <p>本场景钉死三条边界（对应用户提出的三类测试）：<br>
+	 * A. Tier 3 结构相同 + 1-to-N：non-strict 保持现状；strict → 拒绝且不产出任何 rename；<br>
+	 * B. Tier 3 结构唯一：strict **不得**影响它（安全门不改非歧义配对）；<br>
+	 * C. 同一宿主里"安全配对 + 歧义配对"共存：验证拒绝粒度是**整个宿主组**，不存在半批次。</p>
+	 */
+	static void testScenario23_StrictIsSafetyGateNotPolicy(String javac, File baseDir) throws Exception {
+		System.out.println("\n--- Scenario 23: strict 是安全门而非匹配策略（拒绝粒度 = 整个宿主组）---");
+		File dir = new File(baseDir, "s23");
+		dir.mkdirs();
+		boolean savedStrict = HotSwapAgent.ANON_STRICT;
+		try {
+			// 非 strict 基线：本场景内所有 "relaxed" 调用都在此状态下，避免开关泄漏到下一个小节
+			HotSwapAgent.ANON_STRICT = false;
+
+			// ================= A. Tier 3 结构相同 + 1-to-N =================
+			// v1: 一个匿名类；v2: 前面插入一个同构匿名类 + 原类方法体改变
+			// → 两个新类都只满足 Tier 3，1-to-2，minDiff 用物理序号仲裁，插入类 diff=0 必胜
+			byte[][] a = compilePair(javac, dir, "a", "AmbA",
+				"package testStrict;\n" +
+				"class AmbA {\n" +
+				"    void setup() {\n" +
+				"        Runnable x = new Runnable() { public void run() { System.out.println(\"A\"); } };\n" +
+				"        x.run();\n" +
+				"    }\n}\n",
+				"package testStrict;\n" +
+				"class AmbA {\n" +
+				"    void setup() {\n" +
+				"        Runnable extra = new Runnable() { public void run() { System.out.println(\"E\"); } };\n" +
+				"        Runnable x = new Runnable() { public void run() { System.out.println(\"A2\"); } };\n" +
+				"        extra.run(); x.run();\n" +
+				"    }\n}\n");
+			AnonClassAligner.Result aRelaxed = alignHost("testStrict/AmbA", dir, "a", a);
+			check(aRelaxed.stats.ambiguousMatches == 1,
+				"Scenario 23A: Tier 3 结构相同 + 1-to-N 时确实走了 minDiff 仲裁（ambiguousMatches="
+					+ aRelaxed.stats.ambiguousMatches + "）");
+			check("testStrict/AmbA$1".equals(aRelaxed.renameMap.get("testStrict/AmbA$1"))
+				&& "testStrict/AmbA$2".equals(aRelaxed.renameMap.get("testStrict/AmbA$2")),
+				"Scenario 23A: non-strict 保持现状 —— 插入类($1)抢走旧身份 $1，原类($2)落到新编号 $2");
+
+			StrictOutcome aStrict = alignStrict("testStrict/AmbA", dir, "a", a);
+			check(aStrict.reject != null && aStrict.result == null,
+				"Scenario 23A: strict=true 时 Tier 3 的 minDiff 仲裁升级为 Reject（不再静默错配、也不产出 rename）");
+			check(aStrict.reject != null && aStrict.reject.reason.contains("minDiff-arbitrated=1"),
+				"Scenario 23A: 拒绝原因明确指出是 minDiff 仲裁（reason="
+					+ (aStrict.reject == null ? "null" : aStrict.reject.reason) + "）");
+
+			// ================= B. Tier 3 结构唯一：strict 不得影响 =================
+			byte[][] b = compilePair(javac, dir, "b", "UniqueB",
+				"package testStrict;\n" +
+				"class UniqueB {\n" +
+				"    void setup() {\n" +
+				"        Runnable q = new Runnable() { int q = 1; public void run() { q++; } };\n" +
+				"        Runnable s = new Runnable() { String s = \"x\"; public void run() { s.trim(); } };\n" +
+				"        q.run(); s.run();\n" +
+				"    }\n}\n",
+				"package testStrict;\n" +
+				"class UniqueB {\n" +
+				"    void setup() {\n" +
+				"        Runnable q = new Runnable() { int q = 1; public void run() { q += 2; } };\n" +
+				"        Runnable s = new Runnable() { String s = \"x\"; public void run() { s.concat(\"\"); } };\n" +
+				"        q.run(); s.run();\n" +
+				"    }\n}\n");
+			StrictOutcome bStrict = alignStrict("testStrict/UniqueB", dir, "b", b);
+			check(bStrict.reject == null && bStrict.result != null,
+				"Scenario 23B: 结构唯一（每侧只有一个候选）时 strict 不得拒绝 —— 安全门不是新匹配策略");
+			check(bStrict.result != null && bStrict.result.stats.ambiguousMatches == 0
+					&& bStrict.result.stats.ambiguousPairs == 0,
+				"Scenario 23B: 唯一配对不走 minDiff，两个歧义计数都必须为 0");
+			check(bStrict.result != null
+					&& "testStrict/UniqueB$1".equals(bStrict.result.renameMap.get("testStrict/UniqueB$1"))
+					&& "testStrict/UniqueB$2".equals(bStrict.result.renameMap.get("testStrict/UniqueB$2")),
+				"Scenario 23B: 结构唯一的两个匿名类在 strict 下仍逐层正确配对（$1→$1, $2→$2）");
+
+			// ================= C. 安全配对 + 歧义配对共存 → 拒绝粒度 =================
+			// v1: S(内容不变) + X；v2: 前面插入 extra + S(内容不变) + X2(内容变)
+			// Tier 1 唯一命中 S→S（安全）；extra 与 X2 对 X 形成 1-to-2（歧义）
+			byte[][] c = compilePair(javac, dir, "c", "MixedC",
+				"package testStrict;\n" +
+				"class MixedC {\n" +
+				"    void setup() {\n" +
+				"        Runnable s = new Runnable() { public void run() { System.out.println(\"S\"); } };\n" +
+				"        Runnable x = new Runnable() { public void run() { System.out.println(\"X\"); } };\n" +
+				"        s.run(); x.run();\n" +
+				"    }\n}\n",
+				"package testStrict;\n" +
+				"class MixedC {\n" +
+				"    void setup() {\n" +
+				"        Runnable extra = new Runnable() { public void run() { System.out.println(\"E\"); } };\n" +
+				"        Runnable s = new Runnable() { public void run() { System.out.println(\"S\"); } };\n" +
+				"        Runnable x2 = new Runnable() { public void run() { System.out.println(\"X2\"); } };\n" +
+				"        extra.run(); s.run(); x2.run();\n" +
+				"    }\n}\n");
+			AnonClassAligner.Result cRelaxed = alignHost("testStrict/MixedC", dir, "c", c);
+			check(cRelaxed.stats.tier1Matches >= 1 && cRelaxed.stats.ambiguousMatches == 1,
+				"Scenario 23C: 同一宿主里安全配对(T1=" + cRelaxed.stats.tier1Matches
+					+ ")与 minDiff 仲裁配对(ambiguous=" + cRelaxed.stats.ambiguousMatches + ")确实共存");
+			check("testStrict/MixedC$1".equals(cRelaxed.renameMap.get("testStrict/MixedC$2")),
+				"Scenario 23C: non-strict 下安全配对 $2(内容未变的 S) → 旧 $1 已写入 renameMap");
+
+			StrictOutcome cStrict = alignStrict("testStrict/MixedC", dir, "c", c);
+			check(cStrict.reject != null && cStrict.result == null,
+				"Scenario 23C: strict 下整个宿主组被拒绝（异常在 Result 构造之前抛出，故安全配对也不会落地）");
+			check(cStrict.reject != null && cStrict.reject.reason.contains("minDiff-arbitrated=1")
+					&& "testStrict/MixedC".equals(cStrict.reject.hostSlash),
+				"Scenario 23C: 拒绝携带宿主名与歧义计数，调用方 rejectHostGroup 据此丢弃宿主+全部匿名类（无半批次）");
+		} finally {
+			HotSwapAgent.ANON_STRICT = savedStrict;
+		}
+	}
+
+	/** strict 模式下跑一次 align 的结果：要么拿到 Result，要么拿到拒绝异常（二者互斥）。 */
+	static class StrictOutcome {
+		AnonClassAligner.Result result;
+		AnonClassAligner.AlignmentRejectedException reject;
+	}
+
+	/**
+	 * 在 {@code ANON_STRICT = true} 下执行一次 align，并在 **finally** 中还原开关。
+	 *
+	 * <p>开关必须在 finally 里还原 —— 本场景第一版就是漏了这个，导致后一小节的"非 strict 基线"
+	 * 调用在 strict 下抛出未捕获异常，整个测试进程直接死掉。</p>
+	 */
+	static StrictOutcome alignStrict(String hostSlash, File dir, String tag, byte[][] pair) throws Exception {
+		StrictOutcome out = new StrictOutcome();
+		boolean saved = HotSwapAgent.ANON_STRICT;
+		try {
+			HotSwapAgent.ANON_STRICT = true;
+			out.result = alignHost(hostSlash, dir, tag, pair);
+		} catch (AnonClassAligner.AlignmentRejectedException e) {
+			out.reject = e;
+		} finally {
+			HotSwapAgent.ANON_STRICT = saved;
+		}
+		return out;
+	}
+
+	/** 编译一对 (v1, v2) 源码，返回 {hostV2, oldAnon?, ...} 打包成便于 align 的形式。 */
+	static byte[][] compilePair(String javac, File dir, String tag, String cls, String v1src, String v2src) throws Exception {
+		File s1 = new File(dir, tag + "V1.java");
+		Files.writeString(s1.toPath(), v1src);
+		File o1 = new File(dir, tag + "v1");
+		o1.mkdirs();
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", o1.getAbsolutePath(), s1.getAbsolutePath());
+
+		File s2 = new File(dir, tag + "V2.java");
+		Files.writeString(s2.toPath(), v2src);
+		File o2 = new File(dir, tag + "v2");
+		o2.mkdirs();
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", o2.getAbsolutePath(), s2.getAbsolutePath());
+
+		return new byte[][] { Files.readAllBytes(new File(o2, "testStrict/" + cls + ".class").toPath()) };
+	}
+
+	/** 用 Scenario 23 的约定（testStrict 包、tag 目录）跑一次 align。 */
+	static AnonClassAligner.Result alignHost(String hostSlash, File dir, String tag, byte[][] pair) throws Exception {
+		File o1 = new File(dir, tag + "v1");
+		File o2 = new File(dir, tag + "v2");
+		Map<String, byte[]> oldAnon = anonClasses(o1, hostSlash);
+		Map<String, byte[]> newAnon = anonClasses(o2, hostSlash);
+		Function<String, byte[]> oldRes = n -> readIfExists(new File(o1, n.replace('.', '/') + ".class"));
+		Function<String, byte[]> newRes = n -> readIfExists(new File(o2, n.replace('.', '/') + ".class"));
+		return AnonClassAligner.align(hostSlash, pair[0], oldAnon, newAnon, oldRes, newRes);
+	}
+
+	/** 生成 levels 层嵌套匿名类源码；insertTop 时在顶层额外插入一个匿名类制造整链位移。 */
+	static String deepNestSource(String pkg, String cls, int levels, boolean insertTop) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("package ").append(pkg).append(";\n");
+		sb.append("class ").append(cls).append(" {\n");
+		sb.append("    public void setup() {\n");
+		String pad = "        ";
+		if (insertTop) {
+			sb.append(pad).append("Runnable extra = new Runnable() { public void run() { System.out.println(\"EXTRA\"); } };\n");
+		}
+		for (int k = 1; k <= levels; k++) {
+			sb.append(pad).append("Runnable n").append(k).append(" = new Runnable() { public void run() {\n");
+			pad = pad + "    ";
+		}
+		sb.append(pad).append("System.out.println(\"TAG\");\n");
+		for (int k = levels; k >= 1; k--) {
+			pad = pad.substring(4);
+			sb.append(pad).append("}};\n");
+		}
+		sb.append("    }\n}\n");
+		return sb.toString();
+	}
+
+	/** 收集某个宿主类下所有匿名类字节码（内部名 -> 字节码）。 */
+	static Map<String, byte[]> anonClasses(File outDir, String hostSlash) throws Exception {
+		Map<String, byte[]> m = new LinkedHashMap<>();
+		int lastSlash = hostSlash.lastIndexOf('/');
+		String pkgPath = lastSlash > 0 ? hostSlash.substring(0, lastSlash) : "";
+		File pkgDir = pkgPath.isEmpty() ? outDir : new File(outDir, pkgPath);
+		File[] files = pkgDir.listFiles();
+		if (files == null) return m;
+		for (File f : files) {
+			if (!f.getName().endsWith(".class")) continue;
+			String n = (pkgPath.isEmpty() ? "" : pkgPath + "/") + f.getName().substring(0, f.getName().length() - 6);
+			if (AnonClassAligner.isAnonymousClassName(hostSlash, n)) m.put(n, Files.readAllBytes(f.toPath()));
+		}
+		return m;
 	}
 
 	static void runCmd(String... cmd) throws Exception {

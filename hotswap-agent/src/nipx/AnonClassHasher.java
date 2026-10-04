@@ -17,6 +17,20 @@ import java.util.function.Function;
  * 折叠进方法指纹中以消除过度归一化导致的哈希碰撞与语义错位。</p>
  */
 public final class AnonClassHasher {
+	/**
+	 * <b>历史遗留常量，当前永不生效</b>。
+	 *
+	 * <p>{@link #hash} 内部**不会递归调用自身**（子匿名类的哈希只通过 {@code MethodFingerprinter}
+	 * 的 {@code #ANON_relId_<childHash>#} 占位符间接参与，且在本类中因未调用
+	 * {@code setAnonHashes} 而退化为无语的 {@code #ANON_relId#}），而三处调用点
+	 * （{@code AnonClassAligner.parseInfos}、{@code LambdaAligner.scan}、回归套件）全都传
+	 * {@code depth = 0}。因此 {@code if (depth > MAX_DEPTH) return null;} 是不可达分支，
+	 * {@code visiting} 集合也永远不会超过一个元素。</p>
+	 *
+	 * <p>保留它是因为删掉会改动公开签名 {@code hash(..., int depth)}；但**不要**再把它当作
+	 * "嵌套深度支持上限"来引用 —— 实测探针 {@code DeepNestProbe} 显示 depth 8 仍能正确对齐。
+	 * 真正限制匹配质量的是下面第 3 节的方法签名（未屏蔽的 {@code <init>} 描述符）。</p>
+	 */
 	private static final int MAX_DEPTH = 4;
 
 	private AnonClassHasher() { }
@@ -114,7 +128,11 @@ public final class AnonClassHasher {
 
 					// 非合成方法包含名字和描述符（如 run()V）
 					if ((mn.access & Opcodes.ACC_SYNTHETIC) == 0 && !mn.name.startsWith("lambda$")) {
-						methodSignatures.add(mn.name + ":" + mn.desc + ":" + mHash);
+						// 描述符必须过一遍匿名类屏蔽：嵌套匿名类的构造器形如 `<init>(LOuter$1;)V`，
+						// 父类一旦位移成 `Outer$2`，原始描述符就会变，于是子类哈希必然改变、
+						// Tier 1/2 对该层全面失效（只剩不比字段表的 Tier 4）。屏蔽是**定向**的：
+						// MethodFingerprinter.maskDescriptor 只改写 `L本宿主$<纯数字>;`，其余描述符原样返回。
+						methodSignatures.add(mn.name + ":" + fp.maskDescriptor(mn.desc) + ":" + mHash);
 					} else {
 						methodHashes.add(mHash);
 					}

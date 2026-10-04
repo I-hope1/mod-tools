@@ -46,6 +46,70 @@ public final class AnonClassAligner {
 	/** 测试钩子：强制反向遍历以验证顺序无关性 */
 	public static boolean TEST_REVERSE_ORDER = false;
 
+	/**
+	 * 单个宿主类下匿名类数量的硬上限（§6.3-2）。超过即按 §4.3 拒绝整个宿主组。
+	 *
+	 * <p><b>为什么不采用"告警并降级为不重命名"</b>：不对齐时，新编译产物的 {@code Foo$2} 与 JVM 中
+	 * 已加载的旧 {@code Foo$2} 同名但语义不同，一旦进入重定义就正好是本模块要消灭的"存活实例
+	 * 被无关新类占据物理槽位"。因此这里唯一安全的降级是**不对齐**（由调用方整体放弃该宿主组）。</p>
+	 *
+	 * <p>设为 {@link Integer#MAX_VALUE} 可关闭该上限（仅供诊断）。</p>
+	 */
+	public static int  MAX_ANON_PER_HOST = 128;
+
+	/**
+	 * 对齐流程的软超时（毫秒，§6.3-3）。超时即按 §4.3 拒绝该宿主组。
+	 *
+	 * <p>比对采用 elapsed 形式（{@code now - start}），因此天然不会溢出；
+	 * 设为 {@link Long#MAX_VALUE} 可关闭超时；设为 {@code <= 0} 表示"无预算"，
+	 * 在第一个检查点即确定性熔断（便于回归测试，不依赖墙上时钟分辨率）。</p>
+	 */
+	public static long ALIGN_TIMEOUT_MS  = 2000L;
+
+	/**
+	 * 对齐被安全门拒绝（§4.3）。
+	 *
+	 * <p>语义：<b>宿主类 + 其下属全部匿名类</b>作为一个原子单元整体放弃 —— 调用方不得把其中
+	 * 任何一项送入本次重定义（否则宿主新字节码会引用到没被对齐的 {@code Foo$N}）。</p>
+	 *
+	 * <p>继承 {@link IllegalStateException} 是为了不破坏既有调用方与回归断言
+	 * （{@code AnonClassReproTest} Scenario 19 就以 {@code IllegalStateException} 捕获后置校验失败）。</p>
+	 */
+	public static class AlignmentRejectedException extends IllegalStateException {
+		/** 被拒绝的宿主类内部名 */
+		public final String hostSlash;
+		/** 拒绝原因（会进入 {@code [HOTSWAP-REJECT]} 告警） */
+		public final String reason;
+
+		public AlignmentRejectedException(String hostSlash, String reason) {
+			super("[ANON_ALIGN_REJECT] " + hostSlash + ": " + reason);
+			this.hostSlash = hostSlash;
+			this.reason = reason;
+		}
+	}
+
+	/** 是否已超出软超时窗口。 */
+	private static boolean isTimedOut(long startNanos) {
+		// 无预算（<= 0）时确定性熔断，而不是依赖"elapsed 是否已 >= 1ms"这种墙上时钟分辨率
+		if (ALIGN_TIMEOUT_MS <= 0L) return true;
+		return (System.nanoTime() - startNanos) / 1_000_000L > ALIGN_TIMEOUT_MS;
+	}
+
+	/** 超时检查点：命中即拒绝宿主组。 */
+	private static void checkTimeout(String hostSlash, long startNanos) {
+		if (isTimedOut(startNanos)) {
+			throw new AlignmentRejectedException(hostSlash,
+				"alignment exceeded the " + ALIGN_TIMEOUT_MS + "ms soft timeout (§6.3-3)");
+		}
+	}
+
+	/** 诊断日志（§6.4 {@code -Dnipx.agent.anon_debug} / 别名 {@code -Dnipx.anonAlign.debug}，或全局 DEBUG）。 */
+	private static void dbg(String msg) {
+		if (HotSwapAgent.ANON_DEBUG || HotSwapAgent.DEBUG) {
+			HotSwapAgent.info("[ANON_ALIGN] " + msg);
+		}
+	}
+
 	public static class AlignmentStats {
 		public int tier1Matches;
 		public int tier2Matches;
@@ -53,6 +117,17 @@ public final class AnonClassAligner {
 		public int tier4Matches;
 		public int tier5Matches;
 		public int ambiguousMatches;
+		/**
+		 * 在**禁止 minDiff 仲裁的层**（Tier 2 / Tier 4）完成"双向唯一"配对后，仍然无法确定性区分的候选对数（§4.3-①）。
+		 *
+		 * <p>统计口径：剩余新类中拥有 &gt;= 2 个剩余旧候选的个数（1-to-N），加上剩余旧类中拥有 &gt;= 2 个
+		 * 剩余新候选的个数（N-to-1）。只要 &gt; 0 就说明该层存在真实歧义 —— 双向唯一配对是贪心且
+		 * 完备的，凡能唯一确定的都已被取走，留下的必然是"多对多"。</p>
+		 *
+		 * <p>非严格模式下这些类退化为"新增/孤儿"；严格模式（{@code -Dnipx.agent.anon_strict=true}）
+		 * 下与 {@link #ambiguousMatches} 一起构成"缺乏唯一证据"的完整集合，任一非零即拒绝整个宿主组。</p>
+		 */
+		public int ambiguousPairs;
 		public int newClasses;
 		public int orphanClasses;
 
@@ -61,6 +136,7 @@ public final class AnonClassAligner {
 			return "AlignmentStats[T1=" + tier1Matches + ", T2=" + tier2Matches +
 			       ", T3=" + tier3Matches + ", T4=" + tier4Matches +
 			       ", T5=" + tier5Matches + ", ambiguous=" + ambiguousMatches +
+			       ", ambiguousPairs=" + ambiguousPairs +
 			       ", new=" + newClasses + ", orphans=" + orphanClasses + "]";
 		}
 	}
@@ -153,6 +229,8 @@ public final class AnonClassAligner {
 			throw new IllegalArgumentException("hostClassName cannot be null");
 		}
 		final String hostSlash = hostClassName.replace('.', '/');
+		final long   startNanos = System.nanoTime();
+		dbg("begin alignment for host " + hostSlash + " (maxPerHost=" + MAX_ANON_PER_HOST + ", timeoutMs=" + ALIGN_TIMEOUT_MS + ", strict=" + HotSwapAgent.ANON_STRICT + ")");
 
 		// 归一化输入 Map 为内部名
 		Map<String, byte[]> normOld = normalizeMap(oldAnonClasses, hostSlash);
@@ -180,6 +258,15 @@ public final class AnonClassAligner {
 		List<AnonInfo> oldInfos = parseInfos(hostSlash, oldHostNode, normOld, effectiveOldResolver);
 		List<AnonInfo> newInfos = parseInfos(hostSlash, newHostNode, normNew, effectiveNewResolver);
 
+		// §6.3-2 数量硬上限： pathological 输入（代码生成产物、巨型 switch 表达式）下
+		// O(N^2) 对齐会无提示地变慢，因此这里设硬上限并整体拒绝，而不是"降级为不对齐"（见 MAX_ANON_PER_HOST javadoc）。
+		int anonCount = Math.max(oldInfos.size(), newInfos.size());
+		if (anonCount > MAX_ANON_PER_HOST) {
+			throw new AlignmentRejectedException(hostSlash,
+				"anonymous class count " + anonCount + " exceeds MAX_ANON_PER_HOST=" + MAX_ANON_PER_HOST + " (§6.3-2)");
+		}
+		checkTimeout(hostSlash, startNanos);
+
 		AlignmentStats stats = new AlignmentStats();
 
 		// 按层级（depth of '$'）组织类信息
@@ -196,7 +283,16 @@ public final class AnonClassAligner {
 		for (int l : oldByLevel.keySet()) maxLevel = Math.max(maxLevel, l);
 		for (int l : newByLevel.keySet()) maxLevel = Math.max(maxLevel, l);
 		if (maxLevel > 4) {
-			HotSwapAgent.warn("[ANON_ALIGN] Anonymous class nesting depth " + maxLevel + " > 4 detected. Safety guard triggered.");
+			String msg = "anonymous class nesting depth " + maxLevel + " > 4 detected";
+			if (HotSwapAgent.ANON_STRICT) {
+				throw new AlignmentRejectedException(hostSlash, msg + "; strict mode rejects the host group (§4.3-2)");
+			}
+			// 注意：这只是一个**诊断阈值**，不是能力边界 —— 层级推进本身与深度无关，
+			// 真正的闸门是 MAX_ANON_PER_HOST（§6.3-2）与 ALIGN_TIMEOUT_MS（§6.3-3）。
+			// 早期注释曾声称此处"内容哈希退化为 #ANON_relId#"，那是错的：AnonClassHasher.MAX_DEPTH 从不生效（见该类注释）。
+			HotSwapAgent.warn("[ANON_ALIGN] " + msg + ". Diagnostic threshold only"
+				+ " (cascade is depth-generic; the real guards are MAX_ANON_PER_HOST=" + MAX_ANON_PER_HOST
+				+ " and ALIGN_TIMEOUT_MS=" + ALIGN_TIMEOUT_MS + "ms).");
 		}
 
 		Map<AnonInfo, AnonInfo> matchedNewToOld = new LinkedHashMap<>();
@@ -205,15 +301,18 @@ public final class AnonClassAligner {
 
 		// 自顶向下逐层推进（Top-down Cascading Progression）
 		for (int level = 1; level <= maxLevel; level++) {
+			checkTimeout(hostSlash, startNanos);
 			List<AnonInfo> oldLevelInfos = oldByLevel.getOrDefault(level, Collections.emptyList());
 			List<AnonInfo> newLevelInfos = newByLevel.getOrDefault(level, Collections.emptyList());
+			dbg("level " + level + ": old=" + oldLevelInfos.size() + ", new=" + newLevelInfos.size());
 
 			if (level == 1) {
 				// Level 1: 宿主直接子匿名类 (如 Foo$1, Foo$2)
-				Map<AnonInfo, AnonInfo> l1Matches = matchHierarchical(oldLevelInfos, newLevelInfos, stats);
+				Map<AnonInfo, AnonInfo> l1Matches = matchHierarchical(oldLevelInfos, newLevelInfos, stats, hostSlash, startNanos);
 				for (Map.Entry<AnonInfo, AnonInfo> entry : l1Matches.entrySet()) {
 					matchedNewToOld.put(entry.getKey(), entry.getValue());
 					renameMap.put(entry.getKey().name, entry.getValue().name);
+					dbg("  level 1 matched " + entry.getKey().name + " -> " + entry.getValue().name);
 				}
 				for (AnonInfo n : newLevelInfos) {
 					if (!renameMap.containsKey(n.name)) {
@@ -224,6 +323,7 @@ public final class AnonClassAligner {
 						} while (takenTargetNames.contains(candidate));
 						takenTargetNames.add(candidate);
 						renameMap.put(n.name, candidate);
+						dbg("  level 1 unmatched " + n.name + " -> new number " + candidate);
 					}
 				}
 			} else {
@@ -246,12 +346,14 @@ public final class AnonClassAligner {
 					if (targetParent == null) {
 						targetParent = newParent;
 					}
+					dbg("  level " + level + " scope " + newParent + " -> " + targetParent + " (new=" + newChildren.size() + ")");
 
 					List<AnonInfo> oldCandidateChildren = oldByParent.getOrDefault(targetParent, Collections.emptyList());
-					Map<AnonInfo, AnonInfo> childMatches = matchHierarchical(oldCandidateChildren, newChildren, stats);
+					Map<AnonInfo, AnonInfo> childMatches = matchHierarchical(oldCandidateChildren, newChildren, stats, hostSlash, startNanos);
 					for (Map.Entry<AnonInfo, AnonInfo> m : childMatches.entrySet()) {
 						matchedNewToOld.put(m.getKey(), m.getValue());
 						renameMap.put(m.getKey().name, m.getValue().name);
+						dbg("  level " + level + " matched " + m.getKey().name + " -> " + m.getValue().name);
 					}
 
 					for (AnonInfo n : newChildren) {
@@ -263,6 +365,7 @@ public final class AnonClassAligner {
 							} while (takenTargetNames.contains(candidate));
 							takenTargetNames.add(candidate);
 							renameMap.put(n.name, candidate);
+							dbg("  level " + level + " unmatched " + n.name + " -> new number " + candidate);
 						}
 					}
 				}
@@ -283,9 +386,32 @@ public final class AnonClassAligner {
 
 		stats.newClasses = newInfos.size() - matchedNewToOld.size();
 		stats.orphanClasses = orphanOldClasses.size();
+		dbg("level pass done: " + stats + ", orphans=" + orphanOldClasses);
+
+		// §4.3-① 严格模式：只要本轮存在**未被唯一证据证成**的候选配对，就熔断整个宿主组。
+		//
+		// 两个计数的含义（合起来才是"无法唯一证明"的完整集合）：
+		//   • ambiguousMatches —— 在**允许 minDiff 的层（Tier 1 / Tier 3）**由"距离最近"仲裁出来的配对。
+		//     它不是 nondeterministic bug，而是一个**确定性但语义错误**的 tie-breaker：序号偏向
+		//     "插在前面的新类"，于是插入类会抢走旧身份（详见 §4.1 注记的实测）。
+		//   • ambiguousPairs  —— 在**禁止仲裁的层（Tier 2 / Tier 4）**做完双向唯一配对后仍多对多、
+		//     只能退化为"新增/孤儿"的残留。
+		//
+		// strict 的定位是**安全门，不是匹配策略**：它不改变任何"双向唯一"配对的结论（那些不会计入上面
+		// 任一计数），也不改变非 strict 模式下的 minDiff 仲裁行为（那时仍只打 [WARN-ANON]）。
+		if (HotSwapAgent.ANON_STRICT) {
+			int unproven = stats.ambiguousMatches + stats.ambiguousPairs;
+			if (unproven > 0) {
+				throw new AlignmentRejectedException(hostSlash,
+					"strict mode: " + unproven + " candidate pair(s) lack unique evidence"
+					+ " (minDiff-arbitrated=" + stats.ambiguousMatches + " at Tier 1/3,"
+					+ " unresolved-after-bi-unique=" + stats.ambiguousPairs + " at Tier 2/4) (§4.3-1)");
+			}
+		}
 
 		// 后置严格校验 (Validation Invariants)
 		validateRenameMap(renameMap, hostSlash);
+		dbg("renameMap=" + renameMap);
 
 		// 应用 ClassRemapper 重写所有新匿名类字节码
 		Map<String, byte[]> alignedAnonClasses = new LinkedHashMap<>();
@@ -376,13 +502,15 @@ public final class AnonClassAligner {
 			String src = e.getKey();
 			String tgt = e.getValue();
 			if (!seenTargets.add(tgt)) {
-				throw new IllegalStateException("[ANON_ALIGN_VALIDATION] Non-injective mapping detected: multiple classes map to " + tgt);
+				throw new AlignmentRejectedException(hostSlash,
+					"non-injective mapping: multiple classes map to " + tgt + " [ANON_ALIGN_VALIDATION]");
 			}
 			String srcParent = getParentName(hostSlash, src);
 			String expectedPrefix = renameMap.getOrDefault(srcParent, srcParent);
 			if (!tgt.startsWith(expectedPrefix + "$")) {
-				throw new IllegalStateException("[ANON_ALIGN_VALIDATION] Prefix invariant violated for " + src + " -> " + tgt +
-					" (expected prefix: " + expectedPrefix + "$)");
+				throw new AlignmentRejectedException(hostSlash,
+					"prefix invariant violated for " + src + " -> " + tgt +
+					" (expected prefix: " + expectedPrefix + "$) [ANON_ALIGN_VALIDATION]");
 			}
 		}
 	}
@@ -681,7 +809,9 @@ public final class AnonClassAligner {
 		return list;
 	}
 
-	private static Map<AnonInfo, AnonInfo> matchHierarchical(List<AnonInfo> oldList, List<AnonInfo> newList, AlignmentStats stats) {
+	private static Map<AnonInfo, AnonInfo> matchHierarchical(
+	 List<AnonInfo> oldList, List<AnonInfo> newList, AlignmentStats stats,
+	 String hostSlash, long startNanos) {
 		Map<AnonInfo, AnonInfo> matchedNewToOld = new LinkedHashMap<>();
 		List<AnonInfo> oldToUse = new ArrayList<>(oldList);
 		List<AnonInfo> newToUse = new ArrayList<>(newList);
@@ -699,14 +829,14 @@ public final class AnonClassAligner {
 		  && Objects.equals(n.contentHash, o.contentHash)
 		  && Objects.equals(n.outerMethod, o.outerMethod)
 		  && Objects.equals(n.outerMethodDesc, o.outerMethodDesc),
-		 true
+		 true, hostSlash, startNanos
 		);
 
 		// Tier 2: 内容哈希全局精确相同 (禁止跨方法 minDiff，仅全类唯一孤本采纳，且强制要求 contentHash != null)
 		matchTier(2, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
 		 n.contentHash != null
 		  && Objects.equals(n.contentHash, o.contentHash),
-		 false
+		 false, hostSlash, startNanos
 		);
 
 		// Tier 3: 结构签名相同（应对修改方法体导致的哈希变化，允许 minDiff 仲裁）
@@ -718,7 +848,7 @@ public final class AnonClassAligner {
 		  && Objects.equals(n.interfaces, o.interfaces)
 		  && Objects.equals(n.fields, o.fields)
 		  && Objects.equals(n.methods, o.methods),
-		 true
+		 true, hostSlash, startNanos
 		);
 
 		// Tier 4: 松散结构（同宿主方法 + 同基类与接口，禁止多候选 minDiff 盲猜，直接拒绝）
@@ -727,7 +857,7 @@ public final class AnonClassAligner {
 		  && Objects.equals(n.outerMethodDesc, o.outerMethodDesc)
 		  && Objects.equals(n.superName, o.superName)
 		  && Objects.equals(n.interfaces, o.interfaces),
-		 false
+		 false, hostSlash, startNanos
 		);
 
 		// 注意：坚决移除旧版 Tier 5（按物理类名盲配）。若前 4 层均未匹配，
@@ -772,12 +902,16 @@ public final class AnonClassAligner {
 	 Map<AnonInfo, AnonInfo> matchedNewToOld,
 	 AlignmentStats stats,
 	 MatchPredicate predicate,
-	 boolean allowMinDiff) {
+	 boolean allowMinDiff,
+	 String hostSlash,
+	 long startNanos) {
 		if (remainingNew.isEmpty() || remainingOld.isEmpty()) return;
 
 		Map<AnonInfo, List<AnonInfo>> newToOld = new LinkedHashMap<>();
 		Map<AnonInfo, List<AnonInfo>> oldToNew = new LinkedHashMap<>();
 		for (AnonInfo n : remainingNew) {
+			// O(N^2) 的主体就在这里，超时检查点放在外层循环即可覆盖绝大部分耗时
+			checkTimeout(hostSlash, startNanos);
 			for (AnonInfo o : remainingOld) {
 				if (predicate.test(n, o)) {
 					newToOld.computeIfAbsent(n, k -> new ArrayList<>()).add(o);
@@ -817,7 +951,15 @@ public final class AnonClassAligner {
 			}
 		}
 
-		if (!allowMinDiff || remainingNew.isEmpty() || remainingOld.isEmpty()) return;
+		if (!allowMinDiff) {
+			// 低置信层（Tier 4）不允许 minDiff 盲猜：统计"仍有 >= 2 个候选"的歧义对，
+			// 供 §4.3-① 的 strict 熔断与诊断使用。非严格模式下这些类退化为新增/孤儿。
+			if (stats != null) {
+				stats.ambiguousPairs += countAmbiguous(remainingNew, remainingOld, newToOld, oldToNew);
+			}
+			return;
+		}
+		if (remainingNew.isEmpty() || remainingOld.isEmpty()) return;
 
 		// 第二趟：存在 1-to-N 或 N-to-1 歧义候选，按 minDiff 绝对确定性仲裁（具备完全的顺序无关性）
 		List<CandidatePair> conflictPairs = new ArrayList<>();
@@ -855,6 +997,40 @@ public final class AnonClassAligner {
 				HotSwapAgent.info("[ANON_MATCH] Tier " + tier + " fallback paired (diff=" + pair.diff + "): " + pair.n.name + " -> " + pair.o.name);
 			}
 		}
+	}
+
+	/**
+	 * 统计"禁止 minDiff 的层"完成双向唯一配对后，仍无法确定性区分的候选对数量（§4.3-①）。
+	 *
+	 * <p>口径：剩余新类中拥有 &gt;= 2 个剩余旧候选的个数（1-to-N），加上剩余旧类中拥有 &gt;= 2 个
+	 * 剩余新候选的个数（N-to-1）。只要 &gt; 0 就说明该层存在真实歧义 —— 双向唯一配对是贪心且
+	 * 完备的，凡能唯一确定的都已被取走，留下的必然是"多对多"。</p>
+	 */
+	private static int countAmbiguous(
+	 Set<AnonInfo> remainingNew,
+	 Set<AnonInfo> remainingOld,
+	 Map<AnonInfo, List<AnonInfo>> newToOld,
+	 Map<AnonInfo, List<AnonInfo>> oldToNew) {
+		int count = 0;
+		for (AnonInfo n : remainingNew) {
+			List<AnonInfo> candidates = newToOld.get(n);
+			if (candidates == null) continue;
+			int live = 0;
+			for (AnonInfo o : candidates) {
+				if (remainingOld.contains(o)) live++;
+			}
+			if (live >= 2) count++;
+		}
+		for (AnonInfo o : remainingOld) {
+			List<AnonInfo> candidates = oldToNew.get(o);
+			if (candidates == null) continue;
+			int live = 0;
+			for (AnonInfo n : candidates) {
+				if (remainingNew.contains(n)) live++;
+			}
+			if (live >= 2) count++;
+		}
+		return count;
 	}
 
 	private static void recordTierMatch(AlignmentStats stats, int tier) {

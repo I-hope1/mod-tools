@@ -38,6 +38,17 @@ public class HotSwapAgent {
 	public static boolean      LAMBDA_ALIGN;
 	public static boolean      HOTSWAP_PLUS;
 	public static boolean      UI_HOOK;
+	/**
+	 * 匿名类对齐总开关（docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md §6.4）。默认开启。
+	 *
+	 * <p><b>关闭语义</b>：不是"按类名照旧重定义"（那正是编号位移篡夺场景本身），而是把含有匿名类的
+	 * 宿主组整体移出本批重定义（见 {@link #rejectHostGroup}）。</p>
+	 */
+	public static boolean      ANON_ALIGN        = boolProp("nipx.agent.anon_align", "nipx.anonAlign.enabled", true);
+	/** 严格模式（§6.4）：Tier 4 歧义 / 嵌套深度超限时按 §4.3 拒绝整个宿主组。 */
+	public static boolean      ANON_STRICT       = boolProp("nipx.agent.anon_strict", "nipx.anonAlign.strict", false);
+	/** 匿名类对齐诊断日志（§6.4）：打印层级决策链。 */
+	public static boolean      ANON_DEBUG        = boolProp("nipx.agent.anon_debug", "nipx.anonAlign.debug", false);
 	//endregion
 
 	//region Core State Management
@@ -157,6 +168,22 @@ public class HotSwapAgent {
 		}
 	}
 
+	/**
+	 * 读取布尔开关：优先 {@code primary}，缺省时回退到 {@code alias}。
+	 *
+	 * <p>{@code alias} 存在的唯一理由是兼容 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §6.4 里
+	 * 已经对外公布的 {@code nipx.anonAlign.*} 拼写 —— 对一个"止血开关"而言，
+	 * "按文档写下的名字被静默忽略"远比"同一个开关多认一个名字"危险。</p>
+	 *
+	 * <p><b>注意</b>：本方法会在类初始化期（字段赋值时）被调用，因此**不得**打日志 ——
+	 * {@code logger} 字段声明在类体后部，此时仍为 {@code null}。</p>
+	 */
+	private static boolean boolProp(String primary, String alias, boolean def) {
+		String v = System.getProperty(primary);
+		if (v == null && alias != null) v = System.getProperty(alias);
+		return v == null ? def : Boolean.parseBoolean(v.trim());
+	}
+
 	public static void initConfig() {
 		info("DEBUG: " + DEBUG);
 		REDEFINE_MODE = RedefineMode.valueOfFail(System.getProperty("nipx.agent.redefine_mode", "inject"), RedefineMode.inject);
@@ -177,6 +204,14 @@ public class HotSwapAgent {
 		}
 		UI_HOOK = Boolean.parseBoolean(System.getProperty("nipx.agent.ui_hook", "false"));
 		info("UI Hook: " + UI_HOOK);
+		info("Anon Align: " + ANON_ALIGN + " (strict=" + ANON_STRICT + ", debug=" + ANON_DEBUG
+		     + ", maxPerHost=" + AnonClassAligner.MAX_ANON_PER_HOST
+		     + ", timeoutMs=" + AnonClassAligner.ALIGN_TIMEOUT_MS + ")");
+		if (ANON_ALIGN) {
+			info("Anonymous Class Alignment ENABLED. Ambiguity is resolved conservatively (never by class name).");
+		} else {
+			info("Anonymous Class Alignment DISABLED. Host classes containing anonymous classes will be rejected as a whole.");
+		}
 		info("Structural HotSwap Supported: " + isEnhancedHotswapEnabled());
 	}
 	//endregion
@@ -299,6 +334,15 @@ public class HotSwapAgent {
 				continue;
 			}
 
+			if (!ANON_ALIGN) {
+				// 总开关关闭：**不能**退化成"按类名照旧重定义" —— 那正是编号位移篡夺场景本身。
+				// 唯一安全的关闭语义是把该宿主组整体移出本批重定义。
+				rejectHostGroup(newBatchBytes, classToPath, hostName, newAnon,
+					new AnonClassAligner.AlignmentRejectedException(hostSlash,
+						"anonymous class alignment disabled (nipx.agent.anon_align=false)"));
+				continue;
+			}
+
 			AlignmentTransaction tx = new AlignmentTransaction(hostName);
 			for (Map.Entry<String, byte[]> entry : oldAnon.entrySet()) {
 				tx.pinOldBytes.put(entry.getKey(), entry.getValue());
@@ -310,7 +354,19 @@ public class HotSwapAgent {
 			java.util.function.Function<String, byte[]> oldRes = name -> bytecodeCache.get(name.replace('/', '.'));
 			java.util.function.Function<String, byte[]> newRes = name -> newBatchBytes.get(name.replace('/', '.'));
 
-			AnonClassAligner.Result res = AnonClassAligner.align(hostSlash, hostBytes, oldAnon, newAnon, oldRes, newRes);
+			AnonClassAligner.Result res;
+			try {
+				res = AnonClassAligner.align(hostSlash, hostBytes, oldAnon, newAnon, oldRes, newRes);
+			} catch (Throwable t) {
+				// §4.3：以「宿主类 + 其下属全部匿名类」为原子单元整体拒绝。
+				//
+				// 这里**必须** continue 而不能让异常冒泡：冒泡会让整个 processChanges 中断，
+				// 结果是"本轮所有类的热更静默失效"（异常最终只留在 ScheduledFuture 里，无人观测）；
+				// 而对齐失败也不能只跳过匿名类 —— 该宿主的新字节码会引用到未对齐的 Foo$N。
+				// 因此正确做法是连宿主一起移出本批，其余宿主照常处理。
+				rejectHostGroup(newBatchBytes, classToPath, hostName, newAnon, t);
+				continue;
+			}
 
 			if (res.alignedHostBytes != null) {
 				newBatchBytes.put(hostName, res.alignedHostBytes);
@@ -739,6 +795,50 @@ public class HotSwapAgent {
 				}
 			}
 		}
+	}
+
+	/**
+	 * §4.3 宿主级拒绝：把「宿主类 + 其下属全部匿名类」整体移出本批重定义。
+	 *
+	 * <p><b>为什么必须连新侧匿名类的原始类名一起移除</b>：一旦不做对齐，新编译产物的 {@code Foo$2}
+	 * 与 JVM 中已加载的旧 {@code Foo$2} 同名但语义不同，把它送进 redefinition 就是把老实例的方法表
+	 * 交给无关的新类 —— 正是本模块存在的理由。同理，宿主本身也必须一起移除，否则它的新字节码会
+	 * 引用到没有被对齐过的 {@code Foo$N}。</p>
+	 *
+	 * <p>因此拒绝的语义是"这一组本轮完全不动"，与 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md}
+	 * §4.3 的"以宿主 + 其下属全部匿名类为原子单元整体拒绝回滚"一致。</p>
+	 *
+	 * @param t 触发拒绝的异常；{@link AnonClassAligner.AlignmentRejectedException} 视为**预期**拒绝
+	 *          （打 {@code [HOTSWAP-REJECT]} 告警），其它异常视为对齐器缺陷（打 error + 堆栈）
+	 */
+	private static void rejectHostGroup(Map<String, byte[]> newBatchBytes, Map<String, Path> classToPath,
+	                                    String hostName, Map<String, byte[]> newAnon, Throwable t) {
+		boolean expected = t instanceof AnonClassAligner.AlignmentRejectedException;
+		String reason = expected
+		 ? ((AnonClassAligner.AlignmentRejectedException) t).reason
+		 : (t.getClass().getSimpleName() + ": " + t.getMessage());
+		if (expected) {
+			warn("[HOTSWAP-REJECT] Structural ambiguity detected in " + hostName
+			     + ". Redefine skipped safely. Reason: " + reason
+			     + ". Please hot-swap again or restart.");
+		} else {
+			error("[HOTSWAP-REJECT] Anonymous class alignment failed in " + hostName
+			      + ". Redefine skipped safely. Reason: " + reason
+			      + ". Please hot-swap again or restart.", t);
+		}
+		dropFromBatch(newBatchBytes, classToPath, hostName);
+		for (String anonName : newAnon.keySet()) {
+			dropFromBatch(newBatchBytes, classToPath, anonName);
+		}
+	}
+
+	/** 从批次中移除一个类（点分与斜杠两种键形态都移除，避免因键写法不同而漏删）。 */
+	private static void dropFromBatch(Map<String, byte[]> newBatchBytes, Map<String, Path> classToPath, String className) {
+		newBatchBytes.remove(className);
+		classToPath.remove(className);
+		String alt = className.indexOf('/') >= 0 ? className.replace('/', '.') : className.replace('.', '/');
+		newBatchBytes.remove(alt);
+		classToPath.remove(alt);
 	}
 
 	/**

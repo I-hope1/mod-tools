@@ -200,8 +200,20 @@ public final class MethodFingerprinter extends MethodVisitor {
 	/**
 	 * 屏蔽描述符中的匿名类引用，例如 {@code (LOuter$1;)V -> (L#ANON_0#;)V}，
 	 * 保证匿名类编号位移不会影响指纹。
+	 *
+	 * <p><b>破坏范围是刻意收窄的</b>：仅当描述符里出现 {@code L<本上下文类名>$<不稳定数字后缀>;}
+	 * 时才改写，且前置 {@code desc.indexOf('$') < 0} 快速返回。因此：
+	 * <ul>
+	 *   <li>{@code ()V} / {@code (I)V} / {@code (Ljava/lang/String;)V} 等<b>不含 {@code $} 的描述符原样返回</b>
+	 *       —— 普通重载的语义差异不会被抹掉；</li>
+	 *   <li>{@code (LOuter$Inner;)V}（具名内部类）也因为后缀非纯数字而不改写。</li>
+	 * </ul>
+	 *
+	 * <p>包内可见：{@link AnonClassHasher} 组装方法签名时也要用它 —— 嵌套匿名类的构造器描述符形如
+	 * {@code (LOuter$1;)V}，父类编号一移位，子类的原始描述符就会变，导致子类内容哈希必然改变、
+	 * Tier 1/2 全面失效（详见 {@code DeepNestProbe} 的实测）。</p>
 	 */
-	private String maskDescriptor(String desc) {
+	String maskDescriptor(String desc) {
 		if (desc == null || currentClassName == null || desc.indexOf('$') < 0) return desc;
 		String prefix = "L" + currentClassName + "$";
 		int    idx    = desc.indexOf(prefix);

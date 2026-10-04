@@ -158,9 +158,27 @@ public final class AnonClassAligner {
 		Map<String, byte[]> normOld = normalizeMap(oldAnonClasses, hostSlash);
 		Map<String, byte[]> normNew = normalizeMap(newAnonClasses, hostSlash);
 
-		// 解析新旧匿名类特征（接入严密准入分类器）
-		List<AnonInfo> oldInfos = parseInfos(hostSlash, normOld, oldResolver != null ? oldResolver : normOld::get);
-		List<AnonInfo> newInfos = parseInfos(hostSlash, normNew, newResolver != null ? newResolver : normNew::get);
+		// 构造能够解析宿主类的安全 Resolver，防止默认 fallback 导致宿主方法追溯永远返回 null
+		Function<String, byte[]> effectiveOldResolver = oldResolver != null ? oldResolver :
+			(name -> {
+				if (name.equals(hostSlash)) {
+					byte[] b = oldAnonClasses != null ? oldAnonClasses.get(hostSlash) : null;
+					if (b != null) return b;
+					return newHostBytes;
+				}
+				return normOld.get(name);
+			});
+
+		Function<String, byte[]> effectiveNewResolver = newResolver != null ? newResolver :
+			(name -> name.equals(hostSlash) ? newHostBytes : normNew.get(name));
+
+		// 单次解析宿主 ClassNode 供整个流程复用，杜绝多次构建 AST 导致的停顿与 GC 压力
+		ClassNode oldHostNode = parseHostNode(hostSlash, effectiveOldResolver);
+		ClassNode newHostNode = parseHostNode(hostSlash, effectiveNewResolver);
+
+		// 解析新旧匿名类特征（接入严密准入分类器，并复用宿主节点）
+		List<AnonInfo> oldInfos = parseInfos(hostSlash, oldHostNode, normOld, effectiveOldResolver);
+		List<AnonInfo> newInfos = parseInfos(hostSlash, newHostNode, normNew, effectiveNewResolver);
 
 		AlignmentStats stats = new AlignmentStats();
 
@@ -319,9 +337,36 @@ public final class AnonClassAligner {
 	}
 
 	public static String getParentName(String hostSlash, String anonSlash) {
-		if (anonSlash == null) return hostSlash;
+		if (anonSlash == null || hostSlash == null) return hostSlash;
 		int lastDollar = anonSlash.lastIndexOf('$');
-		return lastDollar > 0 ? anonSlash.substring(0, lastDollar) : hostSlash;
+		if (lastDollar <= hostSlash.length()) return hostSlash;
+		return anonSlash.substring(0, lastDollar);
+	}
+
+	public static class EnclosingMethodInfo {
+		public final String name;
+		public final String desc;
+
+		public EnclosingMethodInfo(String name, String desc) {
+			this.name = name;
+			this.desc = desc;
+		}
+	}
+
+	public static ClassNode parseHostNode(String hostSlash, Function<String, byte[]> resolver) {
+		if (hostSlash == null || resolver == null) return null;
+		try {
+			byte[] bytes = resolver.apply(hostSlash);
+			if (bytes == null) {
+				bytes = resolver.apply(hostSlash.replace('/', '.'));
+			}
+			if (bytes == null) return null;
+			ClassNode cn = new ClassNode();
+			new ClassReader(bytes).accept(cn, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+			return cn;
+		} catch (Throwable t) {
+			return null;
+		}
 	}
 
 	public static void validateRenameMap(Map<String, String> renameMap, String hostSlash) {
@@ -431,6 +476,19 @@ public final class AnonClassAligner {
 		}
 
 		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (o == null || getClass() != o.getClass()) return false;
+			AnonInfo anonInfo = (AnonInfo) o;
+			return Objects.equals(name, anonInfo.name);
+		}
+
+		@Override
+		public int hashCode() {
+			return name != null ? name.hashCode() : 0;
+		}
+
+		@Override
 		public String toString() {
 			return name + "(#hash=" + contentHash + ", outer=" + outerMethod + ", order=" + orderIndex + ")";
 		}
@@ -475,19 +533,9 @@ public final class AnonClassAligner {
 		return outerMethod;
 	}
 
-	public static String resolveHostMethodForAnon(String hostSlash, String anonSlash, Function<String, byte[]> resolver) {
-		if (resolver == null || hostSlash == null || anonSlash == null) return null;
+	public static EnclosingMethodInfo resolveHostMethodForAnon(String hostSlash, ClassNode hostNode, String anonSlash) {
+		if (hostNode == null || hostSlash == null || anonSlash == null || hostNode.methods == null) return null;
 		try {
-			byte[] hostBytes = resolver.apply(hostSlash);
-			if (hostBytes == null) {
-				hostBytes = resolver.apply(hostSlash.replace('/', '.'));
-			}
-			if (hostBytes == null) return null;
-
-			ClassNode hostNode = new ClassNode();
-			new ClassReader(hostBytes).accept(hostNode, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-			if (hostNode.methods == null) return null;
-
 			List<MethodNode> instantiators = new ArrayList<>();
 			for (MethodNode mn : hostNode.methods) {
 				if (mn.instructions == null) continue;
@@ -514,17 +562,17 @@ public final class AnonClassAligner {
 			Set<String> visited = new HashSet<>();
 			visited.add(current.name + ":" + current.desc);
 
-			// 顺着 indy 和方法调用向上追溯调用链，直到定位到真正的源码宿主方法名（具备深度上限与死循环保护）
+			// 顺着 indy 和方法调用向上追溯调用链，直到定位到真正的源码宿主方法名与描述符（具备深度上限与死循环保护）
 			int depth = 0;
 			while (current != null && ++depth <= 32) {
 				String norm = normalizeEnclosingMethod(current.name);
 				if (norm != null && !norm.equals("null") && !norm.isEmpty() && !norm.startsWith("lambda$")) {
-					return norm;
+					return new EnclosingMethodInfo(norm, current.desc);
 				}
 				MethodNode caller = findCallerMethod(hostNode, current.name, current.desc, visited);
 				if (caller == null) {
 					if (norm != null && !norm.equals("null") && !norm.isEmpty()) {
-						return norm;
+						return new EnclosingMethodInfo(norm, current.desc);
 					}
 					break;
 				}
@@ -534,6 +582,12 @@ public final class AnonClassAligner {
 			HotSwapAgent.warn("[ANON_ALIGN] Failed to trace call chain to source method for " + anonSlash + " (bottom=" + instantiators.get(0).name + ")");
 		} catch (Throwable ignored) { }
 		return null;
+	}
+
+	public static String resolveHostMethodForAnon(String hostSlash, String anonSlash, Function<String, byte[]> resolver) {
+		ClassNode hostNode = parseHostNode(hostSlash, resolver);
+		EnclosingMethodInfo info = resolveHostMethodForAnon(hostSlash, hostNode, anonSlash);
+		return info != null ? info.name : null;
 	}
 
 	private static MethodNode findCallerMethod(ClassNode hostNode, String calleeMethodName, String calleeMethodDesc, Set<String> visited) {
@@ -562,6 +616,7 @@ public final class AnonClassAligner {
 
 	private static List<AnonInfo> parseInfos(
 	 String hostSlash,
+	 ClassNode hostNode,
 	 Map<String, byte[]> classes,
 	 Function<String, byte[]> resolver) {
 		List<AnonInfo> list = new ArrayList<>();
@@ -573,7 +628,8 @@ public final class AnonClassAligner {
 			if (bytes == null || bytes.length == 0) continue;
 
 			ClassNode cn = new ClassNode();
-			new ClassReader(bytes).accept(cn, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+			// 优化：parseInfos 仅需读取类结构签名与属性，使用 SKIP_CODE 避免全量解析指令体
+			new ClassReader(bytes).accept(cn, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
 			if (!isAnonymousClass(cn, hostSlash)) continue;
 
 			Long hash = AnonClassHasher.hash(name, bytes, hostSlash, resolver, hashCache, null, 0);
@@ -583,15 +639,16 @@ public final class AnonClassAligner {
 			Collections.sort(interfaces);
 
 			String outerMethod = normalizeEnclosingMethod(cn.outerMethod);
+			String outerMethodDesc = cn.outerMethodDesc;
 			// 针对 javac 8 的嵌套 lambda 缺陷（EnclosingMethod 生成虚拟的 lambda$null$0）：
-			// 通过扫描宿主类字节码中实例化该匿名类的真实方法恢复其真实外层源码方法
-			if ((outerMethod == null || "null".equals(outerMethod)) && resolver != null) {
-				String hostMethod = resolveHostMethodForAnon(hostSlash, name, resolver);
-				if (hostMethod != null) {
-					outerMethod = hostMethod;
+			// 通过扫描已解析的宿主类 ClassNode 恢复其真实外层源码方法与描述符
+			if ((outerMethod == null || "null".equals(outerMethod)) && hostNode != null) {
+				EnclosingMethodInfo hostMethodInfo = resolveHostMethodForAnon(hostSlash, hostNode, name);
+				if (hostMethodInfo != null) {
+					outerMethod = hostMethodInfo.name;
+					outerMethodDesc = hostMethodInfo.desc;
 				}
 			}
-			String outerMethodDesc = cn.outerMethodDesc;
 
 			List<String> fields = new ArrayList<>();
 			if (cn.fields != null) {
@@ -636,17 +693,19 @@ public final class AnonClassAligner {
 		Set<AnonInfo> remainingOld = new LinkedHashSet<>(oldToUse);
 		Set<AnonInfo> remainingNew = new LinkedHashSet<>(newToUse);
 
-		// Tier 1: 内容哈希精确相同 + 宿主方法相同 (允许 minDiff 仲裁)
+		// Tier 1: 内容哈希精确相同 + 宿主方法相同 (允许 minDiff 仲裁，且强制要求 contentHash != null)
 		matchTier(1, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
-		 Objects.equals(n.contentHash, o.contentHash)
+		 n.contentHash != null
+		  && Objects.equals(n.contentHash, o.contentHash)
 		  && Objects.equals(n.outerMethod, o.outerMethod)
 		  && Objects.equals(n.outerMethodDesc, o.outerMethodDesc),
 		 true
 		);
 
-		// Tier 2: 内容哈希全局精确相同 (禁止跨方法 minDiff，仅全类唯一孤本采纳)
+		// Tier 2: 内容哈希全局精确相同 (禁止跨方法 minDiff，仅全类唯一孤本采纳，且强制要求 contentHash != null)
 		matchTier(2, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
-		 Objects.equals(n.contentHash, o.contentHash),
+		 n.contentHash != null
+		  && Objects.equals(n.contentHash, o.contentHash),
 		 false
 		);
 
@@ -671,13 +730,8 @@ public final class AnonClassAligner {
 		 false
 		);
 
-		// Tier 5: 位置回退（同名且同基类接口，仅孤本保底，存在竞争者坚决拒绝）
-		matchTier(5, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
-		 Objects.equals(n.name, o.name)
-		  && Objects.equals(n.superName, o.superName)
-		  && Objects.equals(n.interfaces, o.interfaces),
-		 false
-		);
+		// 注意：坚决移除旧版 Tier 5（按物理类名盲配）。若前 4 层均未匹配，
+		// 表明该类为新增类或旧类已删除，严格作为孤儿类保留或新类生成新编号，杜绝内存篡夺。
 
 		return matchedNewToOld;
 	}

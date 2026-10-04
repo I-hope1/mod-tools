@@ -96,6 +96,8 @@ public class AnonClassReproTest {
 			testScenario18_NestedAnonymousClassPrefixRetention(javac, baseDir);
 			// 测试 19 级联树拓扑对齐与蜕变测试套件（Milestone 2 核心引擎）
 			testScenario19_CascadingTreeAndMetamorphicSuite(javac, baseDir);
+			// 测试 20 深度白盒漏洞复现与防御验证（7 大修复项确证）
+			testScenario20_WhiteboxVulnerabilityReproAndDefense(javac, baseDir);
 		} finally {
 			deleteRecursively(baseDir);
 		}
@@ -1286,6 +1288,72 @@ public class AnonClassReproTest {
 			rejectCaught = true;
 		}
 		check(rejectCaught, "Scenario 19: 后置校验 - 前缀不变量破坏时触发异常防护");
+	}
+
+	static void testScenario20_WhiteboxVulnerabilityReproAndDefense(String javac, File baseDir) throws Exception {
+		// 1. 验证缺陷 5: getParentName 在宿主本身是内部类时不跨界
+		String hostInner = "com/example/Outer$Inner";
+		String anonLevel1 = "com/example/Outer$Inner$1";
+		String anonLevel2 = "com/example/Outer$Inner$1$1";
+		check(hostInner.equals(AnonClassAligner.getParentName(hostInner, anonLevel1)),
+			"Scenario 20: getParentName 宿主为内部类时 Level 1 正确截断为宿主内部名");
+		check(anonLevel1.equals(AnonClassAligner.getParentName(hostInner, anonLevel2)),
+			"Scenario 20: getParentName 宿主为内部类时 Level 2 正确截断为父匿名类名");
+		check(hostInner.equals(AnonClassAligner.getParentName(hostInner, hostInner)),
+			"Scenario 20: getParentName 传入宿主类自身时不跨越边界破坏宿主名");
+
+		// 2. 验证缺陷 4: 消除 Tier 5 盲信 name 导致的已删除类被误配（防止反向夺舍）
+		File dir = new File(baseDir, "s20");
+		dir.mkdirs();
+		File fOld = new File(dir, "DeleteShiftOld.java");
+		Files.writeString(fOld.toPath(),
+			"package testVuln;\n" +
+			"class DeleteShift {\n" +
+			"    public void run() {\n" +
+			"        Runnable taskA = new Runnable() { int a = 1; public void run() { a++; } };\n" +
+			"        Runnable taskB = new Runnable() { String b = \"B\"; public void run() { b.trim(); } };\n" +
+			"    }\n" +
+			"}\n");
+		File outOld = new File(dir, "outOld");
+		outOld.mkdirs();
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outOld.getAbsolutePath(), fOld.getAbsolutePath());
+
+		File fNew = new File(dir, "DeleteShiftNew.java");
+		Files.writeString(fNew.toPath(),
+			"package testVuln;\n" +
+			"class DeleteShift {\n" +
+			"    public void run() {\n" +
+			"        Runnable taskC = new Runnable() { double c = 3.14; public void run() { Math.sin(c); } };\n" +
+			"    }\n" +
+			"}\n");
+		File outNew = new File(dir, "outNew");
+		outNew.mkdirs();
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outNew.getAbsolutePath(), fNew.getAbsolutePath());
+
+		byte[] hostNew = Files.readAllBytes(new File(outNew, "testVuln/DeleteShift.class").toPath());
+		Map<String, byte[]> oldClasses = new HashMap<>();
+		oldClasses.put("testVuln/DeleteShift$1", Files.readAllBytes(new File(outOld, "testVuln/DeleteShift$1.class").toPath()));
+		oldClasses.put("testVuln/DeleteShift$2", Files.readAllBytes(new File(outOld, "testVuln/DeleteShift$2.class").toPath()));
+
+		Map<String, byte[]> newClasses = new HashMap<>();
+		newClasses.put("testVuln/DeleteShift$1", Files.readAllBytes(new File(outNew, "testVuln/DeleteShift$1.class").toPath()));
+
+		AnonClassAligner.Result resVuln = AnonClassAligner.align("testVuln/DeleteShift", hostNew, oldClasses, newClasses);
+		check(resVuln.orphanOldClasses.contains("testVuln/DeleteShift$1"),
+			"Scenario 20: 移除 Tier 5 盲信 name 匹配 - 旧 TaskA($1) 保持为孤儿类不被篡夺");
+		check(resVuln.orphanOldClasses.contains("testVuln/DeleteShift$2"),
+			"Scenario 20: 移除 Tier 5 盲信 name 匹配 - 旧 TaskB($2) 保持为孤儿类");
+		check(resVuln.stats.orphanClasses == 2,
+			"Scenario 20: 结构完全不同且无法在 Tier 1~4 匹配的匿名类绝不按名字盲配 (孤儿数=2)");
+
+		// 3. 验证缺陷 1 & 3: 默认 Resolver 下 lambda 匿名类 outerMethod 与 outerMethodDesc 双恢复
+		AnonClassAligner.EnclosingMethodInfo emi = AnonClassAligner.resolveHostMethodForAnon(
+			"testVuln/DeleteShift",
+			AnonClassAligner.parseHostNode("testVuln/DeleteShift", k -> hostNew),
+			"testVuln/DeleteShift$1"
+		);
+		check(emi != null && "run".equals(emi.name) && "()V".equals(emi.desc),
+			"Scenario 20: resolveHostMethodForAnon 同时精准恢复方法名与方法描述符 (run:()V)");
 	}
 
 	static void runCmd(String... cmd) throws Exception {

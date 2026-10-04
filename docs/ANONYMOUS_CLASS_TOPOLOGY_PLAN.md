@@ -328,6 +328,17 @@ V2:  L0-new → { A-new,  A0 → L1 }
 
 ⚠️ **但要诚实标注**：INV-1 在匿名类侧的成立**带有偶然性** —— 它来自 `AnonClassHasher.hash` **内部没有自递归**（那个递归参数与 `MAX_DEPTH` 是死代码，见 §3 注记），而不是来自任何显式设计约束。一旦有人"修好"那个递归，就会立刻违反 INV-1 并引入提案担心的雪崩（新增一个子匿名类 → 整条祖先链的哈希全变）。**因此这两条必须写进文档与代码注释，而不是继续依赖一个碰巧不生效的参数。**
 
+✅ **已落成回归断言**（`AnonClassReproTest` Scenario 25，6 条，已挂 `check`）：
+
+| 断言 | 实测值 | 守的是什么 |
+|:---|:---|:---|
+| 只改**子**匿名类内容 → **父**匿名类指纹不变 | `8807ec5a2a420738` == `8807ec5a2a420738` | 若有人让 `AnonClassHasher` 递归折入子哈希，此处立刻变红 |
+| 负向对照：子匿名类自身内容确实变了 | `fe64bce7ac46e2f4` != `fd40bf6eeeeb6845` | 防止上一条**空过**（夹具没真改动） |
+| 正对照：改父类**自身**方法体 → 指纹必须变 | `8807ec5a...` != `5b4b6505...` | 防止指纹退化成常量 |
+| `LambdaAligner` 常量池不得出现 `nipx/AnonClassAligner` | 通过 | INV-2（架构守卫：扫字节码常量池，位置无关） |
+| `AnonClassAligner` 不得出现 `nipx/LambdaAligner` | 通过 | INV-2 |
+| 正对照：两者都只经 `nipx/AnonClassHasher` 取指纹 | 通过 | 钉住**允许**的依赖方向 |
+
 
 ---
 
@@ -621,7 +632,7 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 | §3.3 未匹配子类前缀派生                            | ✅                 | `alignCascading` 的 `level > 1` 分支；Scenario 18/19                                                      |
 | §3.4 调用链三要素比对 + 深度 32                    | ✅                 | `findCallerMethod`；Scenario 12/17                                                                        |
 | §3.5 非方法上下文宿主归类                          | 🔶                 | 靠 `outerMethod == null` 退化，无 `<initializer>`/`<clinit>`/`<init>` 三态。**回退扫描上下文已修**：改用直接父类节点（javac 8 `lambda$null$N` + 嵌套匿名类，Scenario 24 守卫） |
-| §3.6 Lambda/匿名类边界（INV-1 自描述指纹 / INV-2 禁止互相递归） | 🔶         | INV-2 成立；INV-1 在匿名类侧成立**但属偶然**（`AnonClassHasher` 无自递归），lambda 侧是 1 层折叠（即 §3.1 排除项 4 的偏离）；见 §3.6 |
+| §3.6 Lambda/匿名类边界（INV-1 自描述指纹 / INV-2 禁止互相递归） | ✅         | INV-1/INV-2 均已落成回归断言（Scenario 25，含负向/正对照与常量池架构守卫）；lambda 侧仍是 1 层折叠（§3.1 排除项 4 的偏离）；见 §3.6 |
 | §3.6 提案的"异构拓扑树"                            | ➖ 不需要          | 实测 javac 中 lambda **不构成命名层级**（`Alt$1$1` 而非 `Alt$1$1$1`），匿名类包含树已由 `$` 前缀完全表达；无须合并两棵树（§3.6） |
 | §4.1 Tier 1 / 2 / 3 / 4                            | 🔶                 | `matchTier` + 双向唯一 + minDiff。**新发现缺陷：Tier 3 的 minDiff 在"前插 + 改体"下系统性错配**（§4.1 注记） |
 | §4.1 嵌套深度支持范围（§1.1 声明 depth ≤ 4）        | ➖ 声明无效        | `maxLevel > 4` 仅 warn；`AnonClassHasher.MAX_DEPTH` 为**不可达死代码**；探针实测 depth 8 逐层正确（§3 注记） |
@@ -650,9 +661,9 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 本系统的回归门槛**不在 Gradle 的 `test` 任务里**，而是 `scratch/hstest` 下的一组 main 程序，经 `suite.sh` 由 `:hstestRun`（`Exec`，走 Git Bash）驱动，并已挂在根项目的 `check` 上：
 
 * **入口**：`./gradlew check` → `:hstestRun` → `scratch/hstest/suite.sh`。
-* **本主题直接相关**：`AnonClassTest`（Save/Delete 静默对调防线）、`AnonClassReproTest`（**24 场景**，§1~§4 的绝大多数断言来自它；Scenario 21 专测 §4.3 拒绝通道与 §6.3/§6.4 闸门与开关，Scenario 22 专测嵌套匿名类的内容哈希可用性与设计不变量，Scenario 23 专测 strict 的行为边界，Scenario 24 专测 javac 8 回退扫描上下文）。
+* **本主题直接相关**：`AnonClassTest`（Save/Delete 静默对调防线）、`AnonClassReproTest`（**25 场景**，§1~§4 的绝大多数断言来自它；Scenario 21 专测 §4.3 拒绝通道与 §6.3/§6.4 闸门与开关，Scenario 22 专测嵌套匿名类的内容哈希可用性与设计不变量，Scenario 23 专测 strict 的行为边界，Scenario 24 专测 javac 8 回退扫描上下文，Scenario 25 专测设计不变量 INV-1/INV-2）。
 * **同一次运行还包括**（Lambda 对齐主题，与本主题共用夹具与哈希器）：`SemAssert`、`CompeteDeleteTest`、`PassBTest`、`NameIndexTest`、`FixtureATest`、`XGroupTest`。
-* **数量基线**：`scratch/hstest/expected-count.txt` 记录 `<通过> <失败> <已知限制>` 三元组，实测值与基线不符即构建失败；另有"一条断言都没执行即判 FAIL"的空绿金丝雀。当前基线 `245 0 3`。
+* **数量基线**：`scratch/hstest/expected-count.txt` 记录 `<通过> <失败> <已知限制>` 三元组，实测值与基线不符即构建失败；另有"一条断言都没执行即判 FAIL"的空绿金丝雀。当前基线 `251 0 3`。
 * **注意**：`AnonClassReproTest` 的夹具由脚本按 JDK 版本分别编译（同包同名不能混编），且 `hstestRun` 依赖 `hotswap-agent` 的 **jar 重建** —— hstest 的 `runtimeClasspath` 解析到的是 `build/libs` 下的 jar 而非 `classes` 目录，少了这一步会静默跑陈旧产物。
 
 ### 8.3 建议的实施优先级
@@ -664,7 +675,7 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 3. ~~**修 `AnonClassHasher` 未屏蔽的方法描述符**~~ ✅ **已完成**（改为走 `MethodFingerprinter.maskDescriptor`，定向屏蔽；嵌套匿名类**全层恢复 Tier 1**，`T1` 由恒为 1 变为等于嵌套层数）。守卫断言已进 `check`：`AnonClassReproTest` Scenario 22（4 层嵌套 T1=4 / T4=0；描述符定向性反例；层级守卫）。附带收益：不再依赖"不比字段表"的 Tier 4，等于把 §7.2 风险 1 的暴露面收窄一大半。
 4. **决定 Tier 3 minDiff 策略**（§4.1 注记的实测缺陷：前插 + 改体 → 静默错配；depth 1 已可复现，探针 `DeepNestProbe` 的 2 条 FAIL 即此）。三选一：① `strict` 也覆盖 `ambiguousMatches > 0`（3 行，但默认仍不安全）；② Tier 3 多候选不再仲裁、降级给 Tier 4（保守安全，牺牲部分正当匹配）；③ 落地 **Tier 1.5 相似度 + 后代拓扑维度**（根本修法，能把该场景**判对**而非判成歧义 —— §3.6 已论证"后代拓扑"就是 §4.1 例子真正需要的第二判据）。**建议先做 ①止血，再评估 ③**。
 5. ~~**`parseInfos` 改用直接父类节点做实例化点扫描**~~ ✅ **已完成**（level 1 复用 `hostNode`，嵌套层按需解析并缓存直接父类节点）。靶子经实测收窄为 javac 8 的 `lambda$null$N`（`lambda$work$0` 不触发）；修复前该形态下两侧 `outerMethod` 都停在 `"null"`、方法作用域判据被抹平，导致"方法顺序反转 + 两侧改体"时两条同构链**跨方法错配**。守卫断言已进 `check`：`AnonClassReproTest` Scenario 24（真实 javac 8，6 条）。附带确认 javac 8 的嵌套命名同样是 `$1$1`。
-6. **把 INV-1 / INV-2 写进代码注释与测试**（§3.6）：当前 INV-1 靠"`AnonClassHasher` 恰好没有自递归"成立，随时可能被一次"顺手修复"破坏。建议加一条断言：新增一个子匿名类后，父匿名类的 `contentHash` **必须不变**。
+6. ~~**把 INV-1 / INV-2 写进代码注释与测试**~~ ✅ **已完成**（§3.6）：`AnonClassReproTest` Scenario 25 用"只改子层 → 父层指纹必须不变"把 INV-1 变成受保护断言（若有人让 `AnonClassHasher` 恢复递归折入子哈希，此处立刻变红），并用字节码常量池扫描做 INV-2 架构守卫。
 7. **§7.2 风险 1 升级为实例状态布局安全门**（分级：纯加字段放行 + 日志；删字段 / 改类型 / 改静态性拒绝配对）。理由是它**不是边角路径而是默认路径**（见 §7.2 注记），且后果是"老实例状态被错布局解释"，比配错名字更重。建议这道门做在**事务/重定义层**（顺带覆盖具名类），对齐器只额外拒绝"用户没要求改字段却在背后发生的布局变化"。**建议先补真机实验**：在 `scratch/hstest/src/LiveDcevmTest.java` 的 JBR + `-XX:+AllowEnhancedClassRedefinition` 路径上跑一例"捕获变量类型变更后原地重定义"，看 JBR 是拒绝、复制旧值、还是静默错解释 —— 三种结果对应三种门。
 8. **§2.1 枚举 Switch 映射表排除 + §2.2 第 4 类保留名接入**（`align` 增 `Set<String> reserved` 参数）。两者都能写确定性的负向断言。
 9. **§3.1/§3.2 的规格收敛**：先把文档改成"主哈希 + 子类引用多重集（并列独立维度）"的目标形态，再考虑实现；**在给出能同时满足父哈希稳定与 AnonCase 同构可区分的判别式之前，不要动 `MethodFingerprinter` 的匿名类占位符**。同批应一并把 §3.1 包含特征第 2 条的"非合成字段"改成"含合成捕获字段"，因为它现在是安全信号而非噪声。

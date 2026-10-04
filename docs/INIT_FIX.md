@@ -375,7 +375,7 @@ public class Counter {
                         ✅ 已完成               ⏳ 当前门槛            ⬜ 未开始            🔶 部分提前落地
 ```
 
-### 8.0 实现状态总表（截至 `358b232f`）
+### 8.0 实现状态总表（截至 `7c19e6e6`）
 
 | 规范条目 | 状态 | 落地位置 / 证据 |
 | :--- | :--- | :--- |
@@ -398,6 +398,17 @@ public class Counter {
 | §8 P2 `@HotswapInit`（T4） | ⬜ | — |
 
 **回归测试**：`hstestInitFixOracle`（已挂 `check`）16 个场景 / 114 条断言，覆盖正向值比对（`InstanceTracker.register → transform → afterRedefine` 全公开 API）、负向阻断断言、逐字段驱动的失败隔离、以及 `FieldLedger` 的两轮往返；`./gradlew check` 会跑。
+
+> **实现注记：为什么三张内部表不用 `java.lang.ClassValue`**（`PENDING` / `REPORTS` / `LEDGER`）
+>
+> 曾经评估过把 `Map<Class<?>, XXX>` 换成 `ClassValue`。结论是**保持现状**，四条理由按重要性排列：
+>
+> 1. **`PENDING` 的 TTL 清扫需要全表遍历，而 `ClassValue` 没有迭代接口**（无 `keySet()` / `forEach()`）。§1.2 不变量 2 的 5 分钟超时清扫（`PENDING_TTL_NANOS`）不是为了"条目过期"，而是为了释放 `PendingPatch` 里挂着的 `List<WeakReference<Object>>`（百万实例 = 百万个弱引用）。`ClassValue` 条目随 `Class` 存活，没有清扫就没有释放；要保留就得再维护一个弱引用 bookkeeping 集合专供清扫，等于把 map 加回来一半。
+> 2. **部署约束（决定性）**：本模块刻意保留 Android/ART 路径（`Reflect.isAndroid`、`sun.misc.Unsafe.defineAnonymousClass` 回退、`desugar_jdk_libs`、`Android_dalvik`），而 `ClassValue` 在 ART 上直到 API 34 才有，且不在 core library desugaring 覆盖范围内。把静态字段类型写成 `ClassValue`，旧 ART 上链接 `InitFix` 会直接 `NoClassDefFoundError` —— 这正是 `Reflect` / `HotswapBridge` 全篇用反射探测而非直接引用新 API 的原因。
+> 3. **语义不匹配**：`ClassValue` 只有 `computeValue` / `get` / `remove`（无 `put`），我们的用法是"事件后放入已算好的对象"而非"从 Class 派生"，值必须改成可变 holder；`remove` 返回 `void`，而两处用 `if (PENDING.remove(clazz) == null) return;` 做"取走并判空"；`get()` 在缺失时会创建，破坏 `ledgerSnapshot` / `transform` 快速路径的 peek 语义。
+> 4. **收益不对称**：这三张表的访问频率是"每次 redefine 一次"或诊断期，**不在按对象访问的热路径**上，`synchronizedMap(WeakHashMap)` 的锁不构成瓶颈；而现状已满足 `ClassValue` 想给的两件事（条目随类卸载消失、值不反向持有 `Class` 引用）。
+>
+> 若将来确认该 jar 不再需要支持旧 ART，可**只迁移 `LEDGER`**（唯一完全贴合 `ClassValue` 语义：可变、无需全表清扫、随类卸载），`PENDING` 因清扫需求必须留在 map。
 
 ### 8.1 分阶段规划
 

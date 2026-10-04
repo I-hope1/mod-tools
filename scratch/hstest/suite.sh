@@ -131,6 +131,7 @@ step "SemAssert (15 夹具 / 40 条断言)" run SemAssert \
 step "PassBTest (验证 Pass B 计数器非零可达性)" run PassBTest
 step "CompeteDeleteTest (三层竞争夹具: 删 A 链 + B 叶子改捕获)" run CompeteDeleteTest
 step "AnonClassTest (匿名类内容哈希: 防止 Save/Delete 静默对调)" run AnonClassTest
+step "AnonClassReproTest (匿名类 6 大场景规范验证)" run AnonClassReproTest
 
 # ---------- 数量基线 ----------
 echo "--- 数量基线 ---"

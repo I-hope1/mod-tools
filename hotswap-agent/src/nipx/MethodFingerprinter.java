@@ -154,22 +154,27 @@ public final class MethodFingerprinter extends MethodVisitor {
 	}
 
 	/**
-	 * 判断嵌套类后缀是否「可能随编译顺序位移」。
+	 * 判断嵌套类后缀是否「可能随编译顺序位移」的匿名类。
 	 *
-	 * <p>取最后一段（以 {@code $} 分隔），如果它以数字开头，就视为不稳定：</p>
+	 * <p>取最后一段（以 {@code $} 分隔），如果它完全由数字组成，才视为匿名类：</p>
 	 * <ul>
 	 *   <li>{@code 1}      → 不稳定（匿名类）</li>
-	 *   <li>{@code 1$2}    → 不稳定</li>
+	 *   <li>{@code 1$2}    → 不稳定（嵌套匿名类，末段为 2）</li>
 	 *   <li>{@code bar$1}  → 不稳定（Kotlin 的 {@code Foo$bar$1}）</li>
-	 *   <li>{@code 1Local} → 不稳定（javac 具名局部类）</li>
-	 *   <li>{@code Builder}→ 具名，稳定</li>
+	 *   <li>{@code 1Local} → 具名局部类，保留名字，不按匿名类处理</li>
+	 *   <li>{@code Builder}→ 具名内部类，稳定</li>
 	 * </ul>
 	 */
 	private static boolean isUnstableNestedSuffix(String suffix) {
 		int lastSep = suffix.lastIndexOf('$');
 		int start   = lastSep + 1;
 		if (start >= suffix.length()) return false;
-		return Character.isDigit(suffix.charAt(start));
+		for (int i = start; i < suffix.length(); i++) {
+			if (!Character.isDigit(suffix.charAt(i))) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -259,11 +264,12 @@ public final class MethodFingerprinter extends MethodVisitor {
 		String name = h.getName();
 		if (isSelfSynthetic(owner, name)) {
 			updateString("#SYNTHETIC_METHOD#");
+			updateString("#SYNTHETIC_DESC#");
 		} else {
 			updateString(name);
+			updateString(maskDescriptor(h.getDesc()));
 		}
 
-		updateString(maskDescriptor(h.getDesc()));
 		updateInt(h.isInterface() ? 1 : 0);
 	}
 

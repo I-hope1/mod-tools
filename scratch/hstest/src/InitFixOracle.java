@@ -108,6 +108,7 @@ public class InitFixOracle {
 		scenario("§4.2 bit 4：ThreadLocal 新增字段可补；读取 ThreadLocal.get() 的切片 → 阻断", InitFixOracle::caseThreadLocal);
 		scenario("§4.2 bit 4/5：可复用缓存字段 + setLength(0) → 阻断；切片内 NEW 的 builder → 放行", InitFixOracle::caseReusableBuilderCache);
 		scenario("§3.2 边界：构造器里的独立语句不进切片（REJECT 边界在哪）", InitFixOracle::caseStatementOutsideSlice);
+		scenario("§1.1 @HotswapReinit：解锁构造器读取 / 强制覆写 / CONDITIONAL 不覆写 / T0 绕过", InitFixOracle::caseHotswapReinit);
 
 		System.out.println();
 		System.out.println("通过 " + passed + " 条；失败 " + failed + " 条；合计 " + (passed + failed) + " 条");
@@ -251,8 +252,12 @@ public class InitFixOracle {
 	static final String CASE_E_V2 = """
 		package oracle;
 		public class CaseE {
+			private final String name;
 			private String path;
-			public CaseE(String name) { this.path = new java.io.File(name).getAbsolutePath(); }
+			public CaseE(String name) {
+				this.name = name;
+				this.path = new java.io.File(this.name).getAbsolutePath();
+			}
 			public String path() { return path; }
 		}
 		""";
@@ -827,6 +832,148 @@ public class InitFixOracle {
 		InitFix.PatchReport r4 = f4.transform();
 		expect(r4, false, "s", InitFix.FieldStatus.ACCEPTED, null);
 		check(r4.patchGenerated(), "CaseT4：不可变类型的新增字段被构造器读取 → 仍然放行（边界是类型敏感的）");
+	}
+
+	// ==================== 场景 14：§1.1 @HotswapReinit ====================
+
+	/** N1：新增 ThreadLocal 缓存 + 构造器里碰过它 —— 场景 13 的 T1 加注解后应当解锁。 */
+	static final String CASE_N1_V1 = """
+		package oracle;
+		public class CaseN1 {
+			public CaseN1() { }
+		}
+		""";
+
+	static final String CASE_N1_V2 = """
+		package oracle;
+		public class CaseN1 {
+			@nipx.annotation.HotswapReinit
+			private ThreadLocal<StringBuilder> sb = ThreadLocal.withInitial(StringBuilder::new);
+			public CaseN1() { sb.get().append("aass"); }
+		}
+		""";
+
+	/** N2/N3/N5：既有字段改了初值（没有任何新增字段）。 */
+	static final String CASE_N2_V1 = """
+		package oracle;
+		public class CaseN2 {
+			private String tag = "old";
+			public String tag() { return tag; }
+		}
+		""";
+
+	static final String CASE_N2_V2 = """
+		package oracle;
+		public class CaseN2 {
+			@nipx.annotation.HotswapReinit(mode = nipx.annotation.HotswapReinit.Mode.OVERWRITE)
+			private String tag = "new";
+			public String tag() { return tag; }
+		}
+		""";
+
+	static final String CASE_N3_V2 = """
+		package oracle;
+		public class CaseN3 {
+			@nipx.annotation.HotswapReinit(mode = nipx.annotation.HotswapReinit.Mode.CONDITIONAL)
+			private String tag = "new";
+			public String tag() { return tag; }
+		}
+		""";
+
+	static final String CASE_N5_V2 = """
+		package oracle;
+		public class CaseN5 {
+			private String tag = "new";
+			public String tag() { return tag; }
+		}
+		""";
+
+	/** N4：既有 int 字段改成零值 —— 注解必须绕过 T0，否则会判 NOTHING_TO_PATCH。 */
+	static final String CASE_N4_V1 = """
+		package oracle;
+		public class CaseN4 {
+			private int retries = 7;
+			public int retries() { return retries; }
+		}
+		""";
+
+	static final String CASE_N4_V2 = """
+		package oracle;
+		public class CaseN4 {
+			@nipx.annotation.HotswapReinit
+			private int retries = 0;
+			public int retries() { return retries; }
+		}
+		""";
+
+	static void caseHotswapReinit() throws Exception {
+		// ---- N1：注解解锁"新增字段 + 构造器里碰过它" ----
+		Fixture f1 = loadFixture("oracle.CaseN1", CASE_N1_V1, CASE_N1_V2);
+		Object s1 = construct(f1.host);
+		resetToDefault(f1.host, s1, "sb", "Ljava/lang/ThreadLocal;");
+		InstanceTracker.register(s1);
+
+		InitFix.PatchReport r1 = f1.transform();
+		expect(r1, false, "sb", InitFix.FieldStatus.ACCEPTED, null);
+		check(r1.patchGenerated(), "CaseN1：@HotswapReinit 解锁了构造器读取检查，补丁照常生成");
+		f1.apply();
+		check(read(f1.host, s1, "sb") instanceof ThreadLocal,
+			"CaseN1：存量实例拿到了可用的空缓存（实际 " + read(f1.host, s1, "sb") + "）");
+
+		// ---- N2：既有字段 + OVERWRITE → 无条件覆写 ----
+		Fixture f2 = loadFixture("oracle.CaseN2", CASE_N2_V1, CASE_N2_V2);
+		Object s2 = construct(f2.host);
+		setField(f2.host, s2, "tag", "old");        // 模拟"存量实例里还是旧值"
+		InstanceTracker.register(s2);
+
+		InitFix.PatchReport r2 = f2.transform();
+		expect(r2, false, "tag", InitFix.FieldStatus.ACCEPTED, null);
+		check(r2.patchGenerated(), "CaseN2：既有字段（无新增字段）也生成了补丁");
+		f2.apply();
+		check("new".equals(read(f2.host, s2, "tag")),
+			"CaseN2：OVERWRITE 无条件覆写了存量值（期望 new，实际 "
+			+ describe(read(f2.host, s2, "tag")) + "）");
+
+		// ---- N3：既有字段 + CONDITIONAL → 非默认值不动 ----
+		Fixture f3 = loadFixture("oracle.CaseN3",
+			CASE_N2_V1.replace("CaseN2", "CaseN3"), CASE_N3_V2);
+		Object s3 = construct(f3.host);
+		setField(f3.host, s3, "tag", "old");
+		InstanceTracker.register(s3);
+
+		InitFix.PatchReport r3 = f3.transform();
+		expect(r3, false, "tag", InitFix.FieldStatus.ACCEPTED, null);
+		f3.apply();
+		check("old".equals(read(f3.host, s3, "tag")),
+			"CaseN3：CONDITIONAL 没覆盖已有非默认值（期望 old，实际 "
+			+ describe(read(f3.host, s3, "tag")) + "）");
+
+		// ---- N5：同样的改动但不标注解 → 不产生补丁（对照） ----
+		Fixture f5 = loadFixture("oracle.CaseN5",
+			CASE_N2_V1.replace("CaseN2", "CaseN5"), CASE_N5_V2);
+		Object s5 = construct(f5.host);
+		setField(f5.host, s5, "tag", "old");
+		InstanceTracker.register(s5);
+
+		InitFix.PatchReport r5 = f5.transform();
+		check(!r5.patchGenerated() && r5.instanceFields().isEmpty(),
+			"CaseN5 对照：没有注解时既有字段不进候选集（无决策、无补丁）");
+		f5.apply();
+		check("old".equals(read(f5.host, s5, "tag")),
+			"CaseN5 对照：存量值保持 old（实际 " + describe(read(f5.host, s5, "tag")) + "）");
+
+		// ---- N4：既有字段改成零值 + 注解 → 必须绕过 T0 ----
+		Fixture f4 = loadFixture("oracle.CaseN4", CASE_N4_V1, CASE_N4_V2);
+		Object s4 = construct(f4.host);
+		setField(f4.host, s4, "retries", 7);
+		InstanceTracker.register(s4);
+
+		InitFix.PatchReport r4 = f4.transform();
+		expect(r4, false, "retries", InitFix.FieldStatus.ACCEPTED, null);
+		f4.apply();
+		check(Integer.valueOf(0).equals(read(f4.host, s4, "retries")),
+			"CaseN4：显式重置为零值没有被 T0 吞掉（期望 0，实际 "
+			+ describe(read(f4.host, s4, "retries")) + "）");
 	}
 
 	// ==================== 夹具装配 ====================

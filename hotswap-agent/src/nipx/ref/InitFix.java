@@ -34,11 +34,28 @@ import static nipx.HotSwapAgent.log;
  * 多根构造器不一致、循环依赖，都会拒绝。误补会静默污染对象状态，漏补只是字段保持默认值。</p>
  *
  * <h2>字段写入</h2>
- * <p>所有新增字段的 {@code PUTFIELD}/{@code PUTSTATIC}（final 与非 final 统一）都改写为
- * {@code invokedynamic}，由 {@link HotswapBridge#KIND_CONDITIONAL} 在链接期算好
- * Unsafe offset 并用条件 CAS 写入：仅当字段当前等于该类型默认值才写。这样不会覆盖
- * redefine 之后其他线程赋的新值；代价是字段已是默认值以外时跳过（保守方向）。
- * CAS 本身即 volatile 语义，无需额外 fence。</p>
+ * <p>所有目标字段的 {@code PUTFIELD}/{@code PUTSTATIC}（final 与非 final 统一）都改写为
+ * {@code invokedynamic}，由 {@link HotswapBridge} 在链接期算好 Unsafe offset 后写入：
+ * {@link HotswapBridge#KIND_CONDITIONAL} 条件 CAS —— 仅当字段当前等于该类型默认值才写，
+ * 这样不会覆盖 redefine 之后其他线程赋的新值（代价是字段已是默认值以外时跳过，保守方向）；
+ * {@link HotswapBridge#KIND_FORCE} 无条件 volatile 写（{@code @HotswapReinit(OVERWRITE)}）。
+ * 两者都经 Unsafe，因此 final 字段也适用（补丁是 nestmate，不能直接 {@code putfield} final）。
+ * CAS/volatile 本身即带可见性语义，无需额外 fence。</p>
+ *
+ * <h2>存量重置扩展（§1.1）</h2>
+ * <p>默认作用域只覆盖<b>本次新增字段</b>。字段标了 {@code @HotswapReinit} 时按
+ * {@link nipx.annotation.HotswapReinit.Mode} 处理：</p>
+ * <ul>
+ *   <li>候选集从"新增字段"扩展为"新增字段 ∪ 带注解的已有字段"（含静态字段）；</li>
+ *   <li>{@code OVERWRITE}（默认）→ {@link HotswapBridge#KIND_FORCE} 无条件覆写；
+ *       {@code CONDITIONAL} → 维持条件 CAS；</li>
+ *   <li>豁免 §4.1 T0 零值过滤（否则"把已有字段重置成 0/null"会判 NOTHING_TO_PATCH）
+ *       与"构造器里读过 / 别处写过该字段"的后续加工检查 —— 已有字段本来就会被各处
+ *       读写，那些门按定义不可能满足；</li>
+ *   <li>切片本身的安全门<b>不</b>豁免：分支、局部变量、§4.2 效应判定照旧。
+ *       覆写只决定"要不要写"，不能让一个读脏的值变正确。</li>
+ * </ul>
+ * <p>注解按<b>描述符字符串</b>匹配，不加载注解类（§2.1 同一原则）。</p>
  *
  * <h2>提取流程</h2>
  * <ol>
@@ -120,6 +137,14 @@ public class InitFix {
 
 	private static final long PENDING_TTL_NANOS = TimeUnit.MINUTES.toNanos(5);
 	private static final int  MAX_DETAILED_FAILURES = 5;
+
+	/** {@code @HotswapReinit} 的描述符（纯字符串匹配，不加载注解类）。 */
+	private static final String REINIT_DESC = "Lnipx/annotation/HotswapReinit;";
+	/** {@code @HotswapReinit} 的 {@code mode} 元素类型描述符。 */
+	private static final String REINIT_MODE_DESC = "Lnipx/annotation/HotswapReinit$Mode;";
+
+	/** 一个被 {@code @HotswapReinit} 标注的字段及其写入协议。 */
+	private record ReinitField(boolean overwrite) { }
 
 	private static final Unsafe UNSAFE = Unsafe.getUnsafe();
 
@@ -253,7 +278,8 @@ public class InitFix {
 		Set<String> addedStaticFields   = diff.addedStaticFields;
 		Set<String> addedInstanceFields = diff.addedInstanceFields;
 
-		if (addedStaticFields.isEmpty() && addedInstanceFields.isEmpty()) {
+		if (addedStaticFields.isEmpty() && addedInstanceFields.isEmpty()
+		    && !hasReinitAnnotation(newBytes)) {
 			REPORTS.put(host, new PatchReport(Map.of(), Map.of(), false));
 			return;
 		}
@@ -349,6 +375,26 @@ public class InitFix {
 		// 全程只读字节码，不调用 Class.forName，避免在 transform 线程上触发类加载死锁。
 		NestView nest = NestView.of(host, newClass);
 
+		// ==================== §1.1 存量重置扩展：候选集 ====================
+		// 默认只处理新增字段；标了 @HotswapReinit 的已有字段按显式声明进入候选集。
+		Map<String, ReinitField> reinitFields = scanReinitFields(newClass);
+		Set<String> targetInstanceFields = new LinkedHashSet<>(addedInstanceFields);
+		Set<String> targetStaticFields   = new LinkedHashSet<>(addedStaticFields);
+		Set<String> forceWriteFields     = new LinkedHashSet<>();
+		for (Map.Entry<String, ReinitField> e : reinitFields.entrySet()) {
+			FieldNode fn = fieldNodes.get(e.getKey());
+			if (fn == null) continue;   // 注解在不存在的字段上（理论上不可能）
+			boolean isStatic = (fn.access & Opcodes.ACC_STATIC) != 0;
+			(isStatic ? targetStaticFields : targetInstanceFields).add(e.getKey());
+			if (e.getValue().overwrite()) forceWriteFields.add(e.getKey());
+			log("@HotswapReinit on " + className + "." + e.getKey()
+			    + " -> mode=" + (e.getValue().overwrite() ? "OVERWRITE" : "CONDITIONAL"));
+		}
+		if (!reinitFields.isEmpty()) {
+			log("@HotswapReinit 扩展候选集 for " + className
+			    + ": instance=" + targetInstanceFields + ", static=" + targetStaticFields);
+		}
+
 		// ==================== 实例字段提取 ====================
 		Map<String, List<FieldExtract>> instanceExtracts = new LinkedHashMap<>();
 		Set<String> selfAssignedFields = new HashSet<>();
@@ -368,7 +414,7 @@ public class InitFix {
 				    + "." + init.name + "(): " + slots);
 			}
 			Map<String, FieldExtract> perField = extractFieldInits(
-			 host, className, init, addedInstanceFields, false, privateMethods,
+			 host, className, init, targetInstanceFields, false, privateMethods,
 			 paramFields, scan.rejected(), fromRoot, selfAssignedFields, instanceReasons);
 
 			for (Map.Entry<String, FieldExtract> fe : perField.entrySet()) {
@@ -383,7 +429,7 @@ public class InitFix {
 		Map<String, String> staticReasons = new LinkedHashMap<>();
 		if (clinitMethod != null) {
 			Map<String, FieldExtract> perField = extractFieldInits(
-			 host, className, clinitMethod, addedStaticFields,
+			 host, className, clinitMethod, targetStaticFields,
 			 true, privateMethods, Map.of(), Map.of(), true, null, staticReasons);
 			for (Map.Entry<String, FieldExtract> fe : perField.entrySet()) {
 				staticExtracts
@@ -395,7 +441,7 @@ public class InitFix {
 		// 提前进入 staticExtracts，避免依赖闭包误杀依赖该常量的其他字段，并保证拓扑排序优先输出。
 		for (FieldNode field : newClass.fields) {
 			if ((field.access & Opcodes.ACC_STATIC) != 0
-			    && addedStaticFields.contains(field.name)
+			    && targetStaticFields.contains(field.name)
 			    && field.value != null
 			    && !staticExtracts.containsKey(field.name)) {
 				List<AbstractInsnNode> insns = List.of(
@@ -417,14 +463,16 @@ public class InitFix {
 		// 存量实例与静态环境本来就是默认值：零开销放行，不生成补丁（也不会生成恒等 CAS 写）。
 		// 浮点按位判定，-0.0f / -0.0d / NaN 的位模式非零，不算零值等价。
 		Set<String> zeroInstanceFields = new LinkedHashSet<>();
-		for (String f : addedInstanceFields) {
+		for (String f : targetInstanceFields) {
 			if (selfAssignedFields.contains(f)) continue;
+			if (reinitFields.containsKey(f)) continue;   // §1.1：显式重置请求不受 T0 影响
 			if (isZeroEquivalentField(nest, newClass, fieldNodes.get(f), false, instanceExtracts)) {
 				zeroInstanceFields.add(f);
 			}
 		}
 		Set<String> zeroStaticFields = new LinkedHashSet<>();
-		for (String f : addedStaticFields) {
+		for (String f : targetStaticFields) {
+			if (reinitFields.containsKey(f)) continue;
 			if (isZeroEquivalentField(nest, newClass, fieldNodes.get(f), true, staticExtracts)) {
 				zeroStaticFields.add(f);
 			}
@@ -441,7 +489,7 @@ public class InitFix {
 		// 这样即便某字段在 extractFieldInits 里就被拒（不进 instanceExtracts），
 		// PatchReport 里依然有它的一条决策记录，且原因是提取期记录下来的真实原因。
 		Map<String, FieldDecision> instanceDecisions = new LinkedHashMap<>();
-		for (String f : addedInstanceFields) {
+		for (String f : targetInstanceFields) {
 			if (zeroInstanceFields.contains(f)) {
 				instanceDecisions.put(f, FieldDecision.NOTHING_TO_PATCH);
 				continue;
@@ -490,7 +538,7 @@ public class InitFix {
 		// ==================== 静态字段：接受 clinit 的提取结果 ====================
 		// 同上：先全部标记拒绝（带提取期记录的真实原因），再让 extract 命中的字段覆盖。
 		Map<String, FieldDecision> staticDecisions = new LinkedHashMap<>();
-		for (String f : addedStaticFields) {
+		for (String f : targetStaticFields) {
 			if (zeroStaticFields.contains(f)) {
 				staticDecisions.put(f, FieldDecision.NOTHING_TO_PATCH);
 				continue;
@@ -511,6 +559,10 @@ public class InitFix {
 			changed = false;
 
 			for (String f : new ArrayList<>(acceptedInstance)) {
+				// §1.1：@HotswapReinit 显式声明"允许覆写存量状态"，因此不再受
+				// "构造器里读过/别处写过该字段"这类后续加工检查约束 —— 已有字段本来
+				// 就会被各处读写，这条按定义不可能满足。
+				if (reinitFields.containsKey(f)) continue;
 				String reason = subsequentProcessingReason(
 				 f, acceptedInstance, instanceExtracts, initMethods,
 				 className, false, fieldNodes.get(f));
@@ -523,6 +575,7 @@ public class InitFix {
 			}
 
 			for (String f : new ArrayList<>(acceptedStatic)) {
+				if (reinitFields.containsKey(f)) continue;
 				String reason = subsequentProcessingReason(
 				 f, acceptedStatic, staticExtracts, staticScanMethods,
 				 className, true, fieldNodes.get(f));
@@ -538,7 +591,7 @@ public class InitFix {
 				String reason = depReason(
 				 f, instanceExtracts.get(f), className,
 				 acceptedInstance, acceptedStatic,
-				 addedInstanceFields, addedStaticFields);
+				 targetInstanceFields, targetStaticFields);
 				if (reason != null) {
 					log("Field '" + f + "' refused (dependency): " + reason);
 					acceptedInstance.remove(f);
@@ -551,7 +604,7 @@ public class InitFix {
 				String reason = depReason(
 				 f, staticExtracts.get(f), className,
 				 null, acceptedStatic,
-				 null, addedStaticFields);
+				 null, targetStaticFields);
 				if (reason != null) {
 					log("Static field '" + f + "' refused (dependency): " + reason);
 					acceptedStatic.remove(f);
@@ -635,10 +688,11 @@ public class InitFix {
 		initInsns   = rewritePrivateInvokes(className, initInsns);
 		clinitInsns = rewritePrivateInvokes(className, clinitInsns);
 
-		Set<String> allAddedFields = new HashSet<>(addedInstanceFields);
-		allAddedFields.addAll(addedStaticFields);
-		initInsns   = rewriteFieldPuts(className, initInsns, allAddedFields);
-		clinitInsns = rewriteFieldPuts(className, clinitInsns, allAddedFields);
+		Set<String> conditionalFields = new HashSet<>(targetInstanceFields);
+		conditionalFields.addAll(targetStaticFields);
+		conditionalFields.removeAll(forceWriteFields);
+		initInsns   = rewriteFieldPuts(className, initInsns, conditionalFields, forceWriteFields);
+		clinitInsns = rewriteFieldPuts(className, clinitInsns, conditionalFields, forceWriteFields);
 
 		boolean hasStatic   = !clinitInsns.isEmpty();
 		boolean hasInstance = !initInsns.isEmpty();
@@ -733,6 +787,90 @@ public class InitFix {
 		visited.add(f);
 		order.add(f);
 		return true;
+	}
+
+	// ==================== §1.1 存量重置扩展：注解扫描 ====================
+
+	/**
+	 * 扫描带 {@code @HotswapReinit} 的字段，解析其写入协议。
+	 *
+	 * <p>只做<b>描述符字符串匹配</b>，不加载注解类 —— 与 §2.1 的离线层级接口同一原则：
+	 * 在 transform 线程上 {@code Class.forName} 注解类型可能触发类加载死锁。
+	 * 元素缺省时按注解声明取默认值 {@code OVERWRITE}。</p>
+	 */
+	private static Map<String, ReinitField> scanReinitFields(ClassNode newClass) {
+		Map<String, ReinitField> out = new LinkedHashMap<>();
+		for (FieldNode f : newClass.fields) {
+			AnnotationNode reinit = findReinit(f);
+			if (reinit == null) continue;
+			out.put(f.name, new ReinitField(readOverwriteMode(reinit)));
+		}
+		return out;
+	}
+
+	private static AnnotationNode findReinit(FieldNode f) {
+		AnnotationNode found = findReinit(f.visibleAnnotations);
+		return found != null ? found : findReinit(f.invisibleAnnotations);
+	}
+
+	private static AnnotationNode findReinit(List<AnnotationNode> annotations) {
+		if (annotations == null) return null;
+		for (AnnotationNode a : annotations) {
+			if (REINIT_DESC.equals(a.desc)) return a;
+		}
+		return null;
+	}
+
+	/**
+	 * 读 {@code mode} 元素。ASM 把注解里的枚举值表示成 {@code String[]{描述符, 常量名}}。
+	 *
+	 * @return true 表示 {@code OVERWRITE}（默认值也是它）
+	 */
+	private static boolean readOverwriteMode(AnnotationNode a) {
+		if (a.values == null) return true;
+		for (int i = 0; i + 1 < a.values.size(); i += 2) {
+			if (!"mode".equals(a.values.get(i))) continue;
+			Object v = a.values.get(i + 1);
+			if (v instanceof String[] enumValue && enumValue.length == 2
+			    && REINIT_MODE_DESC.equals(enumValue[0])) {
+				return !"CONDITIONAL".equals(enumValue[1]);
+			}
+			if (v instanceof String[] other) {
+				log("Unexpected @HotswapReinit mode representation: "
+				    + Arrays.toString(other) + "; falling back to OVERWRITE");
+			}
+			return true;
+		}
+		return true;
+	}
+
+	/**
+	 * 轻量探测：新字节码里是否存在 {@code @HotswapReinit} 字段注解。
+	 *
+	 * <p>用途是 {@link #transform} 的快速路径：没有任何新增字段时它本来会直接返回，
+	 * 但"改了已有字段初值 + 标注解"恰恰是没有任何新增字段的形态，必须放行到
+	 * {@link #buildPatch}。这里跳过全部方法字节码，只读字段表与注解。</p>
+	 */
+	private static boolean hasReinitAnnotation(byte[] bytes) {
+		final boolean[] found = {false};
+		try {
+			new ClassReader(bytes).accept(new ClassVisitor(Opcodes.ASM9) {
+				@Override
+				public FieldVisitor visitField(int access, String name, String desc,
+				                               String signature, Object value) {
+					return new FieldVisitor(Opcodes.ASM9) {
+						@Override
+						public AnnotationVisitor visitAnnotation(String adesc, boolean visible) {
+							if (REINIT_DESC.equals(adesc)) found[0] = true;
+							return null;
+						}
+					};
+				}
+			}, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+		} catch (Throwable ignored) {
+			// 读不了就当没有注解：与"宁可不补"一致
+		}
+		return found[0];
 	}
 
 	// ==================== Analyzer 封装 ====================
@@ -1856,20 +1994,30 @@ public class InitFix {
 	}
 
 	/**
-	 * 把补丁片段里对新增字段的 {@code PUTFIELD}/{@code PUTSTATIC} 改写为
-	 * {@code invokedynamic}，由 {@link HotswapBridge#KIND_CONDITIONAL} 做条件 CAS 写。
+	 * 把补丁片段里对目标字段的 {@code PUTFIELD}/{@code PUTSTATIC} 改写为
+	 * {@code invokedynamic}，由 {@link HotswapBridge} 在链接期算好 Unsafe offset 后写入：
+	 * {@link HotswapBridge#KIND_CONDITIONAL} 条件 CAS（仅当字段仍是类型默认值），
+	 * {@link HotswapBridge#KIND_FORCE} 无条件写（{@code @HotswapReinit(mode = OVERWRITE)}）。
 	 * <p>final 与非 final 走同一条路径，语义统一。</p>
+	 *
+	 * @param conditionalFields 走条件 CAS 的字段
+	 * @param forceFields       走强制写的字段（两者不相交；force 优先）
 	 */
 	private static List<AbstractInsnNode> rewriteFieldPuts(
-	 String className, List<AbstractInsnNode> insns, Set<String> targetFields) {
-		if (insns.isEmpty() || targetFields.isEmpty()) return insns;
+	 String className, List<AbstractInsnNode> insns,
+	 Set<String> conditionalFields, Set<String> forceFields) {
+		if (insns.isEmpty() || (conditionalFields.isEmpty() && forceFields.isEmpty())) return insns;
 
 		List<AbstractInsnNode> rewritten = new ArrayList<>(insns.size());
 		for (AbstractInsnNode insn : insns) {
 			if (!(insn instanceof FieldInsnNode f)
 			    || !f.owner.equals(className)
-			    || !targetFields.contains(f.name)
 			    || (f.getOpcode() != Opcodes.PUTFIELD && f.getOpcode() != Opcodes.PUTSTATIC)) {
+				rewritten.add(insn);
+				continue;
+			}
+			boolean forced = forceFields.contains(f.name);
+			if (!forced && !conditionalFields.contains(f.name)) {
 				rewritten.add(insn);
 				continue;
 			}
@@ -1879,14 +2027,14 @@ public class InitFix {
 			Type    hostType = Type.getObjectType(className);
 
 			Object[] bsmArgs = new Object[] {
-			 HotswapBridge.KIND_CONDITIONAL,
+			 forced ? HotswapBridge.KIND_FORCE : HotswapBridge.KIND_CONDITIONAL,
 			 f.getOpcode(),
 			 hostType,
 			 hostType
 			};
 
 			rewritten.add(new InvokeDynamicInsnNode(f.name, indyDesc, BRIDGE_BSM, bsmArgs));
-			log("Rewriting field write via indy(conditional): "
+			log("Rewriting field write via indy(" + (forced ? "force" : "conditional") + "): "
 			    + className + "." + f.name + " " + f.desc);
 		}
 		return rewritten;
@@ -2419,7 +2567,13 @@ public class InitFix {
 		String ctrlReason = checkControlDependency(insns, minIdx, putIdx);
 		if (ctrlReason != null) return ctrlReason;
 
-		for (AbstractInsnNode n : collected) {
+		// 按<b>字节码顺序</b>遍历 collected（而不是 HashSet 的迭代顺序）：
+		// 同一个切片里可能同时命中多条门（例如"依赖构造器参数"与"IO 调用"），
+		// HashSet 的迭代顺序由 identity hash 决定、每次 JVM 运行都可能不同，
+		// 会让 PatchReport 里的 reason 飘忽。按序取第一条，报告才稳定且指向最早的问题。
+		for (int k = minIdx; k <= putIdx; k++) {
+			AbstractInsnNode n = insns.get(k);
+			if (!collected.contains(n)) continue;
 			if (n instanceof VarInsnNode v) {
 				if (isStatic) return "depends on local variables";
 				if (v.getOpcode() == Opcodes.ALOAD && v.var == 0) {

@@ -61,6 +61,16 @@ public final class HotswapBridge {
 	/** 新增字段的条件 CAS 写：owner 是宿主类。 */
 	public static final int KIND_CONDITIONAL = 1;
 
+	/**
+	 * 强制写（{@code @HotswapReinit(mode = OVERWRITE)}，{@code docs/INIT_FIX.md} §1.1）：
+	 * owner 是宿主类。
+	 * <p>与 {@link #KIND_CONDITIONAL} 的唯一差别是<b>不比较旧值</b>：无条件 volatile 写。
+	 * 之所以必须经 Unsafe 而不是 {@code putfield}：{@code final} 字段只允许在声明类的
+	 * 构造器里被赋值，而补丁是宿主的一个 hidden nestmate class，直接 {@code putfield}
+	 * 会在链接期抛 {@code IllegalAccessError}。</p>
+	 */
+	public static final int KIND_FORCE = 2;
+
 	private static final Unsafe UNSAFE      = Reflect.UNSAFE;
 	private static final Lookup IMPL_LOOKUP = Reflect.IMPL_LOOKUP;
 
@@ -97,6 +107,49 @@ public final class HotswapBridge {
 	 * 两种形态的剩余签名一致，都是 {@code (receiver, offset, value)}。</p>
 	 */
 	private static final Map<Class<?>, MethodHandle> CONDITIONAL_PUTTERS;
+
+	/**
+	 * valueClass -> MethodHandle {@code (Object, long, V)void}，无条件 volatile 写。
+	 * <p>供 {@link #KIND_FORCE} 使用。这些方法在 {@code sun.misc.Unsafe} 与
+	 * {@code jdk.internal.misc.Unsafe} 上都存在且命名一致（不存在 JDK 版本差异），
+	 * 不需要像条件 CAS 那样维护 fallback 链。</p>
+	 */
+	private static final Map<Class<?>, MethodHandle> FORCE_PUTTERS;
+
+	static {
+		Map<Class<?>, MethodHandle> m = new HashMap<>(16);
+		try {
+			m.put(Object.class, volatilePutter(
+			 new String[]{"putReferenceVolatile", "putObjectVolatile"}, Object.class));
+			m.put(boolean.class, volatilePutter(new String[]{"putBooleanVolatile"}, boolean.class));
+			m.put(byte.class, volatilePutter(new String[]{"putByteVolatile"}, byte.class));
+			m.put(char.class, volatilePutter(new String[]{"putCharVolatile"}, char.class));
+			m.put(short.class, volatilePutter(new String[]{"putShortVolatile"}, short.class));
+			m.put(int.class, volatilePutter(new String[]{"putIntVolatile"}, int.class));
+			m.put(long.class, volatilePutter(new String[]{"putLongVolatile"}, long.class));
+			m.put(float.class, volatilePutter(new String[]{"putFloatVolatile"}, float.class));
+			m.put(double.class, volatilePutter(new String[]{"putDoubleVolatile"}, double.class));
+		} catch (Throwable t) {
+			throw new ExceptionInInitializerError(t);
+		}
+		FORCE_PUTTERS = Collections.unmodifiableMap(m);
+	}
+
+	/**
+	 * 组合无条件写句柄：依次尝试 {@code names} 中第一个存在的方法，得到
+	 * {@code (Object, long, V)void}。都不存在则抛异常，让类初始化失败
+	 * （"JDK 版本超出预期"应该大声暴露，而不是退化成静默不写）。
+	 */
+	private static MethodHandle volatilePutter(String[] names, Class<?> valueClass)
+	 throws NoSuchMethodException {
+		MethodType type = MethodType.methodType(void.class, Object.class, long.class, valueClass);
+		for (String name : names) {
+			MethodHandle put = tryFind(name, type);
+			if (put != null) return put;
+		}
+		throw new NoSuchMethodException(
+		 "no volatile put found for " + valueClass + " (tried " + Arrays.toString(names) + ")");
+	}
 
 	static {
 		Map<Class<?>, MethodHandle> m = new HashMap<>(16);
@@ -262,6 +315,7 @@ public final class HotswapBridge {
 			return switch (kind) {
 				case KIND_PROTECTED -> protectedCallSite(caller, name, callSiteType, opcode, owner, host);
 				case KIND_CONDITIONAL -> conditionalFieldCallSite(caller, name, callSiteType, opcode, owner);
+				case KIND_FORCE -> forceFieldCallSite(caller, name, callSiteType, opcode, owner);
 				default -> throw new IllegalArgumentException("unknown bridge kind: " + kind);
 			};
 		} catch (BootstrapMethodError bme) {
@@ -287,6 +341,38 @@ public final class HotswapBridge {
 		MethodHandle template = CONDITIONAL_PUTTERS.get(key);
 		if (template == null) {
 			throw new IllegalStateException("no putter for " + valType);
+		}
+
+		Field field = findField(owner, fieldName, Type.getDescriptor(valType));
+		long offset = isStatic
+		 ? UNSAFE.staticFieldOffset(field)
+		 : UNSAFE.objectFieldOffset(field);
+		Object base = isStatic ? UNSAFE.staticFieldBase(field) : null;
+
+		MethodHandle writer = MethodHandles.insertArguments(template, 1, offset);
+		if (isStatic) {
+			writer = MethodHandles.insertArguments(writer, 0, base);
+		}
+		return new ConstantCallSite(writer.asType(callSiteType));
+	}
+
+	// ==================== 字段强制写（@HotswapReinit OVERWRITE） ====================
+
+	/**
+	 * {@link #KIND_FORCE} 的调用点：与 {@link #conditionalFieldCallSite} 同构，
+	 * 只是换成无条件 volatile 写（因此 final 字段也能写）。
+	 */
+	private static CallSite forceFieldCallSite(
+	 Lookup caller, String fieldName, MethodType callSiteType, int opcode, Class<?> owner
+	) throws Throwable {
+		boolean isStatic = opcode == Opcodes.PUTSTATIC;
+
+		Class<?> valType = callSiteType.parameterType(isStatic ? 0 : 1);
+		Class<?> key     = valType.isPrimitive() ? valType : Object.class;
+
+		MethodHandle template = FORCE_PUTTERS.get(key);
+		if (template == null) {
+			throw new IllegalStateException("no force putter for " + valType);
 		}
 
 		Field field = findField(owner, fieldName, Type.getDescriptor(valType));

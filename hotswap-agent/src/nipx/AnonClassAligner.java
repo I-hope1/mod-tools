@@ -34,6 +34,28 @@ import java.util.function.Function;
  */
 public final class AnonClassAligner {
 
+	/** 测试钩子：强制反向遍历以验证顺序无关性 */
+	public static boolean TEST_REVERSE_ORDER = false;
+
+	public static class AlignmentStats {
+		public int tier1Matches;
+		public int tier2Matches;
+		public int tier3Matches;
+		public int tier4Matches;
+		public int tier5Matches;
+		public int ambiguousMatches;
+		public int newClasses;
+		public int orphanClasses;
+
+		@Override
+		public String toString() {
+			return "AlignmentStats[T1=" + tier1Matches + ", T2=" + tier2Matches +
+			       ", T3=" + tier3Matches + ", T4=" + tier4Matches +
+			       ", T5=" + tier5Matches + ", ambiguous=" + ambiguousMatches +
+			       ", new=" + newClasses + ", orphans=" + orphanClasses + "]";
+		}
+	}
+
 	public static class Result {
 		/** 对齐重命名后的宿主类字节码（若输入了 hostBytes） */
 		public final byte[] alignedHostBytes;
@@ -43,16 +65,28 @@ public final class AnonClassAligner {
 		public final Map<String, String> renameMap;
 		/** 未被匹配上的旧匿名类（孤儿类内部名），应在 JVM 中保留不动不触发重定义 */
 		public final Set<String> orphanOldClasses;
+		/** 对齐统计数据 */
+		public final AlignmentStats stats;
 
 		public Result(
 		 byte[] alignedHostBytes,
 		 Map<String, byte[]> alignedAnonClasses,
 		 Map<String, String> renameMap,
 		 Set<String> orphanOldClasses) {
+			this(alignedHostBytes, alignedAnonClasses, renameMap, orphanOldClasses, new AlignmentStats());
+		}
+
+		public Result(
+		 byte[] alignedHostBytes,
+		 Map<String, byte[]> alignedAnonClasses,
+		 Map<String, String> renameMap,
+		 Set<String> orphanOldClasses,
+		 AlignmentStats stats) {
 			this.alignedHostBytes = alignedHostBytes;
 			this.alignedAnonClasses = Collections.unmodifiableMap(alignedAnonClasses);
 			this.renameMap = Collections.unmodifiableMap(renameMap);
 			this.orphanOldClasses = Collections.unmodifiableSet(orphanOldClasses);
+			this.stats = stats != null ? stats : new AlignmentStats();
 		}
 	}
 
@@ -98,8 +132,10 @@ public final class AnonClassAligner {
 		List<AnonInfo> oldInfos = parseInfos(hostSlash, normOld, oldResolver != null ? oldResolver : normOld::get);
 		List<AnonInfo> newInfos = parseInfos(hostSlash, normNew, newResolver != null ? newResolver : normNew::get);
 
+		AlignmentStats stats = new AlignmentStats();
+
 		// 多级匹配
-		Map<AnonInfo, AnonInfo> matchedNewToOld = matchHierarchical(oldInfos, newInfos);
+		Map<AnonInfo, AnonInfo> matchedNewToOld = matchHierarchical(oldInfos, newInfos, stats);
 
 		// 构建 renameMap
 		Map<String, String> renameMap = new LinkedHashMap<>();
@@ -139,6 +175,9 @@ public final class AnonClassAligner {
 			}
 		}
 
+		stats.newClasses = newInfos.size() - matchedNewToOld.size();
+		stats.orphanClasses = orphanOldClasses.size();
+
 		// 应用 ClassRemapper 重写所有新匿名类字节码
 		Map<String, byte[]> alignedAnonClasses = new LinkedHashMap<>();
 		for (AnonInfo n : newInfos) {
@@ -150,7 +189,7 @@ public final class AnonClassAligner {
 		// 应用 ClassRemapper 重写宿主类字节码
 		byte[] alignedHostBytes = newHostBytes != null ? remapClass(newHostBytes, renameMap) : null;
 
-		return new Result(alignedHostBytes, alignedAnonClasses, renameMap, orphanOldClasses);
+		return new Result(alignedHostBytes, alignedAnonClasses, renameMap, orphanOldClasses, stats);
 	}
 
 	/**
@@ -263,6 +302,28 @@ public final class AnonClassAligner {
 		return result;
 	}
 
+	public static String normalizeEnclosingMethod(String outerMethod) {
+		if (outerMethod == null) return null;
+		if (outerMethod.startsWith("lambda$")) {
+			// 在 JDK 8 中，lambda 体内的匿名类其 EnclosingMethod 指向 lambda$foo$0，
+			// 在 JDK 17/21 中则直接指向外层源码方法 foo。
+			// 统一规约为源码方法名，抹除 lambda 编号位移与跨 JDK 差异。
+			int lastDollar = outerMethod.lastIndexOf('$');
+			if (lastDollar > 7) {
+				String suffix = outerMethod.substring(lastDollar + 1);
+				boolean allDigits = true;
+				for (int i = 0; i < suffix.length(); i++) {
+					if (!Character.isDigit(suffix.charAt(i))) { allDigits = false; break; }
+				}
+				if (allDigits) {
+					return outerMethod.substring(7, lastDollar);
+				}
+			}
+			return outerMethod.substring(7);
+		}
+		return outerMethod;
+	}
+
 	private static List<AnonInfo> parseInfos(
 	 String hostSlash,
 	 Map<String, byte[]> classes,
@@ -284,7 +345,7 @@ public final class AnonClassAligner {
 			List<String> interfaces = cn.interfaces != null ? new ArrayList<>(cn.interfaces) : new ArrayList<>();
 			Collections.sort(interfaces);
 
-			String outerMethod = cn.outerMethod;
+			String outerMethod = normalizeEnclosingMethod(cn.outerMethod);
 			String outerMethodDesc = cn.outerMethodDesc;
 
 			List<String> fields = new ArrayList<>();
@@ -318,26 +379,33 @@ public final class AnonClassAligner {
 		return list;
 	}
 
-	private static Map<AnonInfo, AnonInfo> matchHierarchical(List<AnonInfo> oldList, List<AnonInfo> newList) {
+	private static Map<AnonInfo, AnonInfo> matchHierarchical(List<AnonInfo> oldList, List<AnonInfo> newList, AlignmentStats stats) {
 		Map<AnonInfo, AnonInfo> matchedNewToOld = new LinkedHashMap<>();
-		Set<AnonInfo> remainingOld = new LinkedHashSet<>(oldList);
-		Set<AnonInfo> remainingNew = new LinkedHashSet<>(newList);
+		List<AnonInfo> oldToUse = new ArrayList<>(oldList);
+		List<AnonInfo> newToUse = new ArrayList<>(newList);
+		if (TEST_REVERSE_ORDER) {
+			Collections.reverse(oldToUse);
+			Collections.reverse(newToUse);
+		}
+
+		Set<AnonInfo> remainingOld = new LinkedHashSet<>(oldToUse);
+		Set<AnonInfo> remainingNew = new LinkedHashSet<>(newToUse);
 
 		// Tier 1: 内容哈希精确相同 + 宿主方法相同
-		matchTier(remainingNew, remainingOld, matchedNewToOld, (n, o) ->
+		matchTier(1, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
 		 Objects.equals(n.contentHash, o.contentHash)
 		  && Objects.equals(n.outerMethod, o.outerMethod)
 		  && Objects.equals(n.outerMethodDesc, o.outerMethodDesc)
 		);
 
 		// Tier 2: 内容哈希全局精确相同
-		matchTier(remainingNew, remainingOld, matchedNewToOld, (n, o) ->
+		matchTier(2, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
 		 Objects.equals(n.contentHash, o.contentHash)
 		);
 
 		// Tier 3: 结构签名相同（应对修改方法体导致的哈希变化）
 		// 同宿主方法、同父类、同接口、同字段、同声明方法
-		matchTier(remainingNew, remainingOld, matchedNewToOld, (n, o) ->
+		matchTier(3, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
 		 Objects.equals(n.outerMethod, o.outerMethod)
 		  && Objects.equals(n.outerMethodDesc, o.outerMethodDesc)
 		  && Objects.equals(n.superName, o.superName)
@@ -347,7 +415,7 @@ public final class AnonClassAligner {
 		);
 
 		// Tier 4: 松散结构（同宿主方法 + 同基类与接口）
-		matchTier(remainingNew, remainingOld, matchedNewToOld, (n, o) ->
+		matchTier(4, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
 		 Objects.equals(n.outerMethod, o.outerMethod)
 		  && Objects.equals(n.outerMethodDesc, o.outerMethodDesc)
 		  && Objects.equals(n.superName, o.superName)
@@ -355,7 +423,7 @@ public final class AnonClassAligner {
 		);
 
 		// Tier 5: 位置回退（同名且同基类接口）
-		matchTier(remainingNew, remainingOld, matchedNewToOld, (n, o) ->
+		matchTier(5, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
 		 Objects.equals(n.name, o.name)
 		  && Objects.equals(n.superName, o.superName)
 		  && Objects.equals(n.interfaces, o.interfaces)
@@ -370,9 +438,11 @@ public final class AnonClassAligner {
 	}
 
 	private static void matchTier(
+	 int tier,
 	 Set<AnonInfo> remainingNew,
 	 Set<AnonInfo> remainingOld,
 	 Map<AnonInfo, AnonInfo> matchedNewToOld,
+	 AlignmentStats stats,
 	 MatchPredicate predicate) {
 		if (remainingNew.isEmpty() || remainingOld.isEmpty()) return;
 
@@ -389,8 +459,13 @@ public final class AnonClassAligner {
 				matchedNewToOld.put(n, best);
 				remainingOld.remove(best);
 				toRemoveNew.add(n);
+				recordTierMatch(stats, tier);
 			} else if (candidates.size() > 1) {
-				// 多个匹配：按相对相对次序或序号差值最小选择
+				stats.ambiguousMatches++;
+				System.err.println("[WARN-ANON] Ambiguous anonymous class match in Tier " + tier +
+				                   " for " + n.name + " (" + candidates.size() + " candidates). " +
+				                   "Falling back to relative positional order.");
+				// 多个匹配：按相对序号差值最小选择
 				AnonInfo best = null;
 				int minDiff = Integer.MAX_VALUE;
 				for (AnonInfo c : candidates) {
@@ -404,10 +479,22 @@ public final class AnonClassAligner {
 					matchedNewToOld.put(n, best);
 					remainingOld.remove(best);
 					toRemoveNew.add(n);
+					recordTierMatch(stats, tier);
 				}
 			}
 		}
 		remainingNew.removeAll(toRemoveNew);
+	}
+
+	private static void recordTierMatch(AlignmentStats stats, int tier) {
+		if (stats == null) return;
+		switch (tier) {
+			case 1: stats.tier1Matches++; break;
+			case 2: stats.tier2Matches++; break;
+			case 3: stats.tier3Matches++; break;
+			case 4: stats.tier4Matches++; break;
+			case 5: stats.tier5Matches++; break;
+		}
 	}
 
 	//endregion

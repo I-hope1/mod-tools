@@ -128,6 +128,27 @@ public final class AnonClassAligner {
 	 Map<String, byte[]> newAnonClasses,
 	 Function<String, byte[]> oldResolver,
 	 Function<String, byte[]> newResolver) {
+		return alignCascading(hostClassName, newHostBytes, oldAnonClasses, newAnonClasses, oldResolver, newResolver);
+	}
+
+	/**
+	 * 级联树匿名类对齐（Cascading Tree Anonymous Class Aligner）。
+	 *
+	 * <p>按 {@code $} 嵌套深度组织匿名类树形拓扑（Level 1 -> Level N），自顶向下逐层推进：
+	 * <ul>
+	 *   <li><b>Level 1</b>：宿主直接子匿名类（如 {@code Foo$1}, {@code Foo$2}），在宿主作用域内对齐；</li>
+	 *   <li><b>Level > 1</b>：嵌套匿名类（如 {@code Foo$1$1}），候选作用域严格收敛于其父类对齐映射后的目标旧类所包含的子类集合，物理阻断跨树夺舍；</li>
+	 *   <li><b>前缀派生</b>：未匹配新类的类名前缀强制继承其父类重映射后的目标名称，保证 JVM 内部类层级不被破坏；</li>
+	 *   <li><b>严格校验</b>：对齐映射结果执行单射性与前缀不变量校验，不符合则阻断提交。</li>
+	 * </ul>
+	 */
+	public static Result alignCascading(
+	 String hostClassName,
+	 byte[] newHostBytes,
+	 Map<String, byte[]> oldAnonClasses,
+	 Map<String, byte[]> newAnonClasses,
+	 Function<String, byte[]> oldResolver,
+	 Function<String, byte[]> newResolver) {
 		if (hostClassName == null) {
 			throw new IllegalArgumentException("hostClassName cannot be null");
 		}
@@ -137,50 +158,100 @@ public final class AnonClassAligner {
 		Map<String, byte[]> normOld = normalizeMap(oldAnonClasses, hostSlash);
 		Map<String, byte[]> normNew = normalizeMap(newAnonClasses, hostSlash);
 
-		// 解析新旧匿名类特征
+		// 解析新旧匿名类特征（接入严密准入分类器）
 		List<AnonInfo> oldInfos = parseInfos(hostSlash, normOld, oldResolver != null ? oldResolver : normOld::get);
 		List<AnonInfo> newInfos = parseInfos(hostSlash, normNew, newResolver != null ? newResolver : normNew::get);
 
 		AlignmentStats stats = new AlignmentStats();
 
-		// 多级匹配
-		Map<AnonInfo, AnonInfo> matchedNewToOld = matchHierarchical(oldInfos, newInfos, stats);
+		// 按层级（depth of '$'）组织类信息
+		Map<Integer, List<AnonInfo>> oldByLevel = new TreeMap<>();
+		Map<Integer, List<AnonInfo>> newByLevel = new TreeMap<>();
+		for (AnonInfo o : oldInfos) {
+			oldByLevel.computeIfAbsent(getHierarchyLevel(hostSlash, o.name), k -> new ArrayList<>()).add(o);
+		}
+		for (AnonInfo n : newInfos) {
+			newByLevel.computeIfAbsent(getHierarchyLevel(hostSlash, n.name), k -> new ArrayList<>()).add(n);
+		}
 
-		// 构建 renameMap
+		int maxLevel = 1;
+		for (int l : oldByLevel.keySet()) maxLevel = Math.max(maxLevel, l);
+		for (int l : newByLevel.keySet()) maxLevel = Math.max(maxLevel, l);
+		if (maxLevel > 4) {
+			HotSwapAgent.warn("[ANON_ALIGN] Anonymous class nesting depth " + maxLevel + " > 4 detected. Safety guard triggered.");
+		}
+
+		Map<AnonInfo, AnonInfo> matchedNewToOld = new LinkedHashMap<>();
 		Map<String, String> renameMap = new LinkedHashMap<>();
 		Set<String> takenTargetNames = new HashSet<>(normOld.keySet());
 
-		// 1. 已匹配项建立映射
-		for (Map.Entry<AnonInfo, AnonInfo> entry : matchedNewToOld.entrySet()) {
-			AnonInfo n = entry.getKey();
-			AnonInfo o = entry.getValue();
-			renameMap.put(n.name, o.name);
-		}
+		// 自顶向下逐层推进（Top-down Cascading Progression）
+		for (int level = 1; level <= maxLevel; level++) {
+			List<AnonInfo> oldLevelInfos = oldByLevel.getOrDefault(level, Collections.emptyList());
+			List<AnonInfo> newLevelInfos = newByLevel.getOrDefault(level, Collections.emptyList());
 
-		// 2. 为未匹配的新匿名类分配不冲突的目标名称
-		for (AnonInfo n : newInfos) {
-			if (!renameMap.containsKey(n.name)) {
-				// 寻找最小未占用的编号：保留父前缀路径（防止多层嵌套 Foo$1$1 被错误打平成一级类 Foo$3）
-				int lastDollar = n.name.lastIndexOf('$');
-				String prefix = lastDollar > 0 ? n.name.substring(0, lastDollar) : hostSlash;
-				// 关键修复（A2）：若父级类已被重命名（例如新 Foo$2 映射回旧 Foo$1），
-				// 则未匹配子类的新编号必须基于映射后的父名派生，维持正确的 JVM 层级树
-				String mappedParent = renameMap.get(prefix);
-				if (mappedParent != null) {
-					prefix = mappedParent;
+			if (level == 1) {
+				// Level 1: 宿主直接子匿名类 (如 Foo$1, Foo$2)
+				Map<AnonInfo, AnonInfo> l1Matches = matchHierarchical(oldLevelInfos, newLevelInfos, stats);
+				for (Map.Entry<AnonInfo, AnonInfo> entry : l1Matches.entrySet()) {
+					matchedNewToOld.put(entry.getKey(), entry.getValue());
+					renameMap.put(entry.getKey().name, entry.getValue().name);
 				}
-				int idx = 1;
-				String candidate;
-				do {
-					candidate = prefix + "$" + idx;
-					idx++;
-				} while (takenTargetNames.contains(candidate));
-				takenTargetNames.add(candidate);
-				renameMap.put(n.name, candidate);
+				for (AnonInfo n : newLevelInfos) {
+					if (!renameMap.containsKey(n.name)) {
+						int idx = 1;
+						String candidate;
+						do {
+							candidate = hostSlash + "$" + idx++;
+						} while (takenTargetNames.contains(candidate));
+						takenTargetNames.add(candidate);
+						renameMap.put(n.name, candidate);
+					}
+				}
+			} else {
+				// Level > 1: 嵌套匿名类 (如 Foo$1$1, Foo$2$1)
+				// 作用域收敛：候选严格限制在已配对的父级类名所对应的旧子级范围内
+				Map<String, List<AnonInfo>> newByParent = new LinkedHashMap<>();
+				for (AnonInfo n : newLevelInfos) {
+					newByParent.computeIfAbsent(getParentName(hostSlash, n.name), k -> new ArrayList<>()).add(n);
+				}
+
+				Map<String, List<AnonInfo>> oldByParent = new LinkedHashMap<>();
+				for (AnonInfo o : oldLevelInfos) {
+					oldByParent.computeIfAbsent(getParentName(hostSlash, o.name), k -> new ArrayList<>()).add(o);
+				}
+
+				for (Map.Entry<String, List<AnonInfo>> entry : newByParent.entrySet()) {
+					String newParent = entry.getKey();
+					List<AnonInfo> newChildren = entry.getValue();
+					String targetParent = renameMap.get(newParent);
+					if (targetParent == null) {
+						targetParent = newParent;
+					}
+
+					List<AnonInfo> oldCandidateChildren = oldByParent.getOrDefault(targetParent, Collections.emptyList());
+					Map<AnonInfo, AnonInfo> childMatches = matchHierarchical(oldCandidateChildren, newChildren, stats);
+					for (Map.Entry<AnonInfo, AnonInfo> m : childMatches.entrySet()) {
+						matchedNewToOld.put(m.getKey(), m.getValue());
+						renameMap.put(m.getKey().name, m.getValue().name);
+					}
+
+					for (AnonInfo n : newChildren) {
+						if (!renameMap.containsKey(n.name)) {
+							int idx = 1;
+							String candidate;
+							do {
+								candidate = targetParent + "$" + idx++;
+							} while (takenTargetNames.contains(candidate));
+							takenTargetNames.add(candidate);
+							renameMap.put(n.name, candidate);
+						}
+					}
+				}
 			}
 		}
 
-		// 收集旧类孤儿
+		// 收集孤儿类
 		Set<String> matchedOldNames = new HashSet<>();
 		for (AnonInfo o : matchedNewToOld.values()) {
 			matchedOldNames.add(o.name);
@@ -194,6 +265,9 @@ public final class AnonClassAligner {
 
 		stats.newClasses = newInfos.size() - matchedNewToOld.size();
 		stats.orphanClasses = orphanOldClasses.size();
+
+		// 后置严格校验 (Validation Invariants)
+		validateRenameMap(renameMap, hostSlash);
 
 		// 应用 ClassRemapper 重写所有新匿名类字节码
 		Map<String, byte[]> alignedAnonClasses = new LinkedHashMap<>();
@@ -232,6 +306,61 @@ public final class AnonClassAligner {
 		ClassRemapper remapper = new ClassRemapper(cw, new SimpleRemapper(renameMap));
 		cr.accept(remapper, 0);
 		return cw.toByteArray();
+	}
+
+	public static int getHierarchyLevel(String hostSlash, String anonSlash) {
+		if (hostSlash == null || anonSlash == null || !anonSlash.startsWith(hostSlash + "$")) return 1;
+		String suffix = anonSlash.substring(hostSlash.length() + 1);
+		int count = 1;
+		for (int i = 0; i < suffix.length(); i++) {
+			if (suffix.charAt(i) == '$') count++;
+		}
+		return count;
+	}
+
+	public static String getParentName(String hostSlash, String anonSlash) {
+		if (anonSlash == null) return hostSlash;
+		int lastDollar = anonSlash.lastIndexOf('$');
+		return lastDollar > 0 ? anonSlash.substring(0, lastDollar) : hostSlash;
+	}
+
+	public static void validateRenameMap(Map<String, String> renameMap, String hostSlash) {
+		if (renameMap == null || renameMap.isEmpty()) return;
+		Set<String> seenTargets = new HashSet<>();
+		for (Map.Entry<String, String> e : renameMap.entrySet()) {
+			String src = e.getKey();
+			String tgt = e.getValue();
+			if (!seenTargets.add(tgt)) {
+				throw new IllegalStateException("[ANON_ALIGN_VALIDATION] Non-injective mapping detected: multiple classes map to " + tgt);
+			}
+			String srcParent = getParentName(hostSlash, src);
+			String expectedPrefix = renameMap.getOrDefault(srcParent, srcParent);
+			if (!tgt.startsWith(expectedPrefix + "$")) {
+				throw new IllegalStateException("[ANON_ALIGN_VALIDATION] Prefix invariant violated for " + src + " -> " + tgt +
+					" (expected prefix: " + expectedPrefix + "$)");
+			}
+		}
+	}
+
+	/**
+	 * 严格准入分类器：校验字节码是否为真正的匿名内部类。
+	 * <p>综合 JVM 规范的 {@code InnerClasses} 属性（匿名类 innerName 必为 null）、
+	 * {@code ACC_ENUM} 排除以及名称模式校验。</p>
+	 */
+	public static boolean isAnonymousClass(ClassNode cn, String hostClassName) {
+		if (cn == null || hostClassName == null) return false;
+		if ((cn.access & Opcodes.ACC_ENUM) != 0) return false;
+		if (cn.innerClasses != null) {
+			for (org.objectweb.asm.tree.InnerClassNode icn : cn.innerClasses) {
+				if (cn.name.equals(icn.name)) {
+					if (icn.innerName != null) {
+						return false;
+					}
+					break;
+				}
+			}
+		}
+		return isAnonymousClassName(hostClassName, cn.name);
 	}
 
 	/**
@@ -445,6 +574,7 @@ public final class AnonClassAligner {
 
 			ClassNode cn = new ClassNode();
 			new ClassReader(bytes).accept(cn, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+			if (!isAnonymousClass(cn, hostSlash)) continue;
 
 			Long hash = AnonClassHasher.hash(name, bytes, hostSlash, resolver, hashCache, null, 0);
 
@@ -506,19 +636,21 @@ public final class AnonClassAligner {
 		Set<AnonInfo> remainingOld = new LinkedHashSet<>(oldToUse);
 		Set<AnonInfo> remainingNew = new LinkedHashSet<>(newToUse);
 
-		// Tier 1: 内容哈希精确相同 + 宿主方法相同
+		// Tier 1: 内容哈希精确相同 + 宿主方法相同 (允许 minDiff 仲裁)
 		matchTier(1, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
 		 Objects.equals(n.contentHash, o.contentHash)
 		  && Objects.equals(n.outerMethod, o.outerMethod)
-		  && Objects.equals(n.outerMethodDesc, o.outerMethodDesc)
+		  && Objects.equals(n.outerMethodDesc, o.outerMethodDesc),
+		 true
 		);
 
-		// Tier 2: 内容哈希全局精确相同
+		// Tier 2: 内容哈希全局精确相同 (禁止跨方法 minDiff，仅全类唯一孤本采纳)
 		matchTier(2, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
-		 Objects.equals(n.contentHash, o.contentHash)
+		 Objects.equals(n.contentHash, o.contentHash),
+		 false
 		);
 
-		// Tier 3: 结构签名相同（应对修改方法体导致的哈希变化）
+		// Tier 3: 结构签名相同（应对修改方法体导致的哈希变化，允许 minDiff 仲裁）
 		// 同宿主方法、同父类、同接口、同字段、同声明方法
 		matchTier(3, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
 		 Objects.equals(n.outerMethod, o.outerMethod)
@@ -526,22 +658,25 @@ public final class AnonClassAligner {
 		  && Objects.equals(n.superName, o.superName)
 		  && Objects.equals(n.interfaces, o.interfaces)
 		  && Objects.equals(n.fields, o.fields)
-		  && Objects.equals(n.methods, o.methods)
+		  && Objects.equals(n.methods, o.methods),
+		 true
 		);
 
-		// Tier 4: 松散结构（同宿主方法 + 同基类与接口）
+		// Tier 4: 松散结构（同宿主方法 + 同基类与接口，禁止多候选 minDiff 盲猜，直接拒绝）
 		matchTier(4, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
 		 Objects.equals(n.outerMethod, o.outerMethod)
 		  && Objects.equals(n.outerMethodDesc, o.outerMethodDesc)
 		  && Objects.equals(n.superName, o.superName)
-		  && Objects.equals(n.interfaces, o.interfaces)
+		  && Objects.equals(n.interfaces, o.interfaces),
+		 false
 		);
 
-		// Tier 5: 位置回退（同名且同基类接口）
+		// Tier 5: 位置回退（同名且同基类接口，仅孤本保底，存在竞争者坚决拒绝）
 		matchTier(5, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
 		 Objects.equals(n.name, o.name)
 		  && Objects.equals(n.superName, o.superName)
-		  && Objects.equals(n.interfaces, o.interfaces)
+		  && Objects.equals(n.interfaces, o.interfaces),
+		 false
 		);
 
 		return matchedNewToOld;
@@ -582,7 +717,8 @@ public final class AnonClassAligner {
 	 Set<AnonInfo> remainingOld,
 	 Map<AnonInfo, AnonInfo> matchedNewToOld,
 	 AlignmentStats stats,
-	 MatchPredicate predicate) {
+	 MatchPredicate predicate,
+	 boolean allowMinDiff) {
 		if (remainingNew.isEmpty() || remainingOld.isEmpty()) return;
 
 		Map<AnonInfo, List<AnonInfo>> newToOld = new LinkedHashMap<>();
@@ -627,7 +763,7 @@ public final class AnonClassAligner {
 			}
 		}
 
-		if (remainingNew.isEmpty() || remainingOld.isEmpty()) return;
+		if (!allowMinDiff || remainingNew.isEmpty() || remainingOld.isEmpty()) return;
 
 		// 第二趟：存在 1-to-N 或 N-to-1 歧义候选，按 minDiff 绝对确定性仲裁（具备完全的顺序无关性）
 		List<CandidatePair> conflictPairs = new ArrayList<>();

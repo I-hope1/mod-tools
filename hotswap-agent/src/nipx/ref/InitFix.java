@@ -2344,12 +2344,14 @@ public class InitFix {
 		Class<?> pc = h.lookupClass();
 
 		// 必须在取 Handle 时就 asType 适配：init$F 的形参是宿主类型，驱动手里只有 Object。
-		Map<String, MethodHandle> instanceHandles = new LinkedHashMap<>();
-		for (FieldPatchTask task : plan.instanceTasks()) {
-			MethodHandle mh = h.findStatic(pc, task.methodName(),
-			 MethodType.methodType(void.class, host));
-			instanceHandles.put(task.fieldName(),
-			 mh.asType(MethodType.methodType(void.class, Object.class)));
+		BoundInstanceTask[] instanceTasks = new BoundInstanceTask[plan.instanceTasks().size()];
+		boolean hasInstanceDependencies = false;
+		for (int i = 0; i < instanceTasks.length; i++) {
+			FieldPatchTask task = plan.instanceTasks().get(i);
+			MethodHandle handle = h.findStatic(pc, task.methodName(), MethodType.methodType(void.class, host))
+				.asType(MethodType.methodType(void.class, Object.class));
+			instanceTasks[i] = new BoundInstanceTask(task.fieldName(), task.dependencies(), handle);
+			hasInstanceDependencies |= !task.dependencies().isEmpty();
 		}
 
 		Map<String, MethodHandle> staticHandles = new LinkedHashMap<>();
@@ -2381,9 +2383,11 @@ public class InitFix {
 			                  + ", fields=" + plan.instanceTasks().size());
 
 			long start = System.nanoTime();
-			for (Object ins : alive) {
-				runTasks(host, plan.instanceTasks(), instanceHandles, ins,
+			if (hasInstanceDependencies) {
+				runDependentInstanceTasks(host, alive, instanceTasks,
 				 failedFields, skippedFields, failureReasons);
+			} else {
+				runIndependentInstanceTasks(host, alive, instanceTasks, failedFields, failureReasons);
 			}
 			long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
 
@@ -2418,6 +2422,63 @@ public class InitFix {
 		}
 	}
 
+	private record BoundInstanceTask(String fieldName, Set<String> dependencies, MethodHandle handle) {}
+
+	private static void runIndependentInstanceTasks(
+	 Class<?> host, List<Object> targets, BoundInstanceTask[] tasks,
+	 Set<String> failedFields, Map<String, String> failureReasons) {
+		for (Object target : targets) {
+			for (BoundInstanceTask task : tasks) {
+				try {
+					task.handle().invokeExact(target);
+				} catch (LinkageError le) {
+					throw le;
+				} catch (Throwable t) {
+					recordTaskFailure(host, task.fieldName(), t, failedFields, failureReasons);
+				}
+			}
+		}
+	}
+
+	private static void runDependentInstanceTasks(
+	 Class<?> host, List<Object> targets, BoundInstanceTask[] tasks,
+	 Set<String> failedFields, Set<String> skippedFields, Map<String, String> failureReasons) {
+		for (Object target : targets) {
+			for (BoundInstanceTask task : tasks) {
+				Set<String> dependencies = task.dependencies();
+				if (!dependencies.isEmpty()
+				    && (!Collections.disjoint(dependencies, failedFields)
+				        || !Collections.disjoint(dependencies, skippedFields))) {
+					if (skippedFields.add(task.fieldName())) {
+						failureReasons.putIfAbsent(task.fieldName(), "dependency failed: "
+						                                             + intersection(dependencies, failedFields, skippedFields));
+						HotSwapAgent.warn("Skipping field init for " + host.getName() + "."
+						                  + task.fieldName() + " because a dependency failed");
+					}
+					continue;
+				}
+				try {
+					task.handle().invokeExact(target);
+				} catch (LinkageError le) {
+					throw le;
+				} catch (Throwable t) {
+					recordTaskFailure(host, task.fieldName(), t, failedFields, failureReasons);
+				}
+			}
+		}
+	}
+
+	private static void recordTaskFailure(
+	 Class<?> host, String fieldName, Throwable failure,
+	 Set<String> failedFields, Map<String, String> failureReasons) {
+		failedFields.add(fieldName);
+		failureReasons.putIfAbsent(fieldName, String.valueOf(failure));
+		if (DETAILED_FAILURE_LOGS.incrementAndGet() <= MAX_DETAILED_FAILURES) {
+			HotSwapAgent.error("Field init patch failed for " + host.getName()
+			                   + "." + fieldName + ": " + failure.getMessage(), failure);
+		}
+	}
+
 	/**
 	 * 按拓扑序执行一组字段任务。
 	 * @param target 实例字段时为对象，静态字段时忽略
@@ -2428,13 +2489,15 @@ public class InitFix {
 	 Map<String, String> failureReasons) {
 
 		for (FieldPatchTask task : tasks) {
-			if (!Collections.disjoint(task.dependencies(), failedFields)
-			    || !Collections.disjoint(task.dependencies(), skippedFields)) {
-				skippedFields.add(task.fieldName());
-				failureReasons.putIfAbsent(task.fieldName(), "dependency failed: "
-				                                             + intersection(task.dependencies(), failedFields, skippedFields));
-				HotSwapAgent.warn("Skipping field init for " + host.getName() + "."
-				                  + task.fieldName() + " because a dependency failed");
+			if (!task.dependencies().isEmpty()
+			    && (!Collections.disjoint(task.dependencies(), failedFields)
+			        || !Collections.disjoint(task.dependencies(), skippedFields))) {
+				if (skippedFields.add(task.fieldName())) {
+					failureReasons.putIfAbsent(task.fieldName(), "dependency failed: "
+					                                             + intersection(task.dependencies(), failedFields, skippedFields));
+					HotSwapAgent.warn("Skipping field init for " + host.getName() + "."
+					                  + task.fieldName() + " because a dependency failed");
+				}
 				continue;
 			}
 			MethodHandle mh = handles.get(task.fieldName());
@@ -2448,12 +2511,7 @@ public class InitFix {
 			} catch (LinkageError le) {
 				throw le;   // §1.2 熔断：类元数据假设已被打破，继续修补没有意义
 			} catch (Throwable t) {
-				failedFields.add(task.fieldName());
-				failureReasons.putIfAbsent(task.fieldName(), String.valueOf(t));
-				if (DETAILED_FAILURE_LOGS.incrementAndGet() <= MAX_DETAILED_FAILURES) {
-					HotSwapAgent.error("Field init patch failed for " + host.getName()
-					                   + "." + task.fieldName() + ": " + t.getMessage(), t);
-				}
+				recordTaskFailure(host, task.fieldName(), t, failedFields, failureReasons);
 			}
 		}
 	}

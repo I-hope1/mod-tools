@@ -63,9 +63,11 @@ public interface ClassHierarchyOracle {
     List<ClassNode> getNestMembers(String className);
 }
 ```
-* **实现底座**：运行时内嵌模式直接对接 `AnnotationTransformer.HierarchyTree`（基于 BFS 解析字节码与 `bytecodeCache`），彻底避开动态类加载。`[已实现-转换底座]`
+* **实现底座**：运行时内嵌模式由 `HierarchyTreeOracle` 对接 `AnnotationTransformer.HierarchyTree` 的 BFS 与 `bytecodeCache` / ClassLoader 资源回退；整个查询过程不触发动态类加载。类名采用 JVM internal form。`HierarchyTree` 全局只保存 `superName`、interfaces、access；Oracle 的 ClassNode 元数据仅存在于单次分析实例。`[已实现]`
+* **Nest 扫描**：成员清单以 `SKIP_CODE` 读取；字段写入证明另用 ASM visitor 流式扫描方法体，只保留紧凑的 `PUTFIELD` / `PUTSTATIC` 记录，不构造完整方法指令树。
+* **失败语义**：无法解析时层级/接口查询返回 `false`；类修饰符查询抛 `IllegalArgumentException`；成员查询返回 empty，调用方在安全门中按“无法证明”处理；Nest 任一声明成员不可读时 Oracle 抛 `IllegalStateException`，`InitFix` 捕获、记录 warning 并拒绝全 Nest 写入证明。
 
-> **实现状态（截至 `358b232f`）**：接口本身尚未抽成 `ClassHierarchyOracle` 类型。已落地的只有其中一项能力的等价物 —— `InitFix.NestView`（§4.3 的全 Nest 单写证明与 §4.1 T0 的"无写入"判定用它读 Nest 成员字节码，**不做 `Class.forName`**）。`InitFix.isProtectedCrossPackageAccess` 仍在用 `Class.forName` + 反射读修饰符，是 §2.1 要消除的那类调用，尚未迁移。
+> `InitFix.isProtectedCrossPackageAccess` 已改为通过 oracle 读取成员标志，不再使用 `Class.forName` 或反射。protected 跨包判断按类名中的 package 路径比较；Oracle 接口不携带定义类加载器身份，因此运行时包的跨 ClassLoader 同名包区别不在此契约内。
 
 ### 2.2 `PatchPlan` 前置条件指纹与多轮热更基线追踪 `[目标规范]`
 * **规范化基线对象**：`baseClassHash` 指向**经 `AnnotationTransformer`（`forceStaticLambdas` 等）改写规范化后、传给 JVM redefine 的字节码哈希**，而非磁盘原始字节码。
@@ -380,7 +382,7 @@ public class Counter {
 | 规范条目 | 状态 | 落地位置 / 证据 |
 | :--- | :--- | :--- |
 | §1.2 五条不变量 | ✅ | `InitFix`（`isInitialized` 守卫、`PENDING` 弱键 + 5min TTL、`PatchReport` 解耦、`LinkageError` 熔断、`afterRedefineFailed`） |
-| §2.1 `ClassHierarchyOracle` | 🔶 | `InitFix.NestView`（只读字节码）已覆盖 Nest 部分；`isProtectedCrossPackageAccess` 仍走 `Class.forName` |
+| §2.1 `ClassHierarchyOracle` | ✅ | `ClassHierarchyOracle` / `HierarchyTreeOracle`：离线层级、类/成员修饰符与完整 Nest 读取；protected 检查不再反射 |
 | §2.2 `PatchPlan` 基线指纹 | ⬜ | — |
 | §3 两阶段 Schema-First / §3.2 阶段 A | ⬜ | 单阶段 |
 | §3.4 失败策略矩阵（`ABORT_ON_FATAL`/`ABORT_ON_ANY`） | 🔶 | 单字段失败跳过 + 依赖失败跳过 + `LinkageError` 熔断已具备；"中止并放弃提交阶段 C"依赖两阶段 |

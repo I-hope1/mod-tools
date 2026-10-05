@@ -578,9 +578,12 @@ public class AnnotationTransformer implements ClassFileTransformer {
 	/** 给类打上幂等标记（已存在则不重复添加）。 */
 	private static void addForcedMarker(ClassNode cn) {
 		if (hasForcedMarker(cn)) return;
+		// JVMS 4.5：接口字段必须是 public static final，private 会 ClassFormatError (0x101A)
+    int access = (cn.access & ACC_INTERFACE) != 0
+        ? ACC_PUBLIC  | ACC_STATIC | ACC_FINAL | ACC_SYNTHETIC   // 0x1019
+        : ACC_PRIVATE | ACC_STATIC | ACC_FINAL | ACC_SYNTHETIC;  // 0x101A
 		cn.fields.add(new FieldNode(
-			ACC_PRIVATE | ACC_STATIC | ACC_FINAL | ACC_SYNTHETIC,
-			FORCED_MARKER, "Z", null, null));
+			access, FORCED_MARKER, "Z", null, null));
 	}
 
 	private static boolean isLambdaMetafactory(Handle h) {
@@ -616,29 +619,25 @@ public class AnnotationTransformer implements ClassFileTransformer {
 	 * 用于在不触发 ClassLoader.loadClass 的前提下，判断类的继承与实现关系
 	 */
 	public static class HierarchyTree {
-		private static final ConcurrentHashMap<String, ClassNode> tree = new ConcurrentHashMap<>();
+		private static final ConcurrentHashMap<String, HierarchyNode> tree = new ConcurrentHashMap<>();
 
-		static class ClassNode {
-			String   superName;
-			String[] interfaces;
-			boolean  isInterface;
+		private static final class HierarchyNode {
+			final String superName;
+			final String[] interfaces;
+			final int access;
 
-			ClassNode(String superName, String[] interfaces, boolean isInterface) {
+			HierarchyNode(String superName, String[] interfaces, int access) {
 				this.superName = superName;
 				this.interfaces = interfaces;
-				this.isInterface = isInterface;
+				this.access = access;
 			}
 		}
 
 		public static void register(byte[] classfileBuffer) {
 			try {
-				ClassReader cr          = new ClassReader(classfileBuffer);
-				String      className   = cr.getClassName();
-				String      superName   = cr.getSuperName();
-				String[]    interfaces  = cr.getInterfaces();
-				boolean     isInterface = (cr.getAccess() & ACC_INTERFACE) != 0;
-
-				tree.put(className, new ClassNode(superName, interfaces, isInterface));
+				ClassReader reader = new ClassReader(classfileBuffer);
+				tree.put(reader.getClassName(), new HierarchyNode(
+					reader.getSuperName(), reader.getInterfaces(), reader.getAccess()));
 			} catch (Exception ignored) {
 			}
 		}
@@ -659,7 +658,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 
 			while (!queue.isEmpty()) {
 				String    current = queue.poll();
-				ClassNode node    = getNode(current, loader);
+				HierarchyNode node = getNode(current, loader);
 
 				if (node == null) continue;
 
@@ -688,8 +687,8 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		 * 获取类节点，如果缓存中没有，尝试从目标 ClassLoader 以资源流的方式读取，
 		 * 坚决不使用 Class.forName！
 		 */
-		private static ClassNode getNode(String slashName, ClassLoader loader) {
-			ClassNode node = tree.get(slashName);
+		private static HierarchyNode getNode(String slashName, ClassLoader loader) {
+			HierarchyNode node = tree.get(slashName);
 			if (node != null) return node;
 
 			// 尝试从缓存获取 (兼容原有的 bytecodeCache)
@@ -714,8 +713,8 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		}
 
 		public static boolean isInterface(String slashName, ClassLoader loader) {
-			ClassNode node = getNode(slashName, loader);
-			return node != null && node.isInterface;
+			HierarchyNode node = getNode(slashName, loader);
+			return node != null && (node.access & ACC_INTERFACE) != 0;
 		}
 	}
 	//endregion
@@ -752,7 +751,7 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			// 向上寻找 type1 的父类，直到找到也是 type2 父类的类
 			String type1Super = type1;
 			do {
-				HierarchyTree.ClassNode node = HierarchyTree.getNode(type1Super, targetLoader);
+				HierarchyTree.HierarchyNode node = HierarchyTree.getNode(type1Super, targetLoader);
 				if (node == null || node.superName == null) {
 					return "java/lang/Object";
 				}

@@ -9,14 +9,10 @@ import org.objectweb.asm.tree.*;
 import org.objectweb.asm.tree.analysis.*;
 import org.objectweb.asm.tree.analysis.Frame;
 
-import java.io.InputStream;
 import java.lang.invoke.*;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Array;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.*;
 import java.util.concurrent.*;
@@ -143,7 +139,7 @@ public class InitFix {
 	private static final String INSTANCE_PATCH_PREFIX = "init$";
 	private static final String PATCH_SUFFIX          = "$$HotswapPatch";
 
-	private static final long PENDING_TTL_NANOS = TimeUnit.MINUTES.toNanos(5);
+	private static final long PENDING_TTL_NANOS     = TimeUnit.MINUTES.toNanos(5);
 	private static final int  MAX_DETAILED_FAILURES = 5;
 
 	/**
@@ -153,7 +149,7 @@ public class InitFix {
 	private static final AtomicInteger DETAILED_FAILURE_LOGS = new AtomicInteger();
 
 	/** {@code @HotswapReinit} 的描述符（纯字符串匹配，不加载注解类）。 */
-	private static final String REINIT_DESC = "Lnipx/annotation/HotswapReinit;";
+	private static final String REINIT_DESC      = "Lnipx/annotation/HotswapReinit;";
 	/** {@code @HotswapReinit} 的 {@code mode} 元素类型描述符。 */
 	private static final String REINIT_MODE_DESC = "Lnipx/annotation/HotswapReinit$Mode;";
 
@@ -256,7 +252,6 @@ public class InitFix {
 
 	/**
 	 * 单个字段的补丁任务（{@code docs/INIT_FIX.md} §5.2）。
-	 *
 	 * @param methodName   伴生类里承载该字段的独立静态方法名
 	 * @param fieldName    字段名（报告/失败台账的键）
 	 * @param isStatic     静态字段（方法无参，整个补丁只调用一次）
@@ -279,12 +274,12 @@ public class InitFix {
 
 		public PatchPlan {
 			instanceTasks = instanceTasks == null ? List.of() : List.copyOf(instanceTasks);
-			staticTasks   = staticTasks   == null ? List.of() : List.copyOf(staticTasks);
+			staticTasks = staticTasks == null ? List.of() : List.copyOf(staticTasks);
 		}
 
 		public boolean isEmpty() { return instanceTasks.isEmpty() && staticTasks.isEmpty(); }
 
-		public boolean hasStatic()   { return !staticTasks.isEmpty(); }
+		public boolean hasStatic() { return !staticTasks.isEmpty(); }
 		public boolean hasInstance() { return !instanceTasks.isEmpty(); }
 
 		public List<FieldPatchTask> allTasks() {
@@ -308,7 +303,7 @@ public class InitFix {
 			}
 		}
 
-		boolean hasStatic()   { return plan.hasStatic(); }
+		boolean hasStatic() { return plan.hasStatic(); }
 		boolean hasInstance() { return plan.hasInstance(); }
 
 		PendingPatch withSnapshot(List<WeakReference<Object>> snapshot) {
@@ -332,7 +327,6 @@ public class InitFix {
 
 	/**
 	 * 一次构造器参数扫描的结果。
-	 *
 	 * @param accepted 可用作参数回溯的槽位映射
 	 * @param rejected 被拒的槽位 -> 拒绝原因（按槽位记录，供 {@link #checkSafe}
 	 *                 把"真实原因"透传进 {@link PatchReport}，而不是笼统的
@@ -357,7 +351,6 @@ public class InitFix {
 
 	/**
 	 * 单个字段的放行决策。
-	 *
 	 * @param status   放行状态
 	 * @param reason   被拒时的原因（{@link FieldStatus#REJECTED} 才有意义）
 	 * @param warnings 已放行但带已知风险的说明（例如 §1.1 注解豁免了"构造器里用过该字段"
@@ -368,7 +361,7 @@ public class InitFix {
 			warnings = warnings == null ? List.of() : List.copyOf(warnings);
 		}
 
-		public static final FieldDecision ACCEPTED = new FieldDecision(FieldStatus.ACCEPTED, null, List.of());
+		public static final FieldDecision ACCEPTED         = new FieldDecision(FieldStatus.ACCEPTED, null, List.of());
 		public static final FieldDecision NOTHING_TO_PATCH =
 		 new FieldDecision(FieldStatus.NOTHING_TO_PATCH, null, List.of());
 
@@ -426,7 +419,7 @@ public class InitFix {
 		String className = diff.newClass.name;
 		try {
 			BuiltPatch built = buildPatch(host, newBytes, className,
-			                              addedStaticFields, addedInstanceFields, pending);
+			 addedStaticFields, addedInstanceFields, pending);
 			// if (built == null) return;
 
 			REPORTS.put(host, built.report());
@@ -505,7 +498,7 @@ public class InitFix {
 		 .findFirst().orElse(null);
 
 		Map<MethodNode, Boolean> rootCtorCache = new IdentityHashMap<>();
-		int rootCtorCount = 0;
+		int                      rootCtorCount = 0;
 		for (MethodNode init : initMethods) {
 			if (isRootConstructor(newClass, init, rootCtorCache)) rootCtorCount++;
 		}
@@ -520,10 +513,10 @@ public class InitFix {
 
 		// ==================== §1.1 存量重置扩展：候选集 ====================
 		// 默认只处理新增字段；标了 @HotswapReinit 的已有字段按显式声明进入候选集。
-		Map<String, ReinitField> reinitFields = scanReinitFields(newClass);
-		Set<String> targetInstanceFields = new LinkedHashSet<>(addedInstanceFields);
-		Set<String> targetStaticFields   = new LinkedHashSet<>(addedStaticFields);
-		Set<String> forceWriteFields     = new LinkedHashSet<>();
+		Map<String, ReinitField> reinitFields         = scanReinitFields(newClass);
+		Set<String>              targetInstanceFields = new LinkedHashSet<>(addedInstanceFields);
+		Set<String>              targetStaticFields   = new LinkedHashSet<>(addedStaticFields);
+		Set<String>              forceWriteFields     = new LinkedHashSet<>();
 		for (Map.Entry<String, ReinitField> e : reinitFields.entrySet()) {
 			FieldNode fn = fieldNodes.get(e.getKey());
 			if (fn == null) continue;   // 注解在不存在的字段上（理论上不可能）
@@ -561,13 +554,13 @@ public class InitFix {
 		}
 
 		// ==================== 实例字段提取 ====================
-		Map<String, List<FieldExtract>> instanceExtracts = new LinkedHashMap<>();
-		Set<String> selfAssignedFields = new HashSet<>();
-		Map<String, String> instanceReasons = new LinkedHashMap<>();
+		Map<String, List<FieldExtract>> instanceExtracts   = new LinkedHashMap<>();
+		Set<String>                     selfAssignedFields = new HashSet<>();
+		Map<String, String>             instanceReasons    = new LinkedHashMap<>();
 		for (MethodNode init : initMethods) {
 			log("Extracting field init for " + className + "." + init.name + "()");
-			boolean fromRoot = isRootConstructor(newClass, init, rootCtorCache);
-			ParamScan scan = scanParamFields(host, newClass, init, nest);
+			boolean                  fromRoot    = isRootConstructor(newClass, init, rootCtorCache);
+			ParamScan                scan        = scanParamFields(host, newClass, init, nest);
 			Map<Integer, ParamField> paramFields = scan.accepted();
 			if (!paramFields.isEmpty()) {
 				StringBuilder slots = new StringBuilder();
@@ -591,7 +584,7 @@ public class InitFix {
 
 		// ==================== 静态字段提取 ====================
 		Map<String, List<FieldExtract>> staticExtracts = new LinkedHashMap<>();
-		Map<String, String> staticReasons = new LinkedHashMap<>();
+		Map<String, String>             staticReasons  = new LinkedHashMap<>();
 		if (clinitMethod != null) {
 			Map<String, FieldExtract> perField = extractFieldInits(
 			 host, className, clinitMethod, targetStaticFields,
@@ -662,13 +655,13 @@ public class InitFix {
 			String reason = selfAssignedFields.contains(f)
 			 ? "self-assignment from constructor parameter (patch would be a no-op)"
 			 : instanceReasons.getOrDefault(f,
-			   "no safe initialization expression found in constructors");
+			 "no safe initialization expression found in constructors");
 			instanceDecisions.put(f, FieldDecision.rejected(reason));
 		}
 		Set<String> acceptedInstance = new LinkedHashSet<>();
 		for (Map.Entry<String, List<FieldExtract>> e : instanceExtracts.entrySet()) {
-			String fieldName = e.getKey();
-			List<FieldExtract> extracts = e.getValue();
+			String             fieldName = e.getKey();
+			List<FieldExtract> extracts  = e.getValue();
 
 			int fromRootCount = 0;
 			for (FieldExtract fe : extracts) {
@@ -680,7 +673,7 @@ public class InitFix {
 				refuseReason = "field is only initialized in delegating constructors";
 			} else if (rootCtorCount > 1 && fromRootCount < rootCtorCount) {
 				refuseReason = "field is only initialized in " + fromRootCount
-				             + " of " + rootCtorCount + " root constructors";
+				               + " of " + rootCtorCount + " root constructors";
 			} else {
 				// §4.4 构造器共识放宽：多根构造器 + 参数回溯并非绝对禁止。
 				// 上面的分支已保证所有根构造器都覆盖了该字段，只要参数替换完成后的
@@ -710,7 +703,7 @@ public class InitFix {
 			}
 			staticDecisions.put(f, FieldDecision.rejected(
 			 staticReasons.getOrDefault(f,
-			  "no safe initialization expression found in <clinit>")));
+				"no safe initialization expression found in <clinit>")));
 		}
 		Set<String> acceptedStatic = new LinkedHashSet<>();
 		for (String f : staticExtracts.keySet()) {
@@ -721,7 +714,7 @@ public class InitFix {
 		// ==================== 阶段 1.5 + 阶段 2：闭包迭代 ====================
 		// 注解豁免过的字段只告警一次，别在 while 循环里刷屏。
 		Set<String> warnedExemptions = new HashSet<>();
-		boolean changed = true;
+		boolean     changed          = true;
 		while (changed) {
 			changed = false;
 
@@ -824,7 +817,7 @@ public class InitFix {
 		// ==================== 阶段 3：逐字段发射（§5.1 每字段独立静态方法） ====================
 		// 每个放行字段单独一个静态直线方法：一行抛异常只影响该字段，不会像"单方法承载全部
 		// 字段"那样跳过其后所有字段（§5.2 的驱动依赖这一点做失败隔离）。
-		String hostInternal = Type.getInternalName(host);
+		String      hostInternal      = Type.getInternalName(host);
 		Set<String> conditionalFields = new HashSet<>(targetInstanceFields);
 		conditionalFields.addAll(targetStaticFields);
 		conditionalFields.removeAll(forceWriteFields);
@@ -835,14 +828,17 @@ public class InitFix {
 		patch.name = className + PATCH_SUFFIX;
 		patch.superName = "java/lang/Object";
 
-		Set<String> usedMethodNames = new HashSet<>();
-		List<FieldPatchTask> instanceTasks = new ArrayList<>();
-		List<FieldPatchTask> staticTasks   = new ArrayList<>();
+		Set<String>          usedMethodNames = new HashSet<>();
+		List<FieldPatchTask> instanceTasks   = new ArrayList<>();
+		List<FieldPatchTask> staticTasks     = new ArrayList<>();
 
 		for (String fieldName : orderedInstance) {
 			FieldExtract chosen = null;
 			for (FieldExtract fe : instanceExtracts.get(fieldName)) {
-				if (fe.fromRootCtor()) { chosen = fe; break; }
+				if (fe.fromRootCtor()) {
+					chosen = fe;
+					break;
+				}
 			}
 			if (chosen == null) chosen = instanceExtracts.get(fieldName).get(0);
 
@@ -856,8 +852,8 @@ public class InitFix {
 		}
 
 		for (String fieldName : orderedStatic) {
-			FieldExtract fe = staticExtracts.get(fieldName).get(0);
-			String method = uniqueMethodName(STATIC_PATCH_PREFIX, fieldName, usedMethodNames);
+			FieldExtract fe     = staticExtracts.get(fieldName).get(0);
+			String       method = uniqueMethodName(STATIC_PATCH_PREFIX, fieldName, usedMethodNames);
 			List<AbstractInsnNode> body = rewriteFieldSlice(
 			 hostInternal, className, new ArrayList<>(fe.instructions()),
 			 fe.protectedAccesses(), conditionalFields, forceWriteFields);
@@ -923,7 +919,7 @@ public class InitFix {
 	 String fieldName, Map<String, List<FieldExtract>> extracts,
 	 String className, Set<String> acceptedFields) {
 
-		Set<String> deps = new LinkedHashSet<>();
+		Set<String>        deps   = new LinkedHashSet<>();
 		List<FieldExtract> feList = extracts.get(fieldName);
 		if (feList == null) return deps;
 		for (FieldExtract fe : feList) {
@@ -952,7 +948,7 @@ public class InitFix {
 
 		Map<String, Set<String>> deps = new LinkedHashMap<>();
 		for (String f : fields) {
-			Set<String> d = new LinkedHashSet<>();
+			Set<String>        d      = new LinkedHashSet<>();
 			List<FieldExtract> feList = extracts.get(f);
 			if (feList != null) {
 				for (FieldExtract fe : feList) {
@@ -971,9 +967,9 @@ public class InitFix {
 			deps.put(f, d);
 		}
 
-		List<String> order = new ArrayList<>(fields.size());
-		Set<String> visited  = new HashSet<>();
-		Set<String> visiting = new HashSet<>();
+		List<String> order    = new ArrayList<>(fields.size());
+		Set<String>  visited  = new HashSet<>();
+		Set<String>  visiting = new HashSet<>();
 		for (String f : fields) {
 			if (!topoVisit(f, deps, visited, visiting, order)) return null;
 		}
@@ -1032,7 +1028,6 @@ public class InitFix {
 
 	/**
 	 * 读 {@code mode} 元素。ASM 把注解里的枚举值表示成 {@code String[]{描述符, 常量名}}。
-	 *
 	 * @return true 表示 {@code OVERWRITE}（默认值也是它）
 	 */
 	private static boolean readOverwriteMode(AnnotationNode a) {
@@ -1143,7 +1138,7 @@ public class InitFix {
 			if (!(n instanceof MethodInsnNode m)
 			    || m.getOpcode() != Opcodes.INVOKESPECIAL
 			    || !"<init>".equals(m.name)
-			    || !m.owner.equals(hostClass.name)) continue;
+			    || !m.owner.equals(hostClass.name)) { continue; }
 
 			Frame<SourceValue> frame = frames[i];
 			if (frame == null) continue;
@@ -1202,21 +1197,21 @@ public class InitFix {
 				if (f.getOpcode() == putOp) {
 					if (!acceptedInsns.contains(n)) {
 						return "field written outside its extraction in "
-						     + className + "." + m.name + " at index "
-						     + m.instructions.indexOf(n);
+						       + className + "." + m.name + " at index "
+						       + m.instructions.indexOf(n);
 					}
 				} else if (f.getOpcode() == getOp) {
 					if (fieldIsPrimitive || fieldIsImmutable) continue;
 					if (!acceptedInsns.contains(n)) {
 						String where = className + "." + m.name + " at index "
-						             + m.instructions.indexOf(n);
+						               + m.instructions.indexOf(n);
 						if (isThreadAffineType(fieldNode.desc)) {
 							// 按线程的值类型单独说清楚：补丁在热更线程上单线程执行，
 							// 构造器里对它的使用无法重放，重算只会得到另一条线程的副本。
 							return "thread-affine field " + fieldNode.desc + " is used outside its "
-							     + "extraction in " + where
-							     + " (patch runs single-threaded on the hotswap thread; "
-							     + "the constructor's use of it cannot be replayed)";
+							       + "extraction in " + where
+							       + " (patch runs single-threaded on the hotswap thread; "
+							       + "the constructor's use of it cannot be replayed)";
 						}
 						return "field read outside any accepted extraction in " + where;
 					}
@@ -1242,7 +1237,6 @@ public class InitFix {
 	 * </ul>
 	 * <p>需要按实例、按正确线程补齐时，用 {@link nipx.annotation.OnReload}
 	 * （跑在 {@code Core.app} 的应用线程上、逐实例调用）。</p>
-	 *
 	 * @param warned 去重集合，避免 while 循环里重复告警
 	 * @return 报告里可见的告警文本
 	 */
@@ -1265,11 +1259,11 @@ public class InitFix {
 	private static String exemptionWarning(FieldNode fieldNode, String gateReason) {
 		StringBuilder sb = new StringBuilder();
 		sb.append("@HotswapReinit 豁免了门禁（").append(gateReason).append("）："
-		          + "补丁只重建该字段的初始化式，构造器里对它的这部分用法不会被重放");
+		                                                                  + "补丁只重建该字段的初始化式，构造器里对它的这部分用法不会被重放");
 		if (fieldNode != null && isThreadAffineType(fieldNode.desc)) {
 			sb.append("；该字段是按线程的值（").append(fieldNode.desc)
-			  .append("），补丁在热更线程上单线程执行，构造线程的 per-thread 副本无法还原，"
-			      + "如需按实例/按应用线程补齐请用 @OnReload");
+			 .append("），补丁在热更线程上单线程执行，构造线程的 per-thread 副本无法还原，"
+			         + "如需按实例/按应用线程补齐请用 @OnReload");
 		}
 		return sb.toString();
 	}
@@ -1300,7 +1294,7 @@ public class InitFix {
 				    && !fld.name.equals(self)
 				    && !acceptedInstance.contains(fld.name)) {
 					return "reads new instance field '" + fld.name
-					     + "' which is not patched";
+					       + "' which is not patched";
 				}
 				if (op == Opcodes.GETSTATIC
 				    && allNewStatic != null
@@ -1309,7 +1303,7 @@ public class InitFix {
 				    && !fld.name.equals(self)
 				    && !acceptedStatic.contains(fld.name)) {
 					return "reads new static field '" + fld.name
-					     + "' which is not patched";
+					       + "' which is not patched";
 				}
 			}
 		}
@@ -1328,20 +1322,13 @@ public class InitFix {
 	}
 
 	private static String describe(AbstractInsnNode n) {
-		if (n instanceof FieldInsnNode f)
-			return f.owner + "." + f.name + ":" + f.desc;
-		if (n instanceof MethodInsnNode m)
-			return m.owner + "." + m.name + m.desc + (m.itf ? ":itf" : "");
-		if (n instanceof VarInsnNode v)
-			return "v" + v.var;
-		if (n instanceof LdcInsnNode l)
-			return "ldc(" + describeLdcConstant(l.cst) + ")";
-		if (n instanceof TypeInsnNode t)
-			return t.desc;
-		if (n instanceof IntInsnNode in)
-			return "int" + in.operand;
-		if (n instanceof MultiANewArrayInsnNode m)
-			return "manaa:" + m.desc + ":" + m.dims;
+		if (n instanceof FieldInsnNode f) { return f.owner + "." + f.name + ":" + f.desc; }
+		if (n instanceof MethodInsnNode m) { return m.owner + "." + m.name + m.desc + (m.itf ? ":itf" : ""); }
+		if (n instanceof VarInsnNode v) { return "v" + v.var; }
+		if (n instanceof LdcInsnNode l) { return "ldc(" + describeLdcConstant(l.cst) + ")"; }
+		if (n instanceof TypeInsnNode t) { return t.desc; }
+		if (n instanceof IntInsnNode in) { return "int" + in.operand; }
+		if (n instanceof MultiANewArrayInsnNode m) { return "manaa:" + m.desc + ":" + m.dims; }
 		if (n instanceof InvokeDynamicInsnNode indy) {
 			StringBuilder sb = new StringBuilder("indy:")
 			 .append(indy.name).append(indy.desc)
@@ -1353,8 +1340,7 @@ public class InitFix {
 			}
 			return sb.toString();
 		}
-		if (n instanceof IincInsnNode inc)
-			return "iinc" + inc.var + "+" + inc.incr;
+		if (n instanceof IincInsnNode inc) { return "iinc" + inc.var + "+" + inc.incr; }
 		return "";
 	}
 
@@ -1390,8 +1376,8 @@ public class InitFix {
 			return describeConstantDynamic(cd);
 		}
 		if (a.getClass().isArray()) {
-			int len = Array.getLength(a);
-			StringBuilder sb = new StringBuilder("[");
+			int           len = Array.getLength(a);
+			StringBuilder sb  = new StringBuilder("[");
 			for (int i = 0; i < len; i++) {
 				if (i > 0) sb.append(',');
 				sb.append(describeBsmArg(Array.get(a, i)));
@@ -1415,7 +1401,7 @@ public class InitFix {
 	// ==================== 宿主 Nest 视图（§4.3 / §4.1 的字节码底座） ====================
 
 	/**
-	 * 宿主的 Nest 视图：宿主 + 全部 Nest 成员的 {@link ClassNode}。
+	 * 宿主的 Nest 视图：完整成员清单与紧凑的 Nest 字段写入索引。
 	 *
 	 * <p>用于两件事：{@code docs/INIT_FIX.md} §4.3 的"全 Nest 单写证明"，以及 §4.1 T0
 	 * 的"该字段在任何地方都没被写过"判定。</p>
@@ -1426,59 +1412,23 @@ public class InitFix {
 	 * （拒绝），而不是当作"没有第二处写入"。</p>
 	 */
 	private static final class NestView {
-		private final List<ClassNode> nodes;
-		private final boolean         complete;
+		private final List<ClassHierarchyOracle.NestFieldWrite> writes;
+		private final boolean complete;
 
-		private NestView(List<ClassNode> nodes, boolean complete) {
-			this.nodes = nodes;
+		private NestView(List<ClassHierarchyOracle.NestFieldWrite> writes, boolean complete) {
+			this.writes = writes;
 			this.complete = complete;
 		}
 
 		static NestView of(Class<?> host, ClassNode hostClass) {
 			ClassLoader loader = host == null ? null : host.getClassLoader();
-
-			ClassNode root = hostClass;
-			if (hostClass.nestHostClass != null) {
-				ClassNode hostNode = parseMember(hostClass.nestHostClass, loader);
-				if (hostNode == null) return new NestView(List.of(hostClass), false);
-				root = hostNode;
-			}
-
-			Map<String, ClassNode> byName = new LinkedHashMap<>();
-			byName.put(root.name, root);
-			byName.put(hostClass.name, hostClass);
-
-			boolean complete = true;
-			if (root.nestMembers != null) {
-				for (String member : root.nestMembers) {
-					if (byName.containsKey(member)) continue;
-					ClassNode node = parseMember(member, loader);
-					if (node == null) {
-						complete = false;
-						continue;
-					}
-					byName.put(member, node);
-				}
-			}
-			return new NestView(new ArrayList<>(byName.values()), complete);
-		}
-
-		private static ClassNode parseMember(String internalName, ClassLoader loader) {
-			byte[] bytes = HotSwapAgent.bytecodeCache.get(internalName.replace('/', '.'));
-			if (bytes == null && loader != null) {
-				try (InputStream in = loader.getResourceAsStream(internalName + ".class")) {
-					if (in != null) bytes = in.readAllBytes();
-				} catch (Throwable ignored) {
-					// 读不到就是读不到，交给调用方按"无法证明"处理
-				}
-			}
-			if (bytes == null) return null;
 			try {
-				ClassNode cn = new ClassNode();
-				new ClassReader(bytes).accept(cn, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-				return cn;
-			} catch (Throwable t) {
-				return null;
+				HierarchyTreeOracle oracle = new HierarchyTreeOracle(loader, hostClass);
+				oracle.getNestMembers(hostClass.name);
+				return new NestView(oracle.getNestFieldWrites(hostClass.name), true);
+			} catch (IllegalStateException unavailable) {
+				HotSwapAgent.warn("Nest scan incomplete for " + hostClass.name + ": " + unavailable.getMessage());
+				return new NestView(List.of(), false);
 			}
 		}
 
@@ -1490,17 +1440,13 @@ public class InitFix {
 		 */
 		int countPuts(String ownerInternal, String name, String desc, int putOp) {
 			int n = 0;
-			for (ClassNode c : nodes) {
-				for (MethodNode m : c.methods) {
-					for (AbstractInsnNode i : m.instructions) {
-						if (!(i instanceof FieldInsnNode f)) continue;
-						if (f.getOpcode() != putOp) continue;
-						if (!f.owner.equals(ownerInternal)
-						    || !f.name.equals(name)
-						    || !f.desc.equals(desc)) continue;
-						n++;
-					}
-				}
+			for (ClassHierarchyOracle.NestFieldWrite write : writes) {
+				FieldInsnNode field = write.instruction;
+				if (field.getOpcode() != putOp) continue;
+				if (!field.owner.equals(ownerInternal)
+				    || !field.name.equals(name)
+				    || !field.desc.equals(desc)) continue;
+				n++;
 			}
 			return n;
 		}
@@ -1511,18 +1457,13 @@ public class InitFix {
 		 */
 		String firstOtherPut(String ownerInternal, String name, String desc,
 		                     int putOp, FieldInsnNode self) {
-			for (ClassNode c : nodes) {
-				for (MethodNode m : c.methods) {
-					for (AbstractInsnNode i : m.instructions) {
-						if (!(i instanceof FieldInsnNode f)) continue;
-						if (f.getOpcode() != putOp) continue;
-						if (f == self) continue;
-						if (!f.owner.equals(ownerInternal)
-						    || !f.name.equals(name)
-						    || !f.desc.equals(desc)) continue;
-						return c.name + "." + m.name + m.desc;
-					}
-				}
+			for (ClassHierarchyOracle.NestFieldWrite write : writes) {
+				FieldInsnNode field = write.instruction;
+				if (field.getOpcode() != putOp || field == self) continue;
+				if (!field.owner.equals(ownerInternal)
+				    || !field.name.equals(name)
+				    || !field.desc.equals(desc)) continue;
+				return write.className + "." + write.methodName + write.methodDesc;
 			}
 			return null;
 		}
@@ -1556,7 +1497,7 @@ public class InitFix {
 		}
 		if (!nest.complete()) return false;
 
-		int putOp = isStatic ? Opcodes.PUTSTATIC : Opcodes.PUTFIELD;
+		int putOp  = isStatic ? Opcodes.PUTSTATIC : Opcodes.PUTFIELD;
 		int writes = nest.countPuts(newClass.name, field.name, field.desc, putOp);
 		if (writes == 0) return true;
 
@@ -1598,10 +1539,10 @@ public class InitFix {
 
 		if (!isStatic) {
 			if (!(insns.get(0) instanceof VarInsnNode v
-			      && v.getOpcode() == Opcodes.ALOAD && v.var == 0)) return false;
+			      && v.getOpcode() == Opcodes.ALOAD && v.var == 0)) { return false; }
 		}
 		if (!(insns.get(putIdx) instanceof FieldInsnNode f)
-		    || f.getOpcode() != (isStatic ? Opcodes.PUTSTATIC : Opcodes.PUTFIELD)) return false;
+		    || f.getOpcode() != (isStatic ? Opcodes.PUTSTATIC : Opcodes.PUTFIELD)) { return false; }
 
 		return isZeroConstantInsn(insns.get(valueIdx), desc);
 	}
@@ -1610,12 +1551,12 @@ public class InitFix {
 	private static boolean isZeroConstantInsn(AbstractInsnNode n, String desc) {
 		if (n == null || desc == null || desc.isEmpty()) return false;
 
-		char c = desc.charAt(0);
-		boolean ref  = c == 'L' || c == '[';
-		boolean isJ  = c == 'J';
-		boolean isF  = c == 'F';
-		boolean isD  = c == 'D';
-		boolean isI  = !ref && !isJ && !isF && !isD;   // Z/B/C/S/I
+		char    c   = desc.charAt(0);
+		boolean ref = c == 'L' || c == '[';
+		boolean isJ = c == 'J';
+		boolean isF = c == 'F';
+		boolean isD = c == 'D';
+		boolean isI = !ref && !isJ && !isF && !isD;   // Z/B/C/S/I
 
 		if (ref) return n.getOpcode() == Opcodes.ACONST_NULL;
 		if (n.getOpcode() == Opcodes.ICONST_0) return isI;
@@ -1720,7 +1661,6 @@ public class InitFix {
 	 *   <li>未命中者 P0 一律放行 —— 这一步只做"明确危险"的负向拦截，
 	 *       真正的白名单准入（{@code ALLOWED_MASK}）在 P2 落地。</li>
 	 * </ol>
-	 *
 	 * @return null 表示放行；否则返回拒绝原因
 	 */
 	private static String effectReason(AbstractInsnNode n) {
@@ -1761,7 +1701,7 @@ public class InitFix {
 	/** 误杀白名单：命中即放行，优先于包级黑名单。 */
 	private static boolean isWhitelistedCall(MethodInsnNode m) {
 		if ("<init>".equals(m.name) && "()V".equals(m.desc)
-		    && PURE_NOARG_CTOR_OWNERS.contains(m.owner)) return true;
+		    && PURE_NOARG_CTOR_OWNERS.contains(m.owner)) { return true; }
 
 		if ("java/util/Objects".equals(m.owner) && m.name.startsWith("requireNonNull")) return true;
 		if ("java/lang/Object".equals(m.owner) && "getClass".equals(m.name)) return true;
@@ -1769,15 +1709,15 @@ public class InitFix {
 		if (m.owner.startsWith("kotlin/jvm/internal/Intrinsics")) return true;
 		if ("java/util/Collections".equals(m.owner)
 		    && (m.name.startsWith("empty") || m.name.startsWith("singleton")
-		        || m.name.startsWith("unmodifiable"))) return true;
+		        || m.name.startsWith("unmodifiable"))) { return true; }
 		if ("java/util/Arrays".equals(m.owner)
-		    && (m.name.startsWith("asList") || m.name.startsWith("copyOf"))) return true;
+		    && (m.name.startsWith("asList") || m.name.startsWith("copyOf"))) { return true; }
 
 		// Logger：工厂与纯查询放行；落地方法（info/debug/log/...）不在此列，走黑名单。
 		if (m.getOpcode() == Opcodes.INVOKESTATIC && LOGGER_FACTORY_OWNERS.contains(m.owner)
-		    && ("getLogger".equals(m.name) || "getLog".equals(m.name))) return true;
+		    && ("getLogger".equals(m.name) || "getLog".equals(m.name))) { return true; }
 		if (LOGGER_TYPES.contains(m.owner)
-		    && (m.name.startsWith("is") || m.name.startsWith("get"))) return true;
+		    && (m.name.startsWith("is") || m.name.startsWith("get"))) { return true; }
 		return false;
 	}
 
@@ -1787,7 +1727,7 @@ public class InitFix {
 
 		if (THREAD_LOCAL_OWNERS.contains(owner) && THREAD_LOCAL_STATEFUL.contains(name)) {
 			return "thread-local heap state " + owner + "." + name
-			     + " (值取决于执行线程，补丁在热更线程上重算会读脏)";
+			       + " (值取决于执行线程，补丁在热更线程上重算会读脏)";
 		}
 
 		if ("java/lang/System".equals(owner)) {
@@ -1887,7 +1827,6 @@ public class InitFix {
 	 *
 	 * <p>完整的逃逸证明（对象是否被赋值给外部字段、是否传给了非纯调用）属于 P2 的代数模型；
 	 * 这里只排除"接收者不是切片内新建对象"这一档已实测会读脏的形态。</p>
-	 *
 	 * @return null 表示放行；否则返回拒绝原因
 	 */
 	private static String builderMutatorReason(
@@ -1921,7 +1860,7 @@ public class InitFix {
 			}
 		}
 		return "mutates a reusable " + m.owner + " obtained outside the slice"
-		     + " (接收者来源: " + (origin.length() == 0 ? "未知" : origin) + ")";
+		       + " (接收者来源: " + (origin.length() == 0 ? "未知" : origin) + ")";
 	}
 
 	private static void appendOrigin(StringBuilder sb, String what) {
@@ -1945,7 +1884,6 @@ public class InitFix {
 	 *       内部类跨实例写入）。证明通过后该字段的读取在效应审查中按 {@code READS_FINAL} 等价处理。</li>
 	 * </ol>
 	 * <p>二者都不满足时拒绝映射 —— 宁可不补，也不能拿被改过的值去算。</p>
-	 *
 	 * @param host 宿主类（仅用于取 ClassLoader 读 Nest 成员资源，<b>不做</b> {@code Class.forName}）
 	 * @param nest 宿主 Nest 视图
 	 * @return 可用映射 + 被拒槽位的真实原因（原因会被透传进 {@link PatchReport}）
@@ -1953,10 +1891,10 @@ public class InitFix {
 	private static ParamScan scanParamFields(
 	 Class<?> host, ClassNode hostClass, MethodNode init, NestView nest) {
 
-		Map<Integer, ParamField> map = new HashMap<>();
-		Map<Integer, String> rejected = new LinkedHashMap<>();
-		InsnList insns = init.instructions;
-		List<AbstractInsnNode> real = filterReal(insns);
+		Map<Integer, ParamField> map      = new HashMap<>();
+		Map<Integer, String>     rejected = new LinkedHashMap<>();
+		InsnList                 insns    = init.instructions;
+		List<AbstractInsnNode>   real     = filterReal(insns);
 
 		for (int i = 0; i + 2 < real.size(); i++) {
 			AbstractInsnNode a = real.get(i);
@@ -1964,18 +1902,18 @@ public class InitFix {
 			AbstractInsnNode c = real.get(i + 2);
 
 			if (!(a instanceof VarInsnNode va)
-			    || va.getOpcode() != Opcodes.ALOAD || va.var != 0) continue;
+			    || va.getOpcode() != Opcodes.ALOAD || va.var != 0) { continue; }
 			if (!(b instanceof VarInsnNode vb)
-			    || !isLoadOfParam(vb)) continue;
+			    || !isLoadOfParam(vb)) { continue; }
 			if (!(c instanceof FieldInsnNode fc)
-			    || fc.getOpcode() != Opcodes.PUTFIELD) continue;
+			    || fc.getOpcode() != Opcodes.PUTFIELD) { continue; }
 			if (!fc.owner.equals(hostClass.name)) continue;
 
 			int slot = vb.var;
 			if (map.containsKey(slot)) continue;
 
-			int startOrig = insns.indexOf(a);
-			int putOrig   = insns.indexOf(c);
+			int    startOrig  = insns.indexOf(a);
+			int    putOrig    = insns.indexOf(c);
 			String ctrlReason = checkControlDependency(insns, startOrig, putOrig);
 			if (ctrlReason != null) {
 				rejectParamSlot(rejected, slot, "pattern has control dependency: " + ctrlReason);
@@ -2010,7 +1948,7 @@ public class InitFix {
 			String immutableReason = sourceFieldNotImmutableReason(hostClass, source, fc, nest);
 			if (immutableReason != null) {
 				rejectParamSlot(rejected, slot, "source field '" + source.name
-				 + "' is not provably immutable: " + immutableReason);
+				                                + "' is not provably immutable: " + immutableReason);
 				log("Skipping constructor param slot " + slot + " in "
 				    + hostClass.name + ".<init>: source field '" + source.name
 				    + "' is not provably immutable: " + immutableReason);
@@ -2096,7 +2034,6 @@ public class InitFix {
 
 	/**
 	 * §4.3 源字段不可变证明。
-	 *
 	 * @param pattern 本次触发映射的 {@code PUTFIELD}（Nest 扫描时按对象身份排除）
 	 * @return null 表示可证明构造后不再变化；否则返回拒绝原因
 	 */
@@ -2114,7 +2051,7 @@ public class InitFix {
 			return "cannot read every nest member to prove a single write";
 		}
 		String where = nest.firstOtherPut(hostClass.name, field.name, field.desc,
-		                                  Opcodes.PUTFIELD, pattern);
+		 Opcodes.PUTFIELD, pattern);
 		if (where != null) {
 			return "private but written again at " + where;
 		}
@@ -2153,21 +2090,21 @@ public class InitFix {
 	private static boolean isLoadOfParam(VarInsnNode v) {
 		int op = v.getOpcode();
 		boolean isLoad = op == Opcodes.ALOAD || op == Opcodes.ILOAD
-		              || op == Opcodes.LLOAD || op == Opcodes.FLOAD
-		              || op == Opcodes.DLOAD;
+		                 || op == Opcodes.LLOAD || op == Opcodes.FLOAD
+		                 || op == Opcodes.DLOAD;
 		return isLoad && v.var != 0;
 	}
 
 	private static boolean isStore(int op) {
 		return op == Opcodes.ASTORE || op == Opcodes.ISTORE || op == Opcodes.LSTORE
-		    || op == Opcodes.FSTORE || op == Opcodes.DSTORE;
+		       || op == Opcodes.FSTORE || op == Opcodes.DSTORE;
 	}
 
 	private static boolean isPrimitiveDesc(String desc) {
 		if (desc == null || desc.isEmpty()) return false;
 		char c = desc.charAt(0);
 		return c == 'Z' || c == 'B' || c == 'C' || c == 'S'
-		    || c == 'I' || c == 'J' || c == 'F' || c == 'D';
+		       || c == 'I' || c == 'J' || c == 'F' || c == 'D';
 	}
 
 	private static boolean isImmutableType(String desc) {
@@ -2219,9 +2156,9 @@ public class InitFix {
 			}
 
 			String ownerInternal = pa.owner();
-			String indyDesc = indyDescFor(pa, hostInternal);
+			String indyDesc      = indyDescFor(pa, hostInternal);
 
-			Object[] bsmArgs = new Object[] {
+			Object[] bsmArgs = new Object[]{
 			 HotswapBridge.KIND_PROTECTED,
 			 pa.opcode(),
 			 Type.getObjectType(ownerInternal),
@@ -2238,12 +2175,11 @@ public class InitFix {
 
 	private static String indyDescFor(ProtectedAccess pa, String hostInternal) {
 		return switch (pa.opcode()) {
-			case Opcodes.GETFIELD  -> "(L" + hostInternal + ";)" + pa.desc();
-			case Opcodes.PUTFIELD  -> "(L" + hostInternal + ";" + pa.desc() + ")V";
+			case Opcodes.GETFIELD -> "(L" + hostInternal + ";)" + pa.desc();
+			case Opcodes.PUTFIELD -> "(L" + hostInternal + ";" + pa.desc() + ")V";
 			case Opcodes.GETSTATIC -> "()" + pa.desc();
 			case Opcodes.PUTSTATIC -> "(" + pa.desc() + ")V";
-			case Opcodes.INVOKEVIRTUAL, Opcodes.INVOKEINTERFACE ->
-			 "(L" + hostInternal + ";" + pa.desc().substring(1);
+			case Opcodes.INVOKEVIRTUAL, Opcodes.INVOKEINTERFACE -> "(L" + hostInternal + ";" + pa.desc().substring(1);
 			case Opcodes.INVOKESTATIC -> pa.desc();
 			default -> throw new IllegalStateException(
 			 "unexpected opcode for protected bridge: " + pa.opcode());
@@ -2300,7 +2236,6 @@ public class InitFix {
 	 * {@link HotswapBridge#KIND_CONDITIONAL} 条件 CAS（仅当字段仍是类型默认值），
 	 * {@link HotswapBridge#KIND_FORCE} 无条件写（{@code @HotswapReinit(mode = OVERWRITE)}）。
 	 * <p>final 与非 final 走同一条路径，语义统一。</p>
-	 *
 	 * @param conditionalFields 走条件 CAS 的字段
 	 * @param forceFields       走强制写的字段（两者不相交；force 优先）
 	 */
@@ -2327,7 +2262,7 @@ public class InitFix {
 			String  indyDesc = (isStatic ? "(" : "(L" + className + ";") + f.desc + ")V";
 			Type    hostType = Type.getObjectType(className);
 
-			Object[] bsmArgs = new Object[] {
+			Object[] bsmArgs = new Object[]{
 			 forced ? HotswapBridge.KIND_FORCE : HotswapBridge.KIND_CONDITIONAL,
 			 f.getOpcode(),
 			 hostType,
@@ -2394,7 +2329,7 @@ public class InitFix {
 			return;
 		}
 
-		PatchPlan plan = patch.plan();
+		PatchPlan    plan  = patch.plan();
 		List<Object> alive = null;
 		if (plan.hasInstance()) {
 			alive = collectInstancesForPatch(patch);
@@ -2423,8 +2358,8 @@ public class InitFix {
 			 h.findStatic(pc, task.methodName(), MethodType.methodType(void.class)));
 		}
 
-		Set<String> failedFields = new LinkedHashSet<>();
-		Set<String> skippedFields = new LinkedHashSet<>();
+		Set<String>         failedFields   = new LinkedHashSet<>();
+		Set<String>         skippedFields  = new LinkedHashSet<>();
 		Map<String, String> failureReasons = new LinkedHashMap<>();
 
 		// ---- 静态字段：整个补丁只跑一次 ----
@@ -2433,7 +2368,7 @@ public class InitFix {
 			                  + ", fields=" + plan.staticTasks().size());
 			long start = System.nanoTime();
 			runTasks(host, plan.staticTasks(), staticHandles, null,
-			         failedFields, skippedFields, failureReasons);
+			 failedFields, skippedFields, failureReasons);
 			long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
 			HotSwapAgent.info("Static field init patch for " + host.getName()
 			                  + " done in " + elapsedMs + "ms");
@@ -2448,7 +2383,7 @@ public class InitFix {
 			long start = System.nanoTime();
 			for (Object ins : alive) {
 				runTasks(host, plan.instanceTasks(), instanceHandles, ins,
-				         failedFields, skippedFields, failureReasons);
+				 failedFields, skippedFields, failureReasons);
 			}
 			long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
 
@@ -2471,11 +2406,11 @@ public class InitFix {
 			// §3.4 待补台账：本轮没补上的字段记入，下一轮候选集自动并回来。
 			for (String f : failedFields) {
 				ledgerPut(host, f, "runtime failure: "
-				 + failureReasons.getOrDefault(f, "patch execution failed"));
+				                   + failureReasons.getOrDefault(f, "patch execution failed"));
 			}
 			for (String f : skippedFields) {
 				ledgerPut(host, f, "skipped: "
-				 + failureReasons.getOrDefault(f, "a dependency field failed to patch"));
+				                   + failureReasons.getOrDefault(f, "a dependency field failed to patch"));
 			}
 			HotSwapAgent.warn("Field init patch incomplete for " + host.getName()
 			                  + ": failed=" + failedFields + ", skipped=" + skippedFields
@@ -2485,7 +2420,6 @@ public class InitFix {
 
 	/**
 	 * 按拓扑序执行一组字段任务。
-	 *
 	 * @param target 实例字段时为对象，静态字段时忽略
 	 */
 	private static void runTasks(
@@ -2498,7 +2432,7 @@ public class InitFix {
 			    || !Collections.disjoint(task.dependencies(), skippedFields)) {
 				skippedFields.add(task.fieldName());
 				failureReasons.putIfAbsent(task.fieldName(), "dependency failed: "
-				 + intersection(task.dependencies(), failedFields, skippedFields));
+				                                             + intersection(task.dependencies(), failedFields, skippedFields));
 				HotSwapAgent.warn("Skipping field init for " + host.getName() + "."
 				                  + task.fieldName() + " because a dependency failed");
 				continue;
@@ -2510,8 +2444,7 @@ public class InitFix {
 				continue;
 			}
 			try {
-				if (target == null) mh.invokeExact();
-				else mh.invokeExact(target);
+				if (target == null) { mh.invokeExact(); } else mh.invokeExact(target);
 			} catch (LinkageError le) {
 				throw le;   // §1.2 熔断：类元数据假设已被打破，继续修补没有意义
 			} catch (Throwable t) {
@@ -2544,7 +2477,7 @@ public class InitFix {
 
 	private static List<Object> collectInstancesForPatch(PendingPatch patch) {
 		List<WeakReference<Object>> snapshot = patch.instanceSnapshot();
-		List<Object> alive = new ArrayList<>(snapshot.size());
+		List<Object>                alive    = new ArrayList<>(snapshot.size());
 		for (WeakReference<Object> ref : snapshot) {
 			Object o = ref.get();
 			if (o != null) alive.add(o);
@@ -2621,17 +2554,17 @@ public class InitFix {
 			if (outReasons != null) {
 				for (String f : targetFields) {
 					outReasons.putIfAbsent(f, "bytecode analysis failed in "
-					  + method.name + method.desc + ": " + e.getMessage());
+					                          + method.name + method.desc + ": " + e.getMessage());
 				}
 			}
 			return Map.of();
 		}
 
-		InsnList              insns       = method.instructions;
-		Set<LabelNode>        jumpTargets = collectJumpTargets(method);
-		Map<String, Set<AbstractInsnNode>> perFieldCollected = new LinkedHashMap<>();
+		InsnList                                            insns             = method.instructions;
+		Set<LabelNode>                                      jumpTargets       = collectJumpTargets(method);
+		Map<String, Set<AbstractInsnNode>>                  perFieldCollected = new LinkedHashMap<>();
 		Map<String, Map<AbstractInsnNode, ProtectedAccess>> perFieldProtected = new HashMap<>();
-		Set<String> refusedFields = new HashSet<>();
+		Set<String>                                         refusedFields     = new HashSet<>();
 
 		for (int i = 0; i < insns.size(); i++) {
 			AbstractInsnNode insn = insns.get(i);
@@ -2705,7 +2638,7 @@ public class InitFix {
 
 			if (perFieldCollected.containsKey(f.name)) {
 				String reason = "multiple safe writes to the same field in "
-				              + className + "." + method.name + "()";
+				                + className + "." + method.name + "()";
 				log("Field '" + f.name + "' has multiple safe PUTFIELD in "
 				    + className + "." + method.name + "(): refusing");
 				perFieldCollected.remove(f.name);
@@ -2720,16 +2653,16 @@ public class InitFix {
 
 		Map<String, FieldExtract> perField = new LinkedHashMap<>();
 		for (Map.Entry<String, Set<AbstractInsnNode>> e : perFieldCollected.entrySet()) {
-			String fieldName = e.getKey();
+			String                fieldName  = e.getKey();
 			Set<AbstractInsnNode> fieldInsns = e.getValue();
 			Map<AbstractInsnNode, ProtectedAccess> fieldProtected =
 			 perFieldProtected.getOrDefault(fieldName, Map.of());
 
-			Map<LabelNode, LabelNode> labelMap = new HashMap<>();
-			List<AbstractInsnNode> cloned = new ArrayList<>();
+			Map<LabelNode, LabelNode>              labelMap        = new HashMap<>();
+			List<AbstractInsnNode>                 cloned          = new ArrayList<>();
 			Map<AbstractInsnNode, ProtectedAccess> clonedProtected = new HashMap<>();
-			boolean dependsOnParam = false;
-			boolean selfAssign = false;
+			boolean                                dependsOnParam  = false;
+			boolean                                selfAssign      = false;
 
 			for (int i = 0; i < insns.size(); i++) {
 				AbstractInsnNode insn = insns.get(i);
@@ -2931,6 +2864,7 @@ public class InitFix {
 			}
 		}
 
+		ClassHierarchyOracle oracle = new HierarchyTreeOracle(host.getClassLoader());
 		for (int k = minIdx; k <= putIdx; k++) {
 			AbstractInsnNode n = insns.get(k);
 			if (n.getOpcode() != -1 && !collected.contains(n)) {
@@ -2978,7 +2912,7 @@ public class InitFix {
 					// 该槽位本来是"参数->字段"模式的候选，但被 §4.3 不可变证明或
 					// 单赋值检查拒掉了：把真实原因透传出去，而不是笼统的"局部变量"。
 					return "constructor parameter slot " + v.var
-					     + " cannot be back-tracked: " + rejectedParamSlots.get(v.var);
+					       + " cannot be back-tracked: " + rejectedParamSlots.get(v.var);
 				} else {
 					return "depends on local variables";
 				}
@@ -3011,10 +2945,10 @@ public class InitFix {
 			if (n instanceof MethodInsnNode m
 			    && m.getOpcode() == Opcodes.INVOKESPECIAL
 			    && "<init>".equals(m.name)) {
-				Boolean prot = isProtectedCrossPackageAccess(host, m.owner, m.name, m.desc, false);
+				Boolean prot = isProtectedCrossPackageAccess(oracle, host, m.owner, m.name, m.desc, false);
 				if (prot == null) {
 					return "cannot determine protected status of constructor "
-					     + m.owner + "." + m.name + m.desc;
+					       + m.owner + "." + m.name + m.desc;
 				}
 				if (prot) {
 					return "protected constructor across packages not bridgeable";
@@ -3028,23 +2962,23 @@ public class InitFix {
 					    && !"<init>".equals(h.getName())) {
 						if (!h.getOwner().equals(className)) {
 							return "invokedynamic bsmArgs contains H_INVOKESPECIAL "
-							     + "on foreign owner: " + h.getOwner()
-							     + "." + h.getName() + h.getDesc();
+							       + "on foreign owner: " + h.getOwner()
+							       + "." + h.getName() + h.getDesc();
 						}
 						if (!privateMethods.contains(h.getName() + h.getDesc())) {
 							return "invokedynamic bsmArgs contains H_INVOKESPECIAL "
-							     + "target not a private method of host: "
-							     + h.getName() + h.getDesc();
+							       + "target not a private method of host: "
+							       + h.getName() + h.getDesc();
 						}
 					}
 				}
 			}
 
 			if (n instanceof FieldInsnNode f && isFieldAccessOpcode(f.getOpcode())) {
-				Boolean prot = isProtectedCrossPackageAccess(host, f.owner, f.name, f.desc, true);
+				Boolean prot = isProtectedCrossPackageAccess(oracle, host,f.owner, f.name, f.desc, true);
 				if (prot == null) {
 					return "cannot determine protected status of field access "
-					     + f.owner + "." + f.name + ":" + f.desc;
+					       + f.owner + "." + f.name + ":" + f.desc;
 				}
 				if (prot) {
 					outProtectedAccesses.put(n,
@@ -3052,10 +2986,10 @@ public class InitFix {
 				}
 			}
 			if (n instanceof MethodInsnNode m && !m.owner.startsWith("[")) {
-				Boolean prot = isProtectedCrossPackageAccess(host, m.owner, m.name, m.desc, false);
+				Boolean prot = isProtectedCrossPackageAccess(oracle, host, m.owner, m.name, m.desc, false);
 				if (prot == null) {
 					return "cannot determine protected status of method access "
-					     + m.owner + "." + m.name + m.desc;
+					       + m.owner + "." + m.name + m.desc;
 				}
 				if (prot) {
 					outProtectedAccesses.put(n,
@@ -3068,16 +3002,16 @@ public class InitFix {
 
 	private static boolean isFieldAccessOpcode(int op) {
 		return op == Opcodes.GETFIELD || op == Opcodes.PUTFIELD
-		    || op == Opcodes.GETSTATIC || op == Opcodes.PUTSTATIC;
+		       || op == Opcodes.GETSTATIC || op == Opcodes.PUTSTATIC;
 	}
 
 	private static String checkControlDependency(InsnList insns, int minIdx, int putIdx) {
 		for (int i = 0; i < insns.size(); i++) {
-			AbstractInsnNode n = insns.get(i);
-			int op = n.getOpcode();
-			boolean inRange = i >= minIdx && i <= putIdx;
-			boolean before  = i < minIdx;
-			boolean after   = i > putIdx;
+			AbstractInsnNode n       = insns.get(i);
+			int              op      = n.getOpcode();
+			boolean          inRange = i >= minIdx && i <= putIdx;
+			boolean          before  = i < minIdx;
+			boolean          after   = i > putIdx;
 
 			if (n instanceof JumpInsnNode j) {
 				if (inRange) return "jump instruction inside extraction range";
@@ -3091,16 +3025,16 @@ public class InitFix {
 			} else if (n instanceof TableSwitchInsnNode s) {
 				if (inRange) return "switch instruction inside extraction range";
 				String r = switchTargetCheck(insns, s.dflt, s.labels,
-				                             before, after, minIdx, putIdx);
+				 before, after, minIdx, putIdx);
 				if (r != null) return r;
 			} else if (n instanceof LookupSwitchInsnNode s) {
 				if (inRange) return "switch instruction inside extraction range";
 				String r = switchTargetCheck(insns, s.dflt, s.labels,
-				                             before, after, minIdx, putIdx);
+				 before, after, minIdx, putIdx);
 				if (r != null) return r;
 			} else if (op == Opcodes.RETURN || op == Opcodes.IRETURN
-			        || op == Opcodes.LRETURN || op == Opcodes.FRETURN
-			        || op == Opcodes.DRETURN || op == Opcodes.ARETURN) {
+			           || op == Opcodes.LRETURN || op == Opcodes.FRETURN
+			           || op == Opcodes.DRETURN || op == Opcodes.ARETURN) {
 				if (inRange) return "return inside extraction range";
 				if (before) return "return before put at index " + i;
 			} else if (op == Opcodes.ATHROW) {
@@ -3130,70 +3064,24 @@ public class InitFix {
 	}
 
 	private static Boolean isProtectedCrossPackageAccess(
-	 Class<?> host, String ownerInternal,
+	 ClassHierarchyOracle oracle, Class<?> host, String ownerInternal,
 	 String name, String desc, boolean isField) {
 
 		if (ownerInternal.isEmpty() || ownerInternal.charAt(0) == '[') return Boolean.FALSE;
 
-	Class<?> owner;
-		try {
-			owner = Class.forName(ownerInternal.replace('/', '.'),
-			                      false, host.getClassLoader());
-		} catch (Throwable t) {
-			return null;
-		}
+		Optional<Integer> modifiers = isField
+			? oracle.getFieldModifiers(ownerInternal, name, desc)
+			: oracle.getMethodModifiers(ownerInternal, name, desc);
+		if (modifiers.isEmpty()) return null;
 
-		try {
-			if (isField) {
-				for (Class<?> c = owner; c != null; c = c.getSuperclass()) {
-					try {
-						Field f = c.getDeclaredField(name);
-						return Modifier.isProtected(f.getModifiers()) && !sameRuntimePackage(c, host)
-						 ? Boolean.TRUE : Boolean.FALSE;
-					} catch (NoSuchFieldException ignored) {
-						// 继续向上
-					}
-				}
-				return Boolean.FALSE;
-			}
-
-			if ("<init>".equals(name)) {
-				for (Constructor<?> ctor : owner.getDeclaredConstructors()) {
-					if (Type.getConstructorDescriptor(ctor).equals(desc)) {
-						return Modifier.isProtected(ctor.getModifiers())
-						       && !sameRuntimePackage(owner, host)
-						 ? Boolean.TRUE : Boolean.FALSE;
-					}
-				}
-				return Boolean.FALSE;
-			}
-
-			for (Class<?> c = owner; c != null; c = c.getSuperclass()) {
-				for (Method m : c.getDeclaredMethods()) {
-					if (m.getName().equals(name)
-					    && Type.getMethodDescriptor(m).equals(desc)) {
-						return Modifier.isProtected(m.getModifiers())
-						       && !sameRuntimePackage(c, host)
-						 ? Boolean.TRUE : Boolean.FALSE;
-					}
-				}
-			}
-			return Boolean.FALSE;
-		} catch (Throwable t) {
-			return null;
-		}
+		String hostInternal = host.getName().replace('.', '/');
+		return Modifier.isProtected(modifiers.get())
+		       && !packageName(ownerInternal).equals(packageName(hostInternal));
 	}
 
-	private static boolean sameRuntimePackage(Class<?> a, Class<?> b) {
-		if (a == b) return true;
-		if (a.getClassLoader() != b.getClassLoader()) return false;
-		return Objects.equals(packageNameOf(a), packageNameOf(b));
-	}
-
-	private static String packageNameOf(Class<?> c) {
-		String n = c.getName();
-		int    i = n.lastIndexOf('.');
-		return i < 0 ? "" : n.substring(0, i);
+	private static String packageName(String internalName) {
+		int separator = internalName.lastIndexOf('/');
+		return separator < 0 ? "" : internalName.substring(0, separator);
 	}
 
 	private static boolean isStackBalanced(Frame<SourceValue>[] frames,

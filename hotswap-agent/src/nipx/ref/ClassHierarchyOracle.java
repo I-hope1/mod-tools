@@ -18,6 +18,18 @@ public interface ClassHierarchyOracle {
 
 	Optional<Integer> getMethodModifiers(String className, String methodName, String desc);
 
+	Optional<MemberRef> resolveMember(String className, String name, String desc, boolean isField);
+
+	final class MemberRef {
+		public final String declaringClass;
+		public final int access;
+
+		public MemberRef(String declaringClass, int access) {
+			this.declaringClass = declaringClass;
+			this.access = access;
+		}
+	}
+
 	/** Returns the complete nest, or throws when any declared nest member is unavailable. */
 	List<ClassNode> getNestMembers(String className);
 

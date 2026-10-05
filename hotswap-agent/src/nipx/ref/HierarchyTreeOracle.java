@@ -53,42 +53,26 @@ public final class HierarchyTreeOracle implements ClassHierarchyOracle {
 
 	@Override
 	public Optional<Integer> getFieldModifiers(String className, String fieldName, String desc) {
-		return findField(className, className, fieldName, desc, new HashSet<>());
-	}
-
-	private Optional<Integer> findField(String lookupType, String currentType, String name, String desc,
-	                                    Set<String> visited) {
-		if (!visited.add(currentType)) return Optional.empty();
-		ClassNode node = resolve(currentType);
-		if (node == null) return Optional.empty();
-		for (FieldNode field : node.fields) {
-			if (field.name.equals(name) && field.desc.equals(desc)
-			    && visibleFromLookup(lookupType, currentType, field.access)) {
-				return Optional.of(field.access);
-			}
-		}
-		if (node.interfaces != null) {
-			for (String itf : node.interfaces) {
-				Optional<Integer> found = findField(lookupType, itf, name, desc, visited);
-				if (found.isPresent()) return found;
-			}
-		}
-		return node.superName == null
-			? Optional.empty()
-			: findField(lookupType, node.superName, name, desc, visited);
+		return findField(className, className, fieldName, desc, new HashSet<>()).map(member -> member.access);
 	}
 
 	@Override
 	public Optional<Integer> getMethodModifiers(String className, String methodName, String desc) {
-		if ("<init>".equals(methodName)) return declaredMethod(className, methodName, desc);
+		return resolveMember(className, methodName, desc, false).map(member -> member.access);
+	}
+
+	@Override
+	public Optional<MemberRef> resolveMember(String className, String name, String desc, boolean isField) {
+		if (isField) return findField(className, className, name, desc, new HashSet<>());
+		if ("<init>".equals(name)) return declaredMethod(className, name, desc);
 
 		Set<String> classChain = new LinkedHashSet<>();
 		String current = className;
 		while (current != null && classChain.add(current)) {
 			ClassNode node = resolve(current);
 			if (node == null) return Optional.empty();
-			Optional<Integer> declared = declaredMethod(current, methodName, desc);
-			if (declared.isPresent() && visibleFromLookup(className, current, declared.get())) return declared;
+			Optional<MemberRef> declared = declaredMethod(current, name, desc);
+			if (declared.isPresent() && visibleFromLookup(className, current, declared.get().access)) return declared;
 			current = node.superName;
 		}
 
@@ -97,34 +81,58 @@ public final class HierarchyTreeOracle implements ClassHierarchyOracle {
 			ClassNode node = resolve(classNameInChain);
 			if (node == null || node.interfaces == null) continue;
 			for (String itf : node.interfaces) {
-				Optional<Integer> found = findInterfaceMethod(className, itf, methodName, desc, visitedInterfaces);
+				Optional<MemberRef> found = findInterfaceMethod(className, itf, name, desc, visitedInterfaces);
 				if (found.isPresent()) return found;
 			}
 		}
 		return Optional.empty();
 	}
 
-	private Optional<Integer> findInterfaceMethod(String lookupType, String interfaceType, String name, String desc,
-	                                             Set<String> visited) {
+	private Optional<MemberRef> findField(String lookupType, String currentType, String name, String desc,
+	                                      Set<String> visited) {
+		if (!visited.add(currentType)) return Optional.empty();
+		ClassNode node = resolve(currentType);
+		if (node == null) return Optional.empty();
+		for (FieldNode field : node.fields) {
+			if (field.name.equals(name) && field.desc.equals(desc)
+			    && visibleFromLookup(lookupType, currentType, field.access)) {
+				return Optional.of(new MemberRef(currentType, field.access));
+			}
+		}
+		if (node.interfaces != null) {
+			for (String itf : node.interfaces) {
+				Optional<MemberRef> found = findField(lookupType, itf, name, desc, visited);
+				if (found.isPresent()) return found;
+			}
+		}
+		return node.superName == null
+			? Optional.empty()
+			: findField(lookupType, node.superName, name, desc, visited);
+	}
+
+	private Optional<MemberRef> findInterfaceMethod(String lookupType, String interfaceType, String name, String desc,
+	                                                Set<String> visited) {
 		if (!visited.add(interfaceType)) return Optional.empty();
 		ClassNode node = resolve(interfaceType);
 		if (node == null) return Optional.empty();
-		Optional<Integer> declared = declaredMethod(interfaceType, name, desc);
-		if (declared.isPresent() && visibleFromLookup(lookupType, interfaceType, declared.get())) return declared;
+		Optional<MemberRef> declared = declaredMethod(interfaceType, name, desc);
+		if (declared.isPresent() && visibleFromLookup(lookupType, interfaceType, declared.get().access)) return declared;
 		if (node.interfaces != null) {
 			for (String parent : node.interfaces) {
-				Optional<Integer> found = findInterfaceMethod(lookupType, parent, name, desc, visited);
+				Optional<MemberRef> found = findInterfaceMethod(lookupType, parent, name, desc, visited);
 				if (found.isPresent()) return found;
 			}
 		}
 		return Optional.empty();
 	}
 
-	private Optional<Integer> declaredMethod(String className, String name, String desc) {
+	private Optional<MemberRef> declaredMethod(String className, String name, String desc) {
 		ClassNode node = resolve(className);
 		if (node == null) return Optional.empty();
 		for (MethodNode method : node.methods) {
-			if (method.name.equals(name) && method.desc.equals(desc)) return Optional.of(method.access);
+			if (method.name.equals(name) && method.desc.equals(desc)) {
+				return Optional.of(new MemberRef(className, method.access));
+			}
 		}
 		return Optional.empty();
 	}

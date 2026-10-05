@@ -99,14 +99,24 @@ public class ClassHierarchyOracleTest {
 
 		String intDesc = "I";
 		Optional<Integer> inheritedField = oracle.getFieldModifiers(childName, "inheritedField", intDesc);
-		check(inheritedField.isPresent() && (inheritedField.get() & Opcodes.ACC_PROTECTED) != 0,
-			"inherited field modifiers resolved by descriptor");
+		Optional<ClassHierarchyOracle.MemberRef> inheritedFieldRef =
+			oracle.resolveMember(childName, "inheritedField", intDesc, true);
+		check(inheritedField.isPresent() && (inheritedField.get() & Opcodes.ACC_PROTECTED) != 0
+			&& inheritedFieldRef.isPresent() && inheritedFieldRef.get().declaringClass.equals(grandParentName),
+			"inherited field modifiers and declaring class resolved by descriptor");
 		check(oracle.getFieldModifiers(childName, "ownField", "Ljava/lang/String;").isPresent(),
 			"declared field modifiers resolved");
 		check(oracle.getFieldModifiers(childName, "ownField", "I").isEmpty(),
 			"field lookup requires an exact descriptor");
-		check(oracle.getMethodModifiers(childName, "inheritedMethod", "()V").isPresent(),
-			"inherited method modifiers resolved");
+		Optional<ClassHierarchyOracle.MemberRef> inheritedMethod =
+			oracle.resolveMember(childName, "inheritedMethod", "()V", false);
+		check(inheritedMethod.isPresent() && inheritedMethod.get().declaringClass.equals(grandParentName),
+			"inherited method resolution preserves its declaring class");
+		Optional<ClassHierarchyOracle.MemberRef> clone =
+			oracle.resolveMember(childName, "clone", "()Ljava/lang/Object;", false);
+		check(clone.isPresent() && clone.get().declaringClass.equals("java/lang/Object")
+			&& (clone.get().access & Opcodes.ACC_PROTECTED) != 0,
+			"inherited protected Object.clone retains cross-package declaring class");
 		ClassNode childNode = new ClassNode();
 		new ClassReader(childBytes).accept(childNode, 0);
 		MethodInsnNode thisCall = null;

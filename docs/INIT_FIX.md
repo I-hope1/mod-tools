@@ -59,15 +59,21 @@ public interface ClassHierarchyOracle {
     /** 获取成员访问标志，消除 protected/private 检查期反射 */
     Optional<Integer> getFieldModifiers(String className, String fieldName, String desc);
     Optional<Integer> getMethodModifiers(String className, String methodName, String desc);
+    Optional<MemberRef> resolveMember(String className, String name, String desc, boolean isField);
     /** 提取指定类的所有 Nest 成员字节码（优先读取新版本） */
     List<ClassNode> getNestMembers(String className);
+
+    final class MemberRef {
+        public final String declaringClass; // internal name of the declaring class
+        public final int access;
+    }
 }
 ```
 * **实现底座**：运行时内嵌模式由 `HierarchyTreeOracle` 对接 `AnnotationTransformer.HierarchyTree` 的 BFS 与 `bytecodeCache` / ClassLoader 资源回退；整个查询过程不触发动态类加载。类名采用 JVM internal form。`HierarchyTree` 全局只保存 `superName`、interfaces、access；Oracle 的 ClassNode 元数据仅存在于单次分析实例。`[已实现]`
 * **Nest 扫描**：成员清单以 `SKIP_CODE` 读取；字段写入证明另用 ASM visitor 流式扫描方法体，只保留紧凑的 `PUTFIELD` / `PUTSTATIC` 记录，不构造完整方法指令树。
 * **失败语义**：无法解析时层级/接口查询返回 `false`；类修饰符查询抛 `IllegalArgumentException`；成员查询返回 empty，调用方在安全门中按“无法证明”处理；Nest 任一声明成员不可读时 Oracle 抛 `IllegalStateException`，`InitFix` 捕获、记录 warning 并拒绝全 Nest 写入证明。
 
-> `InitFix.isProtectedCrossPackageAccess` 已改为通过 oracle 读取成员标志，不再使用 `Class.forName` 或反射。protected 跨包判断按类名中的 package 路径比较；Oracle 接口不携带定义类加载器身份，因此运行时包的跨 ClassLoader 同名包区别不在此契约内。
+> `InitFix.isProtectedCrossPackageAccess` 已改为通过 `resolveMember` 读取访问标志与实际声明类，不再使用 `Class.forName` 或反射。protected 跨包判断按声明类与宿主的 package 路径比较；Oracle 接口不携带定义类加载器身份，因此运行时包的跨 ClassLoader 同名包区别不在此契约内。
 
 ### 2.2 `PatchPlan` 前置条件指纹与多轮热更基线追踪 `[目标规范]`
 * **规范化基线对象**：`baseClassHash` 指向**经 `AnnotationTransformer`（`forceStaticLambdas` 等）改写规范化后、传给 JVM redefine 的字节码哈希**，而非磁盘原始字节码。

@@ -3069,14 +3069,13 @@ public class InitFix {
 
 		if (ownerInternal.isEmpty() || ownerInternal.charAt(0) == '[') return Boolean.FALSE;
 
-		Optional<Integer> modifiers = isField
-			? oracle.getFieldModifiers(ownerInternal, name, desc)
-			: oracle.getMethodModifiers(ownerInternal, name, desc);
-		if (modifiers.isEmpty()) return null;
+		Optional<ClassHierarchyOracle.MemberRef> member =
+			oracle.resolveMember(ownerInternal, name, desc, isField);
+		if (member.isEmpty()) return null;
 
 		String hostInternal = host.getName().replace('.', '/');
-		return Modifier.isProtected(modifiers.get())
-		       && !packageName(ownerInternal).equals(packageName(hostInternal));
+		return Modifier.isProtected(member.get().access)
+		       && !packageName(member.get().declaringClass).equals(packageName(hostInternal));
 	}
 
 	private static String packageName(String internalName) {

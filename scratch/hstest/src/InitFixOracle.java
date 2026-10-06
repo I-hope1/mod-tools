@@ -121,6 +121,7 @@ public class InitFixOracle {
 		scenario("§3.5 对照：静态无环时读它的实例字段仍被接受", InitFixOracle::caseAcyclicStaticStillAccepted);
 		scenario("§3.5 静态环拒绝后跨组漏网：读环成员的实例字段必须被连带拒绝", InitFixOracle::caseStaticCycleLeaksInstanceDependent);
 		scenario("§3.5 成环拒绝收窄：与环无关的字段不应被连带拒绝", InitFixOracle::caseCycleRefusalIsNarrow);
+		scenario("§5.3 float/double 条件 CAS：已存在的值（含 -0.0f）不得被覆盖", InitFixOracle::caseFloatDoubleConditionalCas);
 		scenario("§4.1+§4.3 T0 零值字段可被依赖：读零值新增字段的切片必须放行", InitFixOracle::caseZeroValueDependency);
 		scenario("§4.1 静态同款：读零值静态字段的 <clinit> 切片必须放行", InitFixOracle::caseZeroValueStaticDependency);
 		scenario("§3.4 拒绝告警出口：提取期与闭包期的 REJECTED 都必须发 warn", InitFixOracle::caseRejectionWarnings);
@@ -1741,6 +1742,102 @@ public class InitFixOracle {
 		Object izVal = read(fx.host, subject, "iz");
 		check(Integer.valueOf(9).equals(izVal),
 			"CaseCyc4：独立实例字段 iz 补上正确值 9（实际 " + describe(izVal) + "）");
+	}
+
+	// ==================== 场景 16i：float/double 的条件 CAS 必须保持条件语义 ====================
+
+	/** V1：原始版本（只有 raw）。 */
+	static final String CASE_FP_V1 = """
+		package oracle;
+		public class CaseFp {
+			private final String raw;
+			public CaseFp(String raw) { this.raw = raw; }
+			public String raw() { return raw; }
+		}
+		""";
+
+	/**
+	 * V2：新增 float / double 字段，初始化式非零（因此不是 T0 零值等价，会生成条件 CAS）。
+	 *
+	 * <p>判别点：存量实例上这些字段<b>已被别的线程赋成非默认值</b>时，补丁必须
+	 * <b>不覆盖</b>它 —— 条件 CAS 的语义就是"仅当仍是类型默认零值才写"。
+	 * 若 float/double 降级成无条件 volatile 写，就会把已写入的值冲掉。</p>
+	 *
+	 * <p>用 {@code -0.0f} 作为"已存在的值"更有鉴别力：它的位模式非零
+	 * （{@code 0x80000000}），按 §4.1 T0 的按位判零口径**不是**零值等价，
+	 * 因此条件 CAS 必须判定为"已有值"而跳过。整数比较 {@code == 0.0f} 的实现
+	 * 会误判 {@code -0.0f == 0.0f} 为真并覆盖它。</p>
+	 */
+	static final String CASE_FP_V2 = """
+		package oracle;
+		public class CaseFp {
+			private final String raw;
+			private float  f;
+			private double d;
+			public CaseFp(String raw) { this.raw = raw; this.f = 1.5f; this.d = 2.5d; }
+			public String raw() { return raw; }
+			public float f() { return f; }
+			public double d() { return d; }
+		}
+		""";
+
+	static void caseFloatDoubleConditionalCas() throws Exception {
+		Fixture fx = loadFixture("oracle.CaseFp", CASE_FP_V1, CASE_FP_V2);
+
+		// 三个存量实例，补丁前把它们置成不同的"已有值"
+		Object occupiedF = construct(fx.host, "r");
+		Object occupiedD = construct(fx.host, "r");
+		Object occupiedNegZero = construct(fx.host, "r");
+
+		setFieldF(fx.host, occupiedF, "f", 9.0f);          // 明显的非默认值
+		setFieldD(fx.host, occupiedD, "d", 9.0d);
+		setFieldF(fx.host, occupiedNegZero, "f", -0.0f);   // 位模式非零，按 T0 口径算"已有值"
+
+		InstanceTracker.register(occupiedF);
+		InstanceTracker.register(occupiedD);
+		InstanceTracker.register(occupiedNegZero);
+
+		InitFix.PatchReport report = fx.transform();
+		expect(report, false, "f", InitFix.FieldStatus.ACCEPTED, null);
+		expect(report, false, "d", InitFix.FieldStatus.ACCEPTED, null);
+
+		fx.apply();
+
+		// 核心断言：已存在的非默认值不得被覆盖
+		Object gotF = read(fx.host, occupiedF, "f");
+		check(Float.floatToRawIntBits(9.0f) == Float.floatToRawIntBits((Float) gotF),
+			"CaseFp：已存在的 float 值不得被补丁覆盖（期望 9.0，实际 " + describe(gotF) + "）");
+
+		Object gotD = read(fx.host, occupiedD, "d");
+		check(Double.doubleToRawLongBits(9.0d) == Double.doubleToRawLongBits((Double) gotD),
+			"CaseFp：已存在的 double 值不得被补丁覆盖（期望 9.0，实际 " + describe(gotD) + "）");
+
+		// 按位判零口径：-0.0f 不算零值等价，必须视为"已有值"而跳过
+		Object gotNZ = read(fx.host, occupiedNegZero, "f");
+		check(Float.floatToRawIntBits(-0.0f) == Float.floatToRawIntBits((Float) gotNZ),
+			"CaseFp：-0.0f 应被视为已有值而跳过（位模式须保持 0x80000000，实际 "
+			+ describe(gotNZ) + "）");
+	}
+
+	/** 反射写 float（{@code setField} 走 Object，基本类型需要显式装箱路径）。 */
+	static void setFieldF(Class<?> host, Object target, String field, float value) {
+		try {
+			Field f = host.getDeclaredField(field);
+			f.setAccessible(true);
+			f.setFloat(target, value);
+		} catch (ReflectiveOperationException e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
+	static void setFieldD(Class<?> host, Object target, String field, double value) {
+		try {
+			Field f = host.getDeclaredField(field);
+			f.setAccessible(true);
+			f.setDouble(target, value);
+		} catch (ReflectiveOperationException e) {
+			throw new IllegalStateException(e);
+		}
 	}
 
 	/** V1：原始版本（只有 raw）。 */

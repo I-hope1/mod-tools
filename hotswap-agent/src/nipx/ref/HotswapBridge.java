@@ -33,12 +33,15 @@ import java.util.*;
  *   <li><b>boolean/byte/char/short/int/long</b>：JDK 9 引入 VarHandle 时就叫
  *       {@code compareAndSetXxx}。JDK 8 下 {@code sun.misc.Unsafe} 仅包含 {@code compareAndSwapInt/Long}，
  *       无子字 CAS（boolean/byte/char/short 找不到 CAS 时自动降级为 volatile 写）。</li>
- *   <li><b>float/double</b>：{@code Unsafe} 至今没有
- *       {@code compareAndSetFloat}/{@code compareAndDouble}。硬件 {@code cmpxchg}
- *       只作用于整型，JDK 官方（如 VarHandle）用 raw bits + {@code compareAndSetInt/Long}
- *       实现浮点 CAS。本类不做位转换，直接降级为 {@code putFloatVolatile}/
- *       {@code putDoubleVolatile} 无条件写——丢掉条件语义，但保持 volatile 可见性。
- *       float/double 字段极少是 final，影响面很小。</li>
+ *   <li><b>float/double</b>：<b>不依赖 {@code compareAndSetFloat/Double} 是否存在</b>，
+ *       一律用 raw bits 转成 int/long CAS（见 {@link #rawBitsConditional}）。
+ *       原因：{@code jdk.internal.misc.Unsafe}（JDK 9+）<b>有</b>
+ *       {@code compareAndSetFloat/Double}，而 JDK 8 的 {@code sun.misc.Unsafe}
+ *       <b>没有</b>（实测 1.8.0_332：absent；25.0.2：present）。若按名字探测，
+ *       同一补丁在 JDK 9+ 是条件 CAS、在 JDK 8 退化成 {@code putFloatVolatile}
+ *       无条件写 —— 会覆盖其他线程已写入的值，与本节"保守方向"相反。
+ *       统一走 raw bits 后两条 JDK 语义一致，且与 §4.1 T0 的<b>按位判零</b>口径对齐：
+ *       {@code -0.0f} 位模式非零，被视为"已有值"而跳过。</li>
  * </ul>
  *
  * <p><b>bsmArgs 布局</b>：{@code [int kind, int opcode, Class owner, Class host]}。
@@ -182,17 +185,62 @@ public final class HotswapBridge {
 			 new String[]{"compareAndSetLong", "compareAndSwapLong"}, new String[]{"putLongVolatile"},
 			 long.class, 0L));
 
-			// float/double：没有任何 Unsafe 提供对应 CAS，自动降级为无条件 volatile 写。
-			m.put(float.class, conditional(
-			 new String[]{"compareAndSetFloat"}, new String[]{"putFloatVolatile"},
-			 float.class, 0.0f));
-			m.put(double.class, conditional(
-			 new String[]{"compareAndSetDouble"}, new String[]{"putDoubleVolatile"},
-			 double.class, 0.0d));
+			// float/double：一律用 raw bits 走 int/long CAS，不依赖
+			// compareAndSetFloat/Double 是否存在（JDK 8 没有；见类注释）。
+			// 这样 JDK 8 与 JDK 9+ 语义一致，且与 T0 的按位判零口径对齐。
+			m.put(float.class, rawBitsConditional(float.class));
+			m.put(double.class, rawBitsConditional(double.class));
 		} catch (Throwable t) {
 			throw new ExceptionInInitializerError(t);
 		}
 		CONDITIONAL_PUTTERS = Collections.unmodifiableMap(m);
+	}
+
+	/**
+	 * float/double 的条件 CAS：在 raw bits（int/long）上做比较-交换，
+	 * 再把句柄签名适配回 {@code (Object, long, V)void}。
+	 *
+	 * <p>为什么不用 {@code compareAndSetFloat/Double}：JDK 8 的 {@code sun.misc.Unsafe}
+	 * 没有这两个方法（实测 1.8.0_332 absent），按名字探测会静默退化成无条件 volatile 写，
+	 * 覆盖其他线程已写入的值。raw bits 在所有目标 JDK 上都可用（{@code compareAndSwapInt/Long}
+	 * 从 JDK 8 起就有），语义一致。</p>
+	 *
+	 * <p><b>按位判零</b>：expected 取 {@code floatToRawIntBits(0.0f) == 0} / {@code doubleToRawLongBits(0.0d) == 0L}，
+	 * 与 §4.1 T0 的判零口径一致。于是 {@code -0.0f}（位模式 {@code 0x80000000}）与
+	 * 各类 NaN 都被视为"字段已有值"，条件 CAS 失败、补丁跳过 —— 这正是保守方向所需。</p>
+	 *
+	 * <p>句柄组合：{@code casInt(Object,long,int,int)boolean}
+	 * --insertArguments(expected=0)--> {@code (Object,long,int)boolean}
+	 * --filterArguments(floatToRawIntBits)--> {@code (Object,long,float)boolean}
+	 * --dropReturn--> {@code (Object,long,float)void}。</p>
+	 */
+	private static MethodHandle rawBitsConditional(Class<?> valueClass) throws Throwable {
+		boolean isFloat = valueClass == float.class;
+		Class<?> bitsClass = isFloat ? int.class : long.class;
+
+		MethodType casType = MethodType.methodType(
+		 boolean.class, Object.class, long.class, bitsClass, bitsClass);
+		MethodHandle cas = tryFind("compareAndSet" + (isFloat ? "Int" : "Long"), casType);
+		if (cas == null) {
+			cas = tryFind("compareAndSwap" + (isFloat ? "Int" : "Long"), casType);
+		}
+		if (cas == null) {
+			throw new NoSuchMethodException(
+			 "no " + bitsClass.getName() + " CAS for raw-bits " + valueClass.getName());
+		}
+
+		// expected = 零值的 raw bits（两者都是 0）
+		cas = MethodHandles.insertArguments(cas, 2, isFloat ? (Object) 0 : (Object) 0L);
+
+		// 把传入的 float/double 参数转成 raw bits
+		MethodHandle toBits = MethodHandles.lookup().findStatic(
+		 isFloat ? Float.class : Double.class,
+		 isFloat ? "floatToRawIntBits" : "doubleToRawLongBits",
+		 MethodType.methodType(bitsClass, valueClass));
+		cas = MethodHandles.filterArguments(cas, 2, toBits);
+
+		// 丢弃 boolean 返回值，与 CONDITIONAL_PUTTERS 的其余条目同形态
+		return cas.asType(cas.type().changeReturnType(void.class));
 	}
 
 	/**

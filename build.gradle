@@ -546,6 +546,7 @@ sourceSets {
 dependencies {
 	hstestImplementation project(":hotswap-agent")
 	hstestImplementation project(":jni-agent")
+	hstestImplementation "Anuken:Mindustry:$mindustryVersion"
 }
 
 // javaLauncher 只管**运行**，不管编译：不设这一行，测试入口会被编成宿主 JDK 的

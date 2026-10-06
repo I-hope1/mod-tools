@@ -10,6 +10,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
+@SuppressWarnings({"removal", "RedundantSuppression"})
 public class AndroidLinker {
 	private static final int            INVOKE_DIRECT     = 2; // Android ART 核心非虚调用类型
 	private static final int            INVOKE_STATIC     = 3;

@@ -113,6 +113,7 @@ public class InitFixOracle {
 		scenario("§3.2 边界：构造器里的独立语句不进切片（REJECT 边界在哪）", InitFixOracle::caseStatementOutsideSlice);
 		scenario("§1.1 @HotswapReinit：解锁构造器读取 / 强制覆写 / CONDITIONAL 不覆写 / T0 绕过", InitFixOracle::caseHotswapReinit);
 		scenario("§5.1/§5.2 逐字段驱动：单字段失败不牵连后续字段，依赖失败显式跳过", InitFixOracle::casePerFieldDriver);
+		scenario("§3.2 静态依赖失败必须传播到实例字段：连带跳过并记账", InitFixOracle::caseStaticFailurePropagatesToInstance);
 		scenario("§4.1+§4.3 T0 零值字段可被依赖：读零值新增字段的切片必须放行", InitFixOracle::caseZeroValueDependency);
 		scenario("§4.1 静态同款：读零值静态字段的 <clinit> 切片必须放行", InitFixOracle::caseZeroValueStaticDependency);
 		scenario("§3.4 拒绝告警出口：提取期与闭包期的 REJECTED 都必须发 warn", InitFixOracle::caseRejectionWarnings);
@@ -1082,6 +1083,88 @@ public class InitFixOracle {
 		check(agentWarnings.stream().anyMatch(w -> w.contains("CaseU.derived")
 		      && w.contains("dependency failed")),
 			"CaseU：依赖失败被显式告警（实际 warns=" + agentWarnings.size() + " 条）");
+	}
+
+	// ==================== 场景 16a：静态依赖失败必须传播到实例字段 ====================
+
+	/** V1：原始版本（只有 FAIL 开关与构造器）。 */
+	static final String CASE_Y_V1 = """
+		package oracle;
+		public class CaseY {
+			public  static boolean FAIL;
+			public CaseY(String seed) { }
+			public  static void failNow(boolean v) { FAIL = v; }
+			private static int pick() { if (FAIL) throw new IllegalStateException("boom"); return 7; }
+		}
+		""";
+
+	/**
+	 * V2：新增一个<b>静态</b>字段 {@code SBad}（切片执行期抛异常）与一个<b>实例</b>字段
+	 * {@code IDerived}，后者读前者算值。
+	 *
+	 * <p>核心原则（§3.2）：切片不能依赖"未补上的值"。{@code SBad} 补失败后，
+	 * {@code IDerived} 必须被<b>连带跳过并记账</b>；若照常执行，它读到的是
+	 * {@code SBad} 的默认值 0，会静默写入过期值 —— 这就是待修的静默误补。</p>
+	 *
+	 * <p>{@code pick()} 里的分支不在切片内（切片只含 GETSTATIC + 算术 + PUTFIELD），
+	 * 不破坏直线假设；开关在构造期是 false，打补丁前置 true，异常只发生在补丁侧。</p>
+	 */
+	static final String CASE_Y_V2 = """
+		package oracle;
+		public class CaseY {
+			public  static boolean FAIL;
+			private static int SBad    = pick();
+			private int        IDerived = SBad + 1;
+			public CaseY(String seed) { }
+			public  static void failNow(boolean v) { FAIL = v; }
+			private static int pick() { if (FAIL) throw new IllegalStateException("boom"); return 7; }
+			public int iDerived() { return IDerived; }
+		}
+		""";
+
+	static void caseStaticFailurePropagatesToInstance() throws Exception {
+		int before = agentWarnings.size();
+
+		Fixture fx = loadFixture("oracle.CaseY", CASE_Y_V1, CASE_Y_V2);
+
+		// 构造存量实例、清零、登记 —— 必须在 transform 之前，
+		// 否则实例快照拍不到它（alive=0，实例补丁整块被跳过）。
+		Object subject = construct(fx.host, "seed");
+		resetToDefault(fx.host, subject, "IDerived", "I");
+		InstanceTracker.register(subject);
+
+		// 两个字段都应通过静态审查：SBad 的切片是纯 pick() 调用，
+		// IDerived 的切片是 GETSTATIC SBad + 常量 + PUTFIELD
+		InitFix.PatchReport report = fx.transform();
+		expect(report, true, "SBad", InitFix.FieldStatus.ACCEPTED, null);
+		expect(report, false, "IDerived", InitFix.FieldStatus.ACCEPTED, null);
+
+		// 打补丁前置开关：SBad 的静态切片将在执行期抛异常
+		fx.host.getMethod("failNow", boolean.class).invoke(null, true);
+
+		fx.apply();
+
+		// 核心断言 1：SBad 补失败 → IDerived 必须被跳过，保持默认值 0
+		Object got = read(fx.host, subject, "IDerived");
+		check(Integer.valueOf(0).equals(got),
+			"CaseY：静态字段补失败后，依赖它的实例字段必须被连带跳过"
+			+ "（期望 0，实际 " + describe(got) + "）");
+
+		// 核心断言 2：跳过必须被显式告警
+		boolean warned = agentWarnings.stream()
+		 .skip(before)
+		 .anyMatch(w -> w.contains("CaseY") && w.contains("IDerived")
+		                && w.contains("dependency failed"));
+		check(warned,
+			"CaseY：实例字段的连带跳过被显式告警（实际新增 "
+			+ (agentWarnings.size() - before) + " 条 warn）");
+
+		// 核心断言 3：两个字段都必须记入台账（下一轮才可能重试）
+		Set<String> unpatched = unpatched(fx.host);
+		check(unpatched.contains("SBad"),
+			"CaseY：补失败的静态字段记入 FieldLedger（实际 " + unpatched + "）");
+		check(unpatched.contains("IDerived"),
+			"CaseY：被连带跳过的实例字段记入 FieldLedger（实际 " + unpatched + "）");
 	}
 
 	// ==================== 场景 16b：T0 零值字段可被依赖 ====================

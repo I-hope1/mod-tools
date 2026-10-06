@@ -873,8 +873,17 @@ public class InitFix {
 			 hostInternal, className, new ArrayList<>(chosen.instructions()),
 			 chosen.protectedAccesses(), conditionalFields, forceWriteFields);
 			patch.methods.add(straightLineMethod(method, "(L" + className + ";)", body));
-			instanceTasks.add(new FieldPatchTask(method, fieldName, false,
-			 dependencyOf(fieldName, instanceExtracts, className, acceptedInstance)));
+			// 依赖闭包必须同时统计实例侧与<b>静态侧</b>的读取。
+			// 只传 acceptedInstance 会把切片里的 GETSTATIC 整个漏掉：静态字段补失败后，
+			// 依赖它的实例任务不会被跳过，照常执行并读到未补的静态字段默认值 ——
+			// 静默写入过期值，违反 §3.2"切片不能依赖未补上的值"的核心原则。
+			// （静态任务先于实例任务执行，其失败已落入共享的 failedFields，
+			//  因此这里只要把边记全，跳过与记账就会自动发生。）
+			Set<String> instanceDeps = new LinkedHashSet<>(
+			 dependencyOf(fieldName, instanceExtracts, className, acceptedInstance));
+			instanceDeps.addAll(
+			 dependencyOf(fieldName, instanceExtracts, className, acceptedStatic));
+			instanceTasks.add(new FieldPatchTask(method, fieldName, false, instanceDeps));
 		}
 
 		for (String fieldName : orderedStatic) {

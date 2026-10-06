@@ -117,6 +117,9 @@ public class InitFixOracle {
 		scenario("§5.2 失败跳过按实例隔离：单个实例失败不牵连其它实例", InitFixOracle::casePerInstanceSkipIsolation);
 		scenario("§5.2 确定性失败熔断：N 个实例全失败时日志与重试封顶", InitFixOracle::caseFailureCircuitBreaker);
 		scenario("§3.4 TTL 清扫丢弃待补补丁：字段必须写回台账而非永久遗忘", InitFixOracle::caseTtlSweepRecordsLedger);
+		scenario("§3.5 成环后依赖方必须重判：静态环与实例环两侧都要连带拒绝", InitFixOracle::caseCycleReevaluatesDependents);
+		scenario("§3.5 对照：静态无环时读它的实例字段仍被接受", InitFixOracle::caseAcyclicStaticStillAccepted);
+		scenario("§3.5 静态环拒绝后跨组漏网：读环成员的实例字段必须被连带拒绝", InitFixOracle::caseStaticCycleLeaksInstanceDependent);
 		scenario("§4.1+§4.3 T0 零值字段可被依赖：读零值新增字段的切片必须放行", InitFixOracle::caseZeroValueDependency);
 		scenario("§4.1 静态同款：读零值静态字段的 <clinit> 切片必须放行", InitFixOracle::caseZeroValueStaticDependency);
 		scenario("§3.4 拒绝告警出口：提取期与闭包期的 REJECTED 都必须发 warn", InitFixOracle::caseRejectionWarnings);
@@ -1419,6 +1422,238 @@ public class InitFixOracle {
 		} finally {
 			InitFix.setPendingTtlNanos(java.util.concurrent.TimeUnit.MINUTES.toNanos(5));
 		}
+	}
+
+	// ==================== 场景 16f：成环后依赖方必须重判 ====================
+
+	/** V1：原始版本（无环字段）。 */
+	static final String CASE_CYC_V1 = """
+		package oracle;
+		public class CaseCyc {
+			private final String raw;
+			public CaseCyc(String raw) { this.raw = raw; }
+			public String raw() { return raw; }
+		}
+		""";
+
+	/**
+	 * V2：同时构造<b>静态环</b>与<b>实例环</b>，以及各自环外的依赖方。
+	 *
+	 * <p>Java 语法限制：静态字段不能用简单名字前向引用，所以环写成
+	 * {@code CaseCyc.b + 1} / {@code CaseCyc.a + 1} 全限定形式。</p>
+	 *
+	 * <ul>
+	 *   <li><b>静态环</b>：{@code sa ⟷ sb}；{@code si = sa + 1} 依赖环成员。</li>
+	 *   <li><b>实例环</b>：{@code ix ⟷ iy}；{@code ij = ix + 1} 依赖环成员。</li>
+	 * </ul>
+	 *
+	 * <p>两者都是同一类缺陷：环成员在拓扑排序阶段才被拒，而依赖方的 {@code depReason}
+	 * 早已通过 —— 补丁照常执行，读到未补的默认值，静默写入过期值。</p>
+	 */
+	static final String CASE_CYC_V2 = """
+		package oracle;
+		public class CaseCyc {
+			private final String raw;
+			private static int sa;
+			private static int sb;
+			private static int si;
+			private int ix;
+			private int iy;
+			private int ij;
+			static {
+				sa = CaseCyc.sb + 1;
+				sb = CaseCyc.sa + 1;
+				si = sa + 1;
+			}
+			public CaseCyc(String raw) {
+				this.raw = raw;
+				this.ix = this.iy + 1;
+				this.iy = this.ix + 1;
+				this.ij = this.ix + 1;
+			}
+			public String raw() { return raw; }
+		}
+		""";
+
+	static void caseCycleReevaluatesDependents() throws Exception {
+		Fixture fx = loadFixture("oracle.CaseCyc", CASE_CYC_V1, CASE_CYC_V2);
+
+		Object subject = construct(fx.host, "r");
+		resetToDefault(fx.host, subject, "ix", "I");
+		resetToDefault(fx.host, subject, "iy", "I");
+		resetToDefault(fx.host, subject, "ij", "I");
+		InstanceTracker.register(subject);
+
+		InitFix.PatchReport report = fx.transform();
+
+		// 环成员必须被拒
+		boolean staticCycleRejected =
+		 report.staticFields().get("sa") != null
+		 && report.staticFields().get("sa").status() == InitFix.FieldStatus.REJECTED;
+		boolean instanceCycleRejected =
+		 report.instanceFields().get("ix") != null
+		 && report.instanceFields().get("ix").status() == InitFix.FieldStatus.REJECTED;
+		check(staticCycleRejected, "CaseCyc：静态环成员被拒（实际 "
+		      + report.staticFields().get("sa") + "）");
+		check(instanceCycleRejected, "CaseCyc：实例环成员被拒（实际 "
+		      + report.instanceFields().get("ix") + "）");
+
+		// 核心断言：环外的依赖方必须也被拒 —— 它读的是未补的环成员
+		boolean siRejected = report.staticFields().get("si") != null
+		 && report.staticFields().get("si").status() == InitFix.FieldStatus.REJECTED;
+		boolean ijRejected = report.instanceFields().get("ij") != null
+		 && report.instanceFields().get("ij").status() == InitFix.FieldStatus.REJECTED;
+
+		check(siRejected, "CaseCyc：依赖静态环成员的 si 必须被连带拒绝（实际 "
+		      + report.staticFields().get("si") + "）");
+		check(ijRejected, "CaseCyc：依赖实例环成员的 ij 必须被连带拒绝（实际 "
+		      + report.instanceFields().get("ij") + "）");
+
+		// 诊断文案必须可辨识（否则只是换了一种静默）
+		String siReason = report.staticFields().get("si") == null ? ""
+		 : String.valueOf(report.staticFields().get("si").reason());
+		String ijReason = report.instanceFields().get("ij") == null ? ""
+		 : String.valueOf(report.instanceFields().get("ij").reason());
+		check(siReason.contains("cycle") || siReason.contains("depends on rejected")
+		      || siReason.contains("dependency"),
+			"CaseCyc：si 的拒绝原因可辨识（实际：" + siReason + "）");
+		check(ijReason.contains("cycle") || ijReason.contains("depends on rejected")
+		      || ijReason.contains("dependency"),
+			"CaseCyc：ij 的拒绝原因可辨识（实际：" + ijReason + "）");
+
+		fx.apply();
+
+		// 端到端：ij 不得被写成过期值 1
+		Object ij = read(fx.host, subject, "ij");
+		check(Integer.valueOf(0).equals(ij),
+			"CaseCyc：存量实例的 ij 保持默认值 0，不得被写成过期值（实际 " + describe(ij) + "）");
+
+		// 台账：三边都要记账
+		Set<String> unpatched = unpatched(fx.host);
+		check(unpatched.contains("si"), "CaseCyc：si 记入台账（实际 " + unpatched + "）");
+		check(unpatched.contains("ij"), "CaseCyc：ij 记入台账（实际 " + unpatched + "）");
+	}
+
+	/**
+	 * 对照场景：静态字段<b>无环</b>时，读取它的实例字段必须照常放行。
+	 * <p>防止修复退化成"见到静态依赖就拒绝"。</p>
+	 */
+	static final String CASE_CYC2_V1 = """
+		package oracle;
+		public class CaseCyc2 {
+			private final String raw;
+			public CaseCyc2(String raw) { this.raw = raw; }
+			public String raw() { return raw; }
+		}
+		""";
+
+	static final String CASE_CYC2_V2 = """
+		package oracle;
+		public class CaseCyc2 {
+			private final String raw;
+			private static int sa;
+			private int si;
+			static { sa = 41; }
+			public CaseCyc2(String raw) { this.raw = raw; this.si = sa + 1; }
+			public String raw() { return raw; }
+			public int si() { return si; }
+		}
+		""";
+
+	static void caseAcyclicStaticStillAccepted() throws Exception {
+		Fixture fx = loadFixture("oracle.CaseCyc2", CASE_CYC2_V1, CASE_CYC2_V2);
+
+		Object control = construct(fx.host, "r");
+		Object subject = construct(fx.host, "r");
+		resetToDefault(fx.host, subject, "si", "I");
+		InstanceTracker.register(subject);
+
+		InitFix.PatchReport report = fx.transform();
+		expect(report, true, "sa", InitFix.FieldStatus.ACCEPTED, null);
+		expect(report, false, "si", InitFix.FieldStatus.ACCEPTED, null);
+
+		fx.apply();
+
+		expectValue(fx.host, subject, control, "si");
+	}
+
+	// ==================== 场景 16g：静态环拒绝后，实例依赖方漏网 ====================
+
+	/** V1：原始版本（无环字段）。 */
+	static final String CASE_CYC3_V1 = """
+		package oracle;
+		public class CaseCyc3 {
+			private final String raw;
+			public CaseCyc3(String raw) { this.raw = raw; }
+			public String raw() { return raw; }
+		}
+		""";
+
+	/**
+	 * V2：<b>静态环</b> + 一个读取环成员的<b>实例</b>字段。
+	 *
+	 * <p>这是 §3.5 真正的漏网形态，与 CaseCyc 的关键区别在于
+	 * <b>依赖方不在同一个接受集合里</b>：</p>
+	 * <ol>
+	 *   <li>{@code i} 是实例字段，{@code sa} 是静态字段；二者分属
+	 *       {@code acceptedInstance} / {@code acceptedStatic}。</li>
+	 *   <li>闭包阶段 {@code i} 的 {@code depReason} 通过（此时 {@code sa} 还在 {@code acceptedStatic}）。</li>
+	 *   <li>静态拓扑排序发现 {@code sa ⟷ sb} 成环，整组拒绝并 {@code acceptedStatic.clear()}。</li>
+	 *   <li>{@code i} <b>不在</b>被清空的那个集合里，于是补丁照常发射并执行 ——
+	 *       读到 {@code sa} 的默认值 0，把 {@code 1} 静默写进存量实例。</li>
+	 * </ol>
+	 *
+	 * <p>对比：静态依赖方 {@code si} 与被清空的集合同属一组，会被整组拒绝连带覆盖，
+	 * 因此在修复前就是安全的。这正是"整组拒绝偏保守但安全"的边界所在 ——
+	 * 它覆盖同组，不覆盖跨组。</p>
+	 */
+	static final String CASE_CYC3_V2 = """
+		package oracle;
+		public class CaseCyc3 {
+			private final String raw;
+			private static int sa;
+			private static int sb;
+			private int i;
+			static {
+				sa = CaseCyc3.sb + 1;
+				sb = CaseCyc3.sa + 1;
+			}
+			public CaseCyc3(String raw) { this.raw = raw; this.i = sa + 1; }
+			public String raw() { return raw; }
+			public int i() { return i; }
+		}
+		""";
+
+	static void caseStaticCycleLeaksInstanceDependent() throws Exception {
+		Fixture fx = loadFixture("oracle.CaseCyc3", CASE_CYC3_V1, CASE_CYC3_V2);
+
+		Object subject = construct(fx.host, "r");
+		resetToDefault(fx.host, subject, "i", "I");
+		InstanceTracker.register(subject);
+
+		InitFix.PatchReport report = fx.transform();
+
+		// 前置：静态环成员确实被拒了（否则下面的漏网就无从谈起）
+		boolean saRejected = report.staticFields().get("sa") != null
+		 && report.staticFields().get("sa").status() == InitFix.FieldStatus.REJECTED;
+		check(saRejected, "CaseCyc3 前置条件：静态环成员 sa 被拒（实际 "
+		      + report.staticFields().get("sa") + "）");
+
+		// 核心断言：读静态环成员的实例字段 i 必须也被拒
+		InitFix.FieldDecision d = report.instanceFields().get("i");
+		check(d != null && d.status() == InitFix.FieldStatus.REJECTED,
+			"CaseCyc3：读静态环成员的实例字段 i 必须被连带拒绝（实际 " + d + "）");
+
+		fx.apply();
+
+		// 端到端：i 不得被写成过期值 1
+		Object got = read(fx.host, subject, "i");
+		check(Integer.valueOf(0).equals(got),
+			"CaseCyc3：存量实例的 i 保持默认值 0，不得被静默写成过期值（实际 " + describe(got) + "）");
+
+		// 台账：i 必须记账（否则下一轮遗忘）
+		check(unpatched(fx.host).contains("i"),
+			"CaseCyc3：i 记入 FieldLedger（实际 " + unpatched(fx.host) + "）");
 	}
 
 	/** V1：原始版本（只有 raw）。 */

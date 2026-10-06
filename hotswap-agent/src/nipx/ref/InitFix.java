@@ -873,41 +873,89 @@ public class InitFix {
 					changed = true;
 				}
 			}
+
+			// §3.5 成环检测：并入同一固定点，而不是等闭包收敛后再做一次。
+			//
+			// 环成员被拒会改变接受集合，而依赖这些成员的字段可能早已通过 depReason
+			// （跨组尤其明显：实例字段读静态字段时，静态侧成环被拒，实例侧早已放行）。
+			// 若等闭包收敛后才检测，这些依赖方就是漏网之鱼 —— 补丁照常执行，
+			// 读到未补的默认值，静默写入过期值。
+			//
+			// 发现成环即整组拒绝（偏保守但安全），并置 changed 重跑闭包，
+			// 让连带拒绝继续传播（被连带拒绝的字段本身可能又被别的字段依赖）。
+			String cycleInstance = detectCycle(acceptedInstance, instanceExtracts, className);
+			if (cycleInstance != null) {
+				log("Cyclic dependency among instance fields of " + className
+				    + "; refusing all: " + acceptedInstance);
+				for (String f : new ArrayList<>(acceptedInstance)) {
+					instanceDecisions.put(f, FieldDecision.rejected(
+					 "cyclic dependency among instance fields: " + cycleInstance));
+				}
+				acceptedInstance.clear();
+				changed = true;
+			}
+
+			String cycleStatic = detectCycle(acceptedStatic, staticExtracts, className);
+			if (cycleStatic != null) {
+				log("Cyclic dependency among static fields of " + className
+				    + "; refusing all: " + acceptedStatic);
+				for (String f : new ArrayList<>(acceptedStatic)) {
+					staticDecisions.put(f, FieldDecision.rejected(
+					 "cyclic dependency among static fields: " + cycleStatic));
+				}
+				acceptedStatic.clear();
+				changed = true;
+			}
+		}
+
+		// ==================== 阶段 2.6：出口后置闭合校验（主防线） ====================
+		// 不依赖前面的顺序是否正确：最终放行的集合必须对依赖闭合 ——
+		// 每个放行字段读到的"本轮受补字段"都必须在放行集合内（T0 零值字段除外）。
+		// 它同时覆盖 §3.5（成环后依赖方不重判）与 §5.2（静态依赖边缺失）以及将来
+		// 同类的漏网。违反即整类拒绝并打 error，宁可少补也不静默写入过期值。
+		String closureViolation = closureViolation(
+		 acceptedInstance, acceptedStatic, instanceExtracts, staticExtracts,
+		 depInstance, depStatic, className);
+		if (closureViolation != null) {
+			HotSwapAgent.error("Field init patch refused for the whole class " + className
+			                   + ": dependency closure violated: " + closureViolation);
+			for (String f : new ArrayList<>(acceptedInstance)) {
+				instanceDecisions.put(f, FieldDecision.rejected(
+				 "dependency closure violated: " + closureViolation));
+			}
+			for (String f : new ArrayList<>(acceptedStatic)) {
+				staticDecisions.put(f, FieldDecision.rejected(
+				 "dependency closure violated: " + closureViolation));
+			}
+			acceptedInstance.clear();
+			acceptedStatic.clear();
 		}
 
 		// ==================== 阶段 2.5：拓扑排序 ====================
-		List<String> orderedInstance;
-		if (acceptedInstance.isEmpty()) {
+		// 到这里成环已被排除（阶段 2 的固定点），排序必定成功。
+		List<String> orderedInstance = acceptedInstance.isEmpty()
+		 ? List.of()
+		 : topoSortFields(acceptedInstance, instanceExtracts, className);
+		List<String> orderedStatic = acceptedStatic.isEmpty()
+		 ? List.of()
+		 : topoSortFields(acceptedStatic, staticExtracts, className);
+		if (orderedInstance == null || orderedStatic == null) {
+			// 理论上不可达：成环已在阶段 2 清空。真到了这里说明检测与排序口径不一致，
+			// 属于实现缺陷，宁可整类拒绝也不发射依赖未闭合的补丁。
+			HotSwapAgent.error("Field init patch refused for the whole class " + className
+			                   + ": cycle survived the fixpoint (instance="
+			                   + (orderedInstance == null) + ", static="
+			                   + (orderedStatic == null) + ")");
+			for (String f : new ArrayList<>(acceptedInstance)) {
+				instanceDecisions.put(f, FieldDecision.rejected("cycle survived fixpoint"));
+			}
+			for (String f : new ArrayList<>(acceptedStatic)) {
+				staticDecisions.put(f, FieldDecision.rejected("cycle survived fixpoint"));
+			}
+			acceptedInstance.clear();
+			acceptedStatic.clear();
 			orderedInstance = List.of();
-		} else {
-			orderedInstance = topoSortFields(acceptedInstance, instanceExtracts, className);
-			if (orderedInstance == null) {
-				log("Cyclic dependency among instance fields of " + className
-				    + "; refusing all: " + acceptedInstance);
-				for (String f : acceptedInstance) {
-					instanceDecisions.put(f, FieldDecision.rejected(
-					 "cyclic dependency among instance fields"));
-				}
-				acceptedInstance.clear();
-				orderedInstance = List.of();
-			}
-		}
-
-		List<String> orderedStatic;
-		if (acceptedStatic.isEmpty()) {
 			orderedStatic = List.of();
-		} else {
-			orderedStatic = topoSortFields(acceptedStatic, staticExtracts, className);
-			if (orderedStatic == null) {
-				log("Cyclic dependency among static fields of " + className
-				    + "; refusing all: " + acceptedStatic);
-				for (String f : acceptedStatic) {
-					staticDecisions.put(f, FieldDecision.rejected(
-					 "cyclic dependency among static fields"));
-				}
-				acceptedStatic.clear();
-				orderedStatic = List.of();
-			}
 		}
 
 		// ==================== 阶段 3：逐字段发射（§5.1 每字段独立静态方法） ====================
@@ -1079,6 +1127,116 @@ public class InitFix {
 			if (!topoVisit(f, deps, visited, visiting, order)) return null;
 		}
 		return order;
+	}
+
+	/**
+	 * 检测一组字段内部是否存在依赖环（§3.5 的固定点用）。
+	 *
+	 * <p>与 {@link #topoSortFields} 共用同一套边定义，但只回答"有没有环"，
+	 * 并在有环时给出一条可读的环路径（{@code a -> b -> a}）用于诊断文案 ——
+	 * 诊断必须能说明是哪一个环，否则只是把"静默放行"换成"静默拒绝"。</p>
+	 *
+	 * @return 环路径描述；无环返回 {@code null}
+	 */
+	private static String detectCycle(
+	 Set<String> fields, Map<String, List<FieldExtract>> extracts, String className) {
+
+		if (fields.size() < 2) return null;   // 单字段不可能自环（自读已被排除）
+
+		Map<String, Set<String>> deps = dependencyGraph(fields, extracts, className);
+		Set<String> visited = new HashSet<>();
+		Set<String> stack   = new LinkedHashSet<>();
+		for (String f : fields) {
+			String cycle = cycleVisit(f, deps, visited, stack);
+			if (cycle != null) return cycle;
+		}
+		return null;
+	}
+
+	private static String cycleVisit(String f, Map<String, Set<String>> deps,
+	                                 Set<String> visited, Set<String> stack) {
+		if (visited.contains(f)) return null;
+		if (!stack.add(f)) {
+			// 已在当前递归栈上：把栈上从 f 开始的部分拼成 a -> b -> a
+			StringBuilder sb = new StringBuilder();
+			boolean started = false;
+			for (String s : stack) {
+				if (!started && s.equals(f)) started = true;
+				if (started) sb.append(s).append(" -> ");
+			}
+			return sb.append(f).toString();
+		}
+		for (String dep : deps.getOrDefault(f, Set.of())) {
+			String cycle = cycleVisit(dep, deps, visited, stack);
+			if (cycle != null) return cycle;
+		}
+		stack.remove(f);
+		visited.add(f);
+		return null;
+	}
+
+	/** 依赖图：字段 -> 它在本轮受补集合内读到的其它字段（与拓扑排序同一口径）。 */
+	private static Map<String, Set<String>> dependencyGraph(
+	 Set<String> fields, Map<String, List<FieldExtract>> extracts, String className) {
+
+		Map<String, Set<String>> deps = new LinkedHashMap<>();
+		for (String f : fields) {
+			Set<String>        d      = new LinkedHashSet<>();
+			List<FieldExtract> feList = extracts.get(f);
+			if (feList != null) {
+				for (FieldExtract fe : feList) {
+					for (AbstractInsnNode n : fe.instructions()) {
+						if (!(n instanceof FieldInsnNode fld)) continue;
+						if (!fld.owner.equals(className)) continue;
+						if (fld.name.equals(f)) continue;
+						if (!fields.contains(fld.name)) continue;
+						int op = fld.getOpcode();
+						if (op == Opcodes.GETFIELD || op == Opcodes.GETSTATIC) d.add(fld.name);
+					}
+				}
+			}
+			deps.put(f, d);
+		}
+		return deps;
+	}
+
+	/**
+	 * 出口后置闭合校验（§3.5 的主防线）。
+	 *
+	 * <p>断言：最终放行的每个字段，其切片读到的<b>本轮受补</b>字段也必须已放行。
+	 * 它不依赖前置阶段的顺序是否正确，因此对"成环后依赖方不重判"（跨组漏网）、
+	 * "静态依赖边缺失"以及将来同类的漏网一律有效。</p>
+	 *
+	 * <p>判定基准用 {@code depInstance}/{@code depStatic}（已扣除 T0 零值字段）：
+	 * 零值字段存量值本来就是默认值，读它不算读"未补的值"。</p>
+	 *
+	 * @return 违规描述；闭合则返回 {@code null}
+	 */
+	private static String closureViolation(
+	 Set<String> acceptedInstance, Set<String> acceptedStatic,
+	 Map<String, List<FieldExtract>> instanceExtracts,
+	 Map<String, List<FieldExtract>> staticExtracts,
+	 Set<String> depInstance, Set<String> depStatic, String className) {
+
+		for (String f : acceptedInstance) {
+			for (String dep : dependencyOf(f, instanceExtracts, className, depInstance)) {
+				// 依赖可以在实例侧或静态侧被放行（跨组依赖是合法的）
+				if (!acceptedInstance.contains(dep) && !acceptedStatic.contains(dep)) {
+					return "instance field '" + f + "' reads '" + dep
+					       + "' which is not patched (and not zero-value equivalent)";
+				}
+			}
+		}
+
+		for (String f : acceptedStatic) {
+			for (String dep : dependencyOf(f, staticExtracts, className, depStatic)) {
+				if (!acceptedInstance.contains(dep) && !acceptedStatic.contains(dep)) {
+					return "static field '" + f + "' reads '" + dep
+					       + "' which is not patched (and not zero-value equivalent)";
+				}
+			}
+		}
+		return null;
 	}
 
 	private static boolean topoVisit(

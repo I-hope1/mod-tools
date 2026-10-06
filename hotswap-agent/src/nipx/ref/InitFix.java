@@ -712,6 +712,16 @@ public class InitFix {
 		}
 
 		// ==================== 阶段 1.5 + 阶段 2：闭包迭代 ====================
+		// 依赖门禁的判定基准：候选集减去 T0 零值等价字段。
+		// 零值字段的存量值本来就是该类型的默认值，补丁不生成也"已经是对的"，
+		// 因此它不构成"读到未补的新字段"—— 若不排除，a = f(b)（b = 0）会被误杀：
+		// b 在 targetInstanceFields 里、却不在 acceptedInstance 里。
+		// 两个集合在循环中都不被修改，故在建表后一次算好、循环内复用。
+		Set<String> depInstance = new LinkedHashSet<>(targetInstanceFields);
+		depInstance.removeAll(zeroInstanceFields);
+		Set<String> depStatic = new LinkedHashSet<>(targetStaticFields);
+		depStatic.removeAll(zeroStaticFields);
+
 		// 注解豁免过的字段只告警一次，别在 while 循环里刷屏。
 		Set<String> warnedExemptions = new HashSet<>();
 		boolean     changed          = true;
@@ -756,7 +766,7 @@ public class InitFix {
 				String reason = depReason(
 				 f, instanceExtracts.get(f), className,
 				 acceptedInstance, acceptedStatic,
-				 targetInstanceFields, targetStaticFields);
+				 depInstance, depStatic);
 				if (reason != null) {
 					log("Field '" + f + "' refused (dependency): " + reason);
 					acceptedInstance.remove(f);
@@ -769,7 +779,7 @@ public class InitFix {
 				String reason = depReason(
 				 f, staticExtracts.get(f), className,
 				 null, acceptedStatic,
-				 null, targetStaticFields);
+				 null, depStatic);
 				if (reason != null) {
 					log("Static field '" + f + "' refused (dependency): " + reason);
 					acceptedStatic.remove(f);

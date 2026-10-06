@@ -16,6 +16,8 @@ import java.nio.file.*;
 import java.security.ProtectionDomain;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
 import java.util.zip.*;
 
@@ -78,6 +80,52 @@ public class HotSwapAgent {
 		return t;
 	});
 	private static       ScheduledFuture<?>       scheduledTask;
+
+	/**
+	 * 全局热更独占锁：保证 {@code processChanges} 全流程串行。
+	 *
+	 * <p><b>为什么需要它</b>：{@code scheduler} 是单线程的，因此"监听线程 → 防抖 → 热更"这条
+	 * 路径本来就串行。但存在若干<b>绕过 scheduler 的入口</b>，它们直接在调用方线程上执行热更：</p>
+	 * <ul>
+	 *   <li>公开的 {@link #triggerHotswap()} —— 例如 {@code HotSwapDialog} 的 refresh 按钮，
+	 *       它用 {@code Threads.daemon(...)} 起了<b>第二个线程源</b>，与 scheduler 上正在跑的那一轮重叠；</li>
+	 *   <li>{@link #init} 的 else 分支（监控路径未变时直接同步调用）；</li>
+	 *   <li>{@link #init} 整体（含 {@code initializeAgentState} / {@code restartWatchers}）—— 旧 watcher
+	 *       排进 scheduler 的任务可能尚未跑完；</li>
+	 *   <li>公开的 {@link #retransformLoaded()} —— 同样对应一个 UI 按钮。</li>
+	 * </ul>
+	 *
+	 * <p><b>锁序纪律（必须遵守，否则死锁）</b>：</p>
+	 * <ol>
+	 *   <li><b>{@code AnnotationTransformer.transform} 及类加载路径上永远不得获取这把锁。</b>
+	 *       持锁线程在 {@code redefineClasses} / {@code retransformClasses} 期间会触发类加载与 transform，
+	 *       若 transform 反向抢锁即形成死锁。</li>
+	 *   <li><b>不得在持有 {@code synchronized(pendingChanges)} 时获取这把锁。</b>
+	 *       固定顺序为：先取 {@code HOTSWAP_LOCK}，再进 {@code synchronized(pendingChanges)}。
+	 *       反向（持 pendingChanges 锁再抢全局锁）会与其他线程形成环路。</li>
+	 * </ol>
+	 *
+	 * <p>可重入：{@link #init} 持锁后会再次经 {@link #triggerHotswap()} 进入，这是预期的。</p>
+	 */
+	private static final ReentrantLock HOTSWAP_LOCK = new ReentrantLock();
+
+	/**
+	 * 并发探针（测试用）：当前处于热更流程内的线程数，以及历史峰值。
+	 * 用于"先红后绿"回归 —— 去掉 {@code HOTSWAP_LOCK} 时峰值应为 2，加上后恒为 1。
+	 */
+	static final AtomicInteger CONCURRENT_HOTSWAP      = new AtomicInteger();
+	static final AtomicInteger CONCURRENT_HOTSWAP_PEAK = new AtomicInteger();
+
+	/** 测试用：复位并发探针。 */
+	public static void resetConcurrencyProbe() {
+		CONCURRENT_HOTSWAP.set(0);
+		CONCURRENT_HOTSWAP_PEAK.set(0);
+	}
+
+	/** 测试用：读取并发探针峰值。 */
+	public static int peakConcurrentHotswaps() {
+		return CONCURRENT_HOTSWAP_PEAK.get();
+	}
 	//endregion
 
 	//region Agent Initialization
@@ -113,6 +161,17 @@ public class HotSwapAgent {
 	}
 
 	public static void init(String agentArgs, boolean reinit) {
+		// 整体持锁：本方法包含 retransformLoaded / initializeAgentState / restartWatchers，
+		// 而旧 watcher 排进 scheduler 的任务可能尚未跑完。可重入，末尾 triggerHotswap() 嵌套获取无碍。
+		HOTSWAP_LOCK.lock();
+		try {
+			init0(agentArgs, reinit);
+		} finally {
+			HOTSWAP_LOCK.unlock();
+		}
+	}
+
+	private static void init0(String agentArgs, boolean reinit) {
 		initConfig();
 
 		if (transformer == null) {
@@ -217,9 +276,14 @@ public class HotSwapAgent {
 	//endregion
 
 	//region Class Retransformation
-	/** 对外api，刷新已加载的类 */
+	/** 对外api，刷新已加载的类（UI 按钮 B 会直接调用，必须与热更互斥） */
 	public static void retransformLoaded() {
-		retransformLoaded(inst.getAllLoadedClasses());
+		HOTSWAP_LOCK.lock();
+		try {
+			retransformLoaded(inst.getAllLoadedClasses());
+		} finally {
+			HOTSWAP_LOCK.unlock();
+		}
 	}
 
 	private static void retransformLoaded(Class<?>[] classes) {
@@ -436,6 +500,7 @@ public class HotSwapAgent {
 				if (targetClass != null) {
 					// 类已加载：无论模式，都必须执行 redefinition
 					if (DEBUG) log("[MODIFIED] " + className);
+
 
 					byte[] newBytecode = bytecode;
 					byte[] oldBytecode = bytecodeCache.get(className);
@@ -874,13 +939,13 @@ public class HotSwapAgent {
 			info("HotSwap successful: " + definitions.size() + " classes redefined.");
 			for (ClassDefinition def : definitions) {
 				bytecodeCache.put(def.getDefinitionClass().getName(), def.getDefinitionClassFile());
+				successfulClasses.add(def.getDefinitionClass().getName());
 			}
 			for (AlignmentTransaction tx : transactions) {
 				tx.commit();
 			}
 		} catch (Throwable t) {
 			error("Bulk Redefine failed, switching to individual mode...", t);
-			Set<String> successfulClasses = new HashSet<>();
 			for (ClassDefinition def : definitions) {
 				// 批量删除缓存
 				InitFix.afterRedefineFailed(def.getDefinitionClass());
@@ -913,6 +978,7 @@ public class HotSwapAgent {
 				}
 			}
 		}
+		return successfulClasses;
 	}
 	//endregion
 
@@ -1040,7 +1106,10 @@ public class HotSwapAgent {
 				});
 			} catch (IOException _) { }
 		}
-		if (!pendingChanges.isEmpty()) triggerHotswapWith(classes);
+		// 入参 classes 是调用方在 restartWatchers 之前取的快照，此刻可能已过期
+		// （旧 watcher 排进 scheduler 的任务期间可能又有类被加载）。改走 triggerHotswap()，
+		// 由它在锁内重新取一份新鲜快照。
+		if (!pendingChanges.isEmpty()) triggerHotswap();
 	}
 
 	private static void handleFileChange(Path changedFile) {
@@ -1147,6 +1216,29 @@ public class HotSwapAgent {
 	}
 
 	private static void triggerHotswapWith(Class<?>[] classes) {
+		// 锁不变量：任何进入 processChanges 的路径都必须持有 HOTSWAP_LOCK。
+		// 用抛异常而非 assert —— assert 默认关闭（需 -ea），而这条不变量一旦被破坏就是
+		// 静默的并发数据竞争，必须无条件暴露。将来有人新增绕过锁的入口时会立刻在这里炸掉。
+		if (!HOTSWAP_LOCK.isHeldByCurrentThread()) {
+			throw new IllegalStateException(
+				"triggerHotswapWith called without HOTSWAP_LOCK on thread "
+				+ Thread.currentThread().getName()
+				+ " — all hot-swap entry points must acquire HOTSWAP_LOCK first");
+		}
+
+		// 并发探针：测试用，记录同时处于热更流程内的线程数及其历史峰值。
+		// 不加锁时应观察到峰值 2（scheduler 一轮 + 按钮线程一轮），加锁后恒为 1。
+		// getAndAccumulate 本身是原子的，无需再补一次 set。
+		int concurrent = CONCURRENT_HOTSWAP.getAndIncrement();
+		CONCURRENT_HOTSWAP_PEAK.getAndAccumulate(concurrent, Math::max);
+		try {
+			triggerHotswapWith0(classes);
+		} finally {
+			CONCURRENT_HOTSWAP.decrementAndGet();
+		}
+	}
+
+	private static void triggerHotswapWith0(Class<?>[] classes) {
 		// 先把所有待处理的 jar 解压（防抖已结束，文件写入完毕）
 		Set<Path> jars;
 		synchronized (pendingChanges) {
@@ -1166,7 +1258,13 @@ public class HotSwapAgent {
 
 	/** 对外api，触发热更新 */
 	public static void triggerHotswap() {
-		triggerHotswapWith(inst.getAllLoadedClasses());
+		HOTSWAP_LOCK.lock();
+		try {
+			// 快照必须在锁内取：排队等待期间 getAllLoadedClasses() 的结果会过期
+			triggerHotswapWith(inst.getAllLoadedClasses());
+		} finally {
+			HOTSWAP_LOCK.unlock();
+		}
 	}
 
 	private static long calculateHash(byte[] data) {

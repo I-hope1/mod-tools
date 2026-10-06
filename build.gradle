@@ -574,6 +574,23 @@ def hstestEntry = { String name, String cls, List<String> fixtureArgs ->
 
 hstestEntry("SemAssert", "SemAssert", [])
 
+// 并发入口加固断言（先红后绿）。
+// 守的是 processChanges 全流程串行 —— scheduler 单线程只覆盖"监听→防抖→热更"，
+// 绕过它的入口（UI 按钮 daemon 线程、init 的 else 分支）会与之重叠。
+tasks.register("hstestConcurrency", JavaExec) {
+	group = "verification"
+	description = "运行并发入口加固断言（锁不变量 / 可重入 / 探针）"
+	dependsOn tasks.named("hstestClasses")
+	// 同 hstestInitFixOracle：runtimeClasspath 解析到 build/libs 下的 jar，
+	// 少了 dependsOn jar 会跑出陈旧结果（改动只进 classes、没进 jar）。
+	dependsOn project(":hotswap-agent").tasks.named("jar")
+	dependsOn project(":jni-agent").tasks.named("jar")
+	classpath = sourceSets.hstest.runtimeClasspath
+	mainClass = "ConcurrencyAssert"
+}
+tasks.named("check") { dependsOn tasks.named("hstestConcurrency") }
+
+
 // InitFix 差分 Oracle（docs/INIT_FIX.md §8 P0-5）。
 //
 // 与 SemAssert 不同，它**不需要**任何外部 javac：夹具用 javax.tools 在内存里编译，

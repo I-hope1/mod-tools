@@ -739,26 +739,68 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		}
 		@Override
 		protected String getCommonSuperClass(String type1, String type2) {
-			if (HierarchyTree.isInterface(type1, targetLoader) || HierarchyTree.isInterface(type2, targetLoader)) {
-				return "java/lang/Object";
-			}
-			if (HierarchyTree.isAssignableFrom(type1, type2, targetLoader)) {
+			if (type1.equals(type2)) {
 				return type1;
 			}
-			if (HierarchyTree.isAssignableFrom(type2, type1, targetLoader)) {
-				return type2;
+
+			if ("java/lang/Object".equals(type1) || "java/lang/Object".equals(type2)) {
+				return "java/lang/Object";
 			}
-			// 向上寻找 type1 的父类，直到找到也是 type2 父类的类
-			String type1Super = type1;
-			do {
-				HierarchyTree.HierarchyNode node = HierarchyTree.getNode(type1Super, targetLoader);
-				if (node == null || node.superName == null) {
+
+			// 接口不参与"最近的共同父类"求解：两个接口即便有共同父接口，
+			// 返回 Object 也是保守且正确的（栈帧只要求一个安全的宽类型）。
+			// 若各自向上走 superName，接口的 superName 是 Object，结果相同但要多走一圈。
+			if (HierarchyTree.isInterface(type1, targetLoader)
+			    || HierarchyTree.isInterface(type2, targetLoader)) {
+				return "java/lang/Object";
+			}
+
+			// LCA（最近公共祖先）：先收集 type1 的全部祖先（含自身）到一个集合，
+			// 再沿 type2 的 superName 链自底向上走，遇到的第一个在集合中的类型即为 LCA。
+			//
+			// 复杂度 O(depth1 + depth2)，只做两次线性遍历。
+			// 相比"反复调用 isAssignableFrom 向上试探"的做法（每次都是对整棵层级的一次
+			// BFS，最坏 O(depth × hierarchy)），这里是严格更优的，也是 ASM COMPUTE_FRAMES
+			// 文档推荐的口径。集合用 HashSet：链上每个类型只需 O(1) 判断是否在祖先集合里。
+			Set<String> ancestors = new HashSet<>();
+
+			String current = type1;
+			while (current != null) {
+				ancestors.add(current);
+
+				if ("java/lang/Object".equals(current)) {
+					break;   // Object 是根，再往上没有 superName
+				}
+
+				HierarchyTree.HierarchyNode node = HierarchyTree.getNode(current, targetLoader);
+				if (node == null) {
+					// 层级不可知（缓存与资源流都读不到）：只能保守地退回 Object。
+					// 这与旧实现的行为一致，也是 ASM 默认实现的兜底方向。
 					return "java/lang/Object";
 				}
-				type1Super = node.superName;
-			} while (!HierarchyTree.isAssignableFrom(type1Super, type2, targetLoader));
 
-			return type1Super;
+				current = node.superName;
+			}
+
+			current = type2;
+			while (current != null) {
+				if (ancestors.contains(current)) {
+					return current;   // 自底向上第一个命中即最近公共祖先
+				}
+
+				if ("java/lang/Object".equals(current)) {
+					return "java/lang/Object";
+				}
+
+				HierarchyTree.HierarchyNode node = HierarchyTree.getNode(current, targetLoader);
+				if (node == null) {
+					return "java/lang/Object";
+				}
+
+				current = node.superName;
+			}
+
+			return "java/lang/Object";
 		}
 	}
 	//endregion

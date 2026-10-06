@@ -26,6 +26,6 @@ for case in $CASES; do
 		echo "===== $case enhanced=$enh ====="
 		"$JAVA" $flag -Dlp.enhanced=$enh -javaagent:layout-agent.jar -cp out LayoutProbe "$case" 2>&1 \
 			| grep -v '^Picked up' \
-			| grep -E '^(FIELD|BEFORE|REDEFINE|AFTER|DONE)|Exception|Error' | sed 's/^/  /'
+			| grep -E '^(FIELD|BEFORE|REDEFINE|AFTER|DONE|ANON)|Exception|Error' | sed 's/^/  /'
 	done
 done

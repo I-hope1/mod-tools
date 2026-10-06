@@ -366,6 +366,15 @@ public class HotSwapAgent {
 		Set<String> allOrphanClasses = new HashSet<>();
 		Map<String, AlignmentTransaction> transactions = new LinkedHashMap<>();
 
+		// 【指纹延后落账】类名 hash → 新磁盘指纹。循环里只登记，不写 fileDiskHashes；
+		// 待 applyRedefinitions 完成后，仅对**确实成功**的类落账（见本方法末尾）。
+		// 这样失败/被拒的类下次触发时不会被误判为 "file hash unchanged" 而跳过。
+		LongLongMap pendingHashes = new LongLongMap(256);
+		// 【失败回队】类名 → 源文件路径，用于重定义失败后把文件放回 pendingChanges。
+		// 注意：hierarchyChanged 的拒绝**不**回队 —— 那种变更 JVM 层面不支持，重试无意义，
+		// 必须重启；回队只会造成"每次触发都失败一次"的噪音。
+		Map<String, Path> retryCandidates = new HashMap<>();
+
 		for (String hostName : hostClassesToAlign) {
 			String hostSlash = hostName.replace('.', '/');
 
@@ -492,7 +501,15 @@ public class HotSwapAgent {
 						skippedCount++;
 						continue;
 					}
-					fileDiskHashes.put(classNameKey, newHash);
+					// 【不在此处落账】指纹必须等到该类**确实重定义成功**后才记录。
+					//
+					// 旧实现把 put 放在这里（重定义之前），于是以下两条"没生效"的路径
+					// 也会留下已记账的指纹，导致下一次触发被判为 "file hash unchanged" 而跳过 ——
+					// 文件明明改了，却永远不再尝试重试：
+					//   • hierarchyChanged 的 continue（本方法下方）—— 需重启，属于已知拒绝；
+					//   • applyRedefinitions 批量/单类失败 —— 本轮没生效，但指纹已写。
+					// 因此只在这里登记"待落账"，真正的 put 由 applyRedefinitions 之后按成功集合执行。
+					pendingHashes.put(classNameKey, newHash);
 				}
 
 				Class<?> targetClass = loadedClassesMap.get(className);
@@ -566,6 +583,13 @@ public class HotSwapAgent {
 					}
 
 					definitions.add(new ClassDefinition(targetClass, newBytecode));
+					// 登记为"待重定义"：成败由 applyRedefinitions 决定。
+					// 若最终失败，文件会被放回 pendingChanges 以便下次重试。
+					//
+					// 位置很关键：必须在 hierarchyChanged 的 continue **之后** ——
+					// 那种拒绝受 JVM 能力限制，重试永远不会成功，回队只会造成
+					// "每次触发都失败一次"的噪音。这里只会登记真正进入 definitions 的类。
+					if (path != null) retryCandidates.put(className, path);
 				} else {
 					if (DEBUG) log("[NEW] " + className);
 					// 类尚未加载：根据 REDEFINE_MODE 处理
@@ -579,6 +603,11 @@ public class HotSwapAgent {
 						if (injectNewClass(className, clHintPath, bytecode)) {
 							bytecodeCache.put(className, bytecode);
 							injectedCount++;
+							// 注入成功即视为生效：指纹可立即落账（不经过 applyRedefinitions）。
+							// 失败时不落账，下次触发会重试。
+							synchronized (fileDiskHashes) {
+								fileDiskHashes.put(CRC64.hashString(className), calculateHash(bytecode));
+							}
 						}
 					} else if (REDEFINE_MODE == RedefineMode.lazy_load && UCP_APPEND) {
 						ClassLoader loader = findTargetClassLoader(className, clHintPath);
@@ -590,6 +619,8 @@ public class HotSwapAgent {
 							mountForClass(loader, mountPath);
 						}
 						bytecodeCache.put(className, bytecode);
+						// lazy_load 只是挂载路径，类尚未真正加载生效 —— 指纹**不**落账，
+						// 等它真正被加载/重定义时再记，否则会漏掉后续的首次加载。
 					}
 				}
 			} catch (Throwable e) {
@@ -598,7 +629,61 @@ public class HotSwapAgent {
 		}
 
 		// 批量执行重定义（针对已加载类）
-		applyRedefinitions(definitions, transactions.values());
+		RedefineOutcome outcome = applyRedefinitions(definitions, transactions.values());
+		Set<String> redefinedOk  = outcome.successful();
+		Set<String> rolledBack    = outcome.rolledBack();
+
+		// ---- 指纹落账 + 失败回队 ----
+		//
+		// 指纹只对"确实生效"的类记录。未生效的类不落账，因此下次触发不会被
+		// "file hash unchanged" 误跳过 —— 这正是本次修复的核心。
+		//
+		// 同时把重定义失败的类的源文件放回 pendingChanges：失败的文件在
+		// triggerHotswapWith0 里已被取走，而 triggerHotswap() 不重扫磁盘，
+		// 不回队的话"再热更一次"实际上什么也不会发生（文件不再被写入就不会有新的 watcher 事件）。
+		//
+		// **例外：被 rollback 的事务组不回队。** 那种情况下宿主可能已生效、而 cache/pending
+		// 被钉回旧版本；重试会拿与 JVM 实际状态不一致的基线重新对齐。只提示重启。
+		int requeued = 0;
+		int notRequeued = 0;
+		for (Map.Entry<String, Path> e : retryCandidates.entrySet()) {
+			String className = e.getKey();
+			if (redefinedOk.contains(className)) {
+				// 成功：落账指纹
+				synchronized (fileDiskHashes) {
+					fileDiskHashes.put(CRC64.hashString(className), pendingHashes.get(CRC64.hashString(className)));
+				}
+				continue;
+			}
+			if (rolledBack.contains(className)) {
+				// 被 rollback 的组：不落账、也不回队（回队不安全，见上）
+				notRequeued++;
+				if (DEBUG) log("[RETRY-SKIP] " + className + " in rolled-back group; not requeued.");
+				continue;
+			}
+			// 普通失败：不落账（下次仍会尝试），并回队以便立即重试
+			Path p = e.getValue();
+			if (p != null && !Files.exists(p)) {
+				// jar 来源的类：临时目录会在下一次 extractJarToTemp 时被清空重建，
+				// 回队的路径可能已不存在。不报出来这些类会静默丢失重试。
+				error("[RETRY-QUEUE] Source file no longer exists for " + className + ": " + p
+				      + " (likely a jar temp dir that was rebuilt); this class cannot be retried"
+				      + " until its jar is written again.");
+				continue;
+			}
+			pendingChanges.add(p);
+			requeued++;
+			if (DEBUG) log("[RETRY-QUEUE] " + className + " failed to redefine; requeued " + p);
+		}
+		if (requeued > 0) {
+			warn("[HOTSWAP-RETRY] " + requeued + " class(es) failed to redefine and were requeued; "
+			     + "press hot-swap again to retry.");
+		}
+		if (notRequeued > 0) {
+			warn("[HOTSWAP-RETRY] " + notRequeued + " class(es) in an inconsistent group were NOT requeued; "
+			     + "RESTART is required for those.");
+		}
+
 		processAnnotations(definitions);
 		for (ClassDefinition def : definitions) {
 			try {
@@ -911,13 +996,25 @@ public class HotSwapAgent {
 	 *
 	 * <p>注：真正的多类原子一致性依赖 JVM 批量 {@code inst.redefineClasses(definitions)} 的原子调用；
 	 * 当批量失败切换到单类模式时，属于尽力挽救兜底，客观上存在短暂的类间不一致时间窗口。</p>
+	 *
+	 * @return 确实重定义成功的类名集合。调用方据此决定是否落账文件指纹、以及失败类是否回队重试。
+	 *         <p>另有两条必须区分的语义，通过 {@link RedefineOutcome} 一并返回：</p>
+	 *         <ul>
+	 *           <li>{@code rejectedHierarchy} —— 因 {@code hierarchyChanged} 被拒的类。
+	 *               受 JVM 能力限制，重试永不会成功，<b>不得回队</b>。</li>
+	 *           <li>{@code rolledBackGroups} —— 因事务组不一致而 {@code rollback} 的类。
+	 *               这些类的宿主可能<b>已经在 JVM 里生效</b>，而 cache/pending 被钉回旧版本；
+	 *               此时重试会拿"基线与 JVM 实际状态不一致"的数据重新对齐，<b>不得回队</b>。</li>
+	 *         </ul>
 	 */
-	private static void applyRedefinitions(List<ClassDefinition> definitions, Collection<AlignmentTransaction> transactions) {
+	private static RedefineOutcome applyRedefinitions(List<ClassDefinition> definitions, Collection<AlignmentTransaction> transactions) {
+		Set<String> successfulClasses = new HashSet<>();
+		Set<String> rolledBackClasses = new HashSet<>();
 		if (definitions.isEmpty()) {
 			for (AlignmentTransaction tx : transactions) {
 				tx.commit();
 			}
-			return;
+			return new RedefineOutcome(successfulClasses, rolledBackClasses);
 		}
 
 		// 关键竞态消除：在调用 redefineClasses 之前先乐观登记新的 pending 注入！
@@ -973,13 +1070,29 @@ public class HotSwapAgent {
 				} else {
 					if (hostOk != allAnonsOk) {
 						error("[HOTSWAP-PARTIAL] Host " + tx.hostName + " and its anonymous classes redefined inconsistently! Note: classes already applied in JVM cannot be un-redefined; rolling back pending injections and cache, and pinning old bytecode in pending to protect future class loading.");
+						error("[HOTSWAP-PARTIAL] Host " + tx.hostName
+						      + ": NOT requeued for retry — a retry would re-align against a baseline"
+						      + " that no longer matches the JVM's actual state. RESTART is required.");
 					}
 					tx.rollback(true);
+					// 记录整组（宿主 + 其匿名类），供调用方排除出"失败回队"。
+					// 原因：宿主可能已生效、而 cache/pending 被钉回旧版本，重试基线不一致。
+					rolledBackClasses.add(tx.hostName);
+					rolledBackClasses.addAll(tx.targetClasses);
 				}
 			}
 		}
-		return successfulClasses;
+		return new RedefineOutcome(successfulClasses, rolledBackClasses);
 	}
+
+	/**
+	 * {@link #applyRedefinitions} 的结果。
+	 *
+	 * @param successful    确实重定义成功的类名
+	 * @param rolledBack    因事务组不一致被 rollback 的类名（宿主 + 其匿名类）——
+	 *                      这些类<b>不得回队重试</b>，理由见该方法 javadoc
+	 */
+	private record RedefineOutcome(Set<String> successful, Set<String> rolledBack) { }
 	//endregion
 
 	//region File Processing Utilities

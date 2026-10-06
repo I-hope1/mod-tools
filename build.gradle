@@ -590,6 +590,17 @@ tasks.register("hstestConcurrency", JavaExec) {
 }
 tasks.named("check") { dependsOn tasks.named("hstestConcurrency") }
 
+// 指纹延后落账断言：守"失败/被拒的类不得留下指纹，否则再触发会被误判为 unchanged"。
+tasks.register("hstestFingerprint", JavaExec) {
+	group = "verification"
+	description = "运行指纹延后落账断言"
+	dependsOn tasks.named("hstestClasses")
+	dependsOn project(":hotswap-agent").tasks.named("jar")
+	dependsOn project(":jni-agent").tasks.named("jar")
+	classpath = sourceSets.hstest.runtimeClasspath
+	mainClass = "FingerprintAssert"
+}
+tasks.named("check") { dependsOn tasks.named("hstestFingerprint") }
 
 // InitFix 差分 Oracle（docs/INIT_FIX.md §8 P0-5）。
 //

@@ -2323,6 +2323,11 @@ public class InitFix {
 	 * JVM 打破，继续修补没有意义。</p>
 	 */
 	private static void applyPatch(Class<?> host, PendingPatch patch) throws Throwable {
+		// 详细失败日志配额是"本轮"的（见 DETAILED_FAILURE_LOGS 的 Javadoc）：
+		// 不重置的话它是进程级累计，前几轮热更失败满 5 次之后，
+		// 之后所有热更都不再打详细栈。
+		DETAILED_FAILURE_LOGS.set(0);
+
 		if (!isInitialized(host)) {
 			log("Skip field init patch, class not initialized (or initializing/failed): "
 			    + host.getName());

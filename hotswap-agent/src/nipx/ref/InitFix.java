@@ -881,29 +881,35 @@ public class InitFix {
 			// 若等闭包收敛后才检测，这些依赖方就是漏网之鱼 —— 补丁照常执行，
 			// 读到未补的默认值，静默写入过期值。
 			//
-			// 发现成环即整组拒绝（偏保守但安全），并置 changed 重跑闭包，
-			// 让连带拒绝继续传播（被连带拒绝的字段本身可能又被别的字段依赖）。
-			String cycleInstance = detectCycle(acceptedInstance, instanceExtracts, className);
-			if (cycleInstance != null) {
+			// 收窄：只拒绝<b>环成员</b>（强连通分量），不整组拒绝。
+			// 与环无关的字段因此得以保留 —— 整组拒绝虽安全，却白白损失热更覆盖面。
+			// 安全性由闭包保证：环成员出局后，依赖它们的字段会在下一轮 depReason
+			// 被连带拒绝；出口后置闭合校验（阶段 2.6）还会再兜一道底。
+			Set<String> membersInstance = cycleMembers(acceptedInstance, instanceExtracts, className);
+			if (!membersInstance.isEmpty()) {
+				String desc = describeMembers(membersInstance);
 				log("Cyclic dependency among instance fields of " + className
-				    + "; refusing all: " + acceptedInstance);
-				for (String f : new ArrayList<>(acceptedInstance)) {
-					instanceDecisions.put(f, FieldDecision.rejected(
-					 "cyclic dependency among instance fields: " + cycleInstance));
+				    + "; refusing members: " + desc);
+				for (String f : membersInstance) {
+					if (acceptedInstance.remove(f)) {
+						instanceDecisions.put(f, FieldDecision.rejected(
+						 "cyclic dependency among instance fields: " + desc));
+					}
 				}
-				acceptedInstance.clear();
 				changed = true;
 			}
 
-			String cycleStatic = detectCycle(acceptedStatic, staticExtracts, className);
-			if (cycleStatic != null) {
+			Set<String> membersStatic = cycleMembers(acceptedStatic, staticExtracts, className);
+			if (!membersStatic.isEmpty()) {
+				String desc = describeMembers(membersStatic);
 				log("Cyclic dependency among static fields of " + className
-				    + "; refusing all: " + acceptedStatic);
-				for (String f : new ArrayList<>(acceptedStatic)) {
-					staticDecisions.put(f, FieldDecision.rejected(
-					 "cyclic dependency among static fields: " + cycleStatic));
+				    + "; refusing members: " + desc);
+				for (String f : membersStatic) {
+					if (acceptedStatic.remove(f)) {
+						staticDecisions.put(f, FieldDecision.rejected(
+						 "cyclic dependency among static fields: " + desc));
+					}
 				}
-				acceptedStatic.clear();
 				changed = true;
 			}
 		}
@@ -1130,49 +1136,94 @@ public class InitFix {
 	}
 
 	/**
-	 * 检测一组字段内部是否存在依赖环（§3.5 的固定点用）。
+	 * 找出参与依赖环的字段集合（强连通分量里 size > 1 的成员，外加自环）。
 	 *
-	 * <p>与 {@link #topoSortFields} 共用同一套边定义，但只回答"有没有环"，
-	 * 并在有环时给出一条可读的环路径（{@code a -> b -> a}）用于诊断文案 ——
-	 * 诊断必须能说明是哪一个环，否则只是把"静默放行"换成"静默拒绝"。</p>
+	 * <p>用于把成环拒绝<b>收窄</b>到环成员本身：整组拒绝会连带拒掉与环无关的字段
+	 * （安全但白白损失热更覆盖面）。收窄后由闭包负责把拒绝传播给依赖环成员的字段 ——
+	 * 因此安全性不依赖这个函数，它只决定"少拒了多少"。</p>
 	 *
-	 * @return 环路径描述；无环返回 {@code null}
+	 * <p>实现是 Tarjan 迭代版（避免深依赖链上的栈溢出）。</p>
+	 *
+	 * @return 环成员集合；无环返回空集
 	 */
-	private static String detectCycle(
+	private static Set<String> cycleMembers(
 	 Set<String> fields, Map<String, List<FieldExtract>> extracts, String className) {
 
-		if (fields.size() < 2) return null;   // 单字段不可能自环（自读已被排除）
-
 		Map<String, Set<String>> deps = dependencyGraph(fields, extracts, className);
-		Set<String> visited = new HashSet<>();
-		Set<String> stack   = new LinkedHashSet<>();
-		for (String f : fields) {
-			String cycle = cycleVisit(f, deps, visited, stack);
-			if (cycle != null) return cycle;
+
+		Map<String, Integer> index    = new HashMap<>();
+		Map<String, Integer> lowlink  = new HashMap<>();
+		Set<String>          onStack  = new LinkedHashSet<>();
+		Deque<String>        stack    = new ArrayDeque<>();
+		Set<String>          members  = new LinkedHashSet<>();
+		int[]                counter  = {0};
+
+		for (String root : fields) {
+			if (index.containsKey(root)) continue;
+
+			// 迭代式 Tarjan：显式栈保存 (节点, 待访问邻居迭代器)
+			Deque<String>                       nodeStack = new ArrayDeque<>();
+			Deque<Iterator<String>>             iterStack = new ArrayDeque<>();
+
+			index.put(root, counter[0]);
+			lowlink.put(root, counter[0]);
+			counter[0]++;
+			stack.push(root);
+			onStack.add(root);
+			nodeStack.push(root);
+			iterStack.push(deps.getOrDefault(root, Set.of()).iterator());
+
+			while (!nodeStack.isEmpty()) {
+				String   v   = nodeStack.peek();
+				Iterator<String> it = iterStack.peek();
+
+				if (it.hasNext()) {
+					String w = it.next();
+					if (!index.containsKey(w)) {
+						index.put(w, counter[0]);
+						lowlink.put(w, counter[0]);
+						counter[0]++;
+						stack.push(w);
+						onStack.add(w);
+						nodeStack.push(w);
+						iterStack.push(deps.getOrDefault(w, Set.of()).iterator());
+					} else if (onStack.contains(w)) {
+						lowlink.put(v, Math.min(lowlink.get(v), index.get(w)));
+					}
+					continue;
+				}
+
+				// v 的邻居已访问完：结算
+				nodeStack.pop();
+				iterStack.pop();
+				if (!nodeStack.isEmpty()) {
+					String parent = nodeStack.peek();
+					lowlink.put(parent, Math.min(lowlink.get(parent), lowlink.get(v)));
+				}
+
+				if (lowlink.get(v).equals(index.get(v))) {
+					// v 是一个 SCC 的根：弹出该分量
+					Set<String> component = new LinkedHashSet<>();
+					String      w;
+					do {
+						w = stack.pop();
+						onStack.remove(w);
+						component.add(w);
+					} while (!w.equals(v));
+
+					// size > 1 即真环；size == 1 时只有自环才算（自读已在建图时排除）
+					if (component.size() > 1) members.addAll(component);
+				}
+			}
 		}
-		return null;
+		return members;
 	}
 
-	private static String cycleVisit(String f, Map<String, Set<String>> deps,
-	                                 Set<String> visited, Set<String> stack) {
-		if (visited.contains(f)) return null;
-		if (!stack.add(f)) {
-			// 已在当前递归栈上：把栈上从 f 开始的部分拼成 a -> b -> a
-			StringBuilder sb = new StringBuilder();
-			boolean started = false;
-			for (String s : stack) {
-				if (!started && s.equals(f)) started = true;
-				if (started) sb.append(s).append(" -> ");
-			}
-			return sb.append(f).toString();
-		}
-		for (String dep : deps.getOrDefault(f, Set.of())) {
-			String cycle = cycleVisit(dep, deps, visited, stack);
-			if (cycle != null) return cycle;
-		}
-		stack.remove(f);
-		visited.add(f);
-		return null;
+	/** 把环成员集合渲染成可读文案（按字段名排序，保证稳定可断言）。 */
+	private static String describeMembers(Set<String> members) {
+		List<String> sorted = new ArrayList<>(members);
+		Collections.sort(sorted);
+		return String.join(", ", sorted);
 	}
 
 	/** 依赖图：字段 -> 它在本轮受补集合内读到的其它字段（与拓扑排序同一口径）。 */
@@ -1207,8 +1258,11 @@ public class InitFix {
 	 * 它不依赖前置阶段的顺序是否正确，因此对"成环后依赖方不重判"（跨组漏网）、
 	 * "静态依赖边缺失"以及将来同类的漏网一律有效。</p>
 	 *
-	 * <p>判定基准用 {@code depInstance}/{@code depStatic}（已扣除 T0 零值字段）：
-	 * 零值字段存量值本来就是默认值，读它不算读"未补的值"。</p>
+	 * <p>判定基准 = {@code depInstance ∪ depStatic} 再扣掉 T0 零值字段：零值字段存量值
+	 * 本来就是默认值，读它不算读"未补的值"。<b>必须是并集</b> —— 只传实例侧会把切片里的
+	 * GETSTATIC 整个漏掉，而"实例字段读静态字段"恰恰是跨组漏网的主要形态：
+	 * 曾经只传 {@code depInstance}，导致这道校验对它的目标场景完全失明
+	 * （已由"关闭闭包传播"的安全探针实测暴露）。</p>
 	 *
 	 * @return 违规描述；闭合则返回 {@code null}
 	 */
@@ -1218,8 +1272,14 @@ public class InitFix {
 	 Map<String, List<FieldExtract>> staticExtracts,
 	 Set<String> depInstance, Set<String> depStatic, String className) {
 
+		// 跨组依赖必须可见：实例切片可以读静态字段，静态 <clinit> 也可以读实例字段吗？
+		// 后者不需要（<clinit> 无 this），但统一用并集不会有副作用 ——
+		// dependencyOf 内部按 owner 过滤，取并集只是让两侧的读取都不被漏掉。
+		Set<String> depAll = new LinkedHashSet<>(depInstance);
+		depAll.addAll(depStatic);
+
 		for (String f : acceptedInstance) {
-			for (String dep : dependencyOf(f, instanceExtracts, className, depInstance)) {
+			for (String dep : dependencyOf(f, instanceExtracts, className, depAll)) {
 				// 依赖可以在实例侧或静态侧被放行（跨组依赖是合法的）
 				if (!acceptedInstance.contains(dep) && !acceptedStatic.contains(dep)) {
 					return "instance field '" + f + "' reads '" + dep
@@ -1229,7 +1289,7 @@ public class InitFix {
 		}
 
 		for (String f : acceptedStatic) {
-			for (String dep : dependencyOf(f, staticExtracts, className, depStatic)) {
+			for (String dep : dependencyOf(f, staticExtracts, className, depAll)) {
 				if (!acceptedInstance.contains(dep) && !acceptedStatic.contains(dep)) {
 					return "static field '" + f + "' reads '" + dep
 					       + "' which is not patched (and not zero-value equivalent)";

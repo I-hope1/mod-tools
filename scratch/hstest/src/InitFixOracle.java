@@ -120,6 +120,7 @@ public class InitFixOracle {
 		scenario("§3.5 成环后依赖方必须重判：静态环与实例环两侧都要连带拒绝", InitFixOracle::caseCycleReevaluatesDependents);
 		scenario("§3.5 对照：静态无环时读它的实例字段仍被接受", InitFixOracle::caseAcyclicStaticStillAccepted);
 		scenario("§3.5 静态环拒绝后跨组漏网：读环成员的实例字段必须被连带拒绝", InitFixOracle::caseStaticCycleLeaksInstanceDependent);
+		scenario("§3.5 成环拒绝收窄：与环无关的字段不应被连带拒绝", InitFixOracle::caseCycleRefusalIsNarrow);
 		scenario("§4.1+§4.3 T0 零值字段可被依赖：读零值新增字段的切片必须放行", InitFixOracle::caseZeroValueDependency);
 		scenario("§4.1 静态同款：读零值静态字段的 <clinit> 切片必须放行", InitFixOracle::caseZeroValueStaticDependency);
 		scenario("§3.4 拒绝告警出口：提取期与闭包期的 REJECTED 都必须发 warn", InitFixOracle::caseRejectionWarnings);
@@ -1654,6 +1655,92 @@ public class InitFixOracle {
 		// 台账：i 必须记账（否则下一轮遗忘）
 		check(unpatched(fx.host).contains("i"),
 			"CaseCyc3：i 记入 FieldLedger（实际 " + unpatched(fx.host) + "）");
+	}
+
+	// ==================== 场景 16h：成环拒绝应收窄到环成员 + 闭包连带 ====================
+
+	/** V1：原始版本（无环字段）。 */
+	static final String CASE_CYC4_V1 = """
+		package oracle;
+		public class CaseCyc4 {
+			private final String raw;
+			public CaseCyc4(String raw) { this.raw = raw; }
+			public String raw() { return raw; }
+		}
+		""";
+
+	/**
+	 * V2：成环成员 + <b>与环无关</b>的独立字段。
+	 *
+	 * <p>静态侧：{@code sa ⟷ sb} 成环，{@code sd} 完全独立。
+	 * 实例侧：{@code ix ⟷ iy} 成环，{@code iz} 完全独立。</p>
+	 *
+	 * <p>期望（收窄后）：环成员与"依赖环成员"的字段被拒；{@code sd}/{@code iz}
+	 * 与环无关，应当<b>正常放行</b>。整组拒绝会连带拒掉它们 ——
+	 * 安全但白白损失热更覆盖面。</p>
+	 */
+	static final String CASE_CYC4_V2 = """
+		package oracle;
+		public class CaseCyc4 {
+			private final String raw;
+			private static int sa;
+			private static int sb;
+			private static int sd;
+			private int ix;
+			private int iy;
+			private int iz;
+			static {
+				sa = CaseCyc4.sb + 1;
+				sb = CaseCyc4.sa + 1;
+				sd = 7;
+			}
+			public CaseCyc4(String raw) {
+				this.raw = raw;
+				this.ix = this.iy + 1;
+				this.iy = this.ix + 1;
+				this.iz = 9;
+			}
+			public String raw() { return raw; }
+			public int sd() { return sd; }
+			public int iz() { return iz; }
+		}
+		""";
+
+	static void caseCycleRefusalIsNarrow() throws Exception {
+		Fixture fx = loadFixture("oracle.CaseCyc4", CASE_CYC4_V1, CASE_CYC4_V2);
+
+		Object subject = construct(fx.host, "r");
+		resetToDefault(fx.host, subject, "ix", "I");
+		resetToDefault(fx.host, subject, "iy", "I");
+		resetToDefault(fx.host, subject, "iz", "I");
+		InstanceTracker.register(subject);
+
+		InitFix.PatchReport report = fx.transform();
+
+		// 环成员必须被拒（这是安全底线，收窄不能破坏它）
+		boolean saRejected = report.staticFields().get("sa") != null
+		 && report.staticFields().get("sa").status() == InitFix.FieldStatus.REJECTED;
+		boolean ixRejected = report.instanceFields().get("ix") != null
+		 && report.instanceFields().get("ix").status() == InitFix.FieldStatus.REJECTED;
+		check(saRejected, "CaseCyc4：静态环成员 sa 被拒（实际 "
+		      + report.staticFields().get("sa") + "）");
+		check(ixRejected, "CaseCyc4：实例环成员 ix 被拒（实际 "
+		      + report.instanceFields().get("ix") + "）");
+
+		// 收窄的核心：与环无关的独立字段必须放行
+		InitFix.FieldDecision sd = report.staticFields().get("sd");
+		InitFix.FieldDecision iz = report.instanceFields().get("iz");
+		check(sd != null && sd.status() == InitFix.FieldStatus.ACCEPTED,
+			"CaseCyc4：与环无关的静态字段 sd 应放行（实际 " + sd + "）");
+		check(iz != null && iz.status() == InitFix.FieldStatus.ACCEPTED,
+			"CaseCyc4：与环无关的实例字段 iz 应放行（实际 " + iz + "）");
+
+		fx.apply();
+
+		// 独立字段必须真的补上正确值（不是"放行了但没生效"）
+		Object izVal = read(fx.host, subject, "iz");
+		check(Integer.valueOf(9).equals(izVal),
+			"CaseCyc4：独立实例字段 iz 补上正确值 9（实际 " + describe(izVal) + "）");
 	}
 
 	/** V1：原始版本（只有 raw）。 */

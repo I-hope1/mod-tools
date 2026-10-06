@@ -125,11 +125,17 @@ public interface ClassHierarchyOracle {
 * **待补字段台账（`FieldLedger`，解决基线推进遗忘缺陷）**：`[已实现]`
   * 阶段 A 提交成功后类结构即不可逆。一旦阶段 B 中止，宿主类已在物理内存中携带新字段。
   * 系统在持久化上下文维护 `FieldLedger: Class -> Set<UnpatchedField>`。中止后，基线哈希推进至阶段 A，未成功修补的字段记入台账。下一轮热更时，**候选字段集合 = 本轮 Diff 新增字段 $\cup$ 台账内未决字段**，确保因故障或用户修正表达式后重新提交的字段能被再次处理。
-  * **实现注记**：台账键是<b>弱引用 `Class<?>`</b>、值是纯字符串（字段名 + 原因，不持有类引用，与 `PENDING`/`REPORTS` 同策略）。四种情形记账：分析期被拒（`REJECTED`）、运行期补丁抛异常、依赖字段失败而跳过、redefine 本身失败（计划已生成但一个都没补）。成功（`ACCEPTED` 且驱动未报错）或判定"无需补"（`NOTHING_TO_PATCH`）即出账；字段已从新版本消失也出账。候选集并回时仍走同一套安全门 —— 台账只负责"不要遗忘"，不负责"放行"。
+  * **实现注记**：台账键是<b>弱引用 `Class<?>`</b>、值是纯字符串（字段名 + 原因，不持有类引用，与 `PENDING`/`REPORTS` 同策略）。**五种情形记账**：① 分析期被拒（`REJECTED`）；② 运行期补丁抛异常；③ 依赖字段失败而跳过；④ redefine 本身失败（计划已生成但一个都没补）；⑤ **`buildPatch` 规划期抛异常**（`"patch generation failed: ..."`，`InitFix.transform` 的 `catch` 分支 —— 此处 redefine 仍会照常推进，不记账就等于永久遗忘）。成功（`ACCEPTED` 且驱动未报错）或判定"无需补"（`NOTHING_TO_PATCH`）即出账；字段已从新版本消失也出账。候选集并回时仍走同一套安全门 —— 台账只负责"不要遗忘"，不负责"放行"。
+  * **已入账条目不被降级覆盖**：第 ⑤ 种情形记账时，若该字段在台账里已有条目，则保留原有更具体的原因，而不是用笼统的 `"patch generation failed"` 覆盖它。
+  * **`[未实现]` TTL 清扫丢弃未记账**：`cleanupStalePatches` 会丢弃超过 `PENDING_TTL_NANOS`（5 分钟）的待补补丁并打 log，但**不为其中的字段写台账**。`ACCEPTED` 字段在 `transform` 时已出账，丢弃时没有写回，因此这些字段在下一轮不会再被纳入候选集 —— 与第 ⑤ 种情形同一类遗忘，**当前是开放缺口**。修法约束（照 §1.2 不变量 2）：清扫线程**不得强引用 `Class`**，只能从 `PENDING` 的弱键遍历里取名字，key 已被 GC 的条目直接跳过。
 
 ### 3.5 批处理原子拓扑排序 `[目标规范]`
 若类 `X` 的新增字段表达式读取类 `Y` 的新增字段，两类打包为同一事务批次：
 $$\text{Batch: } [Y, X] \xrightarrow{\text{Stage A 全量生效}} [Y, X] \xrightarrow{\text{按拓扑序执行 Stage B}} [Y, X] \xrightarrow{\text{Stage C 全量生效}}$$
+
+> **`[未实现]` 成环检测晚于依赖闭包**：当前类内拓扑排序（`topoSortFields`）在依赖闭包**之后**才跑。因此静态字段成环被拒时，`acceptedStatic` 已被清空，而实例字段的 `depReason` 早已通过 —— 读该静态字段的实例字段成了漏网之鱼，读到的是未补的默认值。成环本来就会被拒，只是**发现得太晚**，故优先级最低；修法是把成环检测移入不动点循环（成环后重跑一轮闭包），而非清空后直接落到发射阶段。
+>
+> 另注：当前成环时**整组拒绝**，会连带拒掉与环无关的字段。偏保守但安全。
 
 ---
 
@@ -140,6 +146,7 @@ $$\text{Batch: } [Y, X] \xrightarrow{\text{Stage A 全量生效}} [Y, X] \xright
 * **T1（编译期常量快速通道）**：携带 `ConstantValue` 属性，或切片仅含单条原子字面量加载（`ICONST`, `LDC "str"`）。绕过切片器，快速发射代码。`[部分实现]`（静态 `ConstantValue` 走专用通道；字面量切片仍走常规直线提取）
 * **T2（纯计算切片）**：经由 `AliasInterpreter` 逆向切片并通过效应掩码审查。`[部分实现]`（切片 + §4.2 的 P0 级防御已生效；完整掩码见 §4.2 状态）
 * **T3（复杂/不安全拒绝）**：包含分支、环境依赖、可变源字段。拒绝生成代码，输出结构化诊断报告。`[已实现-Java基线]`
+  * **拒绝必须对用户可见（诊断出口唯一）**：`InitFix.transform` 在 `buildPatch` 返回后统一遍历 `PatchReport`，对**全部** `REJECTED` 按原因聚合、逐条发 `warn`。这覆盖**两个阶段**：提取期本就发 warn（`extractFieldInits` 的 `initialization skipped`），而闭包期（后续加工、依赖、成环、根构造器覆盖不全、指纹不一致）历史上只调 `log(...)` —— 而 `log` 是 `DEBUG` 门控的（`HotSwapAgent.DefaultLogger.log`），**默认环境下什么都不打印**。把出口收敛到一处后，"哪些拒绝该吵醒用户"不再依赖各阶段各自的日志级别。**静默的保守与静默的错误同样难排查。**
 * **T4（显式逃生口）**：类中声明 `@HotswapInit` 静态方法。发射器在伴生类中直接调用该方法，免除效应检查。`[未实现，见 §8 P2]`
 
 ### 4.2 正交效应位集合（Effect Bitmask）`[部分实现：P0 级黑名单/白名单 + bit 4/5 子集]`
@@ -216,6 +223,14 @@ public final class PatchDriver {
     }
 }
 ```
+
+> **实现状态**：上例是**单实例**语义，`failedFields` 在每次 `applyToInstance` 调用里新建。实际实现（`InitFix.applyPatch` + `runDependentInstanceTasks`/`runIndependentInstanceTasks`）是**逐实例驱动**，而 `failedFields`/`skippedFields` 是**跨全部实例共享的一份全局集合**（与静态任务共用），**不是按实例隔离**。
+>
+> 由此产生的行为：若第 3 个实例的字段 X 失败，第 4..N 个实例的依赖字段 Y 也会被跳过，尽管它们的 X 是成功的；而前 2 个实例的 Y 已经补过。同一轮内状态是分裂的。台账会在下一轮靠条件 CAS 自愈，**当前是开放缺口**。
+>
+> **`[未实现]` 修法与其代价**：把"依赖跳过"按实例隔离（每个 target 一份局部 failed 集合，全局只做计数）。注意代价 —— 若失败原因是确定性的（切片本身必然抛异常），按实例隔离会让**每个实例都各自失败一遍**，日志与耗时放大为 N 倍。因此建议同时给每个字段加**跨实例失败计数**，连续 K 次即熔断该字段。
+>
+> **熔断不受影响**：`LinkageError` 仍然上抛熔断（§1.2 不变量 4），"按实例隔离"不改变这一点 —— 它只隔离"某字段逻辑异常 → 依赖它的字段跳过"这条传播边，不隔离系统性故障。
 
 ### 5.3 写入协议与合成字段自动过滤 `[已实现-Java基线]`
 * **条件 CAS 写入（`KIND_CONDITIONAL`）**：`HotswapBridge` 解析物理偏移量，仅在内存值为类型默认零值时写入。
@@ -361,18 +376,18 @@ public class Counter {
 
 ### 7.2 客观物理限制全表 (Known Limitations) `[已实现-Java基线]`
 
-| 边界类型 | 底层物理行为与现象 | 系统防御动作与规约 |
-| :--- | :--- | :--- |
-| **Kotlin 内联与作用域函数** | `?.`、`?:`、`let`、`apply` 展开为分支跳转与局部临时变量。 | **T3 拒绝**。破坏直线无分支假设。`@HotswapReinit` **救不了这一档** —— 它只改变"要不要写"（覆写存量），改变不了"表达式能不能被直线提取"；此类字段的正解是改用 `@HotswapInit`（T4，由你显式提供初始化方法），或把表达式改写成直线形态。 |
-| **参数委托给父类构造器** | `Sub(x) : Base(x)` 中，入参 `x` 的 `PUTFIELD` 在父类 `<init>` 执行，子类看不到。 | **T3 拒绝**。子类无法在自身字节码建立参数回溯映射。 |
-| **间接依赖读脏** | 表达式调用了私有辅助方法 `foo()`，而 `foo()` 内部读取了一个被拒绝补丁的新字段。 | **部分防御**。直接写在切片里的字段读取由依赖闭包（`depReason`）拦截；**接收者敏感**的两档已实测拦截（见下两行）；但 `foo()` 方法体本身不在切片内，其内部的读取仍然看不见 —— 完整解是递归效应位（P2）。 |
-| **切片读取按线程的值** | `this.key = sb.get().toString()`，而 `sb` 是 `ThreadLocal<StringBuilder>` 缓存；补丁在热更线程上重算。 | **已防御（bit 4 子集）**。`ThreadLocal`/`InheritableThreadLocal` 的 `get/set/remove/initialValue/childValue` 一律拒绝，原因文案为 `thread-local heap state ...`。实测：构造线程上 `'abc'`、补丁线程算出 `''` 并静默写入 —— 现已被拦。 |
-| **切片变异可复用 builder 缓存** | `this.key = BUF.append(name).toString()`，重置语句 `BUF.setLength(0)` 写在切片之外、提取时看不见。 | **已防御（bit 5 子集，接收者敏感）**。`StringBuilder`/`StringBuffer` 的变异方法要求接收者是切片内 `NEW` 出来的对象；实测 `'abc'` → 补丁算出 `'abcabc'` 并把实例的 `buf` 一起改脏，现已被拦。`new StringBuilder().append(a)` 的局部逃逸照旧放行。 |
-| **构造器里使用新增字段** | 新增字段（如 `ThreadLocal` 缓存）在构造器里被读写：`sb.get().append("aass");`。 | **默认拒绝**。补丁只重放字段初始化式，构造器用法无法重放，存量实例会与正常构造实例分叉；原因为 `thread-affine field ... / field read outside any accepted extraction`。标 `@HotswapReinit` 可显式豁免，但**会打 warn 并在报告 `warnings` 里标记**；按线程的值还需注意补丁是**单线程**跑在热更线程上。 |
-| **This 逃逸** | 构造器中存在 `init()`、`register(this)` 等调用，内部修改了新增字段。 | **Nest 加工扫描拦截**（仅针对 §4.3 的参数回溯源字段）。全 Nest `PUTFIELD` 探测排查，无法静态证明视为未知风险；对<b>新增字段</b>经由辅助方法的写入仍不可见。 |
-| **多层 `this$0` 跨实例覆盖** | 内部类构造器通过 `Outer.this.f = param` 试图向外部类字段赋值。 | **坚决拒绝**。外部类实例被多内部类共享（Aliasing），跨实例覆盖会导致严重误补。 |
-| **构造中对象捕获** | 堆遍历在其他线程执行旧构造器期间运行，抓取到 final 字段尚未赋值的半构造对象。 | **已知限制**。在风险报告中予以标明，依赖调用端避开高并发初始化峰值进行热更。 |
-| **同名异型字段索引** | 混淆器生成的同名但描述符不同的重载字段。 | **已知限制**。系统以 `fieldName`（`String`）为单 Key，不支持重载字段。 |
+| 边界类型                        | 底层物理行为与现象                                                                                     | 系统防御动作与规约                                                                                                                                                                                                                                                                                    |
+|:--------------------------------|:-------------------------------------------------------------------------------------------------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Kotlin 内联与作用域函数**     | `?.`、`?:`、`let`、`apply` 展开为分支跳转与局部临时变量。                                              | **T3 拒绝**。破坏直线无分支假设。`@HotswapReinit` **救不了这一档** —— 它只改变"要不要写"（覆写存量），改变不了"表达式能不能被直线提取"；此类字段的正解是改用 `@HotswapInit`（T4，由你显式提供初始化方法），或把表达式改写成直线形态。                                                                 |
+| **参数委托给父类构造器**        | `Sub(x) : Base(x)` 中，入参 `x` 的 `PUTFIELD` 在父类 `<init>` 执行，子类看不到。                       | **T3 拒绝**。子类无法在自身字节码建立参数回溯映射。                                                                                                                                                                                                                                                   |
+| **间接依赖读脏**                | 表达式调用了私有辅助方法 `foo()`，而 `foo()` 内部读取了一个被拒绝补丁的新字段。                        | **部分防御**。直接写在切片里的字段读取由依赖闭包（`depReason`）拦截；**接收者敏感**的两档已实测拦截（见下两行）；但 `foo()` 方法体本身不在切片内，其内部的读取仍然看不见 —— 完整解是递归效应位（P2）。**依赖闭包的判定基准 = 候选集 ∖ T0 零值字段**：存量实例上零值字段本来就是该类型的默认值，与"无需补"的结论一致，因此读取它**不构成依赖阻断**（否则 `a = f(b)`、`b = 0` 会被误杀）。该豁免的前提是 §4.1 T0 判定按位比较、已排除 `-0.0f` / `-0.0d` / `NaN` —— 这些位模式非零，不会被 `zeroInstanceFields`/`zeroStaticFields` 收录，仍照常参与依赖阻断。<br>**`[未实现]` 静态依赖不传播**：运行期驱动里，静态字段任务失败后**不会**连带跳过读取它的实例字段（`dependencyOf` 只统计 `acceptedInstance`），实例任务会照常执行并读到未补的静态字段默认值 —— 静默误补。这违反 §3.2"切片不能依赖未补上的值"的核心原则，**当前是开放缺口**，优先级最高。 |
+| **切片读取按线程的值**          | `this.key = sb.get().toString()`，而 `sb` 是 `ThreadLocal<StringBuilder>` 缓存；补丁在热更线程上重算。 | **已防御（bit 4 子集）**。`ThreadLocal`/`InheritableThreadLocal` 的 `get/set/remove/initialValue/childValue` 一律拒绝，原因文案为 `thread-local heap state ...`。实测：构造线程上 `'abc'`、补丁线程算出 `''` 并静默写入 —— 现已被拦。                                                                 |
+| **切片变异可复用 builder 缓存** | `this.key = BUF.append(name).toString()`，重置语句 `BUF.setLength(0)` 写在切片之外、提取时看不见。     | **已防御（bit 5 子集，接收者敏感）**。`StringBuilder`/`StringBuffer` 的变异方法要求接收者是切片内 `NEW` 出来的对象；实测 `'abc'` → 补丁算出 `'abcabc'` 并把实例的 `buf` 一起改脏，现已被拦。`new StringBuilder().append(a)` 的局部逃逸照旧放行。                                                      |
+| **构造器里使用新增字段**        | 新增字段（如 `ThreadLocal` 缓存）在构造器里被读写：`sb.get().append("aass");`。                        | **默认拒绝**。补丁只重放字段初始化式，构造器用法无法重放，存量实例会与正常构造实例分叉；原因为 `thread-affine field ... / field read outside any accepted extraction`。标 `@HotswapReinit` 可显式豁免，但**会打 warn 并在报告 `warnings` 里标记**；按线程的值还需注意补丁是**单线程**跑在热更线程上。 |
+| **This 逃逸**                   | 构造器中存在 `init()`、`register(this)` 等调用，内部修改了新增字段。                                   | **Nest 加工扫描拦截**（仅针对 §4.3 的参数回溯源字段）。全 Nest `PUTFIELD` 探测排查，无法静态证明视为未知风险；对<b>新增字段</b>经由辅助方法的写入仍不可见。                                                                                                                                           |
+| **多层 `this$0` 跨实例覆盖**    | 内部类构造器通过 `Outer.this.f = param` 试图向外部类字段赋值。                                         | **坚决拒绝**。外部类实例被多内部类共享（Aliasing），跨实例覆盖会导致严重误补。                                                                                                                                                                                                                        |
+| **构造中对象捕获**              | 堆遍历在其他线程执行旧构造器期间运行，抓取到 final 字段尚未赋值的半构造对象。                          | **已知限制**。在风险报告中予以标明，依赖调用端避开高并发初始化峰值进行热更。                                                                                                                                                                                                                          |
+| **同名异型字段索引**            | 混淆器生成的同名但描述符不同的重载字段。                                                               | **已知限制**。系统以 `fieldName`（`String`）为单 Key，不支持重载字段。                                                                                                                                                                                                                                |
 
 ---
 
@@ -385,27 +400,28 @@ public class Counter {
 
 ### 8.0 实现状态总表（截至 `7c19e6e6`）
 
-| 规范条目 | 状态 | 落地位置 / 证据 |
-| :--- | :--- | :--- |
-| §1.2 五条不变量 | ✅ | `InitFix`（`isInitialized` 守卫、`PENDING` 弱键 + 5min TTL、`PatchReport` 解耦、`LinkageError` 熔断、`afterRedefineFailed`） |
-| §2.1 `ClassHierarchyOracle` | ✅ | `ClassHierarchyOracle` / `HierarchyTreeOracle`：离线层级、类/成员修饰符与完整 Nest 读取；protected 检查不再反射 |
-| §2.2 `PatchPlan` 基线指纹 | ⬜ | — |
-| §3 两阶段 Schema-First / §3.2 阶段 A | ⬜ | 单阶段 |
-| §3.4 失败策略矩阵（`ABORT_ON_FATAL`/`ABORT_ON_ANY`） | 🔶 | 单字段失败跳过 + 依赖失败跳过 + `LinkageError` 熔断已具备；"中止并放弃提交阶段 C"依赖两阶段 |
-| §3.4 待补字段台账 `FieldLedger` | ✅ | `InitFix.LEDGER`（弱键 Class → 字段名→原因）+ `getUnpatchedFields`；候选集 = 本轮新增 ∪ 台账未决 ∪ 注解字段 |
-| §3.5 跨类批次拓扑排序 | ⬜ | 类内拓扑排序已实现 |
-| §3.3 构造器尾部插桩 | ⬜（缝隙已实测刻画，见 §3.3 注记） | — |
-| §4.1 T0 / T1 / T2 / T3 / T4 | T0 ✅、T1 🔶、T2 🔶、T3 ✅、T4 ⬜ | `FieldStatus.NOTHING_TO_PATCH`、`ConstantValue` 通道、`checkSafe`、§4.2 P0 防御 |
-| §4.2 效应掩码 | 🔶（bit 3/6 已覆盖；bit 4/5 子集） | `InitFix.effectReason` / `blacklistedCallReason` / `builderMutatorReason`，见 §4.2 注记 |
-| §4.3 参数回溯不可变证明 | ✅ | `scanParamFields` + `sourceFieldNotImmutableReason` + `NestView` |
-| §4.4 多根构造器共识 | ✅ | 指纹一致即放行（原先"参数依赖 + 多根一律拒绝"的守卫已移除） |
-| §5.1 每字段独立静态方法 / §5.2 `PatchDriver` | ✅ | `init$F(LHost;)V` / `initStatic$F()V` + `PatchPlan`/`FieldPatchTask` + 宿主逐字段驱动（`asType` 适配、依赖失败跳过、`LinkageError` 熔断） |
-| §5.3 条件 CAS / 合成字段过滤 | ✅ | `KIND_CONDITIONAL`；`KIND_FORCE` 为 `@HotswapReinit(OVERWRITE)` 追加；`ClassDiffUtil.isInternalMarkerField` |
-| §6 JVMTI 多态堆检索 | ✅（Native 底座） | `LibTool.getInstances` |
-| §1.1 `@HotswapReinit` 字段级存量覆写 | ✅ | `nipx.annotation.HotswapReinit` + `KIND_FORCE` + T0/后续加工检查豁免 + 豁免时 warn |
-| §8 P2 `@HotswapInit`（T4） | ⬜ | — |
+| 规范条目                                             | 状态                               | 落地位置 / 证据                                                                                                                           |
+|:-----------------------------------------------------|:-----------------------------------|:------------------------------------------------------------------------------------------------------------------------------------------|
+| §1.2 五条不变量                                      | ✅                                 | `InitFix`（`isInitialized` 守卫、`PENDING` 弱键 + 5min TTL、`PatchReport` 解耦、`LinkageError` 熔断、`afterRedefineFailed`）              |
+| §2.1 `ClassHierarchyOracle`                          | ✅                                 | `ClassHierarchyOracle` / `HierarchyTreeOracle`：离线层级、类/成员修饰符与完整 Nest 读取；protected 检查不再反射                           |
+| §2.2 `PatchPlan` 基线指纹                            | ⬜                                 | —                                                                                                                                         |
+| §3 两阶段 Schema-First / §3.2 阶段 A                 | ⬜                                 | 单阶段                                                                                                                                    |
+| §3.4 失败策略矩阵（`ABORT_ON_FATAL`/`ABORT_ON_ANY`） | 🔶                                 | 单字段失败跳过 + 依赖失败跳过 + `LinkageError` 熔断已具备；"中止并放弃提交阶段 C"依赖两阶段                                               |
+| §3.4 待补字段台账 `FieldLedger`                      | ✅（TTL 丢弃除外，见 §3.4 `[未实现]`） | `InitFix.LEDGER`（弱键 Class → 字段名→原因）+ `getUnpatchedFields`；候选集 = 本轮新增 ∪ 台账未决 ∪ 注解字段；**五种情形记账**（新增 `buildPatch` 规划期异常） |
+| §3.5 跨类批次拓扑排序                                | ⬜                                 | 类内拓扑排序已实现                                                                                                                        |
+| §3.3 构造器尾部插桩                                  | ⬜（缝隙已实测刻画，见 §3.3 注记） | —                                                                                                                                         |
+| §4.1 T0 / T1 / T2 / T3 / T4                          | T0 ✅、T1 🔶、T2 🔶、T3 ✅、T4 ⬜  | `FieldStatus.NOTHING_TO_PATCH`、`ConstantValue` 通道、`checkSafe`、§4.2 P0 防御                                                           |
+| §4.2 效应掩码                                        | 🔶（bit 3/6 已覆盖；bit 4/5 子集） | `InitFix.effectReason` / `blacklistedCallReason` / `builderMutatorReason`，见 §4.2 注记                                                   |
+| §4.3 参数回溯不可变证明                              | ✅                                 | `scanParamFields` + `sourceFieldNotImmutableReason` + `NestView`                                                                          |
+| §4.4 多根构造器共识                                  | ✅                                 | 指纹一致即放行（原先"参数依赖 + 多根一律拒绝"的守卫已移除）                                                                               |
+| §5.1 每字段独立静态方法 / §5.2 `PatchDriver`         | ✅                                 | `init$F(LHost;)V` / `initStatic$F()V` + `PatchPlan`/`FieldPatchTask` + 宿主逐字段驱动（`asType` 适配、依赖失败跳过、`LinkageError` 熔断） |
+| §5.3 条件 CAS / 合成字段过滤                         | ✅                                 | `KIND_CONDITIONAL`；`KIND_FORCE` 为 `@HotswapReinit(OVERWRITE)` 追加；`ClassDiffUtil.isInternalMarkerField`                               |
+| §6 JVMTI 多态堆检索                                  | ✅（Native 底座）                  | `LibTool.getInstances`                                                                                                                    |
+| §1.1 `@HotswapReinit` 字段级存量覆写                 | ✅                                 | `nipx.annotation.HotswapReinit` + `KIND_FORCE` + T0/后续加工检查豁免 + 豁免时 warn                                                        |
+| §8 P2 `@HotswapInit`（T4）                           | ⬜                                 | —                                                                                                                                         |
 
-**回归测试**：`hstestInitFixOracle`（已挂 `check`）16 个场景 / 114 条断言，覆盖正向值比对（`InstanceTracker.register → transform → afterRedefine` 全公开 API）、负向阻断断言、逐字段驱动的失败隔离、以及 `FieldLedger` 的两轮往返；`./gradlew check` 会跑。
+**回归测试**：`hstestInitFixOracle`（已挂 `check`）**19 个场景 / 128 条断言**，覆盖正向值比对（`InstanceTracker.register → transform → afterRedefine` 全公开 API）、负向阻断断言、逐字段驱动的失败隔离、`FieldLedger` 的两轮往返、T0 零值字段可被依赖（实例侧与静态侧）、以及拒绝告警出口（提取期与闭包期的 `REJECTED` 都必须发 warn）；`./gradlew check` 会跑。运行该任务需要 Mindustry 运行期依赖（`HotSwapAgent.initConfig` 会触碰 `arc.struct.Seq`），已作为 `hstestImplementation` 声明。
+> 注：这是 InitFix oracle **自己**的计数。`hstestRun`（`suite.sh` 广域套件）另有一套独立基线（当前 通过=312 / 失败=0 / 已知=4），两者互不影响。
 
 > **实现注记：为什么三张内部表不用 `java.lang.ClassValue`**（`PENDING` / `REPORTS` / `LEDGER`）
 >
@@ -433,7 +449,7 @@ public class Counter {
 * **P1（两阶段协议与架构解耦）**：`[进行中]`
   1. ~~伴生类重构为“每字段独立静态单方法 + 宿主 `PatchDriver` 用户态调度”模型~~ `[已完成]`；
   2. 落地 Schema-First 两阶段重定义流水线与 `ABORT_ON_FATAL` 事务中止机制；`[待 P0.5-② 门槛]`
-  3. ~~引入**待补字段台账（`FieldLedger`）**，闭合阶段 A 中止后的基线遗忘缺陷~~ `[已完成]`（候选集 = 本轮 Diff 新增 ∪ 台账未决；分析期被拒、运行期抛异常、依赖失败、redefine 失败四种情形都记账，成功即出账）；
+  3. ~~引入**待补字段台账（`FieldLedger`）**，闭合阶段 A 中止后的基线遗忘缺陷~~ `[已完成]`（候选集 = 本轮 Diff 新增 ∪ 台账未决；分析期被拒、运行期抛异常、依赖失败、redefine 失败、**`buildPatch` 规划期异常**五种情形都记账，成功即出账；TTL 清扫丢弃仍未记账，见 §3.4 `[未实现]`）；
   4. 将 `Analyzer` 库化抽取为纯函数模块。
 * **P2（代数模型与业务逃生体系）**：`[部分提前落地]`
   1. 落地 8 位正交效应位集合（Effect Bitmask）与局部对象变异逃逸分析；🔶 已提前落地 bit 3/6 与 bit 4/5 的子集（见 §4.2 注记）；

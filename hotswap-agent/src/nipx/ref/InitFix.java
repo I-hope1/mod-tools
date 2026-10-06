@@ -438,6 +438,17 @@ public class InitFix {
 		} catch (Throwable e) {
 			HotSwapAgent.error("Field init patch generation failed for " + className
 			                   + ": " + e.getMessage(), e);
+			// §3.4：buildPatch 抛异常意味着没生成任何补丁，但 redefine 会照常推进，
+			// 这些新增字段从此不再出现在 Diff 里。必须在这里记账，否则永久遗忘。
+			// 已有的台账条目原样保留（ledgerPut 会覆盖原因，这里跳过以免丢掉上一轮的结论）。
+			Map<String, String> existing = ledgerSnapshot(host);
+			String reason = "patch generation failed: " + e;
+			for (String f : addedInstanceFields) {
+				if (!existing.containsKey(f)) ledgerPut(host, f, reason);
+			}
+			for (String f : addedStaticFields) {
+				if (!existing.containsKey(f)) ledgerPut(host, f, reason);
+			}
 		}
 	}
 

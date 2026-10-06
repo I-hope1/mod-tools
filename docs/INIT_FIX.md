@@ -140,9 +140,11 @@ $$\text{Batch: } [Y, X] \xrightarrow{\text{Stage A 全量生效}} [Y, X] \xright
 >
 > **出口后置闭合校验（主防线）**：最终放行集合必须对依赖闭合 —— 每个放行字段读到的"本轮受补字段"都必须在放行集合内（T0 零值字段除外）。它不依赖各阶段的顺序是否正确，因此同时覆盖"成环后依赖方不重判"、"静态依赖边缺失"以及将来同类的漏网。违反即**整类拒绝并打 error**，宁可少补也不静默写入过期值。已实测：单独关闭不动点里的成环检测，仅靠这道校验仍能拦住全部用例。
 >
-> **诊断**：环成员的拒绝原因带路径（`cyclic dependency among static fields: sa -> sb -> sa`），被连带的字段带具体依赖（`dependency: reads new static field 'sa' which is not patched`），两者都进报告与台账 —— 不让修好的漏洞变成另一种静默拒绝。
+> **判定基准必须是两侧并集**（`depInstance ∪ depStatic`）：只传实例侧会把切片里的 `GETSTATIC` 整个漏掉，而"实例字段读静态字段"恰恰是跨组漏网的主要形态 —— 曾因只传 `depInstance` 导致这道校验对它的目标场景完全失明，由"关闭闭包传播"的安全探针实测暴露。
 >
-> 另注：当前成环时**整组拒绝**，会连带拒掉与环无关的字段。偏保守但安全；收窄到强连通分量 + 闭包连带同样安全（连带由闭包保证），但属额外改动，暂不做。
+> **诊断**：环成员的拒绝原因列出成员（`cyclic dependency among static fields: sa, sb`），被连带的字段带具体依赖（`dependency: reads new static field 'sa' which is not patched`），两者都进报告与台账 —— 不让修好的漏洞变成另一种静默拒绝。
+>
+> **拒绝范围已收窄（已实现）**：`cycleMembers` 用迭代式 Tarjan 求出强连通分量，**只拒绝环成员**，不再整组拒绝。与环无关的字段因此得以保留 —— 整组拒绝虽安全，却会因一个小环丢掉整个补丁集。收窄的安全性由闭包保证（环成员出局后，依赖方在下一轮 `depReason` 被连带拒绝），出口后置闭合校验再兜一道底：已实测在人为关闭闭包传播时，仅靠该校验仍能拦住跨组漏网。环成员的边定义与 `topoSortFields` 同源，两处口径由构造保证一致。
 
 ---
 
@@ -427,7 +429,7 @@ public class Counter {
 | §1.1 `@HotswapReinit` 字段级存量覆写                 | ✅                                 | `nipx.annotation.HotswapReinit` + `KIND_FORCE` + T0/后续加工检查豁免 + 豁免时 warn                                                        |
 | §8 P2 `@HotswapInit`（T4）                           | ⬜                                 | —                                                                                                                                         |
 
-**回归测试**：`hstestInitFixOracle`（已挂 `check`）**26 个场景 / 171 条断言**，覆盖正向值比对（`InstanceTracker.register → transform → afterRedefine` 全公开 API）、负向阻断断言、逐字段驱动的失败隔离、静态依赖失败向实例字段的传播、失败跳过按实例隔离、确定性失败的熔断代价控制、TTL 清扫丢弃写回台账、成环后依赖方重判（静态环 + 实例环 + 跨组漏网 + 无环对照）、`FieldLedger` 的两轮往返、T0 零值字段可被依赖（实例侧与静态侧）、以及拒绝告警出口（提取期与闭包期的 `REJECTED` 都必须发 warn）；`./gradlew check` 会跑。运行该任务需要 Mindustry 运行期依赖（`HotSwapAgent.initConfig` 会触碰 `arc.struct.Seq`），已作为 `hstestImplementation` 声明。
+**回归测试**：`hstestInitFixOracle`（已挂 `check`）**27 个场景 / 176 条断言**，覆盖正向值比对（`InstanceTracker.register → transform → afterRedefine` 全公开 API）、负向阻断断言、逐字段驱动的失败隔离、静态依赖失败向实例字段的传播、失败跳过按实例隔离、确定性失败的熔断代价控制、TTL 清扫丢弃写回台账、成环后依赖方重判（静态环 + 实例环 + 跨组漏网 + 无环对照 + 收窄后独立字段放行）、`FieldLedger` 的两轮往返、T0 零值字段可被依赖（实例侧与静态侧）、以及拒绝告警出口（提取期与闭包期的 `REJECTED` 都必须发 warn）；`./gradlew check` 会跑。运行该任务需要 Mindustry 运行期依赖（`HotSwapAgent.initConfig` 会触碰 `arc.struct.Seq`），已作为 `hstestImplementation` 声明。
 > 注：这是 InitFix oracle **自己**的计数。`hstestRun`（`suite.sh` 广域套件）另有一套独立基线（当前 通过=312 / 失败=0 / 已知=4），两者互不影响。
 
 > **实现注记：为什么三张内部表不用 `java.lang.ClassValue`**（`PENDING` / `REPORTS` / `LEDGER`）

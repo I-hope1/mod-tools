@@ -9,13 +9,13 @@ import java.util.*;
 
 /** 依赖jvmti的工具类 */
 public class LibTool {
-	private static boolean initialized;
+	private static volatile boolean initialized;
 
 	public static boolean initialized() {
 		return initialized;
 	}
 
-	public static void init() {
+	public synchronized static void init() {
 		if (initialized) return;
 		String libPath = System.getProperty("nipx.path.libtool");
 		if (libPath != null && !libPath.isEmpty()) {
@@ -36,6 +36,13 @@ public class LibTool {
 	 */
 	@SuppressWarnings("unchecked")
 	public synchronized static <T> T[] getInstances(Class<T> clazz) {
+		Objects.requireNonNull(clazz, "clazz cannot be null");
+		if (clazz.isPrimitive()) {
+			throw new IllegalArgumentException("基本类型在堆中没有实例: " + clazz);
+		}
+		if (clazz.isArray()) {
+			throw new IllegalArgumentException("不支持数组类型的实例查询: " + clazz);
+		}
 		if (!initialized) init();
 		T[] res = (T[]) nGetInstances(clazz);
 		return res != null ? res : (T[]) Array.newInstance(clazz, 0);
@@ -45,8 +52,10 @@ public class LibTool {
 	 * 获取指定对象在 JVM 中的所有引用对象，如果是Class
 	 * 语义说明：仅包含堆中其他对象对它的字段引用，不包含线程栈局部变量、JNI 全局引用等 GC Roots。
 	 * 若目标对象本身为 Class 对象，堆中所有该类的实例均会被视作引用者（即实例对自身类的类引用关系）。
+	 * 目标对象自身的自引用（this.self = this）不会出现在返回结果中。
 	 */
 	public synchronized static Object[] getReferrers(Object targetObject) {
+		if (targetObject == null) return new Object[0];
 		if (!initialized) init();
 		Object[] res = nGetReferrers(targetObject);
 		return res != null ? res : new Object[0];
@@ -78,7 +87,9 @@ public class LibTool {
 		if (target == null) return Collections.emptyList();
 
 		// 调用底层 C++ JVMTI 接口获取堆中所有直接引用者（包含强、弱、软、虚引用）
-		Object[] rawReferrers = LibTool.nGetReferrers(target);
+		// 必须走公开的 getReferrers：它负责触发 init() 装载 native 库并做 null 防护，
+		// 直接调 native 方法会在库未加载时抛 UnsatisfiedLinkError。
+		Object[] rawReferrers = getReferrers(target);
 		if (rawReferrers == null || rawReferrers.length == 0) {
 			return Collections.emptyList();
 		}

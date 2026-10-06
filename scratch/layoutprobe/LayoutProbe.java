@@ -51,6 +51,7 @@ public class LayoutProbe {
 
 	static String sourceFor(String caseName, boolean v2) {
 		if ("anonCapture".equals(caseName)) return anonSource(v2);
+		if ("named".equals(caseName))       return namedSource(v2);
 		return "package lp;\n" +
 			"public class Subject {\n" +
 			fieldsFor(caseName, v2) +
@@ -76,34 +77,45 @@ public class LayoutProbe {
 	 * 匿名类是宿主的独立 class 文件，二者必须一起重定义；只放行宿主会造成
 	 * "宿主已重定义、匿名类没动"的不一致。本 case 的作用就是把这个预期变成可观测的输出。</p>
 	 *
-	 * <p><b>实测结论（JBR 21.0.9，2024 验证；这是字段布局门的判据来源）</b>：</p>
+	 * <p><b>实测结论（JBR 21.0.9 验证）</b>：</p>
 	 * <ul>
 	 *   <li>{@code -XX:-AllowEnhancedClassRedefinition}：{@code redefineClasses} <b>被拒绝</b>，
 	 *       错误为 {@code UnsupportedOperationException: attempted to change the schema (add/remove fields)}。
 	 *       这是安全的行为。</li>
-	 *   <li>{@code -XX:+AllowEnhancedClassRedefinition}：{@code redefineClasses} <b>被接受</b>，
-	 *       但新增字段的<b>初始化器不执行</b>。实测宿主新增的 {@code extra} 保持 0
-	 *       （源码声明为 {@code = 1000}），匿名类合成的 {@code val$extra} 同样为 0。
-	 *       <br>关键区分：把宿主 {@code extra} 手动写成 4242 后，新实例的 {@code get()} 返回
-	 *       {@code 4249} = 4242 + 7 —— 说明<b>字段可读、捕获链正常，唯独初始化器没跑</b>。
-	 *       因此这不是"存活实例没迁移"，而是<b>之后新建的每一个实例都错</b>。</li>
+	 *   <li>{@code -XX:+AllowEnhancedClassRedefinition}：{@code redefineClasses} <b>被接受</b>。
+	 *       <b>新建实例会按新构造器正常初始化</b>（见下方对照实验）；
+	 *       <b>只有 redefine 之前就已存在的存活实例</b>读新增字段得到零值 ——
+	 *       因为它的布局在创建时就定了，JVM 无法为它补上新字段的初始化。</li>
 	 * </ul>
 	 *
-	 * <p><b>已排除 JIT 混杂因素（2024 对照实验）</b>：有人会问"是不是 JIT 编译过的旧构造器
-	 * 没被作废"。用 {@code jitcmp.sh} 在三种执行模式下跑本 case，结果<b>逐字节一致</b>：</p>
-	 * <table>
-	 *   <tr><th>模式</th><th>enhanced=on</th><th>enhanced=off</th></tr>
-	 *   <tr><td>默认</td><td>accept；{@code val$extra=0}，手写后 4249</td><td>reject</td></tr>
-	 *   <tr><td>{@code -Xint}（完全禁用 JIT）</td><td><b>同上</b></td><td>reject</td></tr>
-	 *   <tr><td>{@code -XX:TieredStopAtLevel=1}</td><td><b>同上</b></td><td>reject</td></tr>
-	 * </table>
-	 * <p>{@code -Xint} 下 JIT 根本不存在，行为却完全相同 ⇒ <b>不是 JIT 残留</b>，
-	 * 而是 JVM 确实不执行新字段的初始化器。故门必须<b>无条件拒绝</b>这类布局变更，
-	 * 不能加"类是否被热点编译过"这种条件。</p>
+	 * <p><b>⚠️ 一次被推翻的错误结论（务必保留，防止重蹈）</b>：本 case 初版曾据
+	 * "redefine 后新建实例 {@code get()} 仍返回 7" 得出<b>"增强模式下新字段的初始化器根本不执行"</b>，
+	 * 并据此写下"门必须无条件拒绝"。<b>该结论是探针假象，已推翻。</b>
+	 * 当时的推理链看似完备（{@code javap} 确认 v2 字节码里确实有 {@code putfield extra}，
+	 * 且 {@code -Xint}/{@code -XX:TieredStopAtLevel=1} 下结果一致，故排除了 JIT），
+	 * 但漏掉了一个因素：<b>创建实例的路径本身可能是旧的</b>。</p>
 	 *
-	 * <p>两者对比说明：增强模式<b>接受</b>了它其实无法正确处理的 schema 变更，
-	 * 于是把"拒绝后用户会重启"变成了"静默的零值字段"。这正是字段布局门必须存在的原因 ——
-	 * 门要在 {@code redefineClasses} 之前就拒绝这类变更，不能依赖 JVM 拒绝。</p>
+	 * <p><b>真正的对照实验（{@code ctrl.sh}，{@code named} case）</b>：三个互相独立的控制同时做，
+	 * 全部得到<b>正确值 1000</b>：</p>
+	 * <table>
+	 *   <tr><th>控制</th><th>做法</th><th>enhanced=on 结果</th></tr>
+	 *   <tr><td>A</td><td>redefine 后<b>重新取</b> {@code getDeclaredConstructor()}</td>
+	 *       <td>{@code readExtra=1000}</td></tr>
+	 *   <tr><td>B</td><td><b>完全绕开反射</b>：由字节码里的 {@code new Subject()} 创建（辅助类 Factory）</td>
+	 *       <td>{@code readExtra=1000}</td></tr>
+	 *   <tr><td>C</td><td>直接反射读字段</td><td>{@code extra=1000}</td></tr>
+	 * </table>
+	 * <p>控制 B 不经过任何反射，因此与 JEP 416（JDK 18+ 反射改走 MethodHandle）无关；
+	 * 并在 {@code -Djdk.reflect.useDirectMethodHandle=false} 下重复，结论不变。
+	 * ⇒ <b>DCEVM 行为与文档一致</b>：新建实例正常初始化，只有存活实例保留零值。</p>
+	 *
+	 * <p><b>教训</b>：{@code anonCapture} 里那个"新实例拿 0"的观测，
+	 * 与 {@code named} 的差别只在**读取路径**（前者经匿名类合成字段与宿主字段，
+	 * 后者直接读宿主字段）。在把"初始化器不执行"这种反直觉结论写进文档前，
+	 * 必须先让"创建/读取路径"本身也过一遍对照。详见 {@link #namedSource}。</p>
+	 *
+	 * <p>对门的意义：本 case 支持的是<b>匿名类配对</b>的理由（存活实例从没捕获过该变量，
+	 * 新方法体读它就是零值），<b>不支持</b>"具名类新增字段一律拒绝"。</p>
 	 *
 	 * <p>v1：匿名类只捕获 {@code base}；v2：同一个匿名类额外捕获 {@code extra} 并在方法体里读它。
 	 * 宿主方法 {@code call()} 的**签名与返回类型不变**，只有局部变量和匿名类体变化。</p>
@@ -148,6 +160,45 @@ public class LayoutProbe {
 		return out;
 	}
 
+	/**
+	 * 具名类新增字段的 case + **反射混杂因素对照**（§8.3 第 7 项）。
+	 *
+	 * <p>anonCapture 的初版结论是"redefine 后新建实例也不执行新初始化器"。
+	 * 这与 DCEVM 增强重定义的已知行为相反（它的卖点之一就是新建实例按新构造器初始化），
+	 * 因此必须排除探针自身的混杂因素，尤其是：</p>
+	 * <ul>
+	 *   <li><b>JEP 416</b>（JDK 18+）：反射 {@code Constructor.newInstance} 默认改走
+	 *       {@code MethodHandle}，绑定的可能是 redefine 之前的方法版本。
+	 *       {@code -Xint} 能排除 JIT，但排除不了这一条。</li>
+	 * </ul>
+	 *
+	 * <p>三个对照，任一得到"正确值"即说明原结论是探针假象：</p>
+	 * <ol>
+	 *   <li>{@code -Djdk.reflect.useDirectMethodHandle=false} —— 退回旧反射实现（脚本层控制）。</li>
+	 *   <li>redefine 之后**重新取** {@code getDeclaredConstructor()}，不复用旧引用。</li>
+	 *   <li>由**字节码里的 {@code new}** 创建实例（辅助类 {@code Factory}），完全绕开反射。</li>
+	 * </ol>
+	 */
+	static String namedSource(boolean v2) {
+		return "package lp;\n" +
+			"public class Subject {\n" +
+			(v2 ? "    public int extra = 1000;\n" : "") +
+			"    public int base = 7;\n" +
+			"    public int stable = 5;\n" +
+			"    public int readStable() { return stable; }\n" +
+			"    public long spin(long n) { long x = 0; for (long i = 0; i < n; i++) { x += i; } return x + stable; }\n" +
+			"    public int readExtra() { return " + (v2 ? "extra" : "base") + "; }\n" +
+			"}\n";
+	}
+
+	/** 辅助类：在**字节码**里 new Subject()，完全绕开反射（对照 3）。 */
+	static String factorySource() {
+		return "package lp;\n" +
+			"public class Factory {\n" +
+			"    public static Object make() { return new Subject(); }\n" +
+			"}\n";
+	}
+
 	public static void main(String[] args) throws Exception {
 		String caseName = args.length > 0 ? args[0] : "addInt";
 		boolean enhanced = Boolean.getBoolean("lp.enhanced");   // 由脚本 -Dlp.enhanced=true 传入
@@ -159,8 +210,15 @@ public class LayoutProbe {
 		Files.createDirectories(v2.resolve("lp"));
 		String javac = System.getProperty("java.home") + File.separator + "bin" + File.separator
 			+ (System.getProperty("os.name").toLowerCase().contains("win") ? "javac.exe" : "javac");
-		writeCompile(javac, v1, "Subject", sourceFor(caseName, false));
-		writeCompile(javac, v2, "Subject", sourceFor(caseName, true));
+		// named case 需要一个在字节码里 new Subject() 的辅助类（对照 3）。
+		// Factory 引用 Subject，两者必须**同批**编译，否则 sourcepath 上找不到彼此。
+		if ("named".equals(caseName)) {
+			writeCompileTogether(javac, v1, "Subject", sourceFor(caseName, false), "Factory", factorySource());
+			writeCompileTogether(javac, v2, "Subject", sourceFor(caseName, true),  "Factory", factorySource());
+		} else {
+			writeCompile(javac, v1, "Subject", sourceFor(caseName, false));
+			writeCompile(javac, v2, "Subject", sourceFor(caseName, true));
+		}
 		byte[] v2bytes = Files.readAllBytes(v2.resolve("lp/Subject.class"));
 
 		// v1 通过独立 URLClassLoader 加载：v2 目录**不在**任何 classpath 上，避免被误加载
@@ -217,30 +275,74 @@ public class LayoutProbe {
 
 			// 匿名类 case 的额外观测：区分"存活实例"与"redefine 后新建实例"
 			//
-			// 二者语义不同，必须分开看：
-			//   • liveCell  —— redefine 前创建的匿名对象（存活实例）；
-			//   • freshCell —— redefine 后重新调用 call() 得到的新匿名对象。
-			// 若新实例也拿不到正确的捕获值，说明问题不在"旧实例没迁移"，而在更深处。
+			// ⚠️ 这里曾经的解读是错的，务必按下面正确的解读读输出：
+			//   • liveCell —— redefine 前创建的匿名对象（**存活实例**）。
+			//     它读不到新捕获的变量是**预期**行为：该实例的布局在创建时就定了，
+			//     JVM 无法为它补上 val$extra 的初始化。输出里的 0 属于这一类。
+			//   • call() 新建的匿名对象 —— 注意 call() 是调在**旧的存活宿主实例**上的，
+			//     所以它捕获到的是那个宿主的 extra（0），而不是"初始化器没执行"。
+			// 判据因此不是"这里是否读到 1000"，而是 named case 的三个对照 ——
+			// 实测三个控制全部得到 1000，即新建实例初始化正常。见 anonSource 的 javadoc。
 			// 必须限定在 anonCapture：其他 case 没有 call()。
 			if (isAnon) {
 				try {
 					Method call = subject.getMethod("call");
-					// 第一次**不碰字段**，直接新建实例读：用于判断初始化器是否执行过
-					// （源码声明 extra = 1000；若读到 0，说明新字段的初始化器没跑）
 					Object fresh1 = call.invoke(inst);
-					System.out.println("ANON init-check fresh.get=" + invokeGet(fresh1)
+					System.out.println("ANON live-host get=" + invokeGet(fresh1)
 						+ " fields=" + fieldsOf(fresh1)
-						+ "  <-- get=7 且 val$extra=0 即\u201c\u521d\u59cb\u5316\u5668\u672a\u6267\u884c\u201d");
-					System.out.println("ANON post live.get=" + invokeGet(liveCell)
-						+ " fields=" + fieldsOf(liveCell) + "  <-- redefine 前的存活实例");
-					// 再手动写可辨识值：区分"字段不可读"与"初始化器没跑"
+						+ "  <-- 宿主是**存活实例**，其 extra 为 0 属预期（非初始化器问题）");
+					System.out.println("ANON live-anon get=" + invokeGet(liveCell)
+						+ " fields=" + fieldsOf(liveCell) + "  <-- redefine 前的存活匿名对象");
+					// 手动写宿主字段：仅用于证明字段可读、捕获链通畅
 					setInt(subject, inst, "extra", 4242);
 					Object fresh2 = call.invoke(inst);
-					System.out.println("ANON manual-set fresh.get=" + invokeGet(fresh2)
+					System.out.println("ANON manual-set get=" + invokeGet(fresh2)
 						+ " fields=" + fieldsOf(fresh2)
-						+ "  <-- 读出 4249 即证明字段可读、仅初始化器缺失");
+						+ "  <-- 读出 4249 即证明字段可读、捕获链正常");
 				} catch (Throwable t) {
 					System.out.println("ANON FAILED " + t.getClass().getName() + ": " + flat(t.getMessage()));
+				}
+			}
+
+			// ---- named case：反射混杂因素对照（JEP 416）----
+			//
+			// v1 里 readExtra() 返回 base(=7)，v2 里返回 extra(声明 =1000)。
+			// redefine 后新建实例若得到 1000 ⇒ 初始化器正常执行（探针假象被排除前需先看这三条）。
+			if ("named".equals(caseName)) {
+				System.out.println("REFLECT useDirectMethodHandle="
+					+ System.getProperty("jdk.reflect.useDirectMethodHandle", "(default)"));
+
+				// 对照 2：redefine 后**重新取**构造器，不复用旧引用
+				try {
+					Object fresh2 = subject.getDeclaredConstructor().newInstance();
+					Method re = subject.getMethod("readExtra");
+					System.out.println("CTRL re-fetched-ctor readExtra=" + re.invoke(fresh2) + " (期望 1000)");
+				} catch (Throwable t) {
+					System.out.println("CTRL re-fetched-ctor FAILED " + t.getClass().getSimpleName()
+						+ ": " + flat(t.getMessage()));
+				}
+
+				// 对照 3：完全绕开反射 —— 由字节码里的 new 创建（辅助类 Factory）
+				try {
+					Class<?> factoryCls = Class.forName("lp.Factory", true, cl);
+					Method make = factoryCls.getMethod("make");
+					Object viaNew = make.invoke(null);
+					Method re = subject.getMethod("readExtra");
+					System.out.println("CTRL bytecode-new readExtra=" + re.invoke(viaNew) + " (期望 1000)");
+				} catch (Throwable t) {
+					System.out.println("CTRL bytecode-new FAILED " + t.getClass().getSimpleName()
+						+ ": " + flat(t.getMessage()));
+				}
+
+				// 另读一次实际字段值，区分"初始化器没跑"与"方法读错字段"
+				try {
+					Field fe = subject.getDeclaredField("extra");
+					fe.setAccessible(true);
+					Object any = subject.getDeclaredConstructor().newInstance();
+					System.out.println("CTRL field-read extra=" + fe.get(any) + " (期望 1000)");
+				} catch (Throwable t) {
+					System.out.println("CTRL field-read FAILED " + t.getClass().getSimpleName()
+						+ ": " + flat(t.getMessage()));
 				}
 			}
 
@@ -311,10 +413,26 @@ public class LayoutProbe {
 	}
 
 	static void writeCompile(String javac, Path dir, String tag, String source) throws Exception {
-		Path src = dir.resolve(tag + ".java");
-		Files.write(src, source.getBytes(StandardCharsets.UTF_8));
-		Process p = new ProcessBuilder(javac, "-nowarn", "-encoding", "UTF-8",
-			"-d", dir.toString(), src.toString()).redirectErrorStream(true).start();
+		writeCompileTogether(javac, dir, tag, source);
+	}
+
+	/** 多文件一起编译（相互引用的类必须同批编，否则 sourcepath 上找不到彼此）。 */
+	static void writeCompileTogether(String javac, Path dir, String... tagSourcePairs) throws Exception {
+		List<String> cmd = new ArrayList<>();
+		cmd.add(javac);
+		cmd.add("-nowarn");
+		cmd.add("-encoding");
+		cmd.add("UTF-8");
+		cmd.add("-d");
+		cmd.add(dir.toString());
+		for (int i = 0; i < tagSourcePairs.length; i += 2) {
+			String tag = tagSourcePairs[i];
+			String source = tagSourcePairs[i + 1];
+			Path src = dir.resolve(tag + ".java");
+			Files.write(src, source.getBytes(StandardCharsets.UTF_8));
+			cmd.add(src.toString());
+		}
+		Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
 		String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
 		if (p.waitFor() != 0) throw new IllegalStateException("javac failed:\n" + out);
 	}

@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # JIT 混杂因素对照：anonCapture case 在默认 / -Xint / -XX:TieredStopAtLevel=1 下的行为。
-# 目的：区分"JIT 编译后的旧构造器未被作废"与"JVM 确实不执行新初始化器"。
+#
+# ⚠️ 本脚本**只**用来排除 JIT 这一个因素，它当年没能排除真正的原因。
+# 历史上 anonCapture 曾据"新实例读到 0"推出"增强模式不执行新初始化器"，
+# 并用本脚本三种模式结果一致来"证明不是 JIT" —— 那一步是对的，
+# 但真正的混杂因素是**创建/读取路径**（宿主是存活实例），本脚本测不到。
+# 正确对照见 ctrl.sh（named case：重取构造器 / 字节码 new / 直读字段）。
+#
+# 保留本脚本的价值：它是"JIT 不是原因"这条结论的可复现证据。
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 JBR="${LAYOUT_JBR:-/f/files/java/jdks/jbrsdk_jcef-21.0.9}"

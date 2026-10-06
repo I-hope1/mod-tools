@@ -294,6 +294,9 @@ public class HotSwapAgent {
 		}
 		UI_HOOK = Boolean.parseBoolean(System.getProperty("nipx.agent.ui_hook", "false"));
 		info("UI Hook: " + UI_HOOK);
+		boolean cellPropertyRef = Boolean.parseBoolean(System.getProperty("nipx.agent.cell_property_ref", "false"));
+		info("Cell Property Ref: " + cellPropertyRef);
+		CellPropertyRef.setEnabled(cellPropertyRef);
 		info("Anon Align: " + ANON_ALIGN + " (strict=" + ANON_STRICT + ", debug=" + ANON_DEBUG
 		     + ", maxPerHost=" + AnonClassAligner.MAX_ANON_PER_HOST
 		     + ", timeoutMs=" + AnonClassAligner.ALIGN_TIMEOUT_MS

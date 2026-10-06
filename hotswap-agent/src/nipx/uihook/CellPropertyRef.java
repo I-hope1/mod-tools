@@ -1829,6 +1829,14 @@ public class CellPropertyRef {
 
     public static boolean isEnabled() { return enabled; }
 
+    /**
+     * 由 {@code HotSwapAgent.initConfig} 依据系统属性
+     * {@code nipx.agent.cell_property_ref} 设置（默认 false）。
+     */
+    public static void setEnabled(boolean b) {
+        enabled = b;
+    }
+
     public static void clearClassRecords(String hostSlashName) {
         if (hostSlashName == null) return;
         if (offUiThread() && Core.app != null) {

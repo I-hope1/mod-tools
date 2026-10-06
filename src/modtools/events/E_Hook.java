@@ -37,6 +37,9 @@ public enum E_Hook implements ISettings {
 	lambda_align,
 	@Switch(dependency = "hot_swap")
 	ui_hook,
+	@Switch
+	cell_property_ref,
+
 	_1,
 	// ------------
 	profile,
@@ -82,6 +85,7 @@ public enum E_Hook implements ISettings {
 		hotswapOnChange(force_reinit, func);
 		hotswapOnChange(lambda_align, func);
 		hotswapOnChange(ui_hook, func);
+		hotswapOnChange(cell_property_ref, func);
 
 		setProperty(retransform_loaded);
 		setProperty(capture_locals);

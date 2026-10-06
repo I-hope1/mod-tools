@@ -59,11 +59,11 @@ static inline TagPair allocateTagPair() {
 }
 
 /** 确保当前 JVMTI 环境已启用对象标记能力 */
-static inline void ensureCapabilities(jvmtiEnv* jvmti) {
+static inline jvmtiError ensureCapabilities(jvmtiEnv* jvmti) {
     jvmtiCapabilities caps{
         .can_tag_objects = 1,
     };
-    jvmti->AddCapabilities(&caps);
+    return jvmti->AddCapabilities(&caps);
 }
 
 /** 遍历清理回调：清空指定类的所有带标记实例 */
@@ -108,7 +108,6 @@ static jvmtiIterationControl JNICALL HeapObjectCallback(
 static std::expected<jobjectArray, jvmtiError>
 getInstancesInternal(jvmtiEnv* jvmti, JNIEnv* env, jclass klass) {
     if (!jvmti || !env || !klass) return std::unexpected(JVMTI_ERROR_NULL_POINTER);
-    ensureCapabilities(jvmti);
 
     std::lock_guard<std::mutex> lock(g_heap_mutex);
 
@@ -136,6 +135,7 @@ getInstancesInternal(jvmtiEnv* jvmti, JNIEnv* env, jclass klass) {
     // 构建结果数组，不再调用 EnsureLocalCapacity 以避免触发超过容量限制的误报失败
     jobjectArray result = env->NewObjectArray(count, klass, nullptr);
     if (!result) {
+        env->ExceptionClear();
         for (jint i = 0; i < count; ++i) {
             jvmti->SetTag(instances[i], 0);
             env->DeleteLocalRef(instances[i]);
@@ -201,8 +201,6 @@ static jint JNICALL ReferrerCallback(
  */
 static std::expected<jobjectArray, jvmtiError> getReferrersInternal(jvmtiEnv* jvmti, JNIEnv* env, jobject target_object) {
     if (!jvmti || !env || !target_object) return std::unexpected(JVMTI_ERROR_NULL_POINTER);
-
-    ensureCapabilities(jvmti);
 
     std::lock_guard<std::mutex> lock(g_heap_mutex);
 
@@ -318,7 +316,13 @@ static jvmtiEnv* getOrAcquireJvmti(JNIEnv* env) {
         void* jvmti_raw = nullptr;
         if (vm->GetEnv(&jvmti_raw, JVMTI_VERSION_1_2) == JNI_OK && jvmti_raw) {
             ti = reinterpret_cast<jvmtiEnv*>(jvmti_raw);
-            ensureCapabilities(ti);
+            if (auto e = ensureCapabilities(ti); e != JVMTI_ERROR_NONE) {
+                // 能力申请失败：**不缓存** 这个 jvmti（store 在下面），返回 nullptr，
+                // 调用方见到 nullptr 即直接返回，下一次调用会重试申请。
+                // 不缓存是刻意的：AddCapabilities 的失败可能是瞬时的。
+                (void) e;
+                return nullptr;
+            }
             g_jvmti.store(ti, std::memory_order_release);
             return ti;
         }

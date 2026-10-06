@@ -127,7 +127,8 @@ public interface ClassHierarchyOracle {
   * 系统在持久化上下文维护 `FieldLedger: Class -> Set<UnpatchedField>`。中止后，基线哈希推进至阶段 A，未成功修补的字段记入台账。下一轮热更时，**候选字段集合 = 本轮 Diff 新增字段 $\cup$ 台账内未决字段**，确保因故障或用户修正表达式后重新提交的字段能被再次处理。
   * **实现注记**：台账键是<b>弱引用 `Class<?>`</b>、值是纯字符串（字段名 + 原因，不持有类引用，与 `PENDING`/`REPORTS` 同策略）。**五种情形记账**：① 分析期被拒（`REJECTED`）；② 运行期补丁抛异常；③ 依赖字段失败而跳过；④ redefine 本身失败（计划已生成但一个都没补）；⑤ **`buildPatch` 规划期抛异常**（`"patch generation failed: ..."`，`InitFix.transform` 的 `catch` 分支 —— 此处 redefine 仍会照常推进，不记账就等于永久遗忘）。成功（`ACCEPTED` 且驱动未报错）或判定"无需补"（`NOTHING_TO_PATCH`）即出账；字段已从新版本消失也出账。候选集并回时仍走同一套安全门 —— 台账只负责"不要遗忘"，不负责"放行"。
   * **已入账条目不被降级覆盖**：第 ⑤ 种情形记账时，若该字段在台账里已有条目，则保留原有更具体的原因，而不是用笼统的 `"patch generation failed"` 覆盖它。
-  * **`[未实现]` TTL 清扫丢弃未记账**：`cleanupStalePatches` 会丢弃超过 `PENDING_TTL_NANOS`（5 分钟）的待补补丁并打 log，但**不为其中的字段写台账**。`ACCEPTED` 字段在 `transform` 时已出账，丢弃时没有写回，因此这些字段在下一轮不会再被纳入候选集 —— 与第 ⑤ 种情形同一类遗忘，**当前是开放缺口**。修法约束（照 §1.2 不变量 2）：清扫线程**不得强引用 `Class`**，只能从 `PENDING` 的弱键遍历里取名字，key 已被 GC 的条目直接跳过。
+  * **TTL 清扫丢弃也会记账（已实现）**：`cleanupStalePatches` 丢弃超过 TTL（默认 5 分钟，`PENDING_TTL_NANOS`）的待补补丁时，把其中<b>尚未补上</b>的字段记入台账（原因 `pending patch expired before apply (age=Ns)`）。这些字段在 `transform` 时已因 `ACCEPTED` 出账，若丢弃时不写回就<b>永久遗忘</b>（下一轮既不在 Diff 也不在台账），与第 ⑤ 种情形同一类缺陷。实现约束（照 §1.2 不变量 2）：清扫线程<b>不新增对 `Class` 的强引用</b> —— 清单里持有的是 `WeakReference<Class<?>>`，已在锁外被回收的条目直接跳过（台账也是弱键，随宿主一同消失）。字段名从待补补丁的计划取（与 `afterRedefineFailed` 同一来源）。记入用 `putIfAbsent`，不覆盖更具体的原因。
+  * **锁序**：台账写入在 `PENDING` 锁<b>之外</b>完成。若在 `removeIf` 判定式里直接写台账，就会在持有 `PENDING` 锁时去拿 `LEDGER` 锁，两把锁的获取顺序取决于调用路径，属无谓的死锁面。
 
 ### 3.5 批处理原子拓扑排序 `[目标规范]`
 若类 `X` 的新增字段表达式读取类 `Y` 的新增字段，两类打包为同一事务批次：
@@ -420,7 +421,7 @@ public class Counter {
 | §1.1 `@HotswapReinit` 字段级存量覆写                 | ✅                                 | `nipx.annotation.HotswapReinit` + `KIND_FORCE` + T0/后续加工检查豁免 + 豁免时 warn                                                        |
 | §8 P2 `@HotswapInit`（T4）                           | ⬜                                 | —                                                                                                                                         |
 
-**回归测试**：`hstestInitFixOracle`（已挂 `check`）**22 个场景 / 148 条断言**，覆盖正向值比对（`InstanceTracker.register → transform → afterRedefine` 全公开 API）、负向阻断断言、逐字段驱动的失败隔离、静态依赖失败向实例字段的传播、失败跳过按实例隔离、确定性失败的熔断代价控制、`FieldLedger` 的两轮往返、T0 零值字段可被依赖（实例侧与静态侧）、以及拒绝告警出口（提取期与闭包期的 `REJECTED` 都必须发 warn）；`./gradlew check` 会跑。运行该任务需要 Mindustry 运行期依赖（`HotSwapAgent.initConfig` 会触碰 `arc.struct.Seq`），已作为 `hstestImplementation` 声明。
+**回归测试**：`hstestInitFixOracle`（已挂 `check`）**23 个场景 / 155 条断言**，覆盖正向值比对（`InstanceTracker.register → transform → afterRedefine` 全公开 API）、负向阻断断言、逐字段驱动的失败隔离、静态依赖失败向实例字段的传播、失败跳过按实例隔离、确定性失败的熔断代价控制、TTL 清扫丢弃写回台账、`FieldLedger` 的两轮往返、T0 零值字段可被依赖（实例侧与静态侧）、以及拒绝告警出口（提取期与闭包期的 `REJECTED` 都必须发 warn）；`./gradlew check` 会跑。运行该任务需要 Mindustry 运行期依赖（`HotSwapAgent.initConfig` 会触碰 `arc.struct.Seq`），已作为 `hstestImplementation` 声明。
 > 注：这是 InitFix oracle **自己**的计数。`hstestRun`（`suite.sh` 广域套件）另有一套独立基线（当前 通过=312 / 失败=0 / 已知=4），两者互不影响。
 
 > **实现注记：为什么三张内部表不用 `java.lang.ClassValue`**（`PENDING` / `REPORTS` / `LEDGER`）

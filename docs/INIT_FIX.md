@@ -125,7 +125,7 @@ public interface ClassHierarchyOracle {
 * **待补字段台账（`FieldLedger`，解决基线推进遗忘缺陷）**：`[已实现]`
   * 阶段 A 提交成功后类结构即不可逆。一旦阶段 B 中止，宿主类已在物理内存中携带新字段。
   * 系统在持久化上下文维护 `FieldLedger: Class -> Set<UnpatchedField>`。中止后，基线哈希推进至阶段 A，未成功修补的字段记入台账。下一轮热更时，**候选字段集合 = 本轮 Diff 新增字段 $\cup$ 台账内未决字段**，确保因故障或用户修正表达式后重新提交的字段能被再次处理。
-  * **实现注记**：台账键是<b>弱引用 `Class<?>`</b>、值是纯字符串（字段名 + 原因，不持有类引用，与 `PENDING`/`REPORTS` 同策略）。**五种情形记账**：① 分析期被拒（`REJECTED`）；② 运行期补丁抛异常；③ 依赖字段失败而跳过；④ redefine 本身失败（计划已生成但一个都没补）；⑤ **`buildPatch` 规划期抛异常**（`"patch generation failed: ..."`，`InitFix.transform` 的 `catch` 分支 —— 此处 redefine 仍会照常推进，不记账就等于永久遗忘）。成功（`ACCEPTED` 且驱动未报错）或判定"无需补"（`NOTHING_TO_PATCH`）即出账；字段已从新版本消失也出账。候选集并回时仍走同一套安全门 —— 台账只负责"不要遗忘"，不负责"放行"。
+  * **实现注记**：台账键是<b>弱引用 `Class<?>`</b>、值是纯字符串（字段名 + 原因，不持有类引用，与 `PENDING`/`REPORTS` 同策略）。**六种情形记账**：① 分析期被拒（`REJECTED`）；② 运行期补丁抛异常；③ 依赖字段失败而跳过；④ redefine 本身失败（计划已生成但一个都没补）；⑤ **`buildPatch` 规划期抛异常**（`"patch generation failed: ..."`，`InitFix.transform` 的 `catch` 分支 —— 此处 redefine 仍会照常推进，不记账就等于永久遗忘）；⑥ **TTL 清扫丢弃待补补丁**（详见下条）。成功（`ACCEPTED` 且驱动未报错）或判定"无需补"（`NOTHING_TO_PATCH`）即出账；字段已从新版本消失也出账。候选集并回时仍走同一套安全门 —— 台账只负责"不要遗忘"，不负责"放行"。
   * **已入账条目不被降级覆盖**：第 ⑤ 种情形记账时，若该字段在台账里已有条目，则保留原有更具体的原因，而不是用笼统的 `"patch generation failed"` 覆盖它。
   * **TTL 清扫丢弃也会记账（已实现）**：`cleanupStalePatches` 丢弃超过 TTL（默认 5 分钟，`PENDING_TTL_NANOS`）的待补补丁时，把其中<b>尚未补上</b>的字段记入台账（原因 `pending patch expired before apply (age=Ns)`）。这些字段在 `transform` 时已因 `ACCEPTED` 出账，若丢弃时不写回就<b>永久遗忘</b>（下一轮既不在 Diff 也不在台账），与第 ⑤ 种情形同一类缺陷。实现约束（照 §1.2 不变量 2）：清扫线程<b>不新增对 `Class` 的强引用</b> —— 清单里持有的是 `WeakReference<Class<?>>`，已在锁外被回收的条目直接跳过（台账也是弱键，随宿主一同消失）。字段名从待补补丁的计划取（与 `afterRedefineFailed` 同一来源）。记入用 `putIfAbsent`，不覆盖更具体的原因。
   * **锁序**：台账写入在 `PENDING` 锁<b>之外</b>完成。若在 `removeIf` 判定式里直接写台账，就会在持有 `PENDING` 锁时去拿 `LEDGER` 锁，两把锁的获取顺序取决于调用路径，属无谓的死锁面。
@@ -408,7 +408,7 @@ public class Counter {
 | §2.2 `PatchPlan` 基线指纹                            | ⬜                                 | —                                                                                                                                         |
 | §3 两阶段 Schema-First / §3.2 阶段 A                 | ⬜                                 | 单阶段                                                                                                                                    |
 | §3.4 失败策略矩阵（`ABORT_ON_FATAL`/`ABORT_ON_ANY`） | 🔶                                 | 单字段失败跳过 + 依赖失败跳过 + `LinkageError` 熔断已具备；"中止并放弃提交阶段 C"依赖两阶段                                               |
-| §3.4 待补字段台账 `FieldLedger`                      | ✅（TTL 丢弃除外，见 §3.4 `[未实现]`） | `InitFix.LEDGER`（弱键 Class → 字段名→原因）+ `getUnpatchedFields`；候选集 = 本轮新增 ∪ 台账未决 ∪ 注解字段；**五种情形记账**（新增 `buildPatch` 规划期异常） |
+| §3.4 待补字段台账 `FieldLedger`                      | ✅                                 | `InitFix.LEDGER`（弱键 Class → 字段名→原因）+ `getUnpatchedFields`；候选集 = 本轮新增 ∪ 台账未决 ∪ 注解字段；**六种情形记账**（`buildPatch` 规划期异常、TTL 清扫丢弃） |
 | §3.5 跨类批次拓扑排序                                | ⬜                                 | 类内拓扑排序已实现                                                                                                                        |
 | §3.3 构造器尾部插桩                                  | ⬜（缝隙已实测刻画，见 §3.3 注记） | —                                                                                                                                         |
 | §4.1 T0 / T1 / T2 / T3 / T4                          | T0 ✅、T1 🔶、T2 🔶、T3 ✅、T4 ⬜  | `FieldStatus.NOTHING_TO_PATCH`、`ConstantValue` 通道、`checkSafe`、§4.2 P0 防御                                                           |
@@ -450,7 +450,7 @@ public class Counter {
 * **P1（两阶段协议与架构解耦）**：`[进行中]`
   1. ~~伴生类重构为“每字段独立静态单方法 + 宿主 `PatchDriver` 用户态调度”模型~~ `[已完成]`；
   2. 落地 Schema-First 两阶段重定义流水线与 `ABORT_ON_FATAL` 事务中止机制；`[待 P0.5-② 门槛]`
-  3. ~~引入**待补字段台账（`FieldLedger`）**，闭合阶段 A 中止后的基线遗忘缺陷~~ `[已完成]`（候选集 = 本轮 Diff 新增 ∪ 台账未决；分析期被拒、运行期抛异常、依赖失败、redefine 失败、**`buildPatch` 规划期异常**五种情形都记账，成功即出账；TTL 清扫丢弃仍未记账，见 §3.4 `[未实现]`）；
+  3. ~~引入**待补字段台账（`FieldLedger`）**，闭合阶段 A 中止后的基线遗忘缺陷~~ `[已完成]`（候选集 = 本轮 Diff 新增 ∪ 台账未决；分析期被拒、运行期抛异常、依赖失败、redefine 失败、**`buildPatch` 规划期异常**、**TTL 清扫丢弃**六种情形都记账，成功即出账）；
   4. 将 `Analyzer` 库化抽取为纯函数模块。
 * **P2（代数模型与业务逃生体系）**：`[部分提前落地]`
   1. 落地 8 位正交效应位集合（Effect Bitmask）与局部对象变异逃逸分析；🔶 已提前落地 bit 3/6 与 bit 4/5 的子集（见 §4.2 注记）；

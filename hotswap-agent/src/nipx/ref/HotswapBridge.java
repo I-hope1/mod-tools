@@ -8,6 +8,8 @@ import java.lang.invoke.*;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.reflect.Field;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.LongAdder;
 
 /**
  * 补丁类引用的两个 bridge 的合并实现，统一走 {@code invokedynamic} + 单一 bootstrap。
@@ -102,12 +104,75 @@ public final class HotswapBridge {
 
 	private static final boolean BIG_ENDIAN = java.nio.ByteOrder.nativeOrder() == java.nio.ByteOrder.BIG_ENDIAN;
 
+	// ==================== 条件 CAS 的写入/跳过统计 ====================
+
 	/**
-	 * valueClass -> MethodHandle {@code (Object, long, V)void}。
+	 * {@code "owner#field"} -> {@code [written, skipped]}（{@code LongAdder} 抗竞争）。
+	 *
+	 * <p>存在的理由：条件 CAS 的 boolean 结果原本被丢弃，"字段已被别人写过所以补丁没生效"
+	 * 与"补丁生效"在驱动侧完全无法区分 —— 跳过是<b>静默</b>的。计数让 {@code InitFix}
+	 * 能在补丁结束后把跳过数汇总进告警。</p>
+	 *
+	 * <p>用 {@code ConcurrentHashMap} + {@code LongAdder}：写入发生在被补丁线程上
+	 * （多线程/多实例），读清零发生在补丁线程。增长在 {@link #drainConditionalStats} 时移除空条目。</p>
+	 */
+	private static final ConcurrentHashMap<String, LongAdder[]> CONDITIONAL_STATS =
+	 new ConcurrentHashMap<>();
+
+	/**
+	 * 统计句柄：{@code (LongAdder[], boolean)void}。
+	 * 用 {@code filterReturnValue} 接在条件 CAS 之后，把 boolean 送进计数器。
+	 */
+	private static final MethodHandle RECORD_CONDITIONAL;
+
+	static {
+		try {
+			RECORD_CONDITIONAL = MethodHandles.lookup().findStatic(
+			 HotswapBridge.class, "recordConditional",
+			 MethodType.methodType(void.class, LongAdder[].class, boolean.class));
+		} catch (Throwable t) {
+			throw new ExceptionInInitializerError(t);
+		}
+	}
+
+	private static void recordConditional(LongAdder[] counters, boolean written) {
+		counters[written ? 0 : 1].increment();
+	}
+
+	/** 取出（或创建）某字段的计数器；{@code owner#field} 为键。 */
+	private static LongAdder[] countersFor(Class<?> owner, String fieldName) {
+		return CONDITIONAL_STATS.computeIfAbsent(owner.getName() + "#" + fieldName,
+		 k -> new LongAdder[]{new LongAdder(), new LongAdder()});
+	}
+
+	/**
+	 * 读取并清零全部条件 CAS 统计（补丁结束时调用一次）。
+	 *
+	 * @return {@code "owner#field"} -> {@code [written, skipped]}；无数据时返回空 Map。
+	 *         清零后条目被移除：下一轮重新开始计数，不会把历史累计混进本轮告警。
+	 */
+	public static Map<String, long[]> drainConditionalStats() {
+		Map<String, long[]> out = new LinkedHashMap<>();
+		for (Map.Entry<String, LongAdder[]> e : CONDITIONAL_STATS.entrySet()) {
+			LongAdder[] c = CONDITIONAL_STATS.remove(e.getKey());
+			if (c == null) continue;
+			long written = c[0].sum();
+			long skipped = c[1].sum();
+			if (written == 0 && skipped == 0) continue;
+			out.put(e.getKey(), new long[]{written, skipped});
+		}
+		return out;
+	}
+
+	/**
+	 * valueClass -> MethodHandle {@code (Object, long, V)boolean}。
 	 * <p>键：引用类型统一用 {@link Object Object.class}；基本类型用各自的 {@code Class}。</p>
-	 * <p>值：优先条件 CAS（expected 已固定为默认值、返回值已 drop）；
-	 * 只有 float/double（任何 JDK 的 Unsafe 都没有对应 CAS）降级为无条件 volatile 写。
-	 * 两种形态的剩余签名一致，都是 {@code (receiver, offset, value)}。</p>
+	 *
+	 * <p><b>保留 boolean 返回值</b>：条件 CAS 的成败必须能被上层区分 ——
+	 * "字段已被别人写过所以跳过"与"补丁生效"是完全不同的事实，丢弃它就等于
+	 * 对用户隐瞒了跳过。<b>唯一例外是 float/double 以外的无 CAS 回退</b>
+	 * （JDK 8 的子字类型走模拟、以及任何落到 volatile put 的情形）：
+	 * 那些路径没有条件语义可报告，统一返回 {@code true}（"已写入"）。</p>
 	 */
 	private static final Map<Class<?>, MethodHandle> CONDITIONAL_PUTTERS;
 
@@ -211,8 +276,7 @@ public final class HotswapBridge {
 	 *
 	 * <p>句柄组合：{@code casInt(Object,long,int,int)boolean}
 	 * --insertArguments(expected=0)--> {@code (Object,long,int)boolean}
-	 * --filterArguments(floatToRawIntBits)--> {@code (Object,long,float)boolean}
-	 * --dropReturn--> {@code (Object,long,float)void}。</p>
+	 * --filterArguments(floatToRawIntBits)--> {@code (Object,long,float)boolean}。</p>
 	 */
 	private static MethodHandle rawBitsConditional(Class<?> valueClass) throws Throwable {
 		boolean isFloat = valueClass == float.class;
@@ -237,20 +301,17 @@ public final class HotswapBridge {
 		 isFloat ? Float.class : Double.class,
 		 isFloat ? "floatToRawIntBits" : "doubleToRawLongBits",
 		 MethodType.methodType(bitsClass, valueClass));
-		cas = MethodHandles.filterArguments(cas, 2, toBits);
-
-		// 丢弃 boolean 返回值，与 CONDITIONAL_PUTTERS 的其余条目同形态
-		return cas.asType(cas.type().changeReturnType(void.class));
+		return MethodHandles.filterArguments(cas, 2, toBits);
 	}
 
 	/**
 	 * 组合条件写模板，依次尝试：
 	 * <ol>
 	 *   <li>{@code casNames} 中第一个存在的真 CAS（先查内部 Unsafe，再查 sun.misc.Unsafe）；
-	 *       得到 {@code (Object, long, V)void} 的条件 CAS。<b>必须先于 put 回退</b>，
+	 *       得到 {@code (Object, long, V)boolean} 的条件 CAS。<b>必须先于 put 回退</b>，
 	 *       否则找不到 {@code compareAndSetXxx} 就会误降级成无条件写。</li>
 	 *   <li>boolean/byte/char/short：用同字 int CAS 模拟（JDK 8 / Android）。</li>
-	 *   <li>{@code putNames} 中第一个存在的 volatile put——无条件写（仅 float/double 会走到这里）。</li>
+	 *   <li>{@code putNames} 中第一个存在的 volatile put——无条件写（仅无 CAS 的类型会走到这里）。</li>
 	 *   <li>都没有则抛异常，让类初始化失败——"JDK 版本超出预期"应该大声暴露。</li>
 	 * </ol>
 	 */
@@ -262,8 +323,8 @@ public final class HotswapBridge {
 		for (String casName : casNames) {
 			MethodHandle cas = tryFind(casName, casType);
 			if (cas != null) {
-				cas = MethodHandles.insertArguments(cas, 2, expected);
-				return cas.asType(cas.type().changeReturnType(void.class));
+				// 保留 boolean：调用点要用它统计"因已有值而跳过"
+				return MethodHandles.insertArguments(cas, 2, expected);
 			}
 		}
 
@@ -274,7 +335,14 @@ public final class HotswapBridge {
 		 void.class, Object.class, long.class, valueClass);
 		for (String putName : putNames) {
 			MethodHandle put = tryFind(putName, putType);
-			if (put != null) return put;
+			if (put != null) {
+				// 无条件写没有条件语义可报告：包成恒 true 的 (Object,long,V)boolean，
+				// 让上层统一按 boolean 处理（此处"写入成功"是事实）。
+				return MethodHandles.dropArguments(
+				 MethodHandles.insertArguments(
+				  MethodHandles.constant(boolean.class, true), 0),
+				 0, Object.class, long.class, valueClass);
+			}
 		}
 		throw new NoSuchMethodException(
 		 "no CAS or volatile put found for " + valueClass
@@ -308,8 +376,8 @@ public final class HotswapBridge {
 		} else return null;
 		MethodHandle h = MethodHandles.lookup().findStatic(HotswapBridge.class, name,
 		 MethodType.methodType(boolean.class, Object.class, long.class, valueClass, valueClass));
-		h = MethodHandles.insertArguments(h, 2, expected);
-		return h.asType(h.type().changeReturnType(void.class));
+		// 保留 boolean：调用点要统计"因已有值而跳过"
+		return MethodHandles.insertArguments(h, 2, expected);
 	}
 
 	private static boolean casBoolean(Object o, long off, boolean e, boolean x) {
@@ -401,6 +469,13 @@ public final class HotswapBridge {
 		if (isStatic) {
 			writer = MethodHandles.insertArguments(writer, 0, base);
 		}
+
+		// 接上计数器：把条件 CAS 的 boolean 结果记进 [written, skipped]。
+		// 这是"跳过"唯一的出口 —— 不接的话，字段因已有值而未补的事实对用户完全不可见。
+		LongAdder[] counters = countersFor(owner, fieldName);
+		writer = MethodHandles.filterReturnValue(writer,
+		 MethodHandles.insertArguments(RECORD_CONDITIONAL, 0, (Object) counters));
+
 		return new ConstantCallSite(writer.asType(callSiteType));
 	}
 

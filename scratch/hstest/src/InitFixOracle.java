@@ -122,6 +122,7 @@ public class InitFixOracle {
 		scenario("§3.5 静态环拒绝后跨组漏网：读环成员的实例字段必须被连带拒绝", InitFixOracle::caseStaticCycleLeaksInstanceDependent);
 		scenario("§3.5 成环拒绝收窄：与环无关的字段不应被连带拒绝", InitFixOracle::caseCycleRefusalIsNarrow);
 		scenario("§5.3 float/double 条件 CAS：已存在的值（含 -0.0f）不得被覆盖", InitFixOracle::caseFloatDoubleConditionalCas);
+		scenario("§5.3 条件 CAS 跳过必须有出口：不得静默丢弃 boolean 结果", InitFixOracle::caseConditionalSkipIsReported);
 		scenario("§4.1+§4.3 T0 零值字段可被依赖：读零值新增字段的切片必须放行", InitFixOracle::caseZeroValueDependency);
 		scenario("§4.1 静态同款：读零值静态字段的 <clinit> 切片必须放行", InitFixOracle::caseZeroValueStaticDependency);
 		scenario("§3.4 拒绝告警出口：提取期与闭包期的 REJECTED 都必须发 warn", InitFixOracle::caseRejectionWarnings);
@@ -1838,6 +1839,78 @@ public class InitFixOracle {
 		} catch (ReflectiveOperationException e) {
 			throw new IllegalStateException(e);
 		}
+	}
+
+	// ==================== 场景 16j：条件 CAS 跳过必须有出口 ====================
+
+	/** V1：原始版本（只有 raw）。 */
+	static final String CASE_CAS_V1 = """
+		package oracle;
+		public class CaseCas {
+			private final String raw;
+			public CaseCas(String raw) { this.raw = raw; }
+			public String raw() { return raw; }
+		}
+		""";
+
+	/** V2：新增一个 String 字段（条件 CAS 写入）。 */
+	static final String CASE_CAS_V2 = """
+		package oracle;
+		public class CaseCas {
+			private final String raw;
+			private String clean;
+			public CaseCas(String raw) { this.raw = raw; this.clean = raw.trim(); }
+			public String raw() { return raw; }
+			public String clean() { return clean; }
+		}
+		""";
+
+	/**
+	 * 条件 CAS 的 boolean 结果原先被丢弃："字段已被别人写过所以补丁没生效"与
+	 * "补丁生效"在驱动侧无法区分，跳过是<b>静默</b>的。
+	 *
+	 * <p>场景：存量实例的字段在补丁前已被赋成非默认值 → CAS 失败 → 补丁跳过该实例。
+	 * 断言：跳过必须出现在告警里，且不得被误报为失败。</p>
+	 */
+	static void caseConditionalSkipIsReported() throws Exception {
+		int before = agentWarnings.size();
+
+		Fixture fx = loadFixture("oracle.CaseCas", CASE_CAS_V1, CASE_CAS_V2);
+
+		Object occupied = construct(fx.host, "  hi  ");
+		Object fresh    = construct(fx.host, "  hi  ");
+		// occupied：补丁前已被赋成非默认值 → 条件 CAS 必须失败（跳过）
+		setField(fx.host, occupied, "clean", "ALREADY");
+		resetToDefault(fx.host, fresh, "clean", "Ljava/lang/String;");
+
+		InstanceTracker.register(occupied);
+		InstanceTracker.register(fresh);
+
+		InitFix.PatchReport report = fx.transform();
+		expect(report, false, "clean", InitFix.FieldStatus.ACCEPTED, null);
+
+		fx.apply();
+
+		// 语义：已有值不得被覆盖；默认值字段必须被补上
+		check("ALREADY".equals(read(fx.host, occupied, "clean")),
+			"CaseCas：已有值不得被条件写覆盖（期望 'ALREADY'，实际 "
+			+ describe(read(fx.host, occupied, "clean")) + "）");
+		check("hi".equals(read(fx.host, fresh, "clean")),
+			"CaseCas：默认值字段正常补上（期望 'hi'，实际 "
+			+ describe(read(fx.host, fresh, "clean")) + "）");
+
+		// 核心断言：跳过必须被报告（修复前 boolean 被丢弃 → 完全静默）
+		boolean reported = agentWarnings.stream()
+		 .skip(before)
+		 .anyMatch(w -> w.contains("skipped") && w.contains("CaseCas")
+		                && w.contains("non-default"));
+		check(reported,
+			"CaseCas：条件 CAS 跳过必须出现在告警里（实际新增 "
+			+ (agentWarnings.size() - before) + " 条 warn）");
+
+		// 跳过不是失败：不得记入台账（下一轮不该重试一个"已解决"的字段）
+		check(!unpatched(fx.host).contains("clean"),
+			"CaseCas：条件跳过不得被当成失败记入台账（实际 " + unpatched(fx.host) + "）");
 	}
 
 	/** V1：原始版本（只有 raw）。 */

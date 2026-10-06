@@ -2692,6 +2692,10 @@ public class InitFix {
 		// 之后所有热更都不再打详细栈。
 		DETAILED_FAILURE_LOGS.set(0);
 
+		// 条件 CAS 统计是"本轮"的：先清掉可能残留的计数，避免上一轮的数据混进本轮告警。
+		// 正常路径下每轮结束都会 drain；这里兜住异常路径留下的残留。
+		HotswapBridge.drainConditionalStats();
+
 		if (!isInitialized(host)) {
 			log("Skip field init patch, class not initialized (or initializing/failed): "
 			    + host.getName());
@@ -2798,6 +2802,36 @@ public class InitFix {
 			HotSwapAgent.warn("Field init patch incomplete for " + host.getName()
 			                  + ": failed=" + failedFields + ", skipped=" + skippedFields
 			                  + "（已记入 FieldLedger，下一轮热更会重新纳入候选）");
+		}
+
+		// 条件 CAS 跳过汇总：字段在补丁执行前已被别的线程赋过非默认值 → CAS 失败 → 补丁未生效。
+		// 这是"已解决"而非"失败"（条件写本来就该保守跳过），所以不进台账、不参与上面的失败告警；
+		// 但它必须被<b>报告</b> —— 否则用户无法区分"补上了"与"因已有值而跳过"。
+		//
+		// 仅首轮有告警价值：台账重试轮里，已补过的实例会因"字段已非默认值"而跳过，
+		// 那是预期行为，报成 warn 会误导。重试轮因此降为 info。
+		Map<String, long[]> casStats = HotswapBridge.drainConditionalStats();
+		if (!casStats.isEmpty()) {
+			long totalSkipped = 0;
+			List<String> skippedNames = new ArrayList<>();
+			for (Map.Entry<String, long[]> e : casStats.entrySet()) {
+				long skipped = e.getValue()[1];
+				if (skipped > 0) {
+					totalSkipped += skipped;
+					skippedNames.add(e.getKey() + " x" + skipped);
+				}
+			}
+			if (totalSkipped > 0) {
+				String msg = "Field init patch skipped " + totalSkipped + " conditional write(s) for "
+				             + host.getName() + " (field already had a non-default value): "
+				             + skippedNames;
+				if (ledgerSnapshot(host).isEmpty()) {
+					HotSwapAgent.warn(msg + "（条件写按设计保守跳过；如需强制覆写请用 @HotswapReinit(OVERWRITE)）");
+				} else {
+					// 重试轮：这些跳过多半来自上一轮已成功补过的实例，属预期
+					HotSwapAgent.info(msg + "（重试轮，通常为上一轮已补过的实例）");
+				}
+			}
 		}
 	}
 

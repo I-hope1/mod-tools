@@ -109,6 +109,35 @@ static std::expected<jobjectArray, jvmtiError>
 getInstancesInternal(jvmtiEnv* jvmti, JNIEnv* env, jclass klass) {
     if (!jvmti || !env || !klass) return std::unexpected(JVMTI_ERROR_NULL_POINTER);
 
+    // 基本类型镜像（int.class / void.class …）在堆中没有物理实例，且 NewObjectArray 要求
+    // elementClass 必须是引用类型 Class（HotSpot 内部 as_Klass 返回 nullptr 会直接 SIGSEGV）。
+    // 这里必须前置拦截，绝不能把基本类型镜像交给 NewObjectArray。
+    // 判定方式：基本类型镜像（含 void）都不是 java.lang.Object 的子类型。
+    jclass obj_clazz = env->FindClass("java/lang/Object");
+    if (!obj_clazz) {
+        env->ExceptionClear();
+        return std::unexpected(JVMTI_ERROR_CLASS_NOT_PREPARED);
+    }
+    const bool is_primitive = !env->IsAssignableFrom(klass, obj_clazz);
+    env->DeleteLocalRef(obj_clazz);
+    if (is_primitive) {
+        return std::unexpected(JVMTI_ERROR_ILLEGAL_ARGUMENT);
+    }
+
+    // 数组类型（int[].class / int[][].class …）：IterateOverInstancesOfClass 会对该数组类
+    // 及其高维衍生类一并打 tag，与按 klass 创建的强类型数组不兼容，触发 ArrayStoreException。
+    // 判定方式：数组类均实现 java.lang.Cloneable。
+    jclass cloneable_clazz = env->FindClass("java/lang/Cloneable");
+    if (!cloneable_clazz) {
+        env->ExceptionClear();
+        return std::unexpected(JVMTI_ERROR_CLASS_NOT_PREPARED);
+    }
+    const bool is_array_class = env->IsAssignableFrom(klass, cloneable_clazz);
+    env->DeleteLocalRef(cloneable_clazz);
+    if (is_array_class) {
+        return std::unexpected(JVMTI_ERROR_ILLEGAL_ARGUMENT);
+    }
+
     std::lock_guard<std::mutex> lock(g_heap_mutex);
 
     jlong tag = allocateTagPair().first;
@@ -143,13 +172,44 @@ getInstancesInternal(jvmtiEnv* jvmti, JNIEnv* env, jclass klass) {
         return std::unexpected(JVMTI_ERROR_OUT_OF_MEMORY);
     }
 
-    // 填充结果并清空 Tag，释放临时局部引用
-    std::span<jobject> objs(instances, static_cast<size_t>(count));
+    // 填充结果并清空 Tag，释放临时局部引用。
+    // 逐个校验元素与 klass 的兼容性：堆遍历可能带回非 klass 精确类型的对象，
+    // 一旦 SetObjectArrayElement 抛 ArrayStoreException，必须在未决异常状态下
+    // 立刻停止后续 JNI 调用，否则违反 JNI 规范。
     jsize idx = 0;
-    for (jobject o : objs) {
-        env->SetObjectArrayElement(result, idx++, o);
+    for (jint i = 0; i < count; ++i) {
+        jobject o = instances[i];
+        if (o && env->IsInstanceOf(o, klass)) {
+            env->SetObjectArrayElement(result, idx, o);
+            if (env->ExceptionCheck()) {
+                // 类型不兼容：跳过错配元素，清异常后继续，保证返回数组类型安全
+                env->ExceptionClear();
+            } else {
+                ++idx;
+            }
+        }
         jvmti->SetTag(o, 0);
         env->DeleteLocalRef(o);
+    }
+
+    // 若有元素被过滤，收缩数组长度以匹配实际填充数量
+    if (idx != count) {
+        jobjectArray trimmed = env->NewObjectArray(idx, klass, nullptr);
+        if (trimmed) {
+            for (jsize i = 0; i < idx; ++i) {
+                jobject e = env->GetObjectArrayElement(result, i);
+                if (env->ExceptionCheck()) {
+                    env->ExceptionClear();
+                    continue;
+                }
+                env->SetObjectArrayElement(trimmed, i, e);
+                if (env->ExceptionCheck()) env->ExceptionClear();
+                if (e) env->DeleteLocalRef(e);
+            }
+            env->DeleteLocalRef(result);
+            return trimmed;
+        }
+        env->ExceptionClear();
     }
 
     return result;

@@ -113,6 +113,9 @@ public class InitFixOracle {
 		scenario("§3.2 边界：构造器里的独立语句不进切片（REJECT 边界在哪）", InitFixOracle::caseStatementOutsideSlice);
 		scenario("§1.1 @HotswapReinit：解锁构造器读取 / 强制覆写 / CONDITIONAL 不覆写 / T0 绕过", InitFixOracle::caseHotswapReinit);
 		scenario("§5.1/§5.2 逐字段驱动：单字段失败不牵连后续字段，依赖失败显式跳过", InitFixOracle::casePerFieldDriver);
+		scenario("§4.1+§4.3 T0 零值字段可被依赖：读零值新增字段的切片必须放行", InitFixOracle::caseZeroValueDependency);
+		scenario("§4.1 静态同款：读零值静态字段的 <clinit> 切片必须放行", InitFixOracle::caseZeroValueStaticDependency);
+		scenario("§3.4 拒绝告警出口：提取期与闭包期的 REJECTED 都必须发 warn", InitFixOracle::caseRejectionWarnings);
 		scenario("§3.4 FieldLedger：被拒字段记入台账，下一轮无新增字段时仍被重试", InitFixOracle::caseFieldLedger);
 
 		System.out.println();
@@ -1079,6 +1082,189 @@ public class InitFixOracle {
 		check(agentWarnings.stream().anyMatch(w -> w.contains("CaseU.derived")
 		      && w.contains("dependency failed")),
 			"CaseU：依赖失败被显式告警（实际 warns=" + agentWarnings.size() + " 条）");
+	}
+
+	// ==================== 场景 16b：T0 零值字段可被依赖 ====================
+
+	/** V1：原始版本（只有 raw）。 */
+	static final String CASE_Z_V1 = """
+		package oracle;
+		public class CaseZ {
+			private final String raw;
+			public CaseZ(String raw) { this.raw = raw; }
+			public String raw() { return raw; }
+		}
+		""";
+
+	/**
+	 * V2：新增两个字段，`zero` 是 T0 零值等价（构造器里根本不写它 —— {@code writes == 0}
+	 * 即"仅声明未赋值"），`derived` 读它算值。
+	 * <p>关键点：`zero` 不进 acceptedInstance（T0 不生成补丁），但它也不是"未补的危险新字段"
+	 * —— 存量实例上它本来就是 0。所以 `derived = zero + 1` 必须放行。</p>
+	 */
+	static final String CASE_Z_V2 = """
+		package oracle;
+		public class CaseZ {
+			private final String raw;
+			private int zero;
+			private int derived;
+			public CaseZ(String raw) { this.raw = raw; this.derived = this.zero + 1; }
+			public String raw() { return raw; }
+			public int zero() { return zero; }
+			public int derived() { return derived; }
+		}
+		""";
+
+	static void caseZeroValueDependency() throws Exception {
+		Fixture fx = loadFixture("oracle.CaseZ", CASE_Z_V1, CASE_Z_V2);
+
+		InitFix.PatchReport report = fx.transform();
+
+		// zero 是零值等价：不生成补丁，但也不算"未补"
+		expect(report, false, "zero", InitFix.FieldStatus.NOTHING_TO_PATCH, null);
+		// 核心断言：读零值字段的 derived 必须放行，而不是被依赖门禁误杀
+		expect(report, false, "derived", InitFix.FieldStatus.ACCEPTED, null);
+
+		Object control = construct(fx.host, "  abc  ");
+		Object subject = construct(fx.host, "  abc  ");
+		resetToDefault(fx.host, subject, "zero", "I");
+		resetToDefault(fx.host, subject, "derived", "I");
+		InstanceTracker.register(subject);
+
+		fx.transform();
+		fx.apply();
+
+		expectValue(fx.host, subject, control, "derived");
+	}
+
+	/** V1：静态版本（只有 raw）。 */
+	static final String CASE_Z2_V1 = """
+		package oracle;
+		public class CaseZ2 {
+			public static final String RAW = "r";
+		}
+		""";
+
+	/** V2：新增零值静态字段（未写、无 ConstantValue）+ 读它的静态字段。 */
+	static final String CASE_Z2_V2 = """
+		package oracle;
+		public class CaseZ2 {
+			public static final String RAW = "r";
+			public static int zero;
+			public static int derived;
+			static { derived = zero + 1; }
+		}
+		""";
+
+	static void caseZeroValueStaticDependency() throws Exception {
+		Fixture fx = loadFixture("oracle.CaseZ2", CASE_Z2_V1, CASE_Z2_V2);
+
+		InitFix.PatchReport report = fx.transform();
+
+		expect(report, true, "zero", InitFix.FieldStatus.NOTHING_TO_PATCH, null);
+		expect(report, true, "derived", InitFix.FieldStatus.ACCEPTED, null);
+
+		// 关键：把 derived 清零，模拟"存量类里 derived 还是默认值"。
+		// 不这样做的话，类初始化时 <clinit> 早已把 derived 算成 1，
+		// 补丁有没有跑都看不出区别 —— 断言就失去了鉴别力。
+		Field f = fx.host.getDeclaredField("derived");
+		f.setAccessible(true);
+		Reflect.UNSAFE.putInt(fx.host, Reflect.UNSAFE.staticFieldOffset(f), 0);
+
+		fx.apply();
+
+		check(f.getInt(null) == 1,
+			"CaseZ2：静态 derived 依赖零值静态字段被放行并补成 1（实际 " + f.getInt(null) + "）");
+	}
+
+	// ==================== 场景 16c：拒绝告警出口 ====================
+
+	/** V1：原始版本（只有 raw）。 */
+	static final String CASE_W_V1 = """
+		package oracle;
+		public class CaseW {
+			private final String raw;
+			public CaseW(String raw) { this.raw = raw; }
+			public String raw() { return raw; }
+		}
+		""";
+
+	/**
+	 * V2：新增一个走非确定性调用（{@code System.currentTimeMillis()}）的字段。
+	 * <p>它在<b>提取期</b>就被拒，因此历史上只发一条 warn —— 用来说明两条告警都存在时
+	 * 不会互相吞掉，且闭包阶段的拒绝也有出口。</p>
+	 */
+	static final String CASE_W_V2 = """
+		package oracle;
+		public class CaseW {
+			private final String raw;
+			private long stamp;
+			public CaseW(String raw) { this.raw = raw; this.stamp = System.currentTimeMillis(); }
+			public String raw() { return raw; }
+			public long stamp() { return stamp; }
+		}
+		""";
+
+	/**
+	 * V2'：新增一个字段，它在<b>闭包阶段</b>才被拒（依赖一个被拒的字段）。
+	 * <p>{@code a} 读 {@code b}，而 {@code b} 因非确定性被拒 → {@code a} 走 depReason 拒绝，
+	 * 这个拒绝历史上只调 {@code log()}（默认静默），必须出现在 warn 里。</p>
+	 */
+	static final String CASE_W2_V1 = """
+		package oracle;
+		public class CaseW2 {
+			private final String raw;
+			public CaseW2(String raw) { this.raw = raw; }
+			public String raw() { return raw; }
+		}
+		""";
+
+	static final String CASE_W2_V2 = """
+		package oracle;
+		public class CaseW2 {
+			private final String raw;
+			private long b;
+			private long a;
+			public CaseW2(String raw) { this.raw = raw; this.b = System.nanoTime(); this.a = this.b + 1; }
+			public String raw() { return raw; }
+		}
+		""";
+
+	static void caseRejectionWarnings() throws Exception {
+		int before = agentWarnings.size();
+
+		// ---- 提取期拒绝：本来就发 warn ----
+		Fixture fx1 = loadFixture("oracle.CaseW", CASE_W_V1, CASE_W_V2);
+		InitFix.PatchReport r1 = fx1.transform();
+		expect(r1, false, "stamp", InitFix.FieldStatus.REJECTED, "non-deterministic");
+
+		boolean extractionWarned = agentWarnings.stream()
+		 .skip(before)
+		 .anyMatch(w -> w.contains("stamp") && w.contains("initialization skipped"));
+		check(extractionWarned,
+			"CaseW：提取期拒绝发出 warn（实际新增 " + (agentWarnings.size() - before) + " 条）");
+
+		// 统一出口也覆盖它：报告里的 REJECTED 必有对应 warn
+		boolean refusedWarned = agentWarnings.stream()
+		 .skip(before)
+		 .anyMatch(w -> w.contains("stamp") && w.contains("patch refused"));
+		check(refusedWarned,
+			"CaseW：提取期拒绝同样经统一出口告警（不因两条通道而漏掉）");
+
+		// ---- 闭包期拒绝：历史上只调 log()，默认静默 ----
+		int before2 = agentWarnings.size();
+		Fixture fx2 = loadFixture("oracle.CaseW2", CASE_W2_V1, CASE_W2_V2);
+		InitFix.PatchReport r2 = fx2.transform();
+		expect(r2, false, "b", InitFix.FieldStatus.REJECTED, "non-deterministic");
+		expect(r2, false, "a", InitFix.FieldStatus.REJECTED, "dependency");
+
+		boolean closureWarned = agentWarnings.stream()
+		 .skip(before2)
+		 .anyMatch(w -> w.contains("a") && w.contains("patch refused")
+		                && w.contains("dependency"));
+		check(closureWarned,
+			"CaseW2：闭包期（依赖）拒绝发出 warn，而不是静默进报告"
+			+ "（实际新增 " + (agentWarnings.size() - before2) + " 条）");
 	}
 
 	// ==================== 场景 16：§3.4 FieldLedger ====================

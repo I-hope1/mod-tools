@@ -426,6 +426,11 @@ public class InitFix {
 			// 分析级台账：被拒的记入（下轮重试），放行/零值等价的出账。
 			// 运行期失败由 applyPatch 追加记入 —— 两者顺序天然正确（applyPatch 在后）。
 			ledgerUpdateFromReport(host, built.report());
+			// 统一的拒绝告警出口：闭包各阶段（后续加工/依赖/成环/根构造器覆盖/指纹不一致）
+			// 只调 log()，而 log() 是 DEBUG 门控的（HotSwapAgent.DefaultLogger.log），
+			// 默认环境下这些真正的 REJECTED 对用户完全静默。这里按原因聚合统一发 warn，
+			// 各阶段不必再各自关心日志级别。
+			warnRejectedFields(className, built.report());
 
 			if (!built.hasPatch()) return;
 
@@ -1106,6 +1111,47 @@ public class InitFix {
 		}
 		for (Map.Entry<String, FieldDecision> e : report.staticFields().entrySet()) {
 			ledgerApply(host, e.getKey(), e.getValue());
+		}
+	}
+
+	/**
+	 * 拒绝告警的唯一出口：把 {@link PatchReport} 里全部 {@link FieldStatus#REJECTED}
+	 * 决策按原因聚合后逐条 {@code warn}。
+	 *
+	 * <p>存在的理由：提取期的拒绝本来就发 warn（{@code extractFieldInits}），但闭包阶段
+	 * 的拒绝（后续加工、依赖、成环、根构造器覆盖不全、指纹不一致）历史上只调
+	 * {@code log(...)} —— 而 {@code log} 是 {@code DEBUG} 门控的，默认环境<b>什么都不打印</b>。
+	 * 于是同一种"拒绝补丁"的结论，两个阶段对用户的可见性完全不同。</p>
+	 *
+	 * <p>把出口收敛到一处后，"哪些拒绝该吵醒用户"不再依赖各阶段各自的日志级别；
+	 * 每条原因只发一条 warn，同一原因下多个字段合并列出，避免逐字段刷屏。</p>
+	 */
+	private static void warnRejectedFields(String className, PatchReport report) {
+		if (report == null) return;
+
+		// 原因 -> 字段名，保持首次出现顺序；instance 在前、static 在后。
+		Map<String, List<String>> byReason = new LinkedHashMap<>();
+		collectRejected(report.instanceFields(), "instance", byReason);
+		collectRejected(report.staticFields(), "static", byReason);
+
+		for (Map.Entry<String, List<String>> e : byReason.entrySet()) {
+			HotSwapAgent.warn("Field init patch refused for "
+			                  + (e.getValue().size() == 1
+			                     ? e.getValue().get(0)
+			                     : e.getValue().size() + " fields of " + className)
+			                  + " in " + className + ": " + e.getKey());
+		}
+	}
+
+	private static void collectRejected(
+	 Map<String, FieldDecision> decisions, String kind, Map<String, List<String>> out) {
+		if (decisions == null) return;
+		for (Map.Entry<String, FieldDecision> e : decisions.entrySet()) {
+			FieldDecision d = e.getValue();
+			if (d == null || d.status() != FieldStatus.REJECTED) continue;
+			String reason = d.reason() == null ? "rejected" : d.reason();
+			out.computeIfAbsent(reason, k -> new ArrayList<>())
+			 .add(kind + " " + e.getKey());
 		}
 	}
 

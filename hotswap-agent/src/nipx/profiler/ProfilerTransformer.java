@@ -1,11 +1,11 @@
 package nipx.profiler;
 
 import nipx.*;
-import nipx.AnnotationTransformer.HierarchyTree;
+import nipx.AnnotationTransformer.*;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.AdviceAdapter;
 
-import java.lang.instrument.*;
+import java.lang.instrument.ClassFileTransformer;
 import java.security.ProtectionDomain;
 import java.util.*;
 
@@ -18,8 +18,9 @@ public class ProfilerTransformer implements ClassFileTransformer {
 	public static void addTargetMethod(Class<?> clazz, String methodName) {
 		targetMethods.computeIfAbsent(clazz, _ -> new HashSet<>()).add(methodName);
 	}
-	public static void clearTargetMethods(Class<?> clazz)             { targetMethods.remove(clazz); }
-	public static void removeTargetMethod(Class<?> clazz, String n)   { targetMethods.computeIfAbsent(clazz, _ -> new HashSet<>()).remove(n); }
+	public static void clearTargetMethods(Class<?> clazz) { targetMethods.remove(clazz); }
+	public static void removeTargetMethod(Class<?> clazz,
+	                                      String n) { targetMethods.computeIfAbsent(clazz, _ -> new HashSet<>()).remove(n); }
 	public static void removeTargetMethods(Class<?> clazz, String... ns) {
 		Set<String> s = targetMethods.computeIfAbsent(clazz, _ -> new HashSet<>());
 		for (String n : ns) s.remove(n);
@@ -28,29 +29,40 @@ public class ProfilerTransformer implements ClassFileTransformer {
 		return targetMethods.computeIfAbsent(clazz, _ -> new HashSet<>()).contains(n);
 	}
 
-	ClassReader   classReader;
-	ClassWriter   classWriter;
-	Set<String>   targetMethodNames;
+	ClassReader classReader;
+	ClassWriter classWriter;
+	Set<String> targetMethodNames;
 
 	public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
 	                        ProtectionDomain protectionDomain, byte[] classfileBuffer) {
 		// if (!ENABLED) return null;
 		resetState();
 
-		targetMethods.forEach((clazz, methodNames) -> {
-			if (classWriter != null || methodNames == null) return;
-			if (classBeingRedefined != null && clazz.isAssignableFrom(classBeingRedefined)) {
-				classReader = new ClassReader(classfileBuffer);
-				classWriter = new AnnotationTransformer.MyClassWriter(classReader, loader);
-				targetMethodNames = methodNames;
+		Set<String> matchedMethods = null;
+
+		for (var entry : targetMethods.entrySet()) {
+			Set<String> methodNames = entry.getValue();
+			if (methodNames == null) continue;
+
+			Class<?> clazz = entry.getKey();
+
+			// 合并分支条件：统一判定是否匹配
+			boolean isMatched = (classBeingRedefined != null)
+			 ? clazz.isAssignableFrom(classBeingRedefined)
+			 : HierarchyTree.isAssignableFrom(AnnotationTransformer.internalName(clazz), className, loader);
+
+			if (isMatched) {
+				matchedMethods = methodNames;
+				break; // 关键：命中后立刻跳出循环，绝不再做多余的判断！
 			}
-			if (classBeingRedefined == null &&
-				HierarchyTree.isAssignableFrom(AnnotationTransformer.internalName(clazz), className, loader)) {
-				classReader = new ClassReader(classfileBuffer);
-				classWriter = new AnnotationTransformer.MyClassWriter(classReader, loader);
-				targetMethodNames = methodNames;
-			}
-		});
+		}
+
+		// 匹配成功后，集中初始化重量级对象
+		if (matchedMethods != null) {
+			this.classReader = new ClassReader(classfileBuffer);
+			this.classWriter = new AnnotationTransformer.MyClassWriter(classReader, loader);
+			this.targetMethodNames = matchedMethods;
+		}
 		if (classWriter == null) return null;
 
 		var cv = new ClassVisitor(Opcodes.ASM9, classWriter) {
@@ -61,8 +73,8 @@ public class ProfilerTransformer implements ClassFileTransformer {
 			                                 String signature, String[] exceptions) {
 				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
 				if (name.startsWith("<") ||
-					(access & Opcodes.ACC_SYNTHETIC) != 0 ||
-					(access & Opcodes.ACC_BRIDGE) != 0) return mv;
+				    (access & Opcodes.ACC_SYNTHETIC) != 0 ||
+				    (access & Opcodes.ACC_BRIDGE) != 0) { return mv; }
 
 				final String simpleClass = className.substring(className.lastIndexOf('/') + 1);
 				final String methodKey   = simpleClass + "." + name;
@@ -75,9 +87,9 @@ public class ProfilerTransformer implements ClassFileTransformer {
 					@Override
 					protected void onMethodEnter() {
 						if (!isProfiled) return;
-						anyProfiled  = true;
+						anyProfiled = true;
 						startTimeVar = newLocal(Type.LONG_TYPE);
-						durationVar  = newLocal(Type.LONG_TYPE);
+						durationVar = newLocal(Type.LONG_TYPE);
 
 						// startTime = System.nanoTime()
 						visitMethodInsn(INVOKESTATIC, "java/lang/System", "nanoTime", "()J", false);
@@ -86,7 +98,7 @@ public class ProfilerTransformer implements ClassFileTransformer {
 						// ProfilerData.recordEntry(methodKey)
 						visitLdcInsn(methodKey);
 						visitMethodInsn(INVOKESTATIC, "nipx/profiler/ProfilerData",
-							"recordEntry", "(Ljava/lang/String;)V", false);
+						 "recordEntry", "(Ljava/lang/String;)V", false);
 					}
 
 					@Override
@@ -97,7 +109,7 @@ public class ProfilerTransformer implements ClassFileTransformer {
 							// 异常路径：只弹栈，不记录耗时
 							visitLdcInsn(methodKey);
 							visitMethodInsn(INVOKESTATIC, "nipx/profiler/ProfilerData",
-								"recordCancel", "(Ljava/lang/String;)V", false);
+							 "recordCancel", "(Ljava/lang/String;)V", false);
 							return;
 						}
 
@@ -111,7 +123,7 @@ public class ProfilerTransformer implements ClassFileTransformer {
 						visitLdcInsn(methodKey);
 						visitVarInsn(LLOAD, durationVar);
 						visitMethodInsn(INVOKESTATIC, "nipx/profiler/ProfilerData",
-							"recordExit", "(Ljava/lang/String;J)V", false);
+						 "recordExit", "(Ljava/lang/String;J)V", false);
 					}
 				};
 			}
@@ -129,5 +141,9 @@ public class ProfilerTransformer implements ClassFileTransformer {
 		}
 	}
 
-	private void resetState() { classReader = null; classWriter = null; targetMethodNames = null; }
+	private void resetState() {
+		classReader = null;
+		classWriter = null;
+		targetMethodNames = null;
+	}
 }

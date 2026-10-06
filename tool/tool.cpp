@@ -126,14 +126,11 @@ getInstancesInternal(jvmtiEnv* jvmti, JNIEnv* env, jclass klass) {
 
     // 数组类型（int[].class / int[][].class …）：IterateOverInstancesOfClass 会对该数组类
     // 及其高维衍生类一并打 tag，与按 klass 创建的强类型数组不兼容，触发 ArrayStoreException。
-    // 判定方式：数组类均实现 java.lang.Cloneable。
-    jclass cloneable_clazz = env->FindClass("java/lang/Cloneable");
-    if (!cloneable_clazz) {
-        env->ExceptionClear();
-        return std::unexpected(JVMTI_ERROR_CLASS_NOT_PREPARED);
+    // 用 JVMTI 的 IsArrayClass 直接判定，比接口推导更精确（无能力/阶段要求）。
+    jboolean is_array_class = JNI_FALSE;
+    if (auto e = jvmti->IsArrayClass(klass, &is_array_class); e != JVMTI_ERROR_NONE) {
+        return std::unexpected(e);
     }
-    const bool is_array_class = env->IsAssignableFrom(klass, cloneable_clazz);
-    env->DeleteLocalRef(cloneable_clazz);
     if (is_array_class) {
         return std::unexpected(JVMTI_ERROR_ILLEGAL_ARGUMENT);
     }

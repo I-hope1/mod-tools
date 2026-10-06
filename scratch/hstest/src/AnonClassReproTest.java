@@ -123,6 +123,8 @@ public class AnonClassReproTest {
 			testScenario25_DesignInvariants(javac, baseDir);
 			// 测试 26 Tier 3 拓扑相等过滤（取代 minDiff 仲裁）
 			testScenario26_Tier3TopologyFilter(javac, baseDir);
+			// 测试 27 实例状态布局门（§7.2 精确变体）
+			testScenario27_LayoutGateForAnonClasses(javac, baseDir);
 		} finally {
 			deleteRecursively(baseDir);
 		}
@@ -1878,8 +1880,203 @@ public class AnonClassReproTest {
 				+ ", ambiguous=0, 无孤儿无新增），无需 minDiff 仲裁");
 	}
 
+	/**
+	 * Scenario 27: 实例状态布局门（§7.2 的精确变体）。
+	 *
+	 * <p><b>守的是什么</b>：字段布局变化后，<b>已存在的实例</b>不会获得新字段的初始化，
+	 * 新方法体读它就是零值。而捕获字段（{@code val$*}）是合成的，
+	 * {@code ClassDiffUtil} 会过滤它们，所以 {@code InitFix} 永远补不到 ——
+	 * 必须在对齐期拦住。</p>
+	 *
+	 * <p><b>夹具要点</b>：捕获的值必须来自<b>非编译期常量</b>。
+	 * {@code final int x = 123;} 会被 javac 内联，匿名类根本不合成 {@code val$x}，
+	 * 断言会因此空过。这里统一用 {@code this.seed} 赋值给局部变量，
+	 * 保证 javac 真的生成捕获字段（本方法开头用 javap 检查确认）。</p>
+	 */
+	static void testScenario27_LayoutGateForAnonClasses(String javac, File baseDir) throws Exception {
+		System.out.println("\n--- Scenario 27: 实例状态布局门（§7.2 精确变体）---");
+		String host = "testLayoutGate/LayoutCase";
+
+		// ---------- 夹具 A：捕获"宿主字段派生的局部变量"，V2 新增一个捕获 ----------
+		//
+		// V1: 匿名类只捕获 seedA
+		// V2: 匿名类额外捕获 seedB  -> 新增 val$seedB
+		// 两版的方法体与结构都不同，所以只能靠 Tier 4 配对（Tier 3 比较 fields 会比较出差异）
+		String v1 = "package testLayoutGate;\n" +
+			"public class LayoutCase {\n" +
+			"    public int seedA = 1;\n" +
+			"    public int seedB = 2;\n" +
+			"    public Runnable call() {\n" +
+			"        int a = this.seedA;\n" +
+			"        return new Runnable() { public void run() { System.out.println(a); } };\n" +
+			"    }\n" +
+			"}\n";
+		String v2 = "package testLayoutGate;\n" +
+			"public class LayoutCase {\n" +
+			"    public int seedA = 1;\n" +
+			"    public int seedB = 2;\n" +
+			"    public Runnable call() {\n" +
+			"        int a = this.seedA;\n" +
+			"        int b = this.seedB;\n" +
+			"        return new Runnable() { public void run() { System.out.println(a + b); } };\n" +
+			"    }\n" +
+			"}\n";
+
+		File s27a = new File(new File(baseDir, "s27a"), "src"); s27a.mkdirs();
+		File s27b = new File(new File(baseDir, "s27b"), "src"); s27b.mkdirs();
+		final File d1 = compileInv(javac, s27a, "LayoutCase", v1);
+		final File d2 = compileInv(javac, s27b, "LayoutCase", v2);
+
+		// 夹具前提：确认 V2 真的合成了新捕获字段（防止常量内联导致空过）
+		check(hasField(d2, host + "$1", "val$a"), "Scenario 27: 夹具前提 - V1/V2 的匿名类合成 val$a");
+		check(hasField(d2, host + "$1", "val$b"), "Scenario 27: 夹具前提 - V2 的匿名类新增合成 val$b");
+		check(!hasField(d1, host + "$1", "val$b"), "Scenario 27: 夹具前提 - V1 没有 val$b");
+
+		Map<String, byte[]> oldAnon = anonClasses(d1, host);
+		Map<String, byte[]> newAnon = anonClasses(d2, host);
+		byte[] v2Host = Files.readAllBytes(new File(d2, host + ".class").toPath());
+		Function<String, byte[]> oldRes = n -> readIfExists(new File(d1, n.replace('.', '/') + ".class"));
+		Function<String, byte[]> newRes = n -> readIfExists(new File(d2, n.replace('.', '/') + ".class"));
+
+		// ---------- 正例：布局不兼容 + 有存活实例 => 拒绝配对 ----------
+		{
+			AnonClassAligner.Result res = AnonClassAligner.align(host, v2Host, oldAnon, newAnon,
+				oldRes, newRes, name -> true);
+			check(res.stats.layoutGateRejected == 1,
+				"Scenario 27: 有存活实例 + 新增捕获 => layoutGateRejected=1（实际 "
+					+ res.stats.layoutGateRejected + "）");
+			check(res.stats.layoutGateWaived == 0,
+				"Scenario 27: 拒绝路径不记 waived（实际 " + res.stats.layoutGateWaived + "）");
+			check(res.orphanOldClasses.contains(host + "$1"),
+				"Scenario 27: 旧类成为孤儿并保留（存活实例继续跑旧逻辑）orphans=" + res.orphanOldClasses);
+			check(res.stats.newClasses >= 1,
+				"Scenario 27: 新类分配未占用编号而非顶替旧身份（newClasses=" + res.stats.newClasses + "）");
+			check(!"$1".equals(lastSegment(res.renameMap.get(host + "$1"))),
+				"Scenario 27: 新类不得占用旧 $1 身份（renameMap=" + res.renameMap + "）");
+		}
+
+		// ---------- 反向对照：同样的编辑但无存活实例 => 放行 ----------
+		//
+		// 防过度拒绝：新建实例会走新构造器、初始化正常（真机对照实验结论），
+		// 所以没有存活实例时拒绝只会白白换来一个新编号和一个孤儿类。
+		{
+			AnonClassAligner.Result res = AnonClassAligner.align(host, v2Host, oldAnon, newAnon,
+				oldRes, newRes, name -> false);
+			check(res.stats.layoutGateRejected == 0,
+				"Scenario 27: 无存活实例时不拒绝（实际 rejected=" + res.stats.layoutGateRejected + "）");
+			check(res.stats.layoutGateWaived == 1,
+				"Scenario 27: 无存活实例 => layoutGateWaived=1（实际 " + res.stats.layoutGateWaived + "）");
+			check(res.orphanOldClasses.isEmpty(),
+				"Scenario 27: 放行后无孤儿（旧身份被复用）orphans=" + res.orphanOldClasses);
+		}
+
+		// ---------- warn 模式：有存活实例仍放行，但计数在 waived ----------
+		{
+			String prev = HotSwapAgent.ANON_LAYOUT_GATE;
+			HotSwapAgent.ANON_LAYOUT_GATE = nipx.LayoutGate.MODE_WARN;
+			try {
+				AnonClassAligner.Result res = AnonClassAligner.align(host, v2Host, oldAnon, newAnon,
+					oldRes, newRes, name -> true);
+				check(res.stats.layoutGateRejected == 0 && res.stats.layoutGateWaived == 1,
+					"Scenario 27: warn 模式放行但记 waived（rejected=" + res.stats.layoutGateRejected
+						+ ", waived=" + res.stats.layoutGateWaived + "）");
+				check(res.orphanOldClasses.isEmpty(), "Scenario 27: warn 模式不产生孤儿");
+			} finally {
+				HotSwapAgent.ANON_LAYOUT_GATE = prev;
+			}
+		}
+
+		// ---------- off 模式：完全恢复旧行为，不扫实例、不计数 ----------
+		{
+			String prev = HotSwapAgent.ANON_LAYOUT_GATE;
+			HotSwapAgent.ANON_LAYOUT_GATE = nipx.LayoutGate.MODE_OFF;
+			try {
+				// 判定桩故意设为"有实例"：off 模式必须**不调用**它
+				final boolean[] called = { false };
+				AnonClassAligner.Result res = AnonClassAligner.align(host, v2Host, oldAnon, newAnon,
+					oldRes, newRes, name -> { called[0] = true; return true; });
+				check(!called[0], "Scenario 27: off 模式完全不扫实例（判定桩未被调用）");
+				check(res.stats.layoutGateRejected == 0 && res.stats.layoutGateWaived == 0,
+					"Scenario 27: off 模式两个计数器都保持 0");
+			} finally {
+				HotSwapAgent.ANON_LAYOUT_GATE = prev;
+			}
+		}
+
+		// ---------- 反向对照：同形态但字段不变 => 仍然正常配对，计数器为 0 ----------
+		{
+			AnonClassAligner.Result res = AnonClassAligner.align(host, v2Host, oldAnon, oldAnon,
+				oldRes, oldRes, name -> true);
+			check(res.stats.layoutGateRejected == 0 && res.stats.layoutGateWaived == 0,
+				"Scenario 27: 字段不变时不触碰门（rejected=0, waived=0）");
+			check("$1".equals(lastSegment(res.renameMap.get(host + "$1"))),
+				"Scenario 27: 字段不变时正常配对回 $1（renameMap=" + res.renameMap + "）");
+		}
+
+		// ---------- 放行例：匿名类体里新增用户自己的（非合成）字段 ----------
+		//
+		// 与捕获字段相反：非合成字段会被 ClassDiffUtil 看到并交给 InitFix，
+		// 所以门必须放行，否则会误伤最常见的一类编辑。
+		{
+			String v3 = "package testLayoutGate;\n" +
+				"public class LayoutCase {\n" +
+				"    public int seedA = 1;\n" +
+				"    public Runnable call() {\n" +
+				"        int a = this.seedA;\n" +
+				"        return new Runnable() {\n" +
+				"            public int userField = 42;\n" +
+				"            public void run() { System.out.println(a + userField); }\n" +
+				"        };\n" +
+				"    }\n" +
+				"}\n";
+			File d3src = new File(new File(baseDir, "s27c"), "src"); d3src.mkdirs();
+			final File d3 = compileInv(javac, d3src, "LayoutCase", v3);
+			check(hasField(d3, host + "$1", "userField"), "Scenario 27: 夹具前提 - V3 有非合成字段 userField");
+			check(!isFieldSynthetic(d3, host + "$1", "userField"),
+				"Scenario 27: 夹具前提 - userField 不是合成字段");
+
+			AnonClassAligner.Result res = AnonClassAligner.align(host,
+				Files.readAllBytes(new File(d3, host + ".class").toPath()),
+				anonClasses(d1, host), anonClasses(d3, host),
+				n -> readIfExists(new File(d1, n.replace('.', '/') + ".class")),
+				n -> readIfExists(new File(d3, n.replace('.', '/') + ".class")),
+				name -> true);
+			check(res.stats.layoutGateRejected == 0,
+				"Scenario 27: 新增非合成字段被放行（交给 InitFix）rejected=" + res.stats.layoutGateRejected);
+		}
+	}
+
+	/** 取内部名的最后一段（$1 / $2）。 */
+	static String lastSegment(String internal) {
+		if (internal == null) return null;
+		int i = internal.lastIndexOf('$');
+		return i < 0 ? internal : internal.substring(i);
+	}
+
+	/** 某个类是否有指定字段（含合成）。 */
+	static boolean hasField(File out, String slashName, String fieldName) throws Exception {
+		return fieldAccess(out, slashName, fieldName) != null;
+	}
+
+	static boolean isFieldSynthetic(File out, String slashName, String fieldName) throws Exception {
+		Integer acc = fieldAccess(out, slashName, fieldName);
+		return acc != null && (acc & org.objectweb.asm.Opcodes.ACC_SYNTHETIC) != 0;
+	}
+
+	/** 读字段的 access 标志；字段不存在返回 null。 */
+	static Integer fieldAccess(File out, String slashName, String fieldName) throws Exception {
+		File cf = new File(out, slashName + ".class");
+		if (!cf.exists()) return null;
+		ClassNode cn = new ClassNode();
+		new ClassReader(Files.readAllBytes(cf.toPath())).accept(cn, 0);
+		if (cn.fields == null) return null;
+		for (org.objectweb.asm.tree.FieldNode fn : cn.fields) {
+			if (fieldName.equals(fn.name)) return fn.access;
+		}
+		return null;
+	}
+
 	static String normalizedEnclosing(byte[] bytes) {
-		if (bytes == null) return null;
 		ClassNode cn = new ClassNode();
 		new ClassReader(bytes).accept(cn, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
 		return AnonClassAligner.normalizeEnclosingMethod(cn.outerMethod);

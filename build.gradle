@@ -602,6 +602,18 @@ tasks.register("hstestFingerprint", JavaExec) {
 }
 tasks.named("check") { dependsOn tasks.named("hstestFingerprint") }
 
+// 布局门规则表断言（纯函数，先红后绿的前半）。
+tasks.register("hstestLayoutGate", JavaExec) {
+	group = "verification"
+	description = "运行 LayoutGate 规则表断言"
+	dependsOn tasks.named("hstestClasses")
+	dependsOn project(":hotswap-agent").tasks.named("jar")
+	dependsOn project(":jni-agent").tasks.named("jar")
+	classpath = sourceSets.hstest.runtimeClasspath
+	mainClass = "LayoutGateAssert"
+}
+tasks.named("check") { dependsOn tasks.named("hstestLayoutGate") }
+
 // InitFix 差分 Oracle（docs/INIT_FIX.md §8 P0-5）。
 //
 // 与 SemAssert 不同，它**不需要**任何外部 javac：夹具用 javax.tools 在内存里编译，

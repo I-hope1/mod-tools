@@ -11,6 +11,7 @@ import org.objectweb.asm.tree.MethodNode;
 
 import java.util.*;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * 匿名类对齐器 (Anonymous Class Aligner)。
@@ -115,6 +116,23 @@ public final class AnonClassAligner {
 		public int tier2Matches;
 		public int tier3Matches;
 		public int tier4Matches;
+		/**
+		 * 布局门拒绝的配对数（{@code reject} 模式）。见 {@code LayoutGate} 与 §7.2。
+		 *
+		 * <p>"用了哪一层"的纪律同样适用：光看映射结果分不清"没配上"是因为歧义、
+		 * 还是因为被布局门挡了。断言这个计数器才能钉住门确实生效。</p>
+		 */
+		public int layoutGateRejected;
+		/**
+		 * 布局门放行的配对数（{@code warn} 模式，或布局不兼容但<b>无存活实例</b>）。
+		 *
+		 * <p>{@code warn} 模式下照旧配对并原地重定义，只打告警；此计数让用户看到
+		 * "本来会被拒绝的有几次"。无存活实例时放行是安全的 ——
+		 * 新建实例会走新构造器，初始化正常（真机对照实验结论）。</p>
+		 */
+		public int layoutGateWaived;
+		/** 布局门扫描存活实例的总耗时（毫秒），用于观察全堆遍历的开销。 */
+		public long layoutGateScanMillis;
 		public int tier5Matches;
 		public int ambiguousMatches;
 		/**
@@ -205,11 +223,13 @@ public final class AnonClassAligner {
 	 byte[] newHostBytes,
 	 Map<String, byte[]> oldAnonClasses,
 	 Map<String, byte[]> newAnonClasses) {
-		return align(hostClassName, newHostBytes, oldAnonClasses, newAnonClasses, null, null);
+		return align(hostClassName, newHostBytes, oldAnonClasses, newAnonClasses, null, null, null);
 	}
 
 	/**
 	 * 对齐匿名类并重写宿主与匿名类字节码（带字节码解析器）。
+	 *
+	 * <p>实例判定取已注入的 {@link #hotswapAlignerHasLiveInstances}（默认保守：视为有实例）。</p>
 	 */
 	public static Result align(
 	 String hostClassName,
@@ -218,7 +238,54 @@ public final class AnonClassAligner {
 	 Map<String, byte[]> newAnonClasses,
 	 Function<String, byte[]> oldResolver,
 	 Function<String, byte[]> newResolver) {
-		return alignCascading(hostClassName, newHostBytes, oldAnonClasses, newAnonClasses, oldResolver, newResolver);
+		return alignCascading(hostClassName, newHostBytes, oldAnonClasses, newAnonClasses,
+		 oldResolver, newResolver, null);
+	}
+
+	/**
+	 * 对齐匿名类并重写宿主与匿名类字节码（带字节码解析器 + 布局门实例判定）。
+	 *
+	 * @param hasLiveInstances 布局门用：给定点分类名，判断它是否还有存活实例。
+	 *                         {@code null} 表示沿用已注入的判定（默认保守：视为有实例）。
+	 *                         由调用方注入，使本类保持纯函数、不依赖 JVMTI。
+	 */
+	public static Result align(
+	 String hostClassName,
+	 byte[] newHostBytes,
+	 Map<String, byte[]> oldAnonClasses,
+	 Map<String, byte[]> newAnonClasses,
+	 Function<String, byte[]> oldResolver,
+	 Function<String, byte[]> newResolver,
+	 Predicate<String> hasLiveInstances) {
+		return alignCascading(hostClassName, newHostBytes, oldAnonClasses, newAnonClasses,
+		 oldResolver, newResolver, hasLiveInstances);
+	}
+
+	/**
+	 * 布局门用的"是否有存活实例"判定；由 {@code HotSwapAgent} 注入。
+	 *
+	 * <p>刻意做成可变静态而不是逐层传参：本类的调用链有 {@code alignCascading} →
+	 * {@code matchHierarchical} → {@code matchTier} 多层，逐层加参数会污染每一层签名，
+	 * 而这个判定是"环境能力"而非"本次调用的数据"。测试里直接设桩即可。</p>
+	 */
+	static Predicate<String> hotswapAlignerHasLiveInstances =
+	 name -> true;   // 未注入时按"有实例"处理：保守，宁可少配对也不静默读零值
+
+	/**
+	 * 级联树匿名类对齐（Cascading Tree Anonymous Class Aligner）—— 不带布局门实例判定。
+	 *
+	 * <p>沿用已注入的 {@link #hotswapAlignerHasLiveInstances}。调用方若需要按本次热更
+	 * 注入判定，用带 {@code Predicate} 的那个重载。</p>
+	 */
+	public static Result alignCascading(
+	 String hostClassName,
+	 byte[] newHostBytes,
+	 Map<String, byte[]> oldAnonClasses,
+	 Map<String, byte[]> newAnonClasses,
+	 Function<String, byte[]> oldResolver,
+	 Function<String, byte[]> newResolver) {
+		return alignCascading(hostClassName, newHostBytes, oldAnonClasses, newAnonClasses,
+		 oldResolver, newResolver, null);
 	}
 
 	/**
@@ -231,6 +298,8 @@ public final class AnonClassAligner {
 	 *   <li><b>前缀派生</b>：未匹配新类的类名前缀强制继承其父类重映射后的目标名称，保证 JVM 内部类层级不被破坏；</li>
 	 *   <li><b>严格校验</b>：对齐映射结果执行单射性与前缀不变量校验，不符合则阻断提交。</li>
 	 * </ul>
+	 *
+	 * @param hasLiveInstances 布局门的实例判定；{@code null} 表示沿用已注入的判定。
 	 */
 	public static Result alignCascading(
 	 String hostClassName,
@@ -238,10 +307,16 @@ public final class AnonClassAligner {
 	 Map<String, byte[]> oldAnonClasses,
 	 Map<String, byte[]> newAnonClasses,
 	 Function<String, byte[]> oldResolver,
-	 Function<String, byte[]> newResolver) {
+	 Function<String, byte[]> newResolver,
+	 Predicate<String> hasLiveInstances) {
 		if (hostClassName == null) {
 			throw new IllegalArgumentException("hostClassName cannot be null");
 		}
+		// 布局门的实例判定：本次调用显式传入则用本次的，否则保留已注入的（测试桩/默认保守）。
+		// 用局部变量 + 恢复，避免污染后续调用。
+		Predicate<String> prevHasLive = hotswapAlignerHasLiveInstances;
+		if (hasLiveInstances != null) hotswapAlignerHasLiveInstances = hasLiveInstances;
+		try {
 		final String hostSlash = hostClassName.replace('.', '/');
 		final long   startNanos = System.nanoTime();
 		dbg("begin alignment for host " + hostSlash + " (maxPerHost=" + MAX_ANON_PER_HOST + ", timeoutMs=" + ALIGN_TIMEOUT_MS + ", strict=" + HotSwapAgent.ANON_STRICT + ")");
@@ -447,6 +522,10 @@ public final class AnonClassAligner {
 		byte[] alignedHostBytes = newHostBytes != null ? remapClass(newHostBytes, renameMap) : null;
 
 		return new Result(alignedHostBytes, alignedAnonClasses, renameMap, orphanOldClasses, stats);
+		} finally {
+			// 恢复调用前的实例判定，避免本次注入泄漏到后续调用
+			hotswapAlignerHasLiveInstances = prevHasLive;
+		}
 	}
 
 	/**
@@ -731,6 +810,14 @@ public final class AnonClassAligner {
 		final int orderIndex;
 		/** 拓扑签名；{@code null} 表示未知（不得当作与任何签名相等） */
 		final TopologySignature topology;
+		/**
+		 * 布局门的判定输入（{@code LayoutGate.of(...)} 的产物）。
+		 *
+		 * <p>为什么不复用 {@link #fields}：它是 {@code name:desc} 字符串，
+		 * <b>不含访问标志</b>，因此看不出 static 性变化 —— 而那正是布局门必须单独比较的一档
+		 * （见 {@code LayoutGate.Verdict.CHANGED_STATICNESS}）。</p>
+		 */
+		final List<LayoutGate.FieldInfo> fieldInfos;
 
 		AnonInfo(
 		 String name,
@@ -743,7 +830,8 @@ public final class AnonClassAligner {
 		 List<String> fields,
 		 List<String> methods,
 		 int orderIndex,
-		 TopologySignature topology) {
+		 TopologySignature topology,
+		 List<LayoutGate.FieldInfo> fieldInfos) {
 			this.name = name;
 			this.bytecode = bytecode;
 			this.contentHash = contentHash;
@@ -755,6 +843,7 @@ public final class AnonClassAligner {
 			this.methods = methods;
 			this.orderIndex = orderIndex;
 			this.topology = topology;
+			this.fieldInfos = fieldInfos;
 		}
 
 		@Override
@@ -970,7 +1059,8 @@ public final class AnonClassAligner {
 			int orderIdx = parseIndex(hostSlash, name);
 			list.add(new AnonInfo(
 			 name, bytes, hash, superName, interfaces,
-			 outerMethod, outerMethodDesc, fields, methods, orderIdx, topology
+			 outerMethod, outerMethodDesc, fields, methods, orderIdx, topology,
+			 LayoutGate.of(cn.fields)
 			));
 		}
 
@@ -1031,7 +1121,51 @@ public final class AnonClassAligner {
 		  && Objects.equals(n.outerMethodDesc, o.outerMethodDesc)
 		  && Objects.equals(n.superName, o.superName)
 		  && Objects.equals(n.interfaces, o.interfaces);
-		matchTier(4, remainingNew, remainingOld, matchedNewToOld, stats, tier4Predicate,
+		// ---- 实例状态布局门（§7.2 的精确变体）----
+		//
+		// 只作用在 Tier 4：Tier 1/2 的哈希含字段表、Tier 3 显式比较 fields，
+		// 所以能跨字段布局配对的只有 Tier 4。门加在这里，Tier 1~3 的语义完全不动。
+		//
+		// 为什么必须在这一层挡：布局变化后**存活实例**读新字段得零值，而这类字段
+		// （val$*/this$0，合成）被 ClassDiffUtil 过滤，InitFix 永远补不到。
+		MatchPredicate gateWrapped = tier4Predicate;
+		if (!LayoutGate.MODE_OFF.equals(HotSwapAgent.ANON_LAYOUT_GATE)) {
+			gateWrapped = (n, o) -> {
+				if (!tier4Predicate.test(n, o)) return false;
+				LayoutGate.Result res = LayoutGate.check(o.fieldInfos, n.fieldInfos);
+				if (res.compatible()) return true;
+
+				// 布局不兼容。下一步取决于"有没有存活实例需要保护"：
+				//   • 无存活实例 → 放行（新建实例会走新构造器，初始化正常；真机实验结论）
+				//   • 有存活实例 → reject 模式拒绝配对；warn 模式放行但强告警
+				boolean hasLive = hotswapAlignerHasLiveInstances.test(o.name.replace('/', '.'));
+				if (!hasLive) {
+					stats.layoutGateWaived++;
+					HotSwapAgent.warn("[ANON-LAYOUT] " + n.name + " -> " + o.name
+						+ ": incompatible layout but no live instances; pairing anyway (new instances"
+						+ " initialize correctly). Reason: " + res.detail());
+					return true;
+				}
+				if (LayoutGate.MODE_WARN.equals(HotSwapAgent.ANON_LAYOUT_GATE)) {
+					stats.layoutGateWaived++;
+					HotSwapAgent.warn("[ANON-LAYOUT] " + n.name + " -> " + o.name
+						+ ": incompatible layout with LIVE instances, pairing anyway because"
+						+ " nipx.agent.anon_layout_gate=warn. Surviving instances will read 0 for"
+						+ " the affected field until they are recreated. Reason: " + res.detail());
+					return true;
+				}
+				// reject：不配对。新类随后分配未占用编号，旧类成为孤儿并保留（§1.2），
+				// 存活实例继续跑旧逻辑 —— 安全但不再更新，所以必须让用户看得见。
+				stats.layoutGateRejected++;
+				HotSwapAgent.warn("[ANON-LAYOUT] " + n.name + " -> " + o.name
+					+ ": REFUSED to pair (incompatible layout with live instances)."
+					+ " The old class is kept as an orphan; its LIVE instances keep running the OLD"
+					+ " code, so this edit will NOT take effect for them until they are recreated."
+					+ " Reason: " + res.detail());
+				return false;
+			};
+		}
+		matchTier(4, remainingNew, remainingOld, matchedNewToOld, stats, gateWrapped,
 		 false, false, hostSlash, startNanos
 		);
 

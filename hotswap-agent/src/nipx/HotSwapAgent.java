@@ -51,6 +51,37 @@ public class HotSwapAgent {
 	public static boolean      ANON_STRICT       = boolProp("nipx.agent.anon_strict", "nipx.anonAlign.strict", false);
 	/** 匿名类对齐诊断日志（§6.4）：打印层级决策链。 */
 	public static boolean      ANON_DEBUG        = boolProp("nipx.agent.anon_debug", "nipx.anonAlign.debug", false);
+
+	/**
+	 * 实例状态布局门模式（§7.2 的精确变体）：{@code reject} / {@code warn} / {@code off}。
+	 *
+	 * <p>门守的是"字段布局变化后，<b>已存在的实例</b>读新字段得零值"。三种模式：</p>
+	 * <ul>
+	 *   <li>{@code reject}（默认）—— 布局不兼容<b>且有存活实例</b>时拒绝配对；
+	 *       新类分配未占用编号，旧类成为孤儿并保留，存活实例继续跑旧逻辑（§1.2）。</li>
+	 *   <li>{@code warn} —— 照旧在 Tier 4 配对并原地重定义，只打强告警。
+	 *       给"我就想原地更新、界面马上会重建"的场景用。计数器照记，
+	 *       这样用户能看到"本来会被拒绝的有几次"。</li>
+	 *   <li>{@code off} —— 完全恢复旧行为：不扫实例、不打日志。</li>
+	 * </ul>
+	 *
+	 * <p>用字符串而非 boolean，是因为将来可能加更多档（如按类注解 {@code @HotswapReinit}），
+	 * 那时再加一个值即可，不用再破坏一次属性语义。</p>
+	 */
+	public static String       ANON_LAYOUT_GATE  = strProp("nipx.agent.anon_layout_gate", "reject");
+
+	/** 读字符串属性并做合法性校验；非法值回退到默认值并告警（不静默接受拼错的开关）。 */
+	private static String strProp(String key, String def) {
+		String v = System.getProperty(key);
+		if (v == null) return def;
+		v = v.trim().toLowerCase();
+		if (v.equals(LayoutGate.MODE_REJECT) || v.equals(LayoutGate.MODE_WARN) || v.equals(LayoutGate.MODE_OFF)) {
+			return v;
+		}
+		// 复用 error()：拼错的开关值被静默忽略，比"多认一个别名"危险得多
+		System.err.println("[NIPX] Unknown " + key + " value '" + v + "'; falling back to '" + def + "'");
+		return def;
+	}
 	//endregion
 
 	//region Core State Management
@@ -265,7 +296,8 @@ public class HotSwapAgent {
 		info("UI Hook: " + UI_HOOK);
 		info("Anon Align: " + ANON_ALIGN + " (strict=" + ANON_STRICT + ", debug=" + ANON_DEBUG
 		     + ", maxPerHost=" + AnonClassAligner.MAX_ANON_PER_HOST
-		     + ", timeoutMs=" + AnonClassAligner.ALIGN_TIMEOUT_MS + ")");
+		     + ", timeoutMs=" + AnonClassAligner.ALIGN_TIMEOUT_MS
+		     + ", layoutGate=" + ANON_LAYOUT_GATE + ")");
 		if (ANON_ALIGN) {
 			info("Anonymous Class Alignment ENABLED. Ambiguity is resolved conservatively (never by class name).");
 		} else {
@@ -429,7 +461,8 @@ public class HotSwapAgent {
 
 			AnonClassAligner.Result res;
 			try {
-				res = AnonClassAligner.align(hostSlash, hostBytes, oldAnon, newAnon, oldRes, newRes);
+				res = AnonClassAligner.align(hostSlash, hostBytes, oldAnon, newAnon, oldRes, newRes,
+					HotSwapAgent::hasLiveInstances);
 			} catch (Throwable t) {
 				// §4.3：以「宿主类 + 其下属全部匿名类」为原子单元整体拒绝。
 				//
@@ -699,6 +732,71 @@ public class HotSwapAgent {
 		if (injectedCount > 0) info("Injected " + injectedCount + " new classes.");
 	}
 
+
+	/**
+	 * 布局门用：某个类是否还有存活实例（§7.2 的精确变体）。
+	 *
+	 * <p><b>判定规则（三条都很关键，别简化）</b>：</p>
+	 * <ol>
+	 *   <li><b>{@code LibTool} 优先</b> —— 走 JVMTI 的 {@code IterateOverInstancesOfClass}，
+	 *       覆盖全部堆实例。</li>
+	 *   <li><b>{@code LibTool} 不可用或异常 ⇒ 视为"有实例"。</b>
+	 *       刻意<b>不</b>回退到 {@link InstanceTracker}：它只是一个由注入代码
+	 *       {@code register()} 填充的弱集合，对匿名类基本是空的，
+	 *       信它会误判成"无实例"而放行 —— 那正是我们最不想要的方向。
+	 *       保守方向的代价只是少配对，放行的代价是静默读零值。</li>
+	 *   <li><b>按类缓存</b> —— 每次扫描都是一次全堆遍历（会触发 safepoint），
+	 *       而同一批里可能有多个类命中。</li>
+	 * </ol>
+	 *
+	 * <p>仅用于布局不兼容的类，因此调用频率很低。</p>
+	 */
+	static boolean hasLiveInstances(String dotClassName) {
+		Boolean cached = LIVE_INSTANCE_CACHE.get(dotClassName);
+		if (cached != null) return cached;
+
+		boolean result;
+		long t0 = System.nanoTime();
+		try {
+			if (!LibTool.initialized()) {
+				// 尝试初始化；失败会抛 UnsatisfiedLinkError
+				LibTool.init();
+			}
+			Class<?> c = loadedClassesMap.get(dotClassName);
+			if (c == null) {
+				// 旧类未加载 ⇒ 不可能有实例。这是**安全**方向的"无实例"：
+				// 未加载的类没有对象可言，放行配对不会让任何东西读到零值。
+				result = false;
+			} else {
+				result = LibTool.getInstances(c).length > 0;
+			}
+		} catch (Throwable t) {
+			// JVMTI 不可用 / 初始化失败 / 扫描异常 —— 一律按"有实例"处理（保守）。
+			warn("[ANON-LAYOUT] Cannot scan instances for " + dotClassName
+			     + " (" + t.getClass().getSimpleName() + "); assuming LIVE instances exist.");
+			result = true;
+		}
+		long ms = (System.nanoTime() - t0) / 1_000_000;
+		LIVE_INSTANCE_SCAN_MILLIS.addAndGet(ms);
+		if (DEBUG || ms > 50) {
+			log("[ANON-LAYOUT] instance scan " + dotClassName + " -> " + (result ? "LIVE" : "none")
+			    + " (" + ms + " ms)");
+		}
+		LIVE_INSTANCE_CACHE.put(dotClassName, result);
+		return result;
+	}
+
+	/** 每轮热更开始时清空实例扫描缓存（实例的存活状况会随轮次变化）。 */
+	private static void resetLiveInstanceCache() {
+		LIVE_INSTANCE_CACHE.clear();
+		LIVE_INSTANCE_SCAN_MILLIS.set(0);
+	}
+
+	/** 实例判定缓存：点分类名 → 是否存活实例。见 {@link #hasLiveInstances}。 */
+	private static final Map<String, Boolean> LIVE_INSTANCE_CACHE = new ConcurrentHashMap<>();
+	/** 累计的实例扫描耗时（毫秒），用于观察全堆遍历开销。 */
+	static final java.util.concurrent.atomic.AtomicLong LIVE_INSTANCE_SCAN_MILLIS =
+	 new java.util.concurrent.atomic.AtomicLong();
 
 	/** 在 applyRedefinitions(definitions) 后调用 */
 	private static void processAnnotations(List<ClassDefinition> definitions) {
@@ -1352,6 +1450,8 @@ public class HotSwapAgent {
 	}
 
 	private static void triggerHotswapWith0(Class<?>[] classes) {
+		// 实例存活状况每轮都可能变（对象被创建/回收），缓存必须按轮清空
+		resetLiveInstanceCache();
 		// 先把所有待处理的 jar 解压（防抖已结束，文件写入完毕）
 		Set<Path> jars;
 		synchronized (pendingChanges) {

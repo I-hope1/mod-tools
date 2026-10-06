@@ -116,6 +116,7 @@ public class InitFixOracle {
 		scenario("§3.2 静态依赖失败必须传播到实例字段：连带跳过并记账", InitFixOracle::caseStaticFailurePropagatesToInstance);
 		scenario("§5.2 失败跳过按实例隔离：单个实例失败不牵连其它实例", InitFixOracle::casePerInstanceSkipIsolation);
 		scenario("§5.2 确定性失败熔断：N 个实例全失败时日志与重试封顶", InitFixOracle::caseFailureCircuitBreaker);
+		scenario("§3.4 TTL 清扫丢弃待补补丁：字段必须写回台账而非永久遗忘", InitFixOracle::caseTtlSweepRecordsLedger);
 		scenario("§4.1+§4.3 T0 零值字段可被依赖：读零值新增字段的切片必须放行", InitFixOracle::caseZeroValueDependency);
 		scenario("§4.1 静态同款：读零值静态字段的 <clinit> 切片必须放行", InitFixOracle::caseZeroValueStaticDependency);
 		scenario("§3.4 拒绝告警出口：提取期与闭包期的 REJECTED 都必须发 warn", InitFixOracle::caseRejectionWarnings);
@@ -1344,7 +1345,81 @@ public class InitFixOracle {
 			"CaseX2：熔断字段仍记入 FieldLedger（实际 " + unpatched(fx.host) + "）");
 	}
 
-	// ==================== 场景 16b：T0 零值字段可被依赖 ====================
+	// ==================== 场景 16e：TTL 清扫丢弃必须记账 ====================
+
+	/** V1：原始版本（只有 raw）。 */
+	static final String CASE_TTL_V1 = """
+		package oracle;
+		public class CaseTtl {
+			private final String raw;
+			public CaseTtl(String raw) { this.raw = raw; }
+			public String raw() { return raw; }
+		}
+		""";
+
+	/**
+	 * V2：新增两个字段，生成补丁后<b>不</b>执行 applyPatch。
+	 * <p>两个字段的切片都必须是确定性的（{@code trim()} / {@code length()} 可以，
+	 * {@code toUpperCase()} 不行 —— 它依赖默认 Locale，会被效应掩码拒绝）。</p>
+	 */
+	static final String CASE_TTL_V2 = """
+		package oracle;
+		public class CaseTtl {
+			private final String raw;
+			private String clean;
+			private int len;
+			public CaseTtl(String raw) { this.raw = raw; this.clean = raw.trim(); this.len = this.clean.length(); }
+			public String raw() { return raw; }
+			public String clean() { return clean; }
+			public int len() { return len; }
+		}
+		""";
+
+	/**
+	 * 待补补丁因 TTL 被清扫时，其中的字段必须记入台账。
+	 *
+	 * <p>场景：{@code transform} 生成了补丁（字段 ACCEPTED、已出账），
+	 * 但 {@code applyPatch} 从未执行（例如 redefine 成功而补丁窗口错过）。
+	 * TTL 到期后清扫把它们丢弃 —— 若不写回台账，这些字段在下一轮既不在 Diff 里、
+	 * 也不在台账里，就<b>永久遗忘</b>了（§3.4 的核心场景）。</p>
+	 */
+	static void caseTtlSweepRecordsLedger() throws Exception {
+		// 把 TTL 设成 0：一经创建即视为过期
+		InitFix.setPendingTtlNanos(0);
+		try {
+			Fixture fx = loadFixture("oracle.CaseTtl", CASE_TTL_V1, CASE_TTL_V2);
+
+			Object subject = construct(fx.host, "  hi  ");
+			resetToDefault(fx.host, subject, "clean", "Ljava/lang/String;");
+			resetToDefault(fx.host, subject, "len", "I");
+			InstanceTracker.register(subject);
+
+			InitFix.PatchReport report = fx.transform();
+			expect(report, false, "clean", InitFix.FieldStatus.ACCEPTED, null);
+			expect(report, false, "len", InitFix.FieldStatus.ACCEPTED, null);
+			check(report.patchGenerated(), "CaseTtl 前置条件：补丁已生成");
+
+			// 关键前置：此刻两个字段都没在台账里（ACCEPTED 已出账），
+			// 而补丁还没执行 —— 这正是"不记账就永久遗忘"的窗口。
+			check(unpatched(fx.host).isEmpty(),
+				"CaseTtl 前置条件：ACCEPTED 字段当前不在台账（实际 " + unpatched(fx.host) + "）");
+
+			// 触发 TTL 清扫（不调用 applyPatch）
+			InitFix.sweepStalePatches();
+
+			Set<String> after = unpatched(fx.host);
+			check(after.contains("clean"),
+				"CaseTtl：TTL 丢弃的 clean 被记入 FieldLedger（实际 " + after + "）");
+			check(after.contains("len"),
+				"CaseTtl：TTL 丢弃的 len 一并记入 FieldLedger（实际 " + after + "）");
+
+			String reason = skippedOrFailedReason(fx.host, "clean");
+			check(reason.contains("expired"),
+				"CaseTtl：台账原因指明是待补补丁过期（实际：" + reason + "）");
+		} finally {
+			InitFix.setPendingTtlNanos(java.util.concurrent.TimeUnit.MINUTES.toNanos(5));
+		}
+	}
 
 	/** V1：原始版本（只有 raw）。 */
 	static final String CASE_Z_V1 = """

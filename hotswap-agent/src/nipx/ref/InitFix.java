@@ -143,6 +143,22 @@ public class InitFix {
 	private static final int  MAX_DETAILED_FAILURES = 5;
 
 	/**
+	 * {@link #PENDING_TTL_NANOS} 的可调副本，仅供测试/诊断把 TTL 缩短以触发清扫。
+	 * 设为 {@code <= 0} 表示"一经创建即视为过期"。
+	 */
+	private static volatile long pendingTtlNanos = PENDING_TTL_NANOS;
+
+	/** 测试/诊断用：覆盖待补补丁的 TTL（见 {@link #pendingTtlNanos}）。 */
+	public static void setPendingTtlNanos(long ttlNanos) {
+		pendingTtlNanos = ttlNanos;
+	}
+
+	/** 测试/诊断用：立即跑一次过期清扫（生产路径由 {@code transform} 触发）。 */
+	public static void sweepStalePatches() {
+		cleanupStalePatches();
+	}
+
+	/**
 	 * 单字段在<b>一次热更</b>内允许失败几次后熔断（§5.2 逐实例驱动的代价控制）。
 	 *
 	 * <p>按实例隔离"依赖跳过"之后，确定性失败（切片本身必然抛异常）会让<b>每个实例
@@ -222,6 +238,19 @@ public class InitFix {
 		if (r.length() > 200) r = r.substring(0, 200) + "...";
 		synchronized (LEDGER) {
 			LEDGER.computeIfAbsent(host, k -> new LinkedHashMap<>()).put(fieldName, r);
+		}
+	}
+
+	/**
+	 * 仅在台账尚无该字段时记入（不覆盖已有原因）。
+	 * <p>TTL 清扫用它：字段可能已被别处记下更具体的原因，不该被笼统的"过期"盖掉。</p>
+	 */
+	private static void ledgerPutIfAbsent(Class<?> host, String fieldName, String reason) {
+		if (host == null || fieldName == null) return;
+		String r = reason == null ? "unpatched" : reason;
+		if (r.length() > 200) r = r.substring(0, 200) + "...";
+		synchronized (LEDGER) {
+			LEDGER.computeIfAbsent(host, k -> new LinkedHashMap<>()).putIfAbsent(fieldName, r);
 		}
 	}
 
@@ -479,20 +508,52 @@ public class InitFix {
 	private static void cleanupStalePatches() {
 		if (PENDING.isEmpty()) return;
 		long now = System.nanoTime();
+
+		// 先在 PENDING 的锁内挑出过期条目并摘除，同时把"宿主弱键 + 字段名 + 原因"
+		// 抄进一个局部清单；出锁后再写台账。
+		//
+		// 为什么不在 removeIf 的判定式里直接写台账：那会在持有 PENDING 锁的同时
+		// 去拿 LEDGER 锁，两把锁的获取顺序就取决于调用路径，属于无谓的死锁面。
+		// 清单元素只持有 <b>弱引用</b> 的宿主键（照 §1.2 不变量 2，不新增强引用），
+		// 弱引用在锁外可能已被清除，写台账前逐个 get() 复核。
+		List<StalePatch> stale = new ArrayList<>();
 		synchronized (PENDING) {
 			PENDING.entrySet().removeIf(e -> {
 				Class<?> k = e.getKey();
 				if (k == null) return true;
 				long age = now - e.getValue().createdNanos();
-				if (age > PENDING_TTL_NANOS) {
+				if (age > pendingTtlNanos) {
 					log("Dropping stale pending field init patch for " + k.getName()
 					    + ", age=" + TimeUnit.NANOSECONDS.toSeconds(age) + "s");
+					// 字段名从补丁计划取（与 afterRedefineFailed 同一来源）：
+					// 此刻还没补上任何一个字段，它们必须记入台账，否则
+					// redefine 推进后这些字段再也不会出现在 Diff 里 —— §3.4 的遗忘场景。
+					List<String> fields = new ArrayList<>();
+					for (FieldPatchTask task : e.getValue().plan().allTasks()) {
+						fields.add(task.fieldName());
+					}
+					stale.add(new StalePatch(new WeakReference<>(k), fields,
+					                         TimeUnit.NANOSECONDS.toSeconds(age)));
 					return true;
 				}
 				return false;
 			});
 		}
+
+		for (StalePatch s : stale) {
+			Class<?> host = s.host().get();
+			if (host == null) continue;   // 宿主已被回收：台账（弱键）也随之消失，无需记账
+			for (String f : s.fields()) {
+				// 只在台账尚无该字段时补记：不覆盖更具体的原因。
+				// （ACCEPTED 字段在 transform 时已出账，所以这里写的是"真的没补上"的。）
+				ledgerPutIfAbsent(host, f,
+				 "pending patch expired before apply (age=" + s.ageSeconds() + "s)");
+			}
+		}
 	}
+
+	/** 被 TTL 清扫摘除的补丁：宿主弱键 + 未补字段名 + 年龄（秒）。 */
+	private record StalePatch(WeakReference<Class<?>> host, List<String> fields, long ageSeconds) { }
 
 	private static BuiltPatch buildPatch(
 	 Class<?> host, byte[] newBytes, String className,

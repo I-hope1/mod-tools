@@ -114,6 +114,8 @@ public class InitFixOracle {
 		scenario("§1.1 @HotswapReinit：解锁构造器读取 / 强制覆写 / CONDITIONAL 不覆写 / T0 绕过", InitFixOracle::caseHotswapReinit);
 		scenario("§5.1/§5.2 逐字段驱动：单字段失败不牵连后续字段，依赖失败显式跳过", InitFixOracle::casePerFieldDriver);
 		scenario("§3.2 静态依赖失败必须传播到实例字段：连带跳过并记账", InitFixOracle::caseStaticFailurePropagatesToInstance);
+		scenario("§5.2 失败跳过按实例隔离：单个实例失败不牵连其它实例", InitFixOracle::casePerInstanceSkipIsolation);
+		scenario("§5.2 确定性失败熔断：N 个实例全失败时日志与重试封顶", InitFixOracle::caseFailureCircuitBreaker);
 		scenario("§4.1+§4.3 T0 零值字段可被依赖：读零值新增字段的切片必须放行", InitFixOracle::caseZeroValueDependency);
 		scenario("§4.1 静态同款：读零值静态字段的 <clinit> 切片必须放行", InitFixOracle::caseZeroValueStaticDependency);
 		scenario("§3.4 拒绝告警出口：提取期与闭包期的 REJECTED 都必须发 warn", InitFixOracle::caseRejectionWarnings);
@@ -1167,6 +1169,181 @@ public class InitFixOracle {
 			"CaseY：被连带跳过的实例字段记入 FieldLedger（实际 " + unpatched + "）");
 	}
 
+	// ==================== 场景 16d：失败跳过必须按实例隔离 ====================
+
+	/** V1：原始版本（只有 ARMED 开关与 seed 源字段）。 */
+	static final String CASE_X_V1 = """
+		package oracle;
+		public class CaseX {
+			public  static boolean ARMED;
+			private final String seed;
+			public CaseX(String seed) { this.seed = seed; }
+			public String seed() { return seed; }
+			public  static void arm(boolean v) { ARMED = v; }
+		}
+		""";
+
+	/**
+	 * V2：新增两个字段，{@code bad} 的切片读 <b>seed</b>（存量值因实例而异），
+	 * {@code derived} 依赖 {@code bad}。
+	 *
+	 * <p>{@code seed} 是 private final，能通过 §4.3 的不可变证明，因此 {@code bad = seed}
+	 * 是可提切片的。{@code pick} 里读<b>静态</b> {@code ARMED}：构造期它为 false（正常构造），
+	 * 打补丁前置 true，且只有 seed 等于哨兵值的那个实例抛异常 —— 于是失败精确地
+	 * 落在<b>单个实例</b>上。</p>
+	 *
+	 * <p>{@code ARMED} 声明为 <b>既有</b>字段（V1 里就有），因此不进本轮 Diff 的
+	 * added*Fields，也就不会污染候选集与台账。</p>
+	 */
+	static final String CASE_X_V2 = """
+		package oracle;
+		public class CaseX {
+			public  static boolean ARMED;
+			private final String seed;
+			private String bad;
+			private String derived;
+			public CaseX(String seed) { this.seed = seed; this.bad = pick(this.seed); this.derived = this.bad + "!"; }
+			public String seed() { return seed; }
+			public String bad() { return bad; }
+			public String derived() { return derived; }
+			public  static void arm(boolean v) { ARMED = v; }
+			private static String pick(String s) {
+				if (ARMED && "BOOM".equals(s)) throw new IllegalStateException("boom");
+				return s;
+			}
+		}
+		""";
+
+	static void casePerInstanceSkipIsolation() throws Exception {
+		Fixture fx = loadFixture("oracle.CaseX", CASE_X_V1, CASE_X_V2);
+
+		// 三个存量实例：第 2 个的 seed 将导致 bad 的切片抛异常
+		Object ok1 = construct(fx.host, "a");
+		Object bad = construct(fx.host, "BOOM");
+		Object ok2 = construct(fx.host, "c");
+
+		for (Object o : List.of(ok1, bad, ok2)) {
+			resetToDefault(fx.host, o, "bad", "Ljava/lang/String;");
+			resetToDefault(fx.host, o, "derived", "Ljava/lang/String;");
+			InstanceTracker.register(o);
+		}
+
+		InitFix.PatchReport report = fx.transform();
+		expect(report, false, "bad", InitFix.FieldStatus.ACCEPTED, null);
+		expect(report, false, "derived", InitFix.FieldStatus.ACCEPTED, null);
+
+		// 打补丁前武装开关：只有 seed=BOOM 的那个实例会在切片里抛异常
+		fx.host.getMethod("arm", boolean.class).invoke(null, true);
+
+		fx.apply();
+
+		// 失败的那个实例：bad 抛异常保持默认值，derived 被连带跳过
+		check(read(fx.host, bad, "bad") == null,
+			"CaseX：失败实例的 bad 保持默认值（实际 "
+			+ describe(read(fx.host, bad, "bad")) + "）");
+		check(read(fx.host, bad, "derived") == null,
+			"CaseX：失败实例的 derived 被连带跳过（实际 "
+			+ describe(read(fx.host, bad, "derived")) + "）");
+
+		// 核心断言：其余实例的 derived 必须照常补上 —— 它们的 bad 是成功的。
+		// 旧实现用共享 failedFields，这里会错误地变成 null。
+		check("a!".equals(read(fx.host, ok1, "derived")),
+			"CaseX：第 1 个实例的 derived 不受其它实例失败牵连（期望 'a!'，实际 "
+			+ describe(read(fx.host, ok1, "derived")) + "）");
+		check("c!".equals(read(fx.host, ok2, "derived")),
+			"CaseX：第 3 个实例的 derived 不受其它实例失败牵连（期望 'c!'，实际 "
+			+ describe(read(fx.host, ok2, "derived")) + "）");
+
+		// 成功实例的 bad 也应正常补上
+		check("a".equals(read(fx.host, ok1, "bad")),
+			"CaseX：第 1 个实例的 bad 正常补上（实际 "
+			+ describe(read(fx.host, ok1, "bad")) + "）");
+
+		// 台账：失败字段与它的下游仍须记账（下一轮重试）
+		Set<String> unpatched = unpatched(fx.host);
+		check(unpatched.contains("bad"),
+			"CaseX：失败的 bad 记入 FieldLedger（实际 " + unpatched + "）");
+		check(unpatched.contains("derived"),
+			"CaseX：被跳过的 derived 记入 FieldLedger（实际 " + unpatched + "）");
+	}
+
+	/**
+	 * 熔断场景：{@code bad} 的切片对<b>每个实例</b>都抛异常（确定性失败），
+	 * 用来验证 §5.2 的代价控制 —— 失败次数封顶后不再对后续实例重试。
+	 *
+	 * <p>按实例隔离之后，确定性失败会让每个实例都各自失败一遍，日志与耗时放大成 N 倍；
+	 * {@code MAX_INSTANCE_FAILURES_PER_FIELD} 把同一字段的失败次数封顶。</p>
+	 */
+	static final String CASE_X2_V1 = """
+		package oracle;
+		public class CaseX2 {
+			public  static boolean ARMED;
+			public CaseX2(String seed) { }
+			public  static void arm(boolean v) { ARMED = v; }
+		}
+		""";
+
+	static final String CASE_X2_V2 = """
+		package oracle;
+		public class CaseX2 {
+			public  static boolean ARMED;
+			private String bad;
+			public CaseX2(String seed) { this.bad = pick(); }
+			public  static void arm(boolean v) { ARMED = v; }
+			public String bad() { return bad; }
+			private static String pick() {
+				if (ARMED) throw new IllegalStateException("always");
+				return "x";
+			}
+		}
+		""";
+
+	static void caseFailureCircuitBreaker() throws Exception {
+		Fixture fx = loadFixture("oracle.CaseX2", CASE_X2_V1, CASE_X2_V2);
+
+		// 20 个实例，全部会失败 —— 远超过熔断阈值 8
+		List<Object> subjects = new ArrayList<>();
+		for (int i = 0; i < 20; i++) {
+			Object o = construct(fx.host, "seed" + i);
+			resetToDefault(fx.host, o, "bad", "Ljava/lang/String;");
+			InstanceTracker.register(o);
+			subjects.add(o);
+		}
+
+		InitFix.PatchReport report = fx.transform();
+		expect(report, false, "bad", InitFix.FieldStatus.ACCEPTED, null);
+
+		fx.host.getMethod("arm", boolean.class).invoke(null, true);
+
+		int errorsBefore = agentErrors.size();
+		long startNanos = System.nanoTime();
+		fx.apply();
+		long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000;
+		int detailed = agentErrors.size() - errorsBefore;
+
+		// 注意：DETAILED_FAILURE_LOGS 本身就把详细栈封顶在 5 条，
+		// 所以"日志数 < 20"<b>不是</b>熔断的证据（去掉熔断也一样成立）。
+		// 真正由熔断决定的是：该字段被尝试的次数被封顶，因此沿用的
+		// skippedFields 记账只发生一次，且总耗时不随实例数线性膨胀。
+		check(detailed <= 5,
+			"CaseX2：详细失败日志被封顶（20 个实例，实际 " + detailed + " 条 error）");
+
+		// 熔断的证据：bad 被记为"失败 N 次后放弃"，而不是逐实例重复失败。
+		check(skippedOrFailedReason(fx.host, "bad").contains("giving up")
+		      || skippedOrFailedReason(fx.host, "bad").contains("8 times"),
+			"CaseX2：熔断生效，bad 的原因记录了「达到失败上限后放弃」（实际："
+			+ skippedOrFailedReason(fx.host, "bad") + "）");
+
+		// 所有实例的 bad 都保持默认值
+		boolean allDefault = true;
+		for (Object o : subjects) if (read(fx.host, o, "bad") != null) allDefault = false;
+		check(allDefault, "CaseX2：全部实例的 bad 都保持默认值");
+
+		// 字段记入台账（下一轮重试）
+		check(unpatched(fx.host).contains("bad"),
+			"CaseX2：熔断字段仍记入 FieldLedger（实际 " + unpatched(fx.host) + "）");
+	}
+
 	// ==================== 场景 16b：T0 零值字段可被依赖 ====================
 
 	/** V1：原始版本（只有 raw）。 */
@@ -1427,6 +1604,14 @@ public class InitFixOracle {
 		Set<String> out = new LinkedHashSet<>();
 		for (InitFix.UnpatchedField u : InitFix.getUnpatchedFields(host)) out.add(u.fieldName());
 		return out;
+	}
+
+	/** 台账里某字段的原因文案（不在台账里返回空串）。 */
+	static String skippedOrFailedReason(Class<?> host, String field) {
+		for (InitFix.UnpatchedField u : InitFix.getUnpatchedFields(host)) {
+			if (u.fieldName().equals(field)) return u.reason() == null ? "" : u.reason();
+		}
+		return "";
 	}
 
 	// ==================== 夹具装配 ====================

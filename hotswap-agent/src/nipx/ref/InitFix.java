@@ -143,6 +143,15 @@ public class InitFix {
 	private static final int  MAX_DETAILED_FAILURES = 5;
 
 	/**
+	 * 单字段在<b>一次热更</b>内允许失败几次后熔断（§5.2 逐实例驱动的代价控制）。
+	 *
+	 * <p>按实例隔离"依赖跳过"之后，确定性失败（切片本身必然抛异常）会让<b>每个实例
+	 * 都各自失败一遍</b>，日志与耗时放大成 N 倍。这个配额把同一字段的失败次数封顶，
+	 * 超过即停止继续尝试该字段（该字段及其下游仍照常记账）。</p>
+	 */
+	private static final int MAX_INSTANCE_FAILURES_PER_FIELD = 8;
+
+	/**
 	 * 详细失败日志的全局配额：逐实例驱动下同一轮可能有成千上万个实例各自失败，
 	 * 逐个打栈会淹没日志（{@code docs/INIT_FIX.md} §5.2 的 {@code handleFieldException}）。
 	 */
@@ -2457,6 +2466,11 @@ public class InitFix {
 			                  + " done in " + elapsedMs + "ms");
 		}
 
+		// 静态侧失败必须在实例阶段开始前冻结一份快照：它全局唯一，对每个实例都生效；
+		// 而实例侧失败只影响出错的那个实例，不能混进这份快照（否则又变成跨实例牵连）。
+		Set<String> staticFailures = new LinkedHashSet<>(failedFields);
+		Set<String> staticSkips    = new LinkedHashSet<>(skippedFields);
+
 		// ---- 实例字段：逐实例、逐字段 ----
 		if (plan.hasInstance() && alive != null && !alive.isEmpty()) {
 			HotSwapAgent.info("Applying instance field init patch to " + host.getName()
@@ -2466,9 +2480,11 @@ public class InitFix {
 			long start = System.nanoTime();
 			if (hasInstanceDependencies) {
 				runDependentInstanceTasks(host, alive, instanceTasks,
-				 failedFields, skippedFields, failureReasons);
+				 failedFields, skippedFields, failureReasons,
+				 union(staticFailures, staticSkips, Set.of()));
 			} else {
-				runIndependentInstanceTasks(host, alive, instanceTasks, failedFields, failureReasons);
+				runIndependentInstanceTasks(host, alive, instanceTasks,
+				 failedFields, skippedFields, failureReasons);
 			}
 			long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
 
@@ -2489,6 +2505,9 @@ public class InitFix {
 
 		if (!failedFields.isEmpty() || !skippedFields.isEmpty()) {
 			// §3.4 待补台账：本轮没补上的字段记入，下一轮候选集自动并回来。
+			// 先写 failed，再写 skipped —— 熔断字段同时属于两者（它确实失败过，
+			// 又被"放弃"），而 skipped 的原因更具体（"达到失败上限后放弃"），
+			// 因此必须后写、覆盖掉笼统的 runtime failure。
 			for (String f : failedFields) {
 				ledgerPut(host, f, "runtime failure: "
 				                   + failureReasons.getOrDefault(f, "patch execution failed"));
@@ -2507,32 +2526,95 @@ public class InitFix {
 
 	private static void runIndependentInstanceTasks(
 	 Class<?> host, List<Object> targets, BoundInstanceTask[] tasks,
-	 Set<String> failedFields, Map<String, String> failureReasons) {
+	 Set<String> failedFields, Set<String> skippedFields, Map<String, String> failureReasons) {
+		InstanceFailureBudget budget = new InstanceFailureBudget();
 		for (Object target : targets) {
 			for (BoundInstanceTask task : tasks) {
+				if (budget.exhausted(task.fieldName())) {
+					budget.recordGiveUp(task.fieldName(), skippedFields, failureReasons);
+					continue;
+				}
 				try {
 					task.handle().invokeExact(target);
 				} catch (LinkageError le) {
 					throw le;
 				} catch (Throwable t) {
 					recordTaskFailure(host, task.fieldName(), t, failedFields, failureReasons);
+					budget.recordFailure(task.fieldName());
 				}
+			}
+		}
+	}
+
+	/**
+	 * 逐实例驱动的失败预算（§5.2 的代价控制）。
+	 *
+	 * <p>按实例隔离"依赖跳过"之后，确定性失败（切片本身必然抛异常）会让每个实例
+	 * 都各自失败一遍，日志与耗时放大成 N 倍。这里给每个字段一个本轮的失败配额，
+	 * 用满即对后续实例放弃该字段。</p>
+	 *
+	 * <p>预算按<b>每个 applyPatch 一轮</b>计，不跨轮累积 —— 下一轮热更会重新给足配额，
+	 * 与台账"下一轮重新纳入候选"的语义一致。</p>
+	 */
+	private static final class InstanceFailureBudget {
+		private final Map<String, Integer> counts = new LinkedHashMap<>();
+
+		boolean exhausted(String fieldName) {
+			return counts.getOrDefault(fieldName, 0) >= MAX_INSTANCE_FAILURES_PER_FIELD;
+		}
+
+		void recordFailure(String fieldName) {
+			counts.merge(fieldName, 1, Integer::sum);
+		}
+
+		/** 记一次"放弃"：该字段已耗尽配额，本轮不再重试。 */
+		void recordGiveUp(String fieldName, Set<String> skippedFields,
+		                  Map<String, String> failureReasons) {
+			if (skippedFields.add(fieldName)) {
+				// put 而非 putIfAbsent：首次失败已记下原始异常文本，
+				// 这里的"放弃"是更具体的结论，覆盖它。
+				failureReasons.put(fieldName, "field failed "
+				                              + MAX_INSTANCE_FAILURES_PER_FIELD
+				                              + " times, giving up for this round");
 			}
 		}
 	}
 
 	private static void runDependentInstanceTasks(
 	 Class<?> host, List<Object> targets, BoundInstanceTask[] tasks,
-	 Set<String> failedFields, Set<String> skippedFields, Map<String, String> failureReasons) {
+	 Set<String> failedFields, Set<String> skippedFields, Map<String, String> failureReasons,
+	 Set<String> staticFailures) {
+
+		InstanceFailureBudget budget = new InstanceFailureBudget();
+
 		for (Object target : targets) {
+			// §5.2：依赖跳过必须<b>按实例</b>隔离。
+			// 旧实现让所有实例共享 failed/skipped：某个实例的 X 失败后，
+			// 其余实例的依赖字段 Y 全被跳过 —— 尽管它们的 X 是成功的，
+			// 同一轮内状态因此是分裂的。这里每个 target 一份局部集合。
+			//
+			// 局部集合只继承<b>静态侧</b>的失败（staticFailures）：静态字段全局唯一，
+			// 它失败时每个实例的下游都该跳过；而实例侧的失败只影响出错的那个实例。
+			Set<String> localFailed  = new LinkedHashSet<>(staticFailures);
+			Set<String> localSkipped = new LinkedHashSet<>();
+
 			for (BoundInstanceTask task : tasks) {
+				// 熔断：该字段在本轮已连续失败多次，不再对后续实例重试。
+				if (budget.exhausted(task.fieldName())) {
+					localSkipped.add(task.fieldName());
+					budget.recordGiveUp(task.fieldName(), skippedFields, failureReasons);
+					continue;
+				}
+
 				Set<String> dependencies = task.dependencies();
 				if (!dependencies.isEmpty()
-				    && (!Collections.disjoint(dependencies, failedFields)
-				        || !Collections.disjoint(dependencies, skippedFields))) {
+				    && (!Collections.disjoint(dependencies, localFailed)
+				        || !Collections.disjoint(dependencies, localSkipped))) {
+					// 全局只做计数与记账；告警不按实例刷屏。
+					localSkipped.add(task.fieldName());
 					if (skippedFields.add(task.fieldName())) {
 						failureReasons.putIfAbsent(task.fieldName(), "dependency failed: "
-						                                             + intersection(dependencies, failedFields, skippedFields));
+						                                             + intersection(dependencies, localFailed, localSkipped));
 						HotSwapAgent.warn("Skipping field init for " + host.getName() + "."
 						                  + task.fieldName() + " because a dependency failed");
 					}
@@ -2543,6 +2625,8 @@ public class InitFix {
 				} catch (LinkageError le) {
 					throw le;
 				} catch (Throwable t) {
+					localFailed.add(task.fieldName());
+					budget.recordFailure(task.fieldName());
 					recordTaskFailure(host, task.fieldName(), t, failedFields, failureReasons);
 				}
 			}

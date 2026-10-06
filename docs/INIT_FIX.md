@@ -20,6 +20,8 @@
 2. **`PENDING` 弱键无环缓存**：采用 `Collections.synchronizedMap(new WeakHashMap<Class<?>, PendingPatch>())`。`PendingPatch` **严禁持有 `Class<?>` 强引用**，仅持有字节码 `byte[]` 与弱引用实例快照；保留 5 分钟 TTL（`PENDING_TTL_NANOS`）超时清扫机制。`[已实现-Java基线]`
 3. **`PatchReport` 引用解耦**：报告仅存储类名字符串与不可变决策枚举，绝不持有宿主类或其 ClassLoader 引用，防止 Metaspace 泄漏。`[已实现-Java基线]`
 4. **`LinkageError` 断路熔断**：一旦补丁执行抛出 `LinkageError`，表明类元数据假设已被底层打破，系统立即熔断中止当前类的修补，防止 JVM 崩溃。`[已实现-Java基线]`
+   * **单字段链接失败是例外（已实现）**：`HotswapBridge.bootstrap` 把任何 `Throwable` 都包成 `BootstrapMethodError`（`LinkageError` 的子类），因此<b>一个字段</b>的 bridge 解析失败（如 `findField` 找不到字段）在驱动侧与"类结构被破坏"完全同形。一律熔断会让它中止<b>所有字段、所有实例</b>，与"每字段一个方法、失败隔离"的设计直接冲突。
+   * **判定依据是 cause 而非类型**：`BootstrapMethodError` 的 `getCause()` 实测两种情况都可能（我们自己的 `NoSuchFieldException`、或真正的 `NoSuchMethodError`）。因此只有"`BootstrapMethodError` 且 cause **不是** `LinkageError`"才视为可隔离；其余（含包装了 `LinkageError` 的 BME、以及所有其它 `LinkageError`）照旧熔断。判定取<b>窄</b> —— 把系统性故障误当可隔离会继续修补一个已不可信的类，代价高于过度中止。
 5. **重定义失败补偿（`afterRedefineFailed`）**：底层 Redefine 事务异常退出时，立即注销并弹出暂存的补丁。`[已实现-Java基线]`
 
 ---
@@ -237,7 +239,7 @@ public final class PatchDriver {
 >
 > **按实例隔离（已实现）**：每个 target 一份局部 `failed`/`skipped` 集合，只有"<b>本实例</b>上确实失败的字段"才会阻断本实例的下游。局部集合只继承<b>静态侧</b>的失败 —— 静态字段全局唯一，它失败时每个实例的下游都该跳过；实例侧失败则只影响出错的那个实例。全局 `failedFields`/`skippedFields` 仍是 `FieldLedger` 的输入（只做计数与记账，告警不按实例刷屏），因此没有字段会被遗忘。
 >
-> **`LinkageError` 熔断不受影响**：仍然上抛熔断（§1.2 不变量 4）。"按实例隔离"只隔离"某字段逻辑异常 → 依赖它的字段跳过"这条传播边，不隔离系统性故障。
+> **`LinkageError` 熔断不受影响**：仍然上抛熔断（§1.2 不变量 4）。"按实例隔离"只隔离"某字段逻辑异常 → 依赖它的字段跳过"这条传播边，不隔离系统性故障。**唯一的例外是单字段的 indy 链接失败**（`BootstrapMethodError` 且 cause 不是 `LinkageError`）—— 它只影响该字段，见 §1.2 不变量 4。
 >
 > **代价控制（已实现）**：按实例隔离后，确定性失败（切片本身必然抛异常）会让**每个实例都各自失败一遍**，日志与耗时放大为 N 倍。`InstanceFailureBudget` 给每个字段一份<b>本轮</b>失败配额（`MAX_INSTANCE_FAILURES_PER_FIELD = 8`），用满即对后续实例放弃该字段，并把原因记为 `field failed 8 times, giving up for this round`（覆盖首次失败时的原始异常文本，否则笼统的 `runtime failure` 会把它盖掉）。配额不跨轮累积 —— 下一轮重新给足，与台账"下一轮重新纳入候选"的语义一致。有回归断言：20 个实例全失败时，详细日志封顶 5 条、放弃原因可见、字段仍入台账。
 
@@ -434,7 +436,7 @@ public class Counter {
 | §1.1 `@HotswapReinit` 字段级存量覆写                 | ✅                                 | `nipx.annotation.HotswapReinit` + `KIND_FORCE` + T0/后续加工检查豁免 + 豁免时 warn                                                        |
 | §8 P2 `@HotswapInit`（T4）                           | ⬜                                 | —                                                                                                                                         |
 
-**回归测试**：`hstestInitFixOracle`（已挂 `check`）**29 个场景 / 186 条断言**，覆盖正向值比对（`InstanceTracker.register → transform → afterRedefine` 全公开 API）、负向阻断断言、逐字段驱动的失败隔离、静态依赖失败向实例字段的传播、失败跳过按实例隔离、确定性失败的熔断代价控制、TTL 清扫丢弃写回台账、成环后依赖方重判（静态环 + 实例环 + 跨组漏网 + 无环对照 + 收窄后独立字段放行）、float/double 条件 CAS 不覆盖已有值、条件 CAS 跳过有告警出口、`FieldLedger` 的两轮往返、T0 零值字段可被依赖（实例侧与静态侧）、以及拒绝告警出口（提取期与闭包期的 `REJECTED` 都必须发 warn）；`./gradlew check` 会跑。运行该任务需要 Mindustry 运行期依赖（`HotSwapAgent.initConfig` 会触碰 `arc.struct.Seq`），已作为 `hstestImplementation` 声明。
+**回归测试**：`hstestInitFixOracle`（已挂 `check`）**30 个场景 / 192 条断言**，覆盖正向值比对（`InstanceTracker.register → transform → afterRedefine` 全公开 API）、负向阻断断言、逐字段驱动的失败隔离、静态依赖失败向实例字段的传播、失败跳过按实例隔离、确定性失败的熔断代价控制、TTL 清扫丢弃写回台账、成环后依赖方重判（静态环 + 实例环 + 跨组漏网 + 无环对照 + 收窄后独立字段放行）、float/double 条件 CAS 不覆盖已有值、条件 CAS 跳过有告警出口、单字段链接失败被隔离、`FieldLedger` 的两轮往返、T0 零值字段可被依赖（实例侧与静态侧）、以及拒绝告警出口（提取期与闭包期的 `REJECTED` 都必须发 warn）；`./gradlew check` 会跑。运行该任务需要 Mindustry 运行期依赖（`HotSwapAgent.initConfig` 会触碰 `arc.struct.Seq`），已作为 `hstestImplementation` 声明。
 > 注：这是 InitFix oracle **自己**的计数。`hstestRun`（`suite.sh` 广域套件）另有一套独立基线（当前 通过=312 / 失败=0 / 已知=4），两者互不影响。
 
 > **实现注记：为什么三张内部表不用 `java.lang.ClassValue`**（`PENDING` / `REPORTS` / `LEDGER`）

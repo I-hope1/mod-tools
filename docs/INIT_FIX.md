@@ -224,13 +224,13 @@ public final class PatchDriver {
 }
 ```
 
-> **实现状态**：上例是**单实例**语义，`failedFields` 在每次 `applyToInstance` 调用里新建。实际实现（`InitFix.applyPatch` + `runDependentInstanceTasks`/`runIndependentInstanceTasks`）是**逐实例驱动**，而 `failedFields`/`skippedFields` 是**跨全部实例共享的一份全局集合**（与静态任务共用），**不是按实例隔离**。
+> **实现状态**：上例是**单实例**语义，`failedFields` 在每次 `applyToInstance` 调用里新建。实际实现（`InitFix.applyPatch` + `runDependentInstanceTasks`/`runIndependentInstanceTasks`）是**逐实例驱动**，依赖跳过**已按实例隔离**。
 >
-> 由此产生的行为：若第 3 个实例的字段 X 失败，第 4..N 个实例的依赖字段 Y 也会被跳过，尽管它们的 X 是成功的；而前 2 个实例的 Y 已经补过。同一轮内状态是分裂的。台账会在下一轮靠条件 CAS 自愈，**当前是开放缺口**。
+> **按实例隔离（已实现）**：每个 target 一份局部 `failed`/`skipped` 集合，只有"<b>本实例</b>上确实失败的字段"才会阻断本实例的下游。局部集合只继承<b>静态侧</b>的失败 —— 静态字段全局唯一，它失败时每个实例的下游都该跳过；实例侧失败则只影响出错的那个实例。全局 `failedFields`/`skippedFields` 仍是 `FieldLedger` 的输入（只做计数与记账，告警不按实例刷屏），因此没有字段会被遗忘。
 >
-> **`[未实现]` 修法与其代价**：把"依赖跳过"按实例隔离（每个 target 一份局部 failed 集合，全局只做计数）。注意代价 —— 若失败原因是确定性的（切片本身必然抛异常），按实例隔离会让**每个实例都各自失败一遍**，日志与耗时放大为 N 倍。因此建议同时给每个字段加**跨实例失败计数**，连续 K 次即熔断该字段。
+> **`LinkageError` 熔断不受影响**：仍然上抛熔断（§1.2 不变量 4）。"按实例隔离"只隔离"某字段逻辑异常 → 依赖它的字段跳过"这条传播边，不隔离系统性故障。
 >
-> **熔断不受影响**：`LinkageError` 仍然上抛熔断（§1.2 不变量 4），"按实例隔离"不改变这一点 —— 它只隔离"某字段逻辑异常 → 依赖它的字段跳过"这条传播边，不隔离系统性故障。
+> **代价控制（已实现）**：按实例隔离后，确定性失败（切片本身必然抛异常）会让**每个实例都各自失败一遍**，日志与耗时放大为 N 倍。`InstanceFailureBudget` 给每个字段一份<b>本轮</b>失败配额（`MAX_INSTANCE_FAILURES_PER_FIELD = 8`），用满即对后续实例放弃该字段，并把原因记为 `field failed 8 times, giving up for this round`（覆盖首次失败时的原始异常文本，否则笼统的 `runtime failure` 会把它盖掉）。配额不跨轮累积 —— 下一轮重新给足，与台账"下一轮重新纳入候选"的语义一致。有回归断言：20 个实例全失败时，详细日志封顶 5 条、放弃原因可见、字段仍入台账。
 
 ### 5.3 写入协议与合成字段自动过滤 `[已实现-Java基线]`
 * **条件 CAS 写入（`KIND_CONDITIONAL`）**：`HotswapBridge` 解析物理偏移量，仅在内存值为类型默认零值时写入。
@@ -420,7 +420,7 @@ public class Counter {
 | §1.1 `@HotswapReinit` 字段级存量覆写                 | ✅                                 | `nipx.annotation.HotswapReinit` + `KIND_FORCE` + T0/后续加工检查豁免 + 豁免时 warn                                                        |
 | §8 P2 `@HotswapInit`（T4）                           | ⬜                                 | —                                                                                                                                         |
 
-**回归测试**：`hstestInitFixOracle`（已挂 `check`）**20 个场景 / 134 条断言**，覆盖正向值比对（`InstanceTracker.register → transform → afterRedefine` 全公开 API）、负向阻断断言、逐字段驱动的失败隔离、静态依赖失败向实例字段的传播、`FieldLedger` 的两轮往返、T0 零值字段可被依赖（实例侧与静态侧）、以及拒绝告警出口（提取期与闭包期的 `REJECTED` 都必须发 warn）；`./gradlew check` 会跑。运行该任务需要 Mindustry 运行期依赖（`HotSwapAgent.initConfig` 会触碰 `arc.struct.Seq`），已作为 `hstestImplementation` 声明。
+**回归测试**：`hstestInitFixOracle`（已挂 `check`）**22 个场景 / 148 条断言**，覆盖正向值比对（`InstanceTracker.register → transform → afterRedefine` 全公开 API）、负向阻断断言、逐字段驱动的失败隔离、静态依赖失败向实例字段的传播、失败跳过按实例隔离、确定性失败的熔断代价控制、`FieldLedger` 的两轮往返、T0 零值字段可被依赖（实例侧与静态侧）、以及拒绝告警出口（提取期与闭包期的 `REJECTED` 都必须发 warn）；`./gradlew check` 会跑。运行该任务需要 Mindustry 运行期依赖（`HotSwapAgent.initConfig` 会触碰 `arc.struct.Seq`），已作为 `hstestImplementation` 声明。
 > 注：这是 InitFix oracle **自己**的计数。`hstestRun`（`suite.sh` 广域套件）另有一套独立基线（当前 通过=312 / 失败=0 / 已知=4），两者互不影响。
 
 > **实现注记：为什么三张内部表不用 `java.lang.ClassValue`**（`PENDING` / `REPORTS` / `LEDGER`）

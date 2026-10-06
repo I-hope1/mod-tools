@@ -4,6 +4,7 @@ import nipx.HotSwapAgent;
 import nipx.InstanceTracker;
 import nipx.Reflect;
 import nipx.ref.InitFix;
+import nipx.ref.HotswapBridge;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
@@ -123,6 +124,7 @@ public class InitFixOracle {
 		scenario("§3.5 成环拒绝收窄：与环无关的字段不应被连带拒绝", InitFixOracle::caseCycleRefusalIsNarrow);
 		scenario("§5.3 float/double 条件 CAS：已存在的值（含 -0.0f）不得被覆盖", InitFixOracle::caseFloatDoubleConditionalCas);
 		scenario("§5.3 条件 CAS 跳过必须有出口：不得静默丢弃 boolean 结果", InitFixOracle::caseConditionalSkipIsReported);
+		scenario("§1.2 单字段链接失败必须隔离：不得中止整轮补丁", InitFixOracle::caseLinkageFailureIsIsolated);
 		scenario("§4.1+§4.3 T0 零值字段可被依赖：读零值新增字段的切片必须放行", InitFixOracle::caseZeroValueDependency);
 		scenario("§4.1 静态同款：读零值静态字段的 <clinit> 切片必须放行", InitFixOracle::caseZeroValueStaticDependency);
 		scenario("§3.4 拒绝告警出口：提取期与闭包期的 REJECTED 都必须发 warn", InitFixOracle::caseRejectionWarnings);
@@ -1911,6 +1913,76 @@ public class InitFixOracle {
 		// 跳过不是失败：不得记入台账（下一轮不该重试一个"已解决"的字段）
 		check(!unpatched(fx.host).contains("clean"),
 			"CaseCas：条件跳过不得被当成失败记入台账（实际 " + unpatched(fx.host) + "）");
+	}
+
+	// ==================== 场景 16k：单字段链接失败不得中止整轮 ====================
+
+	/** V1：原始版本（只有 raw）。 */
+	static final String CASE_LNK_V1 = """
+		package oracle;
+		public class CaseLnk {
+			private final String raw;
+			public CaseLnk(String raw) { this.raw = raw; }
+			public String raw() { return raw; }
+		}
+		""";
+
+	/**
+	 * V2：<b>链接失败的字段排在前面</b>，正常字段排在后面。
+	 *
+	 * <p>声明顺序很重要：补丁按字段声明顺序逐字段执行。若失败字段排在后面，
+	 * 正常字段早已写完，即使"整轮中止"也看不出差别 —— 那样断言就没有鉴别力。
+	 * 让 {@code bad} 先执行，中止才会真的阻止 {@code good} 被补上。</p>
+	 */
+	static final String CASE_LNK_V2 = """
+		package oracle;
+		public class CaseLnk {
+			private final String raw;
+			private String bad;
+			private String good;
+			public CaseLnk(String raw) { this.raw = raw; this.bad = raw.trim(); this.good = raw.trim(); }
+			public String raw() { return raw; }
+			public String good() { return good; }
+			public String bad() { return bad; }
+		}
+		""";
+
+	static void caseLinkageFailureIsIsolated() throws Exception {
+		// 探针必须在 transform <b>之前</b>设好：indy 的 bootstrap 在补丁类被链接时执行，
+		// 也就是 transform 阶段（不是 applyPatch 阶段）。设晚了就完全不会命中。
+		HotswapBridge.setBootstrapFailureProbe("oracle.CaseLnk#bad");
+		try {
+			Fixture fx = loadFixture("oracle.CaseLnk", CASE_LNK_V1, CASE_LNK_V2);
+
+			Object subject = construct(fx.host, "  hi  ");
+			resetToDefault(fx.host, subject, "good", "Ljava/lang/String;");
+			resetToDefault(fx.host, subject, "bad", "Ljava/lang/String;");
+			InstanceTracker.register(subject);
+
+			InitFix.PatchReport report = fx.transform();
+			expect(report, false, "good", InitFix.FieldStatus.ACCEPTED, null);
+			expect(report, false, "bad", InitFix.FieldStatus.ACCEPTED, null);
+
+			fx.apply();
+
+			// 核心断言：good 必须照常补上 —— 一个字段的链接失败不得中止整轮
+			check("hi".equals(read(fx.host, subject, "good")),
+				"CaseLnk：同轮其它字段不受链接失败牵连（期望 'hi'，实际 "
+				+ describe(read(fx.host, subject, "good")) + "）");
+
+			// bad 自己没补上，且必须记入台账
+			check(read(fx.host, subject, "bad") == null,
+				"CaseLnk：链接失败的字段保持默认值（实际 "
+				+ describe(read(fx.host, subject, "bad")) + "）");
+			check(unpatched(fx.host).contains("bad"),
+				"CaseLnk：链接失败的字段记入 FieldLedger（实际 " + unpatched(fx.host) + "）");
+
+			// 成功字段不该被"整轮中止"连累着记账
+			check(!unpatched(fx.host).contains("good"),
+				"CaseLnk：成功字段不得被记入台账（实际 " + unpatched(fx.host) + "）");
+		} finally {
+			HotswapBridge.setBootstrapFailureProbe(null);
+		}
 	}
 
 	/** V1：原始版本（只有 raw）。 */

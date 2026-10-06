@@ -2850,7 +2850,9 @@ public class InitFix {
 				try {
 					task.handle().invokeExact(target);
 				} catch (LinkageError le) {
-					throw le;
+					if (!isolatableLinkFailure(le)) throw le;
+					recordTaskFailure(host, task.fieldName(), le, failedFields, failureReasons);
+					budget.recordFailure(task.fieldName());
 				} catch (Throwable t) {
 					recordTaskFailure(host, task.fieldName(), t, failedFields, failureReasons);
 					budget.recordFailure(task.fieldName());
@@ -2936,7 +2938,10 @@ public class InitFix {
 				try {
 					task.handle().invokeExact(target);
 				} catch (LinkageError le) {
-					throw le;
+					if (!isolatableLinkFailure(le)) throw le;
+					localFailed.add(task.fieldName());
+					budget.recordFailure(task.fieldName());
+					recordTaskFailure(host, task.fieldName(), le, failedFields, failureReasons);
 				} catch (Throwable t) {
 					localFailed.add(task.fieldName());
 					budget.recordFailure(task.fieldName());
@@ -2987,15 +2992,53 @@ public class InitFix {
 			try {
 				if (target == null) { mh.invokeExact(); } else mh.invokeExact(target);
 			} catch (LinkageError le) {
-				throw le;   // §1.2 熔断：类元数据假设已被打破，继续修补没有意义
+				// §1.2 熔断只针对"JVM 元数据假设已被打破"的系统性故障。
+				// indy bootstrap 失败（BootstrapMethodError 包装了我们自己的解析失败）
+				// 是<b>单字段</b>的链接问题，不该中止整轮 —— 那与"每字段一个方法、
+				// 失败隔离"的设计目标直接冲突。
+				if (!isolatableLinkFailure(le)) throw le;
+				recordTaskFailure(host, task.fieldName(), le, failedFields, failureReasons);
 			} catch (Throwable t) {
 				recordTaskFailure(host, task.fieldName(), t, failedFields, failureReasons);
 			}
 		}
 	}
 
-	private static Set<String> intersection(Set<String> deps, Set<String> a, Set<String> b) {
-		Set<String> out = new LinkedHashSet<>();
+	/**
+	 * 判断一个 {@code LinkageError} 是否是<b>可隔离的单字段链接失败</b>，
+	 * 而不是"JVM 元数据假设已被打破"的系统性故障（后者必须熔断，§1.2 不变量 4）。
+	 *
+	 * <p>为什么需要区分：{@code HotswapBridge.bootstrap} 把任何 {@code Throwable} 都包成
+	 * {@code BootstrapMethodError}（{@code LinkageError} 的子类）。因此某个字段的
+	 * {@code findField} 解析失败，在驱动侧看起来与"类结构被破坏"一模一样 ——
+	 * 一律 {@code throw} 会让<b>一个字段</b>的链接问题中止所有字段、所有实例，
+	 * 与"每字段一个方法、失败隔离"的设计目标直接冲突。</p>
+	 *
+	 * <p><b>判定依据是"异常来源"而非异常类型</b>：{@code BootstrapMethodError} 既能包装
+	 * 我们自己的解析失败（{@code NoSuchFieldException} 等），也能包装真正的
+	 * {@code LinkageError}（实测 `getCause()` 两种情况都可能）。因此：</p>
+	 * <ul>
+	 *   <li>{@code BootstrapMethodError} 且 cause 是<b>非</b> {@code LinkageError}
+	 *       → 我们自己 bootstrap 阶段的解析失败，只影响该字段 → 可隔离。</li>
+	 *   <li>{@code BootstrapMethodError} 且 cause <b>是</b> {@code LinkageError}
+	 *       → 真正的元数据问题被透传上来 → 熔断。</li>
+	 *   <li>其它 {@code LinkageError}（{@code NoSuchFieldError}、{@code VerifyError}、
+	 *       {@code IncompatibleClassChangeError} …）→ 熔断。</li>
+	 * </ul>
+	 *
+	 * <p>误判代价不对称：把系统性故障当可隔离，会继续修补一个已经不可信的类
+	 * （危险）；把可隔离失败当系统性故障，只是回到旧行为（保守但过度中止）。
+	 * 因此判定取<b>窄</b>。</p>
+	 */
+	private static boolean isolatableLinkFailure(LinkageError le) {
+		if (!(le instanceof BootstrapMethodError)) return false;
+		Throwable cause = le.getCause();
+		if (cause == null) return false;
+		// cause 本身就是 LinkageError → 真正的元数据问题，必须熔断
+		return !(cause instanceof LinkageError);
+	}
+
+	private static Set<String> intersection(Set<String> deps, Set<String> a, Set<String> b) {		Set<String> out = new LinkedHashSet<>();
 		for (String d : deps) {
 			if (a.contains(d) || b.contains(d)) out.add(d);
 		}

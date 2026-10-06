@@ -146,6 +146,27 @@ public final class HotswapBridge {
 	}
 
 	/**
+	 * 测试探针：命中的 {@code "owner#field"} 在<b>链接期</b>强制失败，用于模拟
+	 * indy bootstrap 抛 {@code BootstrapMethodError}（例如 {@code findField} 解析失败）。
+	 * 生产环境恒为 {@code null}。
+	 */
+	private static volatile String bootstrapFailureProbe;
+
+	/** 测试/诊断用：设置链接失败探针（{@code "owner.Class#field"}）；传 null 清除。 */
+	public static void setBootstrapFailureProbe(String ownerHashField) {
+		bootstrapFailureProbe = ownerHashField;
+	}
+
+	private static void checkProbe(Class<?> owner, String fieldName)
+	 throws NoSuchFieldException {
+		String probe = bootstrapFailureProbe;
+		if (probe != null && probe.equals(owner.getName() + "#" + fieldName)) {
+			throw new NoSuchFieldException("probe: forced link failure for "
+			                               + owner.getName() + "." + fieldName);
+		}
+	}
+
+	/**
 	 * 读取并清零全部条件 CAS 统计（补丁结束时调用一次）。
 	 *
 	 * @return {@code "owner#field"} -> {@code [written, skipped]}；无数据时返回空 Map。
@@ -459,6 +480,7 @@ public final class HotswapBridge {
 			throw new IllegalStateException("no putter for " + valType);
 		}
 
+		checkProbe(owner, fieldName);
 		Field field = findField(owner, fieldName, Type.getDescriptor(valType));
 		long offset = isStatic
 		 ? UNSAFE.staticFieldOffset(field)

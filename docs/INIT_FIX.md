@@ -246,6 +246,8 @@ public final class PatchDriver {
   * **float/double 统一走 raw bits（已实现）**：不用 `compareAndSetFloat/Double`，而是 `compareAndSetInt/Long` + `floatToRawIntBits`/`doubleToRawLongBits`（经 `filterArguments` 适配签名）。原因是**按名字探测会随 JDK 分叉**：`jdk.internal.misc.Unsafe` 有 `compareAndSetFloat/Double`（实测 25.0.2 present），而 JDK 8 的 `sun.misc.Unsafe` 没有、且无内部 Unsafe（实测 1.8.0_332 absent），于是同一补丁在 JDK 8 退化成 `putFloatVolatile` **无条件写**，会覆盖其他线程已写入的值 —— 与本类"保守方向"相反，且是静默的语义差异。`compareAndSwapInt/Long` 在所有目标 JDK 上都存在，一条路径通吃。
   * **与 T0 口径一致**：比较的是**位模式**，因此 `-0.0f`（位模式 `0x80000000`）与各类 NaN 都算"字段已有值"而跳过，真正的 `0.0f`/`0.0d` 默认值才会被写 —— 与 §4.1 T0 的按位判零完全对齐。
   * **测试局限（务必知悉）**：本仓库的 oracle 跑在 JDK 25 上，而那里 `compareAndSetFloat` 本来就存在且行为正确，因此**新断言无法区分两种实现**（旧实现同样通过）。该修复的验证方式是**在真实 JDK 8 上直接跑 raw-bits 句柄**：`-0.0f`/`9.0d` 被保留、`0.0f`/`0.0d` 被写入，而旧的回退实现会把四个值全部覆盖。
+  * **跳过必须被报告（已实现）**：条件写模板现在**保留 CAS 的 boolean 结果**（此前被 `asType(changeReturnType(void.class))` 丢弃，"字段已被别人写过所以补丁没生效"与"补丁生效"在驱动侧无法区分 —— 跳过是**静默**的）。调用点用 `filterReturnValue` 接一个计数器（键 `owner#field`，`[written, skipped]`），`InitFix.applyPatch` 结束后 drain 并汇总。
+  * **跳过不是失败**：字段因已有值而跳过属于条件写的**设计内**保守行为，因此**不进台账、不参与失败告警**（它不是待补，是已解决）。首轮报 `warn`；台账重试轮降为 `info` —— 重试轮的跳过多半来自上一轮已补过的实例，报成 warn 会误导。无 CAS 语义的无条件回退（子字模拟、volatile put）统一返回 `true`，不产生跳过计数。
 * **强制写入（`KIND_FORCE`，`@HotswapReinit(mode = OVERWRITE)`）**：无条件 volatile 写。必须经 `Unsafe` 而不是 `putfield` —— `final` 字段只允许在声明类的构造器里赋值，而补丁是宿主的 hidden nestmate，直接 `putfield` 会在链接期抛 `IllegalAccessError`。
 * **合成标记字段过滤契约**：`ClassDiffUtil` 层统一过滤携带 `ACC_SYNTHETIC` 与 `$nipx$` 前缀的标记字段（如 `forceStaticLambdas` 生成的 `$nipx$lambdasForced`），防止与业务新增字段混淆。
 * **每字段独立静态方法（§5.1）已实现**：每个放行字段生成 `init$F(LHost;)V` /
@@ -432,7 +434,7 @@ public class Counter {
 | §1.1 `@HotswapReinit` 字段级存量覆写                 | ✅                                 | `nipx.annotation.HotswapReinit` + `KIND_FORCE` + T0/后续加工检查豁免 + 豁免时 warn                                                        |
 | §8 P2 `@HotswapInit`（T4）                           | ⬜                                 | —                                                                                                                                         |
 
-**回归测试**：`hstestInitFixOracle`（已挂 `check`）**28 个场景 / 181 条断言**，覆盖正向值比对（`InstanceTracker.register → transform → afterRedefine` 全公开 API）、负向阻断断言、逐字段驱动的失败隔离、静态依赖失败向实例字段的传播、失败跳过按实例隔离、确定性失败的熔断代价控制、TTL 清扫丢弃写回台账、成环后依赖方重判（静态环 + 实例环 + 跨组漏网 + 无环对照 + 收窄后独立字段放行）、float/double 条件 CAS 不覆盖已有值、`FieldLedger` 的两轮往返、T0 零值字段可被依赖（实例侧与静态侧）、以及拒绝告警出口（提取期与闭包期的 `REJECTED` 都必须发 warn）；`./gradlew check` 会跑。运行该任务需要 Mindustry 运行期依赖（`HotSwapAgent.initConfig` 会触碰 `arc.struct.Seq`），已作为 `hstestImplementation` 声明。
+**回归测试**：`hstestInitFixOracle`（已挂 `check`）**29 个场景 / 186 条断言**，覆盖正向值比对（`InstanceTracker.register → transform → afterRedefine` 全公开 API）、负向阻断断言、逐字段驱动的失败隔离、静态依赖失败向实例字段的传播、失败跳过按实例隔离、确定性失败的熔断代价控制、TTL 清扫丢弃写回台账、成环后依赖方重判（静态环 + 实例环 + 跨组漏网 + 无环对照 + 收窄后独立字段放行）、float/double 条件 CAS 不覆盖已有值、条件 CAS 跳过有告警出口、`FieldLedger` 的两轮往返、T0 零值字段可被依赖（实例侧与静态侧）、以及拒绝告警出口（提取期与闭包期的 `REJECTED` 都必须发 warn）；`./gradlew check` 会跑。运行该任务需要 Mindustry 运行期依赖（`HotSwapAgent.initConfig` 会触碰 `arc.struct.Seq`），已作为 `hstestImplementation` 声明。
 > 注：这是 InitFix oracle **自己**的计数。`hstestRun`（`suite.sh` 广域套件）另有一套独立基线（当前 通过=312 / 失败=0 / 已知=4），两者互不影响。
 
 > **实现注记：为什么三张内部表不用 `java.lang.ClassValue`**（`PENDING` / `REPORTS` / `LEDGER`）

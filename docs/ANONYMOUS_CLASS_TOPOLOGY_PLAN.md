@@ -632,8 +632,8 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 >
 > 因此本条现在可以按"**断言零静默错配 + 断言两种模式下的差异化行为**"来读，与 §4.3 的实现一致。
 
-### 7.2 风险登记簿与未决问题 (Risk Register & Open Questions) `[未实现]`
-* **风险 1：超长生命周期实例的字段布局差异** —— `[已做真机实测；门未实现]`
+### 7.2 风险登记簿与未决问题 (Risk Register & Open Questions) `[部分实现]`
+* **风险 1：超长生命周期实例的字段布局差异** —— `[已实现]`
   * *缓解（规格原意）*：若检测到匿名类的捕获字段数量或类型发生变更，在重定义时记录告警，提示实例内存迁移风险。
 
   > **✅ 真机实测结果（JBR 21.0.9 + `-XX:+AllowEnhancedClassRedefinition`）**
@@ -673,7 +673,11 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 
   > **实现注记（风险 1 —— 本文最被低估的一条）**
   >
-  > **现状**：代码中没有任何"前后捕获字段表不一致即告警"的检查。相关信号其实**已经被算出来了**：`ClassDiffUtil.ClassDiff.changedFields` 会记录字段增删（键是 `compositeHash(name, desc)`，所以**类型变更也会被识别为 `- 旧` + `+ 新`**），`structureChanged()` 也会因此为真 —— 但 `HotSwapAgent` 只拿它**打日志**（`STRUCTURAL CHANGE DETECTED!` / `[DCEVM] ... proceeding`），**不 gate 任何类的重定义，匿名类与具名类都不 gate**。也就是说：本系统目前**没有实例状态布局守卫**，"字段布局变了仍照常 redefine"这条路径对**所有**类都是敞开的，匿名类对齐只是其中一条触达路径。
+  > **现状（已实现，两处门）**：
+  > 1. **对齐器 Tier 4 门**（`AnonClassAligner.matchHierarchical`）—— 配对前用 `LayoutGate.check(oldFields, newFields)` 挡住匿名类**合成捕获字段**的增 / 改类型 / 改静态性；开关 `nipx.agent.anon_layout_gate`（`reject`/`warn`/`off`，默认 `reject`），只对有存活实例的旧类拒绝。回证据：`AnonClassReproTest` Scenario 27。
+  > 2. **重定义层门**（`HotSwapAgent.applyRedefineLayoutGate`，位置在宿主对齐之后、`applyRedefinitions` 之前）—— 用现成的 `ClassDiff.changedFields` 按字段名把 `+`/`-` 配对：纯新增放行（InitFix 初始化存活实例）；删除 / 同名改类型 / 改静态性则复用 §4.3 的宿主组拒绝通道（`dropHostGroup`）把「宿主 + 下属匿名类」整组移出本批，并撤销其对齐事务。开关 `nipx.agent.layout_gate`（同上三档，默认 `reject`）。它覆盖**具名类**，也覆盖匿名类里用户自己声明的非合成字段（合成捕获字段被 `ClassDiff` 过滤，由 1 承担）。回证据：`LayoutGateAssert` 第 10/11 节（后者用真实 `ClassDiffUtil.diff` 对接格式）。
+  >
+  > 早先版本此处写的是"代码中没有任何检查、`ClassDiff.changedFields` 只用于日志不 gate"——现已不成立。相关信号本就被算出来，只是此前没接到判决上。
   >
   > **为什么这比"配错名字"更危险**：配错的后果被 Tier 设计限制在"新增/孤儿"（老实例保持旧语义，只是陈旧）；而跨布局的原地重定义会让**老实例的字段值被新字节码以不同布局解释** —— 直接破坏"存活实例状态可被同样语义解释"这一核心不变量。前者是保守性损失，后者是状态损坏。
   >
@@ -740,8 +744,8 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 | §6.4 三个系统属性开关                                           | ✅                 | `nipx.agent.anon_align/anon_strict/anon_debug`（`nipx.anonAlign.*` 为兼容别名）；`strict` 由 Scenario 21 覆盖                                                                  |
 | §7.1-1/2/3 置换不变性 / 幂等 / 尾部追加                         | ✅                 | Scenario 19                                                                                                                                                                    |
 | §7.1-4 故障注入拒绝率                                           | ✅                 | "零静默错配"（Scenario 16/20）+ "两种模式差异化行为"（Scenario 21）                                                                                                            |
-| §7.2 风险 1 字段布局差异                                        | 🔶                 | **真机实测已做**（JBR 21 增强模式：8/8 接受，改类型/改静态性 = 旧值静默丢弃并置默认值；非增强模式 8/8 被 JVM 拒绝）；**分级门未实现**，判据已现成（见 §7.2 注记）              |
-| 实例状态布局守卫（全体类，非仅匿名类）                          | ⬜                 | `ClassDiff.changedFields` / `structureChanged()` 仍只用于日志，不 gate 重定义；但实测已确认判据充分（§7.2 注记），落地在事务/重定义层                                          |
+| §7.2 风险 1 字段布局差异                                        | ✅                 | **真机实测已做**（JBR 21 增强模式：8/8 接受，改类型/改静态性 = 旧值静默丢弃并置默认值；非增强模式 8/8 被 JVM 拒绝）；**分级门已实现**：对齐器 Tier 4 门（`LayoutGate.check`，合成捕获字段，Scenario 27）+ 重定义层门（`HotSwapAgent.applyRedefineLayoutGate`，`ClassDiff.changedFields`，具名类 + 非合成字段，`LayoutGateAssert` 第 10/11 节）              |
+| 实例状态布局守卫（全体类，非仅匿名类）                          | ✅                 | `HotSwapAgent.applyRedefineLayoutGate` 在 `applyRedefinitions` 之前用 `ClassDiff.changedFields` 判决：纯新增放行、删除/改类型/改静态性复用 `dropHostGroup` 整组移出本轮；开关 `nipx.agent.layout_gate`（`reject`/`warn`/`off`，默认 `reject`）                                          |
 | §7.2 未决问题 1 ECJ                                             | ⬜                 | 无样本                                                                                                                                                                         |
 
 ### 8.2 验收基线（回归门槛）
@@ -764,7 +768,7 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 4. ~~**决定 Tier 3 minDiff 策略**~~ 🔶 **部分缓解**：Tier 3 的 minDiff 仲裁已被**拓扑相等过滤**取代（见 §4.1 拓扑判据注记）。夹具 T 判对、夹具 M 与 L 拒绝（L 记 KNOWN）。**仍开放**：拓扑无信息的候选集与 2x2 同构原地改体只能拒绝 —— 根本修法仍是 ③ **Tier 1.5 相似度**。④ 曾评估的 carve-out（"仅在 minDiff 能给出完全匹配且序号单调时才允许仲裁"，可保住 L）**已否决**：它仍依赖物理序号，"删一个 + 插一个"这类两侧等量编辑会满足完全匹配却判错。
 5. ~~**`parseInfos` 改用直接父类节点做实例化点扫描**~~ ✅ **已完成**（level 1 复用 `hostNode`，嵌套层按需解析并缓存直接父类节点）。靶子经实测收窄为 javac 8 的 `lambda$null$N`（`lambda$work$0` 不触发）；修复前该形态下两侧 `outerMethod` 都停在 `"null"`、方法作用域判据被抹平，导致"方法顺序反转 + 两侧改体"时两条同构链**跨方法错配**。守卫断言已进 `check`：`AnonClassReproTest` Scenario 24（真实 javac 8，6 条）。附带确认 javac 8 的嵌套命名同样是 `$1$1`。
 6. ~~**把 INV-1 / INV-2 写进代码注释与测试**~~ ✅ **已完成**（§3.6）：`AnonClassReproTest` Scenario 25 用"只改子层 → 父层指纹必须不变"把 INV-1 变成受保护断言（若有人让 `AnonClassHasher` 恢复递归折入子哈希，此处立刻变红），并用字节码常量池扫描做 INV-2 架构守卫。
-7. **§7.2 风险 1 升级为实例状态布局安全门**（分级：纯加字段放行 + 日志；删字段 / 改类型 / 改静态性拒绝配对）。理由是它**不是边角路径而是默认路径**（见 §7.2 注记），且后果是"老实例状态被错布局解释"，比配错名字更重。建议这道门做在**事务/重定义层**（顺带覆盖具名类），对齐器只额外拒绝"用户没要求改字段却在背后发生的布局变化"。**建议先补真机实验**：在 `scratch/hstest/src/LiveDcevmTest.java` 的 JBR + `-XX:+AllowEnhancedClassRedefinition` 路径上跑一例"捕获变量类型变更后原地重定义"，看 JBR 是拒绝、复制旧值、还是静默错解释 —— 三种结果对应三种门。
+7. ~~**§7.2 风险 1 升级为实例状态布局安全门**~~ ✅ **已完成**（两处门：对齐器 Tier 4 门挡匿名类合成捕获字段 + 重定义层门 `applyRedefineLayoutGate` 用 `ClassDiff.changedFields` 挡全体类的删/改类型/改静态性，纯新增放行交给 InitFix）。真机实验（§7.2 的 8 组 JBR 21 实测）已确认判据充分，无需再补。开关 `nipx.agent.anon_layout_gate` / `nipx.agent.layout_gate` 保证出事可立刻回到旧行为。回证据：`AnonClassReproTest` Scenario 27、`LayoutGateAssert`。
 8. **§2.1 枚举 Switch 映射表排除 + §2.2 第 4 类保留名接入**（`align` 增 `Set<String> reserved` 参数）。两者都能写确定性的负向断言。
 9. **§3.1/§3.2 的规格收敛**：先把文档改成"主哈希 + 子类引用多重集（并列独立维度）"的目标形态，再考虑实现；**在给出能同时满足父哈希稳定与 AnonCase 同构可区分的判别式之前，不要动 `MethodFingerprinter` 的匿名类占位符**。同批应一并把 §3.1 包含特征第 2 条的"非合成字段"改成"含合成捕获字段"，因为它现在是安全信号而非噪声。
 10. **补三个自动化缺口**（都属已实现但未覆盖）：① `depth > 4` 的 strict 熔断（现在有探针夹具可复用，把 `DeepNestProbe` 的 depth ≥ 5 用例搬进 Scenario 21 即可）；② `[HOTSWAP-REJECT]` 与"宿主组整体移出本批"的端到端断言（需让 `processChanges` 可测，或把拒绝决策抽成可单测的纯函数）；③ **把"用了哪一层"纳入断言**（`stats.tier1Matches` 应等于嵌套层数）—— 现有 21 个场景只断言"映射对不对"，这正是 §3.1/§4.1 两个缺陷能长期潜伏的原因。

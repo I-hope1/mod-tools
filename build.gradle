@@ -253,6 +253,12 @@ static def sendGameCommand(int command) {
 	}
 }
 
+tasks.register('copyToMdt', Copy) {
+	from "$buildDir0/libs"
+	into "${MdtDataDir}/mods"
+	include "$archivesName-${version}.jar"
+	rename { oldName -> "$modName-${version}.jar" }
+}
 task playDesktop(type: Copy) {
 	dependsOn jar
 
@@ -273,12 +279,10 @@ task playDesktop(type: Copy) {
 		}
 	}
 
-
-	from "$buildDir0/libs"
-	into "${MdtDataDir}/mods"
-	include "$archivesName-${version}.jar"
-	rename { oldName -> "$modName-${version}.jar" }
+	finalizedBy copyToMdt
 }
+
+
 
 task playGame(type: JavaExec) {
 	dependsOn playDesktop

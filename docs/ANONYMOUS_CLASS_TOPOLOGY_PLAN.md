@@ -248,10 +248,10 @@ renameMap.put(n.name, candidate);
 >
 > **⚠️ 曾存在的缺口（javac 8 嵌套层）—— 已修复**：上面那条回退扫描原本走的是**宿主类**的 `ClassNode`，而嵌套匿名类的实例化点位于**它的直接父匿名类**里。探针 `DeepNestProbe` 的交替嵌套实验：
 >
-> | 类 | `EnclosingMethod` | 用宿主 `deep/Alt` 扫 | 用父类 `deep/Alt$1` 扫 |
-> |:---|:---|:---|:---|
-> | `Alt$1`（A0） | `Alt.run()V` | ✅ `run()V` | ✅ `run()V` |
-> | `Alt$1$1`（A1，在 A0 的 lambda 内） | `Alt$1.work()V` | ❌ `null` | ✅ `work()V` |
+> | 类                                  | `EnclosingMethod` | 用宿主 `deep/Alt` 扫 | 用父类 `deep/Alt$1` 扫 |
+> |:------------------------------------|:------------------|:---------------------|:-----------------------|
+> | `Alt$1`（A0）                       | `Alt.run()V`      | ✅ `run()V`          | ✅ `run()V`            |
+> | `Alt$1$1`（A1，在 A0 的 lambda 内） | `Alt$1.work()V`   | ❌ `null`            | ✅ `work()V`           |
 >
 > **触发条件被实测收窄到一个精确形态**：该扫描只在 `cn.outerMethod` 为空或归约成字面量 `"null"` 时才触发。`lambda$work$0`（lambda 直接写在方法体里）会被归约成 `"work"`，**不触发**；真正触发的是 javac 8 对"**lambda 套在 lambda 里**"生成的 `lambda$null$N` —— 而归约后两侧都变成字面量 `"null"`，于是**方法作用域这个判据被抹平**。
 >
@@ -330,14 +330,14 @@ V2:  L0-new → { A-new,  A0 → L1 }
 
 ✅ **已落成回归断言**（`AnonClassReproTest` Scenario 25，6 条，已挂 `check`）：
 
-| 断言 | 实测值 | 守的是什么 |
-|:---|:---|:---|
-| 只改**子**匿名类内容 → **父**匿名类指纹不变 | `8807ec5a2a420738` == `8807ec5a2a420738` | 若有人让 `AnonClassHasher` 递归折入子哈希，此处立刻变红 |
-| 负向对照：子匿名类自身内容确实变了 | `fe64bce7ac46e2f4` != `fd40bf6eeeeb6845` | 防止上一条**空过**（夹具没真改动） |
-| 正对照：改父类**自身**方法体 → 指纹必须变 | `8807ec5a...` != `5b4b6505...` | 防止指纹退化成常量 |
-| `LambdaAligner` 常量池不得出现 `nipx/AnonClassAligner` | 通过 | INV-2（架构守卫：扫字节码常量池，位置无关） |
-| `AnonClassAligner` 不得出现 `nipx/LambdaAligner` | 通过 | INV-2 |
-| 正对照：两者都只经 `nipx/AnonClassHasher` 取指纹 | 通过 | 钉住**允许**的依赖方向 |
+| 断言                                                   | 实测值                                   | 守的是什么                                              |
+|:-------------------------------------------------------|:-----------------------------------------|:--------------------------------------------------------|
+| 只改**子**匿名类内容 → **父**匿名类指纹不变            | `8807ec5a2a420738` == `8807ec5a2a420738` | 若有人让 `AnonClassHasher` 递归折入子哈希，此处立刻变红 |
+| 负向对照：子匿名类自身内容确实变了                     | `fe64bce7ac46e2f4` != `fd40bf6eeeeb6845` | 防止上一条**空过**（夹具没真改动）                      |
+| 正对照：改父类**自身**方法体 → 指纹必须变              | `8807ec5a...` != `5b4b6505...`           | 防止指纹退化成常量                                      |
+| `LambdaAligner` 常量池不得出现 `nipx/AnonClassAligner` | 通过                                     | INV-2（架构守卫：扫字节码常量池，位置无关）             |
+| `AnonClassAligner` 不得出现 `nipx/LambdaAligner`       | 通过                                     | INV-2                                                   |
+| 正对照：两者都只经 `nipx/AnonClassHasher` 取指纹       | 通过                                     | 钉住**允许**的依赖方向                                  |
 
 
 ---
@@ -388,11 +388,11 @@ V2:  L0-new → { A-new,  A0 → L1 }
 >
 > **爆炸半径（先用真实运行量出来再动手）**：用 `nipx.agent.debug=true` 跑仓库内全部会调用 `AnonClassAligner` 的入口（`AnonClassTest` / `AnonClassReproTest` / `DeepNestProbe`），分 tier 统计 `resolved by minDiff`：
 >
-> | tier | bi-unique（唯一候选，必须不变） | minDiff（多候选仲裁，改动面） |
-> |:---|:---|:---|
-> | Tier 1 | 126 | **0** |
-> | Tier 3 | 8 | **9** |
-> | Tier 4 | 6 | 本层不仲裁 |
+> | tier   | bi-unique（唯一候选，必须不变） | minDiff（多候选仲裁，改动面） |
+> |:-------|:--------------------------------|:------------------------------|
+> | Tier 1 | 126                             | **0**                         |
+> | Tier 3 | 8                               | **9**                         |
+> | Tier 4 | 6                               | 本层不仲裁                    |
 >
 > 9 次 Tier 3 命中的性质：**7 次是错配**（前插 + 改体；含"真 A0 被判孤儿"的一例），**2 次原本正确**（夹具 L：2×2 同构原地改体，恒等映射恰好语义正确），**零次"碰巧对"**；且**既有 Scenario 1–20 与 `AnonClassTest` 全部零命中**（既有语料只通过 Tier 3 的**唯一候选**路径碰过 Tier 3，如 Scenario 3）。Tier 1 为 0 次 → "Tier 1 的 minDiff 先不动"实测零代价。
 >
@@ -430,11 +430,11 @@ V2:  L0-new → { A-new,  A0 → L1 }
 >
 > **实测效果（三入口，`nipx.agent.debug=true`）**：
 >
-> | 夹具 | 形态 | 结果 |
-> |:---|:---|:---|
-> | **T** | V1 `A0{L1{A1}}` → V2 前插空壳 + `A0'{L1'{A1'}}` | **判对**：`Topo$2→Topo$1`（真 A0 继承旧身份）、`Topo$2$1→Topo$1$1`（§3.3 前缀跟随）、空壳拿未占用新号；**零孤儿**；`topology=1, T3=0` |
-> | **M** | V1 `X` → V2 `extra + X2`（皆无子节点） | **拒绝**：过滤后候选数 `2→2` 故不仲裁；两个新类都不占旧槽（`$1→$2, $2→$3`），旧 `$1` 成孤儿保留旧语义；`ambiguousPairs=1`；**`T4=0`（未被 Tier 4 绕过）** |
-> | **L** | 2×2 同构匿名类**原地改体**（拓扑全等） | **拒绝**（代价）：过滤后 `4→4`，两条编辑都不作用于存活实例。旧实现靠 minDiff 取恒等映射恰好正确 —— 这是**有意付出的保守代价**，以 `KNOWN` 条目钉在基线里 |
+> | 夹具  | 形态                                            | 结果                                                                                                                                                      |
+> |:------|:------------------------------------------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------|
+> | **T** | V1 `A0{L1{A1}}` → V2 前插空壳 + `A0'{L1'{A1'}}` | **判对**：`Topo$2→Topo$1`（真 A0 继承旧身份）、`Topo$2$1→Topo$1$1`（§3.3 前缀跟随）、空壳拿未占用新号；**零孤儿**；`topology=1, T3=0`                     |
+> | **M** | V1 `X` → V2 `extra + X2`（皆无子节点）          | **拒绝**：过滤后候选数 `2→2` 故不仲裁；两个新类都不占旧槽（`$1→$2, $2→$3`），旧 `$1` 成孤儿保留旧语义；`ambiguousPairs=1`；**`T4=0`（未被 Tier 4 绕过）** |
+> | **L** | 2×2 同构匿名类**原地改体**（拓扑全等）          | **拒绝**（代价）：过滤后 `4→4`，两条编辑都不作用于存活实例。旧实现靠 minDiff 取恒等映射恰好正确 —— 这是**有意付出的保守代价**，以 `KNOWN` 条目钉在基线里  |
 >
 > **分 tier 变化（改动前 → 改动后）**：Tier 3 minDiff **9 → 0**；Tier 3 bi-unique **8 → 8**（逐条日志完全一致，见 §8.2）；Tier 3 新增 `topology=5`；Tier 1 bi-unique 因新增夹具而 +5，既有配对未受影响。
 >
@@ -594,11 +594,11 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 
 > **实现注记（§6.4）**：三个开关已落地，但**属性名以代码库既有约定为主、规格拼写为别名**：
 >
-> | 规格拼写（§6.4） | 实现首选拼写 | 默认 | 语义 |
-> |:---|:---|:---|:---|
-> | `nipx.anonAlign.enabled` | `nipx.agent.anon_align` | `true` | 总开关。`false` 时**含匿名类的宿主整体拒绝**，而不是按类名照旧重定义（见 §4.3 关闭语义） |
-> | `nipx.anonAlign.strict` | `nipx.agent.anon_strict` | `false` | `true` 时 Tier 4 歧义（`stats.ambiguousPairs > 0`）与 `depth > 4` 都升级为宿主级拒绝 |
-> | `nipx.anonAlign.debug` | `nipx.agent.anon_debug` | `false` | 打印层级决策链（每层 old/new 计数、逐条 `matched`/`unmatched -> 新编号`、作用域收敛、最终 `renameMap`）；亦随全局 `nipx.agent.debug` 打开 |
+> | 规格拼写（§6.4）         | 实现首选拼写             | 默认    | 语义                                                                                                                                      |
+> |:-------------------------|:-------------------------|:--------|:------------------------------------------------------------------------------------------------------------------------------------------|
+> | `nipx.anonAlign.enabled` | `nipx.agent.anon_align`  | `true`  | 总开关。`false` 时**含匿名类的宿主整体拒绝**，而不是按类名照旧重定义（见 §4.3 关闭语义）                                                  |
+> | `nipx.anonAlign.strict`  | `nipx.agent.anon_strict` | `false` | `true` 时 Tier 4 歧义（`stats.ambiguousPairs > 0`）与 `depth > 4` 都升级为宿主级拒绝                                                      |
+> | `nipx.anonAlign.debug`   | `nipx.agent.anon_debug`  | `false` | 打印层级决策链（每层 old/new 计数、逐条 `matched`/`unmatched -> 新编号`、作用域收敛、最终 `renameMap`）；亦随全局 `nipx.agent.debug` 打开 |
 >
 > **为什么首选 `nipx.agent.*` 而不是规格的 `nipx.anonAlign.*`**：代码库中"流水线级开关"一律是 `nipx.agent.*`（共 10 个，其中最近的同类项就是控制 Lambda 对齐的 `nipx.agent.lambda_align`），而 §6.4 的拼写在写入本文时尚未实现。
 >
@@ -701,48 +701,48 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 
 ### 8.1 逐条状态
 
-| 规范条目                                           | 状态               | 落地位置 / 证据                                                                                           |
-|:---------------------------------------------------|:-------------------|:----------------------------------------------------------------------------------------------------------|
-| §1.1 受支持范围（javac 8/11/17/21）                | ✅                 | `suite.sh` 用 `HSTEST_JAVAC8/17/21` 三套 javac 编译夹具                                                   |
-| §1.1 受支持范围（ECJ）                             | ⬜                 | 无夹具（§7.2 未决问题 1）                                                                                 |
-| §1.2 类身份与实例状态保真不变量                    | ✅                 | 移除 Tier 5 + `orphanOldClasses` 保留 + 新类分配未占用编号                                                |
-| §1.3 `renameMap` 方向与 `ClassRemapper` 改写范围   | ✅                 | `AnonClassAligner.remapClass`（`ClassWriter(0)` + `SimpleRemapper`）                                      |
-| §2.1 Attribute-First Admission                     | 🔶                 | `isAnonymousClass` / `isAnonymousClassName`；**枚举 Switch 映射表排除缺失**、**未强制 `EnclosingMethod`** |
-| §2.2 全局保留名集合                                | 🔶                 | `takenTargetNames`；**第 3 类未显式加入、第 4 类（`pendingAlignedClasses`）完全未接入**                   |
-| §3 层级交错流水线                                  | 🔶                 | `alignCascading` 层级循环；Lambda 对齐在独立第二遍；`depth > 4` 非 strict 下只 warn                        |
-| §3.1 自身哈希（包含特征）                          | ✅                 | 未含访问标志（不影响匹配）；`#ANON_relId#` 为增强形式；合成捕获字段**有意计入**。**描述符定向屏蔽缺陷已修复**（嵌套匿名类全层恢复 Tier 1，Scenario 22 守卫），见 §3.1 注记 |
-| §3.1 排除项 1/2（调试元数据、lambda 名归一化）     | ✅                 | `SKIP_DEBUG`；`isSelfSynthetic` → `#SYNTHETIC_METHOD#`                                                    |
-| §3.1 排除项 3（`access$` → `#ACCESS_METHOD#`）     | ➖ 已偏离-有意保留 | 保名不改名策略，理由见 §3.1 注记                                                                          |
-| §3.1 排除项 4（剥离子匿名类 NEW / 子类引用多重集） | ➖ 已偏离-有意保留 | 内容哈希被折入指纹，理由与证据见 §3.1 注记                                                                |
-| §3.2 宿主粗粒度签名隔离                            | ➖ 已偏离-有意保留 | `#ANON_COARSE` 未实现且不应按字面实现，见 §3.2 注记                                                       |
-| §3.3 未匹配子类前缀派生                            | ✅                 | `alignCascading` 的 `level > 1` 分支；Scenario 18/19                                                      |
-| §3.4 调用链三要素比对 + 深度 32                    | ✅                 | `findCallerMethod`；Scenario 12/17                                                                        |
-| §3.5 非方法上下文宿主归类                          | 🔶                 | 靠 `outerMethod == null` 退化，无 `<initializer>`/`<clinit>`/`<init>` 三态。**回退扫描上下文已修**：改用直接父类节点（javac 8 `lambda$null$N` + 嵌套匿名类，Scenario 24 守卫） |
-| §3.6 Lambda/匿名类边界（INV-1 自描述指纹 / INV-2 禁止互相递归） | ✅         | INV-1/INV-2 均已落成回归断言（Scenario 25，含负向/正对照与常量池架构守卫）；lambda 侧仍是 1 层折叠（§3.1 排除项 4 的偏离）；见 §3.6 |
-| §3.6 提案的"异构拓扑树"                            | ➖ 不需要          | 实测 javac 中 lambda **不构成命名层级**（`Alt$1$1` 而非 `Alt$1$1$1`），匿名类包含树已由 `$` 前缀完全表达；无须合并两棵树（§3.6） |
-| §4.1 Tier 1 / 2 / 3 / 4                            | 🔶                 | `matchTier` + 双向唯一。**Tier 3 的 minDiff 已被拓扑相等过滤取代**（前插 + 改体不再错配）；Tier 1 的 minDiff 未动（实测 0 命中） |
-| §4.1 嵌套深度支持范围（§1.1 声明 depth ≤ 4）        | ➖ 声明无效        | `maxLevel > 4` 仅 warn；`AnonClassHasher.MAX_DEPTH` 为**不可达死代码**；探针实测 depth 8 逐层正确（§3 注记） |
-| §4.1 Tier 3 拓扑相等过滤（新增维度）              | ✅                 | `TopologySignature` + `applyTopologyFilter`；`topologyMatches` 独立计数；Scenario 26 守卫（T 判对 / M 拒绝且 T4 不绕过 / L 记 KNOWN） |
-| §4.1 夹具 L：2x2 同构原地改体                     | ➖ 有意代价        | 拓扑全等 -> 不仲裁 -> 拒绝配对；KNOWN 条目钉住（根治需 Tier 1.5） |
-| §4.1 Tier 1.5（相似度）                            | ⬜                 | 无相似度计算；`tier5Matches` 为死字段。**拓扑过滤只做“相等”：拓扑无信息的候选集（夹具 M）与 2x2 同构原地改体（夹具 L）仍只能拒绝 —— 根治仍需本行** |
-| §4.2 `sourceOrder` 多轮基线                        | ⬜                 | 无 `sourceOrder`；`diff` 用物理名序号                                                                     |
-| §4.3 拒绝通道（宿主组整体拒绝 + `[HOTSWAP-REJECT]`）| ✅                 | `AlignmentRejectedException` + `HotSwapAgent.rejectHostGroup`；Scenario 21                                |
-| §4.3-① Tier 4 平局拒绝                             | ✅                 | 非 strict：统计 `stats.ambiguousPairs` 后退化为新增/孤儿；strict：拒绝宿主组；Scenario 21                  |
-| §4.3-② `depth > 4` 熔断                            | 🔶                 | strict 下拒绝宿主组；非 strict 仍只 `warn`。**无独立回归夹具**（需 depth ≥ 5 真实样本）                     |
-| §4.3-③ 后置校验失败回滚                            | ✅                 | `validateRenameMap` 改抛 `AlignmentRejectedException`，与 ①②④⑤ 共用同一拒绝通道；Scenario 21               |
-| §6.1-1/3 Nest/InnerClasses 改写 + 加载期拦截       | ✅                 | Scenario 11                                                                                               |
-| §6.1-2 继承体系变更                                | ➖ 与现状相反      | `hierarchyChanged` 一律拒绝并要求重启                                                                     |
-| §6.2 事务生命周期 + 乐观预登记                     | ✅                 | `AlignmentTransaction` + 批量失败降级单类 + 事务组一致性校验                                              |
-| §6.2 全局独占重入锁                                | ⬜                 | 仅靠单监听线程 + 防抖                                                                                     |
-| §6.3-1 字节码摘要短路                              | ⬜                 | 未做（仍是全量指令解析）；已有 `SKIP_CODE` 等部分缓解                                                      |
-| §6.3-2 数量硬上限 `N <= 128`                       | ✅                 | `MAX_ANON_PER_HOST`，超过即走拒绝通道（有意不"降级为不重命名"）；Scenario 21                               |
-| §6.3-3 2000ms 软超时                               | ✅                 | `ALIGN_TIMEOUT_MS` + `parseInfos`/每层/`matchTier` 检查点；Scenario 21                                     |
-| §6.4 三个系统属性开关                              | ✅                 | `nipx.agent.anon_align/anon_strict/anon_debug`（`nipx.anonAlign.*` 为兼容别名）；`strict` 由 Scenario 21 覆盖 |
-| §7.1-1/2/3 置换不变性 / 幂等 / 尾部追加            | ✅                 | Scenario 19                                                                                               |
-| §7.1-4 故障注入拒绝率                              | ✅                 | "零静默错配"（Scenario 16/20）+ "两种模式差异化行为"（Scenario 21）                                        |
-| §7.2 风险 1 字段布局差异                     | 🔶                 | **真机实测已做**（JBR 21 增强模式：8/8 接受，改类型/改静态性 = 旧值静默丢弃并置默认值；非增强模式 8/8 被 JVM 拒绝）；**分级门未实现**，判据已现成（见 §7.2 注记） |
-| 实例状态布局守卫（全体类，非仅匿名类）             | ⬜                 | `ClassDiff.changedFields` / `structureChanged()` 仍只用于日志，不 gate 重定义；但实测已确认判据充分（§7.2 注记），落地在事务/重定义层 |
-| §7.2 未决问题 1 ECJ                                | ⬜                 | 无样本                                                                                                    |
+| 规范条目                                                        | 状态               | 落地位置 / 证据                                                                                                                                                                |
+|:----------------------------------------------------------------|:-------------------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| §1.1 受支持范围（javac 8/11/17/21）                             | ✅                 | `suite.sh` 用 `HSTEST_JAVAC8/17/21` 三套 javac 编译夹具                                                                                                                        |
+| §1.1 受支持范围（ECJ）                                          | ⬜                 | 无夹具（§7.2 未决问题 1）                                                                                                                                                      |
+| §1.2 类身份与实例状态保真不变量                                 | ✅                 | 移除 Tier 5 + `orphanOldClasses` 保留 + 新类分配未占用编号                                                                                                                     |
+| §1.3 `renameMap` 方向与 `ClassRemapper` 改写范围                | ✅                 | `AnonClassAligner.remapClass`（`ClassWriter(0)` + `SimpleRemapper`）                                                                                                           |
+| §2.1 Attribute-First Admission                                  | 🔶                 | `isAnonymousClass` / `isAnonymousClassName`；**枚举 Switch 映射表排除缺失**、**未强制 `EnclosingMethod`**                                                                      |
+| §2.2 全局保留名集合                                             | 🔶                 | `takenTargetNames`；**第 3 类未显式加入、第 4 类（`pendingAlignedClasses`）完全未接入**                                                                                        |
+| §3 层级交错流水线                                               | 🔶                 | `alignCascading` 层级循环；Lambda 对齐在独立第二遍；`depth > 4` 非 strict 下只 warn                                                                                            |
+| §3.1 自身哈希（包含特征）                                       | ✅                 | 未含访问标志（不影响匹配）；`#ANON_relId#` 为增强形式；合成捕获字段**有意计入**。**描述符定向屏蔽缺陷已修复**（嵌套匿名类全层恢复 Tier 1，Scenario 22 守卫），见 §3.1 注记     |
+| §3.1 排除项 1/2（调试元数据、lambda 名归一化）                  | ✅                 | `SKIP_DEBUG`；`isSelfSynthetic` → `#SYNTHETIC_METHOD#`                                                                                                                         |
+| §3.1 排除项 3（`access$` → `#ACCESS_METHOD#`）                  | ➖ 已偏离-有意保留 | 保名不改名策略，理由见 §3.1 注记                                                                                                                                               |
+| §3.1 排除项 4（剥离子匿名类 NEW / 子类引用多重集）              | ➖ 已偏离-有意保留 | 内容哈希被折入指纹，理由与证据见 §3.1 注记                                                                                                                                     |
+| §3.2 宿主粗粒度签名隔离                                         | ➖ 已偏离-有意保留 | `#ANON_COARSE` 未实现且不应按字面实现，见 §3.2 注记                                                                                                                            |
+| §3.3 未匹配子类前缀派生                                         | ✅                 | `alignCascading` 的 `level > 1` 分支；Scenario 18/19                                                                                                                           |
+| §3.4 调用链三要素比对 + 深度 32                                 | ✅                 | `findCallerMethod`；Scenario 12/17                                                                                                                                             |
+| §3.5 非方法上下文宿主归类                                       | 🔶                 | 靠 `outerMethod == null` 退化，无 `<initializer>`/`<clinit>`/`<init>` 三态。**回退扫描上下文已修**：改用直接父类节点（javac 8 `lambda$null$N` + 嵌套匿名类，Scenario 24 守卫） |
+| §3.6 Lambda/匿名类边界（INV-1 自描述指纹 / INV-2 禁止互相递归） | ✅                 | INV-1/INV-2 均已落成回归断言（Scenario 25，含负向/正对照与常量池架构守卫）；lambda 侧仍是 1 层折叠（§3.1 排除项 4 的偏离）；见 §3.6                                            |
+| §3.6 提案的"异构拓扑树"                                         | ➖ 不需要          | 实测 javac 中 lambda **不构成命名层级**（`Alt$1$1` 而非 `Alt$1$1$1`），匿名类包含树已由 `$` 前缀完全表达；无须合并两棵树（§3.6）                                               |
+| §4.1 Tier 1 / 2 / 3 / 4                                         | 🔶                 | `matchTier` + 双向唯一。**Tier 3 的 minDiff 已被拓扑相等过滤取代**（前插 + 改体不再错配）；Tier 1 的 minDiff 未动（实测 0 命中）                                               |
+| §4.1 嵌套深度支持范围（§1.1 声明 depth ≤ 4）                    | ➖ 声明无效        | `maxLevel > 4` 仅 warn；`AnonClassHasher.MAX_DEPTH` 为**不可达死代码**；探针实测 depth 8 逐层正确（§3 注记）                                                                   |
+| §4.1 Tier 3 拓扑相等过滤（新增维度）                            | ✅                 | `TopologySignature` + `applyTopologyFilter`；`topologyMatches` 独立计数；Scenario 26 守卫（T 判对 / M 拒绝且 T4 不绕过 / L 记 KNOWN）                                          |
+| §4.1 夹具 L：2x2 同构原地改体                                   | ➖ 有意代价        | 拓扑全等 -> 不仲裁 -> 拒绝配对；KNOWN 条目钉住（根治需 Tier 1.5）                                                                                                              |
+| §4.1 Tier 1.5（相似度）                                         | ⬜                 | 无相似度计算；`tier5Matches` 为死字段。**拓扑过滤只做“相等”：拓扑无信息的候选集（夹具 M）与 2x2 同构原地改体（夹具 L）仍只能拒绝 —— 根治仍需本行**                             |
+| §4.2 `sourceOrder` 多轮基线                                     | ⬜                 | 无 `sourceOrder`；`diff` 用物理名序号                                                                                                                                          |
+| §4.3 拒绝通道（宿主组整体拒绝 + `[HOTSWAP-REJECT]`）            | ✅                 | `AlignmentRejectedException` + `HotSwapAgent.rejectHostGroup`；Scenario 21                                                                                                     |
+| §4.3-① Tier 4 平局拒绝                                          | ✅                 | 非 strict：统计 `stats.ambiguousPairs` 后退化为新增/孤儿；strict：拒绝宿主组；Scenario 21                                                                                      |
+| §4.3-② `depth > 4` 熔断                                         | 🔶                 | strict 下拒绝宿主组；非 strict 仍只 `warn`。**无独立回归夹具**（需 depth ≥ 5 真实样本）                                                                                        |
+| §4.3-③ 后置校验失败回滚                                         | ✅                 | `validateRenameMap` 改抛 `AlignmentRejectedException`，与 ①②④⑤ 共用同一拒绝通道；Scenario 21                                                                                   |
+| §6.1-1/3 Nest/InnerClasses 改写 + 加载期拦截                    | ✅                 | Scenario 11                                                                                                                                                                    |
+| §6.1-2 继承体系变更                                             | ➖ 与现状相反      | `hierarchyChanged` 一律拒绝并要求重启                                                                                                                                          |
+| §6.2 事务生命周期 + 乐观预登记                                  | ✅                 | `AlignmentTransaction` + 批量失败降级单类 + 事务组一致性校验                                                                                                                   |
+| §6.2 全局独占重入锁                                             | ⬜                 | 仅靠单监听线程 + 防抖                                                                                                                                                          |
+| §6.3-1 字节码摘要短路                                           | ⬜                 | 未做（仍是全量指令解析）；已有 `SKIP_CODE` 等部分缓解                                                                                                                          |
+| §6.3-2 数量硬上限 `N <= 128`                                    | ✅                 | `MAX_ANON_PER_HOST`，超过即走拒绝通道（有意不"降级为不重命名"）；Scenario 21                                                                                                   |
+| §6.3-3 2000ms 软超时                                            | ✅                 | `ALIGN_TIMEOUT_MS` + `parseInfos`/每层/`matchTier` 检查点；Scenario 21                                                                                                         |
+| §6.4 三个系统属性开关                                           | ✅                 | `nipx.agent.anon_align/anon_strict/anon_debug`（`nipx.anonAlign.*` 为兼容别名）；`strict` 由 Scenario 21 覆盖                                                                  |
+| §7.1-1/2/3 置换不变性 / 幂等 / 尾部追加                         | ✅                 | Scenario 19                                                                                                                                                                    |
+| §7.1-4 故障注入拒绝率                                           | ✅                 | "零静默错配"（Scenario 16/20）+ "两种模式差异化行为"（Scenario 21）                                                                                                            |
+| §7.2 风险 1 字段布局差异                                        | 🔶                 | **真机实测已做**（JBR 21 增强模式：8/8 接受，改类型/改静态性 = 旧值静默丢弃并置默认值；非增强模式 8/8 被 JVM 拒绝）；**分级门未实现**，判据已现成（见 §7.2 注记）              |
+| 实例状态布局守卫（全体类，非仅匿名类）                          | ⬜                 | `ClassDiff.changedFields` / `structureChanged()` 仍只用于日志，不 gate 重定义；但实测已确认判据充分（§7.2 注记），落地在事务/重定义层                                          |
+| §7.2 未决问题 1 ECJ                                             | ⬜                 | 无样本                                                                                                                                                                         |
 
 ### 8.2 验收基线（回归门槛）
 

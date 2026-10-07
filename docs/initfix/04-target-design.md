@@ -56,13 +56,13 @@
 
 ## 6. 路线图
 
-| 阶段 | 内容 | 状态 |
-|:--|:--|:-:|
-| P0 | 参数不可变校验、黑名单/白名单效应防御、`unsafeReason` 透传与 `NOTHING_TO_PATCH`、合成字段过滤、差分 Oracle 流水线 | 已完成 |
-| P0.5 | 前置微验证（见下） | 未开始，是 P1 两阶段的门槛 |
-| P1 | 伴生类每字段独立方法 + `PatchDriver`（已完成）；`FieldLedger`（已完成）；两阶段协议与 `ABORT_ON_FATAL`（待 P0.5）；Analyzer 库化 | 进行中 |
-| P2 | 8 位效应掩码与局部逃逸分析（部分提前落地）；`@HotswapInit`（未做；`@HotswapReinit` 字段级覆写已提前落地）；字段组原子性（`ALL_OR_NOTHING`、`@FieldGroup`） | 部分 |
-| P3 | 构造器尾部插桩；伴生类 CAS 迁移到 JDK 21+ JEP 471 的 `VarHandle.compareAndSet` | 未开始 |
+| 阶段 | 内容                                                                                                                                                       |            状态            |
+|:-----|:-----------------------------------------------------------------------------------------------------------------------------------------------------------|:--------------------------:|
+| P0   | 参数不可变校验、黑名单/白名单效应防御、`unsafeReason` 透传与 `NOTHING_TO_PATCH`、合成字段过滤、差分 Oracle 流水线                                          |           已完成           |
+| P0.5 | 前置微验证（见下）                                                                                                                                         | 未开始，是 P1 两阶段的门槛 |
+| P1   | 伴生类每字段独立方法 + `PatchDriver`（已完成）；`FieldLedger`（已完成）；两阶段协议与 `ABORT_ON_FATAL`（待 P0.5）；Analyzer 库化                           |           进行中           |
+| P2   | 8 位效应掩码与局部逃逸分析（部分提前落地）；`@HotswapInit`（未做；`@HotswapReinit` 字段级覆写已提前落地）；字段组原子性（`ALL_OR_NOTHING`、`@FieldGroup`） |            部分            |
+| P3   | 构造器尾部插桩；伴生类 CAS 迁移到 JDK 21+ JEP 471 的 `VarHandle.compareAndSet`                                                                             |           未开始           |
 
 **P0.5 前置验证项**
 1. 在 JBR 17/21 上实测连续两次 Schema Redefine（阶段 A → 阶段 C）的可行性与 GC 停顿。

@@ -21,6 +21,7 @@ import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -28,7 +29,9 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -129,6 +132,15 @@ public class InitFixOracle {
 		scenario("§4.1 静态同款：读零值静态字段的 <clinit> 切片必须放行", InitFixOracle::caseZeroValueStaticDependency);
 		scenario("§3.4 拒绝告警出口：提取期与闭包期的 REJECTED 都必须发 warn", InitFixOracle::caseRejectionWarnings);
 		scenario("§3.4 FieldLedger：被拒字段记入台账，下一轮无新增字段时仍被重试", InitFixOracle::caseFieldLedger);
+		// ---- 单例形态（S5/S6/S8）：单例实例在 Redefine 前已存在，新增实例字段必须补到存量实例上 ----
+		scenario("单例 S5：Java enum 单例新增实例字段 Math.abs(-3) → 放行并补到已存在的 INSTANCE", InitFixOracle::caseEnumSingleton);
+		scenario("单例 S6：Java Holder 懒加载单例（已实例化）新增 String.concat 字段 → 放行", InitFixOracle::caseHolderSingleton);
+		scenario("单例 S8：Java 单例新增无参 toUpperCase() 字段（默认 Locale）→ 阻断并记台账", InitFixOracle::caseSingletonEnvDependentRejected);
+		scenario("单例 S1：Kotlin object 新增 val x: Int = 1 + 2（<clinit> 静态字段）→ 放行", InitFixOracle::caseKtObjectAddsInt);
+		scenario("单例 S2：Kotlin object 新增 val s = \"  a \".trim()（<clinit> 静态字段）→ 放行", InitFixOracle::caseKtObjectTrim);
+		scenario("单例 S3：Kotlin object 新增 val l by lazy { 42 }（Lazy 委托字段 + indy）→ ?", InitFixOracle::caseKtObjectLazy);
+		scenario("单例 S4：Kotlin object 新增 val a = 1 / val b = a + 1（依赖闭包 + 拓扑序）→ 放行", InitFixOracle::caseKtObjectDependency);
+		scenario("单例 S7：Kotlin object 新增 val t = System.currentTimeMillis() → 阻断并记台账", InitFixOracle::caseKtObjectNonDeterministic);
 
 		System.out.println();
 		System.out.println("通过 " + passed + " 条；失败 " + failed + " 条；合计 " + (passed + failed) + " 条");
@@ -2239,6 +2251,428 @@ public class InitFixOracle {
 			"CaseV 第 2 轮：成功后已出账（实际 " + InitFix.getUnpatchedFields(host) + "）");
 	}
 
+	// ==================== 单例形态 S5：Java enum 单例 ====================
+	//
+	// javap -c -p 结论（javac 25）：
+	//   新增字段 v 的初始化落在 <init>（`bipush -3; invokestatic Math.abs; putfield v:I`），
+	//   单例根 INSTANCE 的创建落在 <clinit>（`new; invokespecial <init>; putstatic INSTANCE`）。
+	//   即：<clinit> 只负责生产单例实例，字段初始化在实例构造器里。
+	// 预期：ACCEPTED —— Math.abs 不在黑名单/环境依赖重载内，切片是纯计算。
+
+	static final String CASE_E1_V1 = """
+		package oracle;
+		public enum CaseE1 { INSTANCE; }
+		""";
+
+	static final String CASE_E1_V2 = """
+		package oracle;
+		public enum CaseE1 { INSTANCE; int v = Math.abs(-3); }
+		""";
+
+	static void caseEnumSingleton() throws Exception {
+		Fixture fx = loadFixture("oracle.CaseE1", CASE_E1_V1, CASE_E1_V2);
+
+		// 控制组：枚举无法反射构造，所以用第二个 ClassLoader 加载同一份 v2 字节码，
+		// 让它的构造器亲自算出 v（这是"直接构造新类"的等价物）。
+		Class<?> controlHost = Class.forName(fx.dotName, true, new ByteLoader(Map.of(fx.dotName, fx.v2)));
+		Object control = read(controlHost, null, "INSTANCE");   // 已由 v2 构造器算出 v
+
+		// 被测：枚举的单例实例在类初始化时就已存在，属"存量实例"。
+		Object subject = read(fx.host, null, "INSTANCE");
+		resetToDefault(fx.host, subject, "v", "I");
+		InstanceTracker.register(subject);
+
+		InitFix.PatchReport report = fx.transform();
+		expect(report, false, "v", InitFix.FieldStatus.ACCEPTED, null);
+		check(report.patchGenerated(), "S5：确实生成了补丁（patchGenerated）");
+
+		fx.apply();
+
+		// 控制组来自另一个 ClassLoader，不能用 expectValue（Field.get 要求同一声明类）。
+		Object want = read(controlHost, control, "v");
+		Object got  = read(fx.host, subject, "v");
+		check(Objects.equals(want, got), "S5：补到 INSTANCE 的值 == 构造器值（构造器="
+		      + describe(want) + "，补丁=" + describe(got) + "）");
+	}
+
+	// ==================== 单例形态 S6：Java Holder 懒加载单例 ====================
+	//
+	// javap -c -p 结论（javac 25）：
+	//   新增字段 tag 的初始化落在 <init>（`ldc "ab"; ldc "cd"; invokevirtual String.concat; putfield tag`）；
+	//   单例根 Holder.INSTANCE 的创建落在 CaseE2$Holder 的 <clinit>（`new CaseE2; invokespecial <init>; putstatic INSTANCE`）。
+	// 预期：ACCEPTED —— String.concat 非环境依赖重载，常量接收者，无参数回溯。
+
+	static final String CASE_E2_V1 = """
+		package oracle;
+		public class CaseE2 {
+			private static final class Holder { private static final CaseE2 INSTANCE = new CaseE2(); }
+			public static CaseE2 instance() { return Holder.INSTANCE; }
+			private CaseE2() { }
+		}
+		""";
+
+	static final String CASE_E2_V2 = """
+		package oracle;
+		public class CaseE2 {
+			private static final class Holder { private static final CaseE2 INSTANCE = new CaseE2(); }
+			public static CaseE2 instance() { return Holder.INSTANCE; }
+			private String tag = "ab".concat("cd");
+			public String tag() { return tag; }
+			private CaseE2() { }
+		}
+		""";
+
+	static void caseHolderSingleton() throws Exception {
+		Fixture fx = loadFixture("oracle.CaseE2", CASE_E2_V1, CASE_E2_V2);
+
+		// 先触发 Holder 初始化，让单例实例"已存在"。
+		Object subject = fx.host.getMethod("instance").invoke(null);
+		resetToDefault(fx.host, subject, "tag", "Ljava/lang/String;");
+		InstanceTracker.register(subject);
+
+		// 控制组：直接 new 新类，构造器亲自算出 tag（同一个 ClassLoader，可用 expectValue）。
+		Object control = construct(fx.host);
+
+		InitFix.PatchReport report = fx.transform();
+		expect(report, false, "tag", InitFix.FieldStatus.ACCEPTED, null);
+		check(report.patchGenerated(), "S6：确实生成了补丁（patchGenerated）");
+
+		fx.apply();
+
+		expectValue(fx, subject, control, "tag");
+	}
+
+	// ==================== 单例形态 S8：Java 单例 + 环境依赖字段（负例） ====================
+	//
+	// javap -c -p 结论（javac 25）：
+	//   新增字段 tag 的初始化落在 <init>（`ldc "ab"; invokevirtual String.toUpperCase; putfield tag`）；
+	//   单例根 INSTANCE 的创建落在 <clinit>（`new CaseE3; invokespecial <init>; putstatic INSTANCE`）。
+	// 预期：REJECTED —— 无参 toUpperCase() 依赖默认 Locale，命中 bit 3 环境依赖重载，
+	//   拒绝文案应为 "environment-dependent call java/lang/String.toUpperCase()Ljava/lang/String;"。
+
+	static final String CASE_E3_V1 = """
+		package oracle;
+		public class CaseE3 {
+			private static final CaseE3 INSTANCE = new CaseE3();
+			public static CaseE3 instance() { return INSTANCE; }
+			private CaseE3() { }
+		}
+		""";
+
+	static final String CASE_E3_V2 = """
+		package oracle;
+		public class CaseE3 {
+			private static final CaseE3 INSTANCE = new CaseE3();
+			public static CaseE3 instance() { return INSTANCE; }
+			private String tag = "ab".toUpperCase();
+			public String tag() { return tag; }
+			private CaseE3() { }
+		}
+		""";
+
+	static void caseSingletonEnvDependentRejected() throws Exception {
+		Fixture fx = loadFixture("oracle.CaseE3", CASE_E3_V1, CASE_E3_V2);
+
+		// 单例实例在类初始化时就已存在（<clinit> 里 new 出来）。
+		Object subject = read(fx.host, null, "INSTANCE");
+		InstanceTracker.register(subject);
+
+		InitFix.PatchReport report = fx.transform();
+		expect(report, false, "tag", InitFix.FieldStatus.REJECTED, "environment-dependent");
+		check(!report.patchGenerated(), "S8：未生成任何补丁");
+		check(unpatched(fx.host).contains("tag"),
+			"S8：tag 已记入 FieldLedger（实际 " + InitFix.getUnpatchedFields(fx.host) + "）");
+	}
+
+	// ==================== 单例形态 S1：Kotlin object + 新增 val ====================
+	//
+	// 夹具来自**构建期** Kotlin 编译（source set ktfixV1 / ktfixV2，见 build.gradle），
+	// 目录经 -Dnipx.ktfix.v1 / -Dnipx.ktfix.v2 传入，绝不进 classpath。
+	//
+	// javap -c -p 结论（Kotlin 2.3.0，major 69 = jvmTarget 25）：
+	//   `object CaseKtObj { val x: Int = 1 + 2 }` 里新增的 x 被编成
+	//   `private static final int x`（ACC_STATIC），初始化落在 **<clinit>**：
+	//     new CaseKtObj; invokespecial <init>; putstatic INSTANCE;
+	//     iconst_3; putstatic x           ← 1+2 被 kotlinc 常量折叠成 3
+	//   即 object 的字段初始化不在 <init>，而在 <clinit>；且无 ConstantValue 属性
+	//   （不是 T1 的静态常量通道，仍是 <clinit> 里的代码）。
+	// 预期：静态字段 x = ACCEPTED（切片 iconst_3; putstatic 为纯计算）。
+
+	/** 构建期编译的 Kotlin 夹具：v1/v2 字节 + 各自独立的 ByteLoader 定义出的 Class。 */
+	static final class CompiledFixture {
+		final Fixture         fx;
+		final Class<?>        oldHost;   // v1 定义，仅供护栏比对
+		final Map<String, byte[]> v2;    // v2 全量字节，供再加载控制组
+
+		CompiledFixture(Fixture fx, Class<?> oldHost, Map<String, byte[]> v2) {
+			this.fx = fx;
+			this.oldHost = oldHost;
+			this.v2 = v2;
+		}
+	}
+
+	/**
+	 * 装载构建期编译的 Kotlin 夹具。
+	 * <p>v1/v2 是**同名同类**，所以只能按目录路径读字节、各自用一个独立 {@link ByteLoader}
+	 * 定义；任何一侧上了 classpath 都会互相遮蔽。缺目录/缺类时给明确报错，
+	 * 而不是等到 {@code NoClassDefFoundError}。</p>
+	 */
+	static CompiledFixture loadCompiledFixture(String dotName) {
+		Map<String, byte[]> v1 = readCompiledClasses(System.getProperty("nipx.ktfix.v1"), dotName);
+		Map<String, byte[]> v2 = readCompiledClasses(System.getProperty("nipx.ktfix.v2"), dotName);
+
+		byte[] b1 = v1.get(dotName);
+		byte[] b2 = v2.get(dotName);
+		if (b1 == null || b2 == null) {
+			throw new IllegalStateException("Kotlin 夹具主类缺失：" + dotName
+				+ "（v1=" + (b1 != null) + "，v2=" + (b2 != null) + "）");
+		}
+
+		Class<?> host;
+		Class<?> oldHost;
+		try {
+			oldHost = Class.forName(dotName, true, new ByteLoader(v1));
+			host = Class.forName(dotName, true, new ByteLoader(v2));
+		} catch (ClassNotFoundException e) {
+			throw new IllegalStateException("Kotlin 夹具加载失败：" + dotName, e);
+		}
+		HotSwapAgent.bytecodeCache.put(dotName, b2);
+		return new CompiledFixture(new Fixture(dotName, b1, b2, host), oldHost, v2);
+	}
+
+	/** 按名字读取目录（{@code pathSeparator} 分隔的多个目录）下的**全部** .class，含 $ 附属类。 */
+	static Map<String, byte[]> readCompiledClasses(String dirsPath, String dotName) {
+		if (dirsPath == null || dirsPath.isEmpty()) {
+			throw new IllegalStateException("缺少 Kotlin 夹具目录：系统属性 nipx.ktfix.* 未设置。"
+				+ "请通过 ./gradlew hstestInitFixOracle 运行，不要直接 java -cp 跑 oracle");
+		}
+		Map<String, byte[]> out = new LinkedHashMap<>();
+		for (String dir : dirsPath.split(java.util.regex.Pattern.quote(File.pathSeparator))) {
+			File root = new File(dir);
+			if (root.isDirectory()) collectClasses(root, root, out);
+		}
+		if (!out.containsKey(dotName)) {
+			throw new IllegalStateException("Kotlin 夹具未找到：" + dotName
+				+ "（已扫描 " + dirsPath + "，实际包含 " + out.keySet()
+				+ "）——请确认 compileKtfixV1Kotlin / compileKtfixV2Kotlin 已执行");
+		}
+		return out;
+	}
+
+	static void collectClasses(File root, File dir, Map<String, byte[]> out) {
+		File[] files = dir.listFiles();
+		if (files == null) return;
+		for (File f : files) {
+			if (f.isDirectory()) {
+				collectClasses(root, f, out);
+			} else if (f.getName().endsWith(".class")) {
+				String rel = root.toPath().relativize(f.toPath()).toString()
+					.replace(File.separatorChar, '/');
+				try {
+					out.put(rel.substring(0, rel.length() - 6).replace('/', '.'),
+						Files.readAllBytes(f.toPath()));
+				} catch (IOException e) {
+					throw new IllegalStateException("读取 Kotlin 夹具失败：" + f, e);
+				}
+			}
+		}
+	}
+
+	static void caseKtObjectAddsInt() throws Exception {
+		CompiledFixture cf = loadCompiledFixture("oracle.CaseKtObj");
+		Fixture fx = cf.fx;
+
+		// ---- 护栏 a：v1/v2 类字节不相等，且是两个不同的 Class 对象 ----
+		check(!Arrays.equals(fx.v1, fx.v2), "S1 护栏a：v1/v2 类字节不相等");
+		check(fx.host != cf.oldHost, "S1 护栏a：v1/v2 是两个不同的 Class 对象");
+
+		// ---- 护栏 b：Kotlin 夹具输出目录不得出现在 java.class.path ----
+		String cp = System.getProperty("java.class.path", "");
+		check(!cp.contains("ktfixV1") && !cp.contains("ktfixV2"),
+			"S1 护栏b：ktfix 输出目录不在 java.class.path");
+
+		// ---- 护栏 c：夹具类的定义加载器是我们的 ByteLoader，而非父加载器 ----
+		check(fx.host.getClassLoader() instanceof ByteLoader,
+			"S1 护栏c：v2 由 ByteLoader 定义（实际 " + fx.host.getClassLoader() + "）");
+		check(cf.oldHost.getClassLoader() instanceof ByteLoader,
+			"S1 护栏c：v1 由 ByteLoader 定义（实际 " + cf.oldHost.getClassLoader() + "）");
+		check(fx.host.getClassLoader() != cf.oldHost.getClassLoader(),
+			"S1 护栏c：v1/v2 来自不同的 ByteLoader 实例");
+
+		// 控制组：v2 再独立加载一次，让它的 <clinit> 亲自算出 x。
+		Class<?> controlHost = Class.forName(fx.dotName, true, new ByteLoader(cf.v2));
+
+		InitFix.PatchReport report = fx.transform();
+		expect(report, true, "x", InitFix.FieldStatus.ACCEPTED, null);
+		check(report.patchGenerated(), "S1：确实生成了补丁（patchGenerated）");
+
+		// 存量类里 x 早被 <clinit> 算成 3；不清零就分不出补丁有没有跑。
+		Field f = fx.host.getDeclaredField("x");
+		f.setAccessible(true);
+		Reflect.UNSAFE.putInt(fx.host, Reflect.UNSAFE.staticFieldOffset(f), 0);
+
+		fx.apply();
+
+		Field cfField = controlHost.getDeclaredField("x");
+		cfField.setAccessible(true);
+		int want = cfField.getInt(null);   // <clinit> 算出的值
+		int got  = f.getInt(null);         // 补丁写入的值
+		check(want == got, "S1：静态 x 补丁值 == <clinit> 算出的值（控制=" + want + "，补丁=" + got + "）");
+	}
+
+	// ==================== 单例形态 S2：Kotlin object + val s = "  a ".trim() ====================
+	//
+	// javap -c -p 结论（Kotlin 2.3.0，major 69）：
+	//   s 编成 `private static final java.lang.String s`（ACC_STATIC），初始化落在 **<clinit>**：
+	//     ldc "  a "; checkcast CharSequence;
+	//     invokestatic kotlin/text/StringsKt.trim(CharSequence)CharSequence;
+	//     invokevirtual java/lang/Object.toString()String; putstatic s
+	//   无附属类（单文件产物）。
+	// 预期：静态字段 s = ACCEPTED（StringsKt.trim 与 Object.toString 都未命中黑名单）。
+	// 实际：REJECTED —— 见方法内 EXPECTED-GAP 说明（identity-dependent dispatch）。
+
+	static void caseKtObjectTrim() throws Exception {
+		CompiledFixture cf = loadCompiledFixture("oracle.CaseKtTrim");
+		Fixture fx = cf.fx;
+		Class<?> controlHost = Class.forName(fx.dotName, true, new ByteLoader(cf.v2));
+
+		InitFix.PatchReport report = fx.transform();
+
+		// EXPECTED-GAP：预期 ACCEPTED（StringsKt.trim 不在黑名单），实际 REJECTED。
+		// 原因：切片尾部 `invokevirtual java/lang/Object.toString()Ljava/lang/String;`
+		// 被判为 identity-dependent dispatch —— 声明接收者类型是 Object/CharSequence，
+		// 真正执行哪个 toString 取决于运行时类型（这里是 kotlin/text/StringsKt.trim 的返回值）。
+		expect(report, true, "s", InitFix.FieldStatus.REJECTED,
+			"identity-dependent dispatch java/lang/Object.toString");
+		check(!report.patchGenerated(), "S2：未生成任何补丁");
+		check(unpatched(fx.host).contains("s"),
+			"S2：s 已记入 FieldLedger（实际 " + InitFix.getUnpatchedFields(fx.host) + "）");
+
+		// 被拒绝 ⇒ 不得有任何静默写入：s 必须还是本类 <clinit> 自己算出来的值。
+		Field f = fx.host.getDeclaredField("s");
+		f.setAccessible(true);
+		Field cfField = controlHost.getDeclaredField("s");
+		cfField.setAccessible(true);
+		check(Objects.equals(cfField.get(null), f.get(null)),
+			"S2：被拒绝后 s 保持 <clinit> 原值（控制=" + describe(cfField.get(null))
+				+ "，实际=" + describe(f.get(null)) + "）");
+	}
+
+	// ==================== 单例形态 S3：Kotlin object + val l by lazy { 42 } ====================
+	//
+	// javap -c -p 结论（Kotlin 2.3.0，major 69）：
+	//   委托字段 `private static final kotlin.Lazy l$delegate`（ACC_PRIVATE|STATIC|FINAL，
+	//   **非 ACC_SYNTHETIC**，所以不会被 ClassDiffUtil 的合成字段过滤掉；字段名带 $ 但无 $nipx$ 前缀）。
+	//   初始化落在 **<clinit>**：
+	//     invokedynamic #0:invoke:()Lkotlin/jvm/functions/Function0;   ← lambda 走 indy，非内部类
+	//     invokestatic kotlin/LazyKt.lazy(Function0)Lazy;
+	//     putstatic l$delegate
+	//   **无 $ 附属类**（v2 输出目录下只有 oracle/CaseKtLazy.class 一个文件）；
+	//   lambda 体是同类的私有静态方法 `l_delegate$lambda$0()I`，不是独立类。
+	//   取值走 `getL()`：getstatic l$delegate → Lazy.getValue() → Number.intValue()。
+	// 预期：静态字段 l$delegate = ACCEPTED（effectReason 只拦 MethodInsnNode/GETSTATIC，
+	//   InvokeDynamicInsnNode 落空；LazyKt.lazy 未命中黑名单）。
+
+	static void caseKtObjectLazy() throws Exception {
+		CompiledFixture cf = loadCompiledFixture("oracle.CaseKtLazy");
+		Fixture fx = cf.fx;
+		Class<?> controlHost = Class.forName(fx.dotName, true, new ByteLoader(cf.v2));
+
+		InitFix.PatchReport report = fx.transform();
+		expect(report, true, "l$delegate", InitFix.FieldStatus.ACCEPTED, null);
+		check(report.patchGenerated(), "S3：确实生成了补丁（patchGenerated）");
+
+		resetStaticToDefault(fx.host, "l$delegate", "Lkotlin/Lazy;");
+		fx.apply();
+
+		Field f = fx.host.getDeclaredField("l$delegate");
+		f.setAccessible(true);
+		Object got = f.get(null);
+		if (got == null) {
+			// 补丁没写进来：区分"根本没生成"和"生成了但运行期链接失败"。
+			check(false, "S3：l$delegate 仍为 null（台账=" + InitFix.getUnpatchedFields(fx.host)
+				+ "，patchGenerated=" + report.patchGenerated() + "）");
+			return;
+		}
+		check(true, "S3：l$delegate 已补成非 null（" + got.getClass().getName() + "）");
+
+		// 控制组：同一份 v2 字节的 <clinit> 亲自造出来的委托，取值必须一致。
+		Field cfField = controlHost.getDeclaredField("l$delegate");
+		cfField.setAccessible(true);
+		Object wantDelegate = cfField.get(null);
+		check(wantDelegate != null && wantDelegate.getClass() == got.getClass(),
+			"S3：委托实现类与 <clinit> 一致（控制=" + (wantDelegate == null ? "null" : wantDelegate.getClass().getName())
+				+ "，补丁=" + got.getClass().getName() + "）");
+
+		// 注意：getL() 是**实例**方法（object 的成员方法不是 static），接收者是 INSTANCE。
+		Object gotInstance = read(fx.host, null, "INSTANCE");
+		Object wantInstance = read(controlHost, null, "INSTANCE");
+		Object lazyGot  = fx.host.getMethod("getL").invoke(gotInstance);
+		Object lazyWant = controlHost.getMethod("getL").invoke(wantInstance);
+		check(Objects.equals(lazyWant, lazyGot), "S3：getL() 补丁值 == <clinit> 值（控制="
+			+ describe(lazyWant) + "，补丁=" + describe(lazyGot) + "）");
+	}
+
+	// ==================== 单例形态 S4：Kotlin object + val a = 1 / val b = a + 1 ====================
+	//
+	// javap -c -p 结论（Kotlin 2.3.0，major 69）：
+	//   a、b 都是 `private static final int`（ACC_STATIC），初始化都在 **<clinit>**：
+	//     iconst_1; putstatic a;
+	//     getstatic INSTANCE; pop;                    ← object 的自引用，夹在中间
+	//     getstatic a; iconst_1; iadd; putstatic b    ← b 真的读 a（未被常量折叠）
+	//   即 b 依赖同一 <clinit> 里新增的静态字段 a，需要依赖闭包 + 类内拓扑序。
+	// 预期：a 与 b 均 ACCEPTED，且 a 必须先于 b 补。
+
+	static void caseKtObjectDependency() throws Exception {
+		CompiledFixture cf = loadCompiledFixture("oracle.CaseKtDep");
+		Fixture fx = cf.fx;
+		Class<?> controlHost = Class.forName(fx.dotName, true, new ByteLoader(cf.v2));
+
+		InitFix.PatchReport report = fx.transform();
+		expect(report, true, "a", InitFix.FieldStatus.ACCEPTED, null);
+		expect(report, true, "b", InitFix.FieldStatus.ACCEPTED, null);
+		check(report.patchGenerated(), "S4：确实生成了补丁（patchGenerated）");
+
+		resetStaticToDefault(fx.host, "a", "I");
+		resetStaticToDefault(fx.host, "b", "I");
+		fx.apply();
+
+		Field fa = fx.host.getDeclaredField("a");
+		Field fb = fx.host.getDeclaredField("b");
+		fa.setAccessible(true);
+		fb.setAccessible(true);
+		Field cfa = controlHost.getDeclaredField("a");
+		Field cfb = controlHost.getDeclaredField("b");
+		cfa.setAccessible(true);
+		cfb.setAccessible(true);
+
+		check(fa.getInt(null) == cfa.getInt(null), "S4：a 补丁值 == <clinit> 值（控制="
+			+ cfa.getInt(null) + "，补丁=" + fa.getInt(null) + "）");
+		check(fb.getInt(null) == cfb.getInt(null), "S4：b 补丁值 == <clinit> 值（控制="
+			+ cfb.getInt(null) + "，补丁=" + fb.getInt(null) + "）");
+		// 拓扑序的鉴别力：b = a + 1。若 b 先于 a 补，b 会算成 0 + 1 = 1。
+		check(fb.getInt(null) == 2,
+			"S4：b 必须在 a 之后补（否则 b=1，实际 " + fb.getInt(null) + "）");
+	}
+
+	// ==================== 单例形态 S7：Kotlin object + val t = System.currentTimeMillis() ====================
+	//
+	// javap -c -p 结论（Kotlin 2.3.0，major 69）：
+	//   t 编成 `private static final long t`（ACC_STATIC），初始化落在 **<clinit>**：
+	//     invokestatic java/lang/System.currentTimeMillis()J; putstatic t
+	// 预期：静态字段 t = REJECTED（bit 6 非确定性），原因应含 "non-deterministic"，且进台账。
+
+	static void caseKtObjectNonDeterministic() throws Exception {
+		CompiledFixture cf = loadCompiledFixture("oracle.CaseKtTime");
+		Fixture fx = cf.fx;
+
+		InitFix.PatchReport report = fx.transform();
+		expect(report, true, "t", InitFix.FieldStatus.REJECTED, "non-deterministic");
+		check(!report.patchGenerated(), "S7：未生成任何补丁");
+		check(unpatched(fx.host).contains("t"),
+			"S7：t 已记入 FieldLedger（实际 " + InitFix.getUnpatchedFields(fx.host) + "）");
+	}
+
 	static Set<String> unpatched(Class<?> host) {
 		Set<String> out = new LinkedHashSet<>();
 		for (InitFix.UnpatchedField u : InitFix.getUnpatchedFields(host)) out.add(u.fieldName());
@@ -2488,6 +2922,33 @@ public class InitFixOracle {
 				case "F" -> Reflect.UNSAFE.putFloat(target, off, 0.0f);
 				case "D" -> Reflect.UNSAFE.putDouble(target, off, 0.0d);
 				default -> throw new IllegalArgumentException("resetToDefault 不支持 " + desc);
+			}
+		} catch (NoSuchFieldException e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
+	/**
+	 * 静态字段版的 {@link #resetToDefault}：把新增静态字段清零，模拟"存量类里还是默认值"。
+	 * <p>静态字段没有实例基址，走 {@code staticFieldOffset} 并把 Class 当作基址。</p>
+	 */
+	@SuppressWarnings({"removal", "deprecation"})
+	static void resetStaticToDefault(Class<?> host, String field, String desc) {
+		try {
+			Field f = host.getDeclaredField(field);
+			long off = Reflect.UNSAFE.staticFieldOffset(f);
+			char c = desc.charAt(0);
+			if (c == 'L' || c == '[') {
+				Reflect.UNSAFE.putObject(host, off, null);
+				return;
+			}
+			switch (desc) {
+				case "I" -> Reflect.UNSAFE.putInt(host, off, 0);
+				case "J" -> Reflect.UNSAFE.putLong(host, off, 0L);
+				case "Z" -> Reflect.UNSAFE.putBoolean(host, off, false);
+				case "F" -> Reflect.UNSAFE.putFloat(host, off, 0.0f);
+				case "D" -> Reflect.UNSAFE.putDouble(host, off, 0.0d);
+				default -> throw new IllegalArgumentException("resetStaticToDefault 不支持 " + desc);
 			}
 		} catch (NoSuchFieldException e) {
 			throw new IllegalStateException(e);

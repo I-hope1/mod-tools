@@ -540,6 +540,16 @@ sourceSets {
 		java.srcDirs = ["scratch/hstest/src"]
 		compileClasspath += sourceSets.main.output + configurations.compileClasspath
 	}
+	// Kotlin 夹具（构建期编译，见 hstestInitFixOracle）。
+	// v1/v2 是**同名同类**，必须分属两个编译单元、各自独立输出目录；
+	// InitFixOracle 按目录路径读字节 + 独立 ByteLoader 定义类，
+	// 这两个输出目录**绝不能**出现在任何 classpath 上（否则同名类只会命中其一）。
+	ktfixV1 {
+		kotlin.srcDirs = ["scratch/hstest/ktfix/v1"]
+	}
+	ktfixV2 {
+		kotlin.srcDirs = ["scratch/hstest/ktfix/v2"]
+	}
 }
 
 
@@ -547,6 +557,10 @@ dependencies {
 	hstestImplementation project(":hotswap-agent")
 	hstestImplementation project(":jni-agent")
 	hstestImplementation "Anuken:Mindustry:$mindustryVersion"
+	// 新建 source set 的 classpath 为空，KGP 不会自动补 stdlib；夹具引用 kotlin.* 必须显式声明。
+	// 版本交由 KGP 的 kotlin-stdlib 约束解析（与 main 的 kotlin-stdlib-jdk8 同源）。
+	ktfixV1Implementation "org.jetbrains.kotlin:kotlin-stdlib"
+	ktfixV2Implementation "org.jetbrains.kotlin:kotlin-stdlib"
 }
 
 // javaLauncher 只管**运行**，不管编译：不设这一行，测试入口会被编成宿主 JDK 的
@@ -629,10 +643,19 @@ tasks.register("hstestInitFixOracle", JavaExec) {
 	dependsOn project(":jni-agent").tasks.named("jar")
 	classpath = sourceSets.hstest.runtimeClasspath
 	mainClass = "InitFixOracle"
+	// Kotlin 夹具：两个 source set 各自编 v1/v2，输出目录按路径（-D）传入 oracle。
+	// 注意：只传路径，不进 classpath —— 同名 v1/v2 上 classpath 会互相遮蔽。
+	dependsOn tasks.named("compileKtfixV1Kotlin")
+	dependsOn tasks.named("compileKtfixV2Kotlin")
+	systemProperty "nipx.ktfix.v1", sourceSets.ktfixV1.output.classesDirs.asPath
+	systemProperty "nipx.ktfix.v2", sourceSets.ktfixV2.output.classesDirs.asPath
 	// InitFix 直接引用 jdk.internal.misc.Unsafe（`Unsafe UNSAFE = Unsafe.getUnsafe()`），
 	// 因此运行期必须显式导出该包 —— 生产环境的 launcher 也是这么给的（见 .idea/compiler.xml
 	// 与游戏启动参数里的 --add-exports java.base/jdk.internal.misc=ALL-UNNAMED）。
 	jvmArgs("--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED")
+	// Force UTF-8 for the forked JVM so redirected stdout/stderr can be read as UTF-8
+	// (the oracle prints Chinese scenario names / assertion messages).
+	jvmArgs("-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8")
 }
 tasks.named("check") { dependsOn tasks.named("hstestInitFixOracle") }
 

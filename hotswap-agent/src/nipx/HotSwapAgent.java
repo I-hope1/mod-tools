@@ -1156,8 +1156,8 @@ public class HotSwapAgent {
 	 * <p>只检查<b>已加载</b>（有旧字节码、可能存在存活实例/静态状态）的类。未加载类没有旧状态可言，
 	 * 首次加载会走新构造器，放行不会让任何东西读到零值。</p>
 	 *
-	 * <p>纯函数 {@link LayoutGate#checkChangedFields} 负责规则，这里只负责"取旧字节 → 逐步 diff →
-	 * 拒绝并整组移出 + 撤销事务"的接线。{@code nipx.agent.layout_gate=off} 时整体跳过。</p>
+	 * <p>判决本身是纯函数 {@link #decideLayout}（给定旧/新字节、开关、批次类名集 → 动作 + 要移出的类）；
+	 * 这里只负责"取字节、执行动作、撤销事务"的接线。{@code nipx.agent.layout_gate=off} 时整体跳过。</p>
 	 */
 	private static void applyRedefineLayoutGate(Map<String, byte[]> newBatchBytes,
 	                                            Map<String, Path> classToPath,
@@ -1179,51 +1179,105 @@ public class HotSwapAgent {
 				oldBytes = fetchOriginalBytecode(targetClass);
 				if (oldBytes != null) bytecodeCache.put(className, oldBytes);
 			}
-			if (oldBytes == null) {
-				// 显式出口：取不到基线就不是"放行"，而是"没法判"。静默放行会重演
-				// "整轮静默失效"那类难排查的问题，所以必须说出来。
-				warn("[LAYOUT-SKIP] " + className + ": layout gate skipped — no baseline bytecode"
-				     + " to diff. Redefining without a field-layout check.");
+
+			LayoutDecision d = decideLayout(className, oldBytes, newBytes, LAYOUT_GATE,
+			                                newBatchBytes.keySet());
+
+			// 显式出口：取不到基线 / 无法 diff 就不是"放行"，而是"没法判"。
+			// 静默放行会重演"整轮静默失效"那类难排查的问题，所以必须说出来。
+			if (d.action() == LayoutAction.SKIP) {
+				warn("[LAYOUT-SKIP] " + className + ": layout gate skipped — no usable baseline"
+				     + " bytecode to diff. Redefining without a field-layout check.");
 				continue;
 			}
 
-			ClassDiffUtil.ClassDiff diff;
-			try {
-				diff = ClassDiffUtil.diff(oldBytes, newBytes);
-			} catch (Throwable t) {
-				warn("[LAYOUT-REJECT] Cannot diff " + className + " for the layout gate ("
-				     + t.getClass().getSimpleName() + "); skipping the gate for this class.");
+			if (d.action() == LayoutAction.REJECT) {
+				LAYOUT_GATE_REJECTED.incrementAndGet();
+				warn("[LAYOUT-REJECT] " + className + ": REFUSED redefine — field layout incompatible ("
+				     + d.layout().detail() + "). Host " + d.hostName() + " and its anonymous classes are"
+				     + " skipped this round; existing instances keep running the OLD code, so this edit will"
+				     + " NOT take effect for them until the class is recreated/restarted. Fix the field layout,"
+				     + " or set -Dnipx.agent.layout_gate=warn to force it.");
+				for (String dropped : d.dropped()) dropFromBatch(newBatchBytes, classToPath, dropped);
+				AlignmentTransaction tx = transactions.remove(d.hostName());
+				if (tx != null) tx.rollback(false);
+				rejectedHosts.add(d.hostName());
 				continue;
 			}
 
-			LayoutGate.Result res = LayoutGate.checkChangedFields(diff.changedFields);
-			if (res.compatible()) {
-				if (!diff.changedFields.isEmpty()) {
-					log("[LAYOUT-ALLOW] " + className + ": " + res.detail());
-				}
-				continue;
-			}
-
-			String hostName = hostNameOf(className);
-			if (LayoutGate.MODE_WARN.equals(LAYOUT_GATE)) {
+			// action == PASS：可能是"字段没变/纯新增"，也可能是 warn 模式下的强制放行。
+			if (d.layout() != null && !d.layout().compatible()) {
 				LAYOUT_GATE_REJECTED.incrementAndGet();
 				warn("[LAYOUT-WARN] " + className + ": incompatible field layout ("
-				     + res.detail() + "); redefining anyway because nipx.agent.layout_gate=warn."
+				     + d.layout().detail() + "); redefining anyway because nipx.agent.layout_gate=warn."
 				     + " Surviving instances may read 0 / misread old values until recreated.");
-				continue;
+			} else if (d.layout() != null && !d.layout().detail().equals("compatible")) {
+				log("[LAYOUT-ALLOW] " + className + ": " + d.layout().detail());
 			}
-
-			LAYOUT_GATE_REJECTED.incrementAndGet();
-			warn("[LAYOUT-REJECT] " + className + ": REFUSED redefine — field layout incompatible ("
-			     + res.detail() + "). Host " + hostName + " and its anonymous classes are skipped this"
-			     + " round; existing instances keep running the OLD code, so this edit will NOT take"
-			     + " effect for them until the class is recreated/restarted. Fix the field layout, or set"
-			     + " -Dnipx.agent.layout_gate=warn to force it.");
-			dropHostGroup(newBatchBytes, classToPath, hostName);
-			AlignmentTransaction tx = transactions.remove(hostName);
-			if (tx != null) tx.rollback(false);
-			rejectedHosts.add(hostName);
 		}
+	}
+
+	/** {@link #decideLayout} 的动作。 */
+	public enum LayoutAction {
+		/** 放行（含 warn 模式下的强制放行，与字段未变）。 */
+		PASS,
+		/** 拒绝并整组移出本批。 */
+		REJECT,
+		/** 无法判定（取不到基线 / diff 失败）—— 放行但必须告警，不得静默。 */
+		SKIP
+	}
+
+	/**
+	 * 布局门判决（纯函数，无副作用）。
+	 * @param action   PASS / REJECT / SKIP
+	 * @param layout   规则结果；{@code null} 表示 OFF 或无法判定（此时看 {@code action}）
+	 * @param hostName 由类名推出的宿主名（{@code Foo$1$2 -> Foo}）
+	 * @param dropped  仅 REJECT 时非空：宿主 + 其下属全部匿名类（取自批次类名集）
+	 */
+	public record LayoutDecision(LayoutAction action, LayoutGate.Result layout,
+	                             String hostName, Set<String> dropped) { }
+
+	/**
+	 * 纯函数：给定一个类的旧/新字节、开关模式与批次类名集，判定布局门动作。
+	 *
+	 * <p>"给定旧字节 / 新字节 / 开关，返回放行或拒绝的类集合"——把接线里最容易出错的部分
+	 * （diff 取哪个字节、拒绝要带哪些类、off/skip 出口）抽成可单测的纯逻辑。调用位置
+	 * （必须在 {@code applyRedefinitions} 之前）由 {@code applyRedefineLayoutGate} 的接线守卫。</p>
+	 *
+	 * <ul>
+	 *   <li>{@code OFF} → PASS，不解析字节。</li>
+	 *   <li>旧字节为 null / diff 抛异常 → SKIP（调用方负责告警）。</li>
+	 *   <li>字段兼容（含纯新增）→ PASS。</li>
+	 *   <li>不兼容 + {@code warn} → PASS，但 {@code layout} 非兼容（调用方强告警）。</li>
+	 *   <li>不兼容 + {@code reject}（默认）→ REJECT + {@code dropped} = 宿主 + 匿名子类。</li>
+	 * </ul>
+	 */
+	public static LayoutDecision decideLayout(String className, byte[] oldBytes, byte[] newBytes,
+	                                          String mode, Set<String> batchNames) {
+		String host = hostNameOf(className);
+		if (LayoutGate.MODE_OFF.equals(mode)) {
+			return new LayoutDecision(LayoutAction.PASS, null, host, Set.of());
+		}
+		if (oldBytes == null || newBytes == null) {
+			return new LayoutDecision(LayoutAction.SKIP, null, host, Set.of());
+		}
+		LayoutGate.Result res;
+		try {
+			res = LayoutGate.checkChangedFields(ClassDiffUtil.diff(oldBytes, newBytes).changedFields);
+		} catch (Throwable t) {
+			return new LayoutDecision(LayoutAction.SKIP, null, host, Set.of());
+		}
+		if (res.compatible() || LayoutGate.MODE_WARN.equals(mode)) {
+			return new LayoutDecision(LayoutAction.PASS, res, host, Set.of());
+		}
+		Set<String> dropped = new LinkedHashSet<>();
+		dropped.add(host);
+		if (batchNames != null) {
+			for (String n : batchNames) {
+				if (AnonClassAligner.isAnonymousClassName(host, n)) dropped.add(n);
+			}
+		}
+		return new LayoutDecision(LayoutAction.REJECT, res, host, dropped);
 	}
 
 	/**

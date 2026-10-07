@@ -121,13 +121,8 @@ step "XGroupTest (JDK8 夹具)"  run XGroupTest "fx/x8v1/test25/XGroup.class" "f
 step "XGroupTest (JDK21 夹具)" run XGroupTest "fx/x21v1/test25/XGroup.class" "fx/x21v2/test25/XGroup.class"
 step "NameIndexTest (三 JDK + 正反序)" run NameIndexTest
 step "FixtureATest (三 JDK + 正反序)" run FixtureATest
-step "SemAssert (15 夹具 / 40 条断言)" run SemAssert \
-  s2a/test16/Swap2Case.class s2b/test16/Swap2Case.class \
-  lf1/test17/LeafCase.class lf2/test17/LeafCase.class lf3/test17/LeafCase.class \
-  dp1/test18/DeepCase.class dp2/test18/DeepCase.class \
-  tw1/test19/TwoLevel.class tw2/test19/TwoLevel.class \
-  d21/test20/Deep2.class d22/test20/Deep2.class d23/test20/Deep2.class \
-  sv1/test21/Save3.class sv2/test21/Save3.class sv3/test21/Save3.class
+# SemAssert 的 8 个场景已迁到 JUnit（SemAssertTest / DirFx，见 build.gradle 的 hstestJunit）。
+# 这里不再跑它；s2a..sv3 夹具仍由 suite.sh 编译，仅供 SemAssertSelfCheck 等手工入口使用。
 step "PassBTest (验证 Pass B 计数器非零可达性)" run PassBTest
 step "CompeteDeleteTest (三层竞争夹具: 删 A 链 + B 叶子改捕获)" run CompeteDeleteTest
 step "AnonClassTest (匿名类内容哈希: 防止 Save/Delete 静默对调)" run AnonClassTest

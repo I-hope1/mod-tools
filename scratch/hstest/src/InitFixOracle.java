@@ -6,8 +6,12 @@ import nipx.Reflect;
 import nipx.ref.InitFix;
 import nipx.ref.HotswapBridge;
 import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
+import org.objectweb.asm.tree.InsnList;
+import org.objectweb.asm.tree.MethodInsnNode;
+import org.objectweb.asm.tree.analysis.Frame;
 
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
@@ -27,6 +31,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -144,6 +149,10 @@ public class InitFixOracle {
 		scenario("A+ accepted: Kotlin trimStart/trimEnd (constant receiver + whitelisted StringsKt producer)", InitFixOracle::caseKtStringOpsAccepted);
 		scenario("A+ accepted: chained \"  a \".trim().trimStart()", InitFixOracle::caseKtTrimChain);
 		scenario("A+ rejected: branch-merged receiver (field read in one arm's provenance)", InitFixOracle::caseKtTernaryMergeRejected);
+		scenario("A+ rejected: Kotlin instance-field receiver (closure has aload_0 + getfield)", InitFixOracle::caseKtInstFieldTrim);
+		scenario("A+ rejected: hashCode on a constant + whitelisted StringsKt chain", InitFixOracle::caseKtTrimHashRejected);
+		scenario("A+ shape pin: constant-only Object.toString closure rejected by rule 1", InitFixOracle::caseJConstObject);
+		scenario("A+ guard: allowedStringCoercion must fail closed when frames == null", InitFixOracle::caseFramesNullIsFailClosed);
 		scenario("A+ rejected: Kotlin Object.toString() without a constant whitelisted producer chain", InitFixOracle::caseKtStringOpsRejected);
 		scenario("A+ rejected: Java new Object()/field receiver/CharSequence field/hashCode/user method", InitFixOracle::caseJavaObjectToStringRejected);
 		scenario("A+ regression: Java \"  a \".trim() still accepted (no Object.toString coercion)", InitFixOracle::caseJavaTrimRegression);
@@ -2751,6 +2760,109 @@ public class InitFixOracle {
 		check(unpatched(fx.host).contains("s"),
 			"CaseKtTernary: s recorded in FieldLedger (actual "
 				+ InitFix.getUnpatchedFields(fx.host) + ")");
+	}
+
+	/**
+	 * M1 coverage: an instance-field receiver in a normal Kotlin class (not an object), so the
+	 * initializer lands in {@code <init>}. javap on v2 {@code <init>}:
+	 * <pre>
+	 *   aload_0; getfield f; checkcast CharSequence; invokestatic StringsKt.trim;
+	 *   invokevirtual java/lang/Object.toString; putfield s
+	 * </pre>
+	 * The receiver closure therefore contains {@code aload_0 + getfield}. GETFIELD is not an
+	 * inert producer, so the coercion must stay rejected.
+	 */
+	static void caseKtInstFieldTrim() throws Exception {
+		CompiledFixture cf = loadCompiledFixture("oracle.CaseKtInstFieldTrim");
+		Fixture fx = cf.fx;
+
+		InitFix.PatchReport report = fx.transform();
+		expect(report, false, "s", InitFix.FieldStatus.REJECTED,
+			"identity-dependent dispatch java/lang/Object.toString");
+		check(!report.patchGenerated(), "CaseKtInstFieldTrim: no patch generated");
+		check(unpatched(fx.host).contains("s"),
+			"CaseKtInstFieldTrim: s recorded in FieldLedger (actual "
+				+ InitFix.getUnpatchedFields(fx.host) + ")");
+	}
+
+	/**
+	 * M5 coverage: {@code hashCode} must stay blacklisted even when its provenance is a constant
+	 * plus a whitelisted StringsKt producer.
+	 *
+	 * <p>javap results for the three candidate spellings (owner of the hashCode call):</p>
+	 * <ul>
+	 *   <li>Kotlin {@code val h: Int = "  a ".trim().hashCode()} -> kotlinc inserts the String
+	 *       coercion first and the call is {@code java/lang/String.hashCode}: unusable, it never
+	 *       reaches the Object rule;</li>
+	 *   <li>Java {@code ((CharSequence) StringsKt.trim((CharSequence) "  a ")).hashCode()}
+	 *       -> javac emits {@code invokeinterface java/lang/CharSequence.hashCode}, owner
+	 *       {@code java/lang/CharSequence}: also unusable;</li>
+	 *   <li>Kotlin {@code (("  a " as CharSequence).trim()).hashCode()} -> owner is
+	 *       {@code java/lang/Object.hashCode}, which is what the fixture uses.</li>
+	 * </ul>
+	 */
+	static void caseKtTrimHashRejected() throws Exception {
+		CompiledFixture cf = loadCompiledFixture("oracle.CaseKtTrimHash");
+		Fixture fx = cf.fx;
+
+		InitFix.PatchReport report = fx.transform();
+		expect(report, true, "h", InitFix.FieldStatus.REJECTED,
+			"identity-dependent dispatch java/lang/Object.hashCode");
+		check(!report.patchGenerated(), "CaseKtTrimHash: no patch generated");
+		check(unpatched(fx.host).contains("h"),
+			"CaseKtTrimHash: h recorded in FieldLedger (actual "
+				+ InitFix.getUnpatchedFields(fx.host) + ")");
+	}
+
+	/**
+	 * M4 coverage, shape-pinning only. javac needs no checkcast for the widening
+	 * {@code String -> Object} conversion, so the receiver closure is just {@code {LDC}} and
+	 * rule 1 (the direct producer must be a whitelisted StringsKt call) is what rejects it.
+	 *
+	 * <p>This is deliberately <b>not</b> a safety assertion: the value is still derived from a
+	 * constant, so if rule 1 is ever relaxed on purpose, flipping this expectation is not a
+	 * regression.</p>
+	 */
+	static void caseJConstObject() throws Exception {
+		String dot = "oracle.CaseJConstObject";
+		Fixture fx = loadFixture(dot,
+			javaSrc("CaseJConstObject", ""),
+			javaSrc("CaseJConstObject", "static String s = ((Object) \"  a \").toString();"));
+
+		InitFix.PatchReport report = fx.transform();
+		expect(report, true, "s", InitFix.FieldStatus.REJECTED,
+			"identity-dependent dispatch java/lang/Object.toString");
+		check(!report.patchGenerated(), "CaseJConstObject: no patch generated");
+		check(unpatched(fx.host).contains("s"),
+			"CaseJConstObject: s recorded in FieldLedger (actual "
+				+ InitFix.getUnpatchedFields(fx.host) + ")");
+	}
+
+	/**
+	 * M6 coverage: the fail-closed guard on missing frames. No Java/Kotlin fixture can reach it —
+	 * a failing {@code analyze()} makes {@code extractFieldInits} return {@code Map.of()} before
+	 * {@code checkSafe} is ever called, so {@code frames == null} is unreachable from
+	 * source-compiled bytecode. The guard is therefore pinned white-box, directly on the private
+	 * predicate, so a future refactor that makes the path reachable is caught.
+	 */
+	static void caseFramesNullIsFailClosed() throws Exception {
+		MethodInsnNode call = new MethodInsnNode(Opcodes.INVOKEVIRTUAL,
+			"java/lang/Object", "toString", "()Ljava/lang/String;", false);
+
+		Method m;
+		try {
+			m = InitFix.class.getDeclaredMethod("allowedStringCoercion",
+				MethodInsnNode.class, InsnList.class, Frame[].class, Set.class);
+		} catch (NoSuchMethodException e) {
+			throw new IllegalStateException("InitFix.allowedStringCoercion("
+				+ "MethodInsnNode, InsnList, Frame[], Set) not found — the A+ gate was renamed or "
+				+ "reshaped; update this fail-closed guard test accordingly", e);
+		}
+		m.setAccessible(true);
+
+		Object result = m.invoke(null, call, new InsnList(), null, Set.of());
+		check(Boolean.FALSE.equals(result),
+			"frames == null must fail closed, but allowedStringCoercion returned " + result);
 	}
 
 	static void caseKtStringOpsRejected() throws Exception {

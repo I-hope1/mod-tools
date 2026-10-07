@@ -58,3 +58,23 @@ object CaseKtTernary {
 	val alt: String = "  b "
 	val s: String = (if (flag) "  a " else alt).trim()
 }
+
+/**
+ * M1 coverage: instance-field receiver in a normal Kotlin class. The receiver closure is
+ * {aload_0, getfield f, checkcast, StringsKt.trim}; GETFIELD is not inert, so it must stay
+ * rejected (javap conclusion recorded in the oracle scenario).
+ */
+class CaseKtInstFieldTrim {
+	val f: String = "  a "
+	val s: String = f.trim()
+}
+
+/**
+ * M5 coverage. `as CharSequence` keeps the static type of the trim result at CharSequence, so
+ * kotlinc dispatches hashCode through java/lang/Object.hashCode (verified with javap) instead of
+ * java/lang/String.hashCode. Without the cast kotlinc coerces to String first and the call lands
+ * on java/lang/String.hashCode, which would not exercise the hashCode narrowing at all.
+ */
+object CaseKtTrimHash {
+	val h: Int = ("  a " as CharSequence).trim().hashCode()
+}

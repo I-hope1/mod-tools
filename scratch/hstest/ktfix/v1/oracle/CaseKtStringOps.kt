@@ -24,3 +24,14 @@ object CaseKtTernary {
 	val flag: Boolean = true
 	val alt: String = "  b "
 }
+
+/**
+ * M1 coverage: a Kotlin *class* (not an object), so `f` is a real instance field and the
+ * initializer lands in `<init>`. v2 adds `s`; only `s` is new.
+ */
+class CaseKtInstFieldTrim {
+	val f: String = "  a "
+}
+
+/** M5 coverage: hashCode must stay blacklisted on a constant + whitelisted chain. */
+object CaseKtTrimHash

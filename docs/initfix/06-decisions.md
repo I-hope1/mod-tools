@@ -69,3 +69,29 @@
 4. **收益不对称**：这三张表每次 Redefine 访问一次或仅诊断期访问，不在按对象访问的热路径上；现状已满足条目随类卸载消失、值不反向持有 `Class` 引用。
 
 **未来可选**：若确认不再支持旧 ART，可只迁移 `LEDGER`（唯一完全贴合 `ClassValue` 语义）。`PENDING` 因清扫需求必须留在 map。
+
+## D10. Kotlin `trim` 家族例外：选"生产者白名单 + 来源闭包"，不选通用来源追踪或按 `CharSequence` 类型放行
+
+**问题**：kotlinc 把 `"  a ".trim()` 展开为 `checkcast CharSequence` + `StringsKt.trim` + `Object.toString()`。黑名单规则只看 owner 和名字，把 `Object.toString` 判为 `identity-dependent dispatch`，导致 Kotlin 常见写法被拒。Java 直写同一表达式不受影响。缺口是 Kotlin 特有的，已确认影响 `trim`、`trimStart`、`trimEnd`。
+
+**被否决的方案**
+- **按 `CharSequence` 静态类型放行 `toString`**：能命中该规则的接收者静态类型必然不是 `String`（否则 owner 就是 `String`，规则看不到），要修只能放行 `CharSequence`。而 `CharSequence` 是接口，`StringBuilder` 等可变对象都实现它，会在没有 mutator 调用的情况下绕开 bit 5 防御，放行"把可复用 builder 的内容拷进新字段"。
+- **通用来源追踪（允许切片内任意 `INVOKESTATIC` 作为来源）**：会放行 `static Object make(){return new Object();} static String s = make().toString();`。`make()` 方法体不在切片内，属于已知盲区，结果是非确定的对象标识。
+
+**决定**：接收者的直接来源必须是三条精确签名的 `StringsKt` 函数，且整个来源闭包只含常量、`CHECKCAST`、白名单调用和同样通过判定的中间 `toString`；取不到来源信息时拒绝。`hashCode` 不放宽。条件详见 `01-safety-gate.md` §2.1。提交 `881d93f0`。
+
+**审查记录**：独立审查子代理提出的 5 条"可能误放行"中，最严重的两条建立在"字段读取会被结构化接纳"的错误假设上，已用 `CaseKtFieldTrim` 证伪；采纳了"中间 `toString` 要求 opcode 为 `INVOKEVIRTUAL`/`INVOKEINTERFACE`"一条，使规则更窄。
+
+**教训**：方案报告里"通用方案是白名单方案的超集且拒绝它拒绝的一切"的说法不成立，评审时要检查"超集"是否真的只放行了预期内的东西。
+
+## D11. 对安全门例外做变异检查
+
+**做法**：故意放宽一处实现，只跑 `hstestInitFixOracle`，确认对应用例变红，再撤销。撤销前先确认修复已提交，避免 `git checkout` 抹掉修复。
+
+**结果**：6 个变异里，放行 `GETSTATIC`、放行任意静态方法被原有用例抓住；放行 `GETFIELD`/`ALOAD`、例外覆盖 `hashCode`、去掉"必须有白名单生产者"、`frames == null` 改放行，在补充 `CaseKtInstFieldTrim`、`CaseKtTrimHash`、`CaseJConstObject`、`caseFramesNullIsFailClosed` 之前原套件抓不住，补充后全部变红。
+
+**要点**
+- 原套件对"字段读取"只有 `CaseKtFieldTrim` 一个用例守着，覆盖的是静态字段；实例字段（`GETFIELD`）没有用例，这是变异检查才暴露的盲点。
+- 构造"`hashCode` 的 owner 是 `Object`"的用例需要 `("  a " as CharSequence).trim().hashCode()`：直接写 `"  a ".trim().hashCode()` 时 kotlinc 先插 `String` 强制转换，owner 是 `String`；Java 写法则发 `invokeinterface CharSequence.hashCode`。**写这类用例必须先 javap，不能凭推断。**
+- 无法用夹具探测的分支（`frames == null`）用反射白盒用例守住，并在方法被改名时明确报错。
+

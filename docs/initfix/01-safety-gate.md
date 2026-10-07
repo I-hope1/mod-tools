@@ -33,9 +33,24 @@
 - 基础集合无参构造、`Logger` 工厂与纯查询、`Objects.requireNonNull`、Kotlin `Intrinsics`、`Collections`/`Arrays` 的不可变工厂。
 - 日志落地方法（`info`/`debug`/`log` 等）按 bit 6 拒绝。
 
+**窄例外：Kotlin `trim` 家族的 `Object.toString`（提交 `881d93f0`）**
+
+背景：kotlinc 把 `String.trim()`/`trimStart()`/`trimEnd()` 展开为 `checkcast CharSequence; invokestatic StringsKt.trim*; invokevirtual java/lang/Object.toString()`。黑名单规则只看指令的 owner 和名字，会把其中的 `Object.toString` 判为 `identity-dependent dispatch`。Java 直写 `"  a ".trim()` 不产生这条指令，本来就放行。
+
+放行条件（`allowedStringCoercion`，`effectReason` 在白名单之后、黑名单之前调用），三条同时满足：
+1. 该 `toString` 的接收者，其直接来源是 `StringsKt.trim`/`trimStart`/`trimEnd` 三条精确的 `owner#name#desc` 之一，且 `toString` 描述符为 `()Ljava/lang/String;`。
+2. 接收者的整个来源闭包只含 `LDC`、`CHECKCAST`、上述白名单调用，以及中间的 `Object.toString`（要求 opcode 为 `INVOKEVIRTUAL`/`INVOKEINTERFACE`，且它自己的接收者闭包也通过同一判定，用于链式 `"  a ".trim().trimStart()`）；闭包内每个节点都在切片集合 `collected` 内。
+3. `frames` 为 null、对应帧为 null 或取不到接收者来源时，一律拒绝（fail-closed）。
+
+不放行（均有负向用例）：`Any().toString()`、接收者来自字段（`GETSTATIC`/`GETFIELD`）、来自 `this`/局部变量、来自用户自定义静态方法或实例方法的返回值、白名单函数作用于字段读取结果、纯常量闭包而无白名单生产者（如 `((Object) "a").toString()`）、`Object.hashCode`。
+
+设计取舍见 `06-decisions.md` D10。放行集合只有三个函数，不要随手加：新增一个函数之前，先用 javap 看真实字节码，补正向、负向用例和变异检查。
+
 **仍然放行（已知宽松面，留给 P2）**
 - `list.size()`、`config.getName()`、`enum.name()` 这类"接收者追溯到字段"的可变堆读取。收它们需要完整掩码与逃逸分析，且会误杀 enum/record 等不可变类型。
 - 未命中黑名单的调用。
+- Java 里 `((CharSequence) BUF).toString()` 和 `.hashCode()`：javac 发的是 `invokeinterface java/lang/CharSequence.*`，owner 不是 `Object`，规则看不到它。用例 `CaseJCsOwner` 固化了当前行为（ACCEPTED），将来补上完整掩码时该断言翻转不算回归。注意 kotlinc 对同形态发 `Object.toString`，所以 Kotlin 侧反而被规则覆盖。
+- 已确认但未覆盖的 Kotlin 写法：`reversed()`、`replaceRange`、`removeRange` 同样展开出 `Object.toString`，仍被拒绝（`replaceRange`/`removeRange` 还会用到局部变量槽）。这只是 javap 抽样结果，**不是对标准库的穷举**。
 
 ### 2.2 目标：8 位效应掩码（⬜ 未实现）
 
@@ -89,8 +104,8 @@
 
 | 场景 | 现象 | 处理 |
 |:--|:--|:--|
-| Kotlin `?.`、`?:`、`let`、`apply` | 展开为分支和临时变量，破坏直线假设 | T3 拒绝。`@HotswapReinit` 无效；正解是改用 `@HotswapInit`（T4，未实现）或把表达式改写成直线形态 |
-| 参数委托给父类构造器 | `Sub(x) : Base(x)` 的 `PUTFIELD` 在父类 `<init>`，子类看不到 | T3 拒绝 |
+| Kotlin `?.`、`?:`、`let`、`apply` | 展开为分支和临时变量，破坏直线假设 | T3 拒绝（⚠ 仅经手写 Java 仿真验证，未用 kotlinc 真实产物验证）。`@HotswapReinit` 无效；正解是改用 `@HotswapInit`（T4，未实现）或把表达式改写成直线形态 |
+| 参数委托给父类构造器 | `Sub(x) : Base(x)` 的 `PUTFIELD` 在父类 `<init>`，子类看不到 | T3 拒绝（⚠ 同上，仅仿真验证） |
 | 构造器里使用新增字段 | 补丁只重放字段初始化式，构造器用法不重放，存量实例会与新实例分叉 | 默认拒绝（`thread-affine field ... / field read outside any accepted extraction`）。标 `@HotswapReinit` 可豁免，但会 warn 并写入 `FieldDecision.warnings` |
 | 间接依赖读脏 | 切片调用私有 `foo()`，`foo()` 内部读了被拒的新字段 | 部分防御。`foo()` 方法体不在切片内，内部读取不可见；完整解需递归效应位（P2） |
 | 切片读取按线程的值 | `ThreadLocal` 缓存在热更线程重算 | 已防御（bit 4 子集） |
@@ -102,7 +117,7 @@
 
 ## 7. 案例
 
-**A. Kotlin 主构造属性回溯（放行）**
+**A. Kotlin 主构造属性回溯（放行）**（⚠ 对应测试 `CASE_A_*` 是手写 Java 仿真，未用 kotlinc 真实产物验证）
 ```kotlin
 class User(rawName: String) {
     val cleanName: String = rawName.trim()
@@ -125,3 +140,31 @@ Nest 扫描发现 `setTag` 的第二处 `PUTFIELD`，拒绝参数映射；切片
 **C. 多构造器共识**
 - 放行：两个构造器都 `this.id = id; this.token = id.trim();`，`id` 为 final，替换后指纹一致。
 - 拒绝：一个构造器 `token = id.trim()`，另一个 `token = "DEFAULT"`，或另一个根本没初始化 `token`。
+
+## 8. 单例与 Kotlin 字节码事实（已用真实 kotlinc 2.3.0 / javac 25 产物验证）
+
+**不需要专门识别单例。** 补丁对象来自堆遍历，单例只是实例数恰好为 1，走普通实例或静态路径。
+
+**Kotlin `object`**
+- 所有属性都是 `private static final` 字段，初始化全部在 `<clinit>`，`<init>` 里只有 `super()`。所以"单例新增实例字段"在 Kotlin `object` 上不存在，走的是静态字段补丁路径。
+- `val x = 1 + 2` 被 kotlinc 折叠成 `iconst_3; putstatic`，字段**没有** `ConstantValue` 属性，不走 T1 专用通道，按 T2 切片处理，放行。
+- `val l by lazy { 42 }`：生成静态委托字段 `l$delegate`（类型 `kotlin.Lazy`，**不带** `ACC_SYNTHETIC`，所以不被合成字段过滤掉），lambda 走 `invokedynamic`，不产生附属类。放行，委托对象与 `<clinit>` 版本同为 `SynchronizedLazyImpl`，`getL()` 取值一致。
+- 两个互相依赖的新增字段（`a = 1`、`b = a + 1`）：放行，类内拓扑序把 `a` 排在 `b` 之前。`<clinit>` 里夹有无关的 `getstatic INSTANCE; pop`，不污染切片边界。
+- `System.currentTimeMillis()`：拒绝（bit 6），原因文案含 `non-deterministic/environment-dependent call`，进台账。
+- `trim`/`trimStart`/`trimEnd`：见 §2.1 的窄例外。`drop`、`take`、`padStart`、`lowercase`、`uppercase`、`substring` 经 javap 确认不展开 `Object.toString`。
+
+**Java 单例**
+- enum 单例新增 `int v = Math.abs(-3)`：放行，补丁值与构造器值一致。
+- Holder 惰性单例（已实例化）新增 `String tag = "ab".concat("cd")`：放行。
+- 新增 `"ab".toUpperCase()`（无 Locale）：拒绝，`environment-dependent call`，进台账。
+
+**测试夹具机制（改测试前读）**
+- Kotlin 夹具在 `scratch/hstest/ktfix/v1/`、`v2/`，由 `ktfixV1`/`ktfixV2` source set 在构建期编译，输出目录经 `-Dnipx.ktfix.v1/v2` 传给 oracle，由两个独立 `ByteLoader` 加载同名的 v1/v2。
+- 护栏断言：v1 与 v2 类字节不相等且 `Class` 对象不同；`java.class.path` 不含夹具输出目录；夹具类的定义加载器是我们的 `ByteLoader`。缺夹具目录时报清晰错误，不是 `NoClassDefFoundError`。
+- 夹具类可能带 `$` 附属类，装载时必须读取整个输出目录。
+
+**变异检查结论（`Object.toString` 例外）**
+- 已验证会变红的变异：放行 `GETSTATIC`；放行任意静态方法；去掉"必须有白名单生产者"；例外同时作用于 `hashCode`；`frames == null` 改为放行；`GETFIELD` + `ALOAD` 同时放行。
+- `GETFIELD` 或 `ALOAD` **单独**放行观察不到误放行：读实例字段必先 `aload_0`，两者缺一都不会放行，只有组合才暴露，所以用 `CaseKtInstFieldTrim` 一个用例覆盖组合。
+- 静态切片里含 `ALOAD` 的字段早已被更早的直线性 gate（`depends on local variables`）拒绝，放宽 `isInertProducer` 对它无影响。
+- `frames == null` 分支在现有调用路径不可达（分析失败时调用点已提前返回），只能用反射白盒用例 `caseFramesNullIsFailClosed` 守住。该用例依赖私有方法 `allowedStringCoercion` 的签名，方法被改名或改形时会明确报错，提醒重新审视这个分支。

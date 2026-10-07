@@ -1,58 +1,3 @@
-## Tool Usage
-
-Prefer `intellij-index` MCP tools for all code navigation and refactoring.
-
-Exclude build artifacts in every search: skip `build/`, `bin/`, `out/`, `*.class`, `*.jar`.
-
-Before reading any large file, use `ide_find_symbol` or `ide_search_text` to locate
-the target method/class and its line range. Then read only that range — never read a
-whole file when you only need one method.
-
-Batch all information-gathering tool calls into a single parallel round. Do not
-interleave reads with partial conclusions: collect all needed context first, then reason.
-
-## Reasoning Discipline
-
-When performing a spec-vs-code gap analysis, output a structured list in the form
-`(item | status: implemented/gap/partial | one-line evidence)`. Do not re-narrate
-the spec in prose.
-
-Before issuing any tool call, state in one sentence: what you expect to find and why
-you need it. If you cannot state this, reconsider whether the call is necessary.
-
-## Commit Discipline
-
-Make atomic (minimal) commits: each commit contains exactly one logical change and
-can be understood, reviewed, and reverted on its own.
-
-- One purpose per commit. Never mix a bug fix, a refactor, a feature, formatting,
-  or dependency changes in the same commit. If the diff needs "and" to describe it,
-  split it.
-- Keep every commit buildable: the project must compile and existing tests must pass
-  at each commit, not just at the end of the series.
-- Separate behavior-preserving changes from behavior changes. Do refactors
-  (renames, moves, extractions) in their own commits, before the commit that
-  changes behavior.
-- Keep tests with the change they verify, in the same commit. Do not defer tests
-  to a later "add tests" commit.
-- Do not include unrelated edi
-- 
-- ts (drive-by formatting, import reordering, incidental
-  cleanup). If you notice something unrelated, note it and handle it in a separate
-  commit.
-- Stage explicitly: use `git add <path>` or `git add -p`. Never use `git add -A`
-  or `git add .` without first reviewing `git diff --staged`.
-- Commit right after each logical step is complete and verified. Do not accumulate
-  multiple steps into one large commit at the end.
-- Before each commit, state in one sentence what single change it contains. If you
-  cannot, the commit is too large — split it.
-- Write the subject line in imperative mood, ≤ 72 characters, describing what the
-  commit does (e.g. `Extract token validation into TokenValidator`). Use the body
-  only to explain why, not what.
-- Do not amend, squash, rebase, or force-push existing commits unless explicitly
-  asked.
-
-
 # InitFix 开发规则
 
 InitFix：热更新（Redefine）后，为**新增字段**初始化存量实例和静态环境的系统。
@@ -81,6 +26,8 @@ InitFix：热更新（Redefine）后，为**新增字段**初始化存量实例�
 **安全优先**
 - 拿不准就拒绝。宁可漏补，不可静默写入过期值。
 - 切片（含递归调用闭包）禁止调用"已存在但本次被修改"的方法。
+- `Object.toString` 的例外只允许 Kotlin `trim`/`trimStart`/`trimEnd` 展开形态（条件见 `docs/initfix/01-safety-gate.md` §2.1）。`Object.hashCode` 不得放宽；不得新增"任意静态方法"作为放行来源。
+- 判定逻辑取不到来源信息（`frames` 为 null 等）时必须拒绝（fail-closed），不要照抄 `builderMutatorReason` 里 `frames == null` 即放行的写法。
 - 新增拒绝路径时，必须经 `InitFix.transform` 的统一出口发 `warn`。不要只调用 `log(...)`，它受 `DEBUG` 门控，默认不输出。
 - 台账（`FieldLedger`）只负责"不遗忘"，不负责"放行"。台账字段回流后仍走同一套安全门。
 
@@ -111,8 +58,11 @@ InitFix：热更新（Redefine）后，为**新增字段**初始化存量实例�
 | 注解 | `nipx.annotation.HotswapReinit` |
 | 合成字段过滤 | `ClassDiffUtil.isInternalMarkerField` |
 | 堆实例检索（Native） | `LibTool.getInstances` |
+| `Object.toString` 例外 | `InitFix.allowedStringCoercion`、`isInertProducer`、`isIntermediateObjectToString`（`effectReason` 在白名单之后、黑名单之前调用） |
+| 测试夹具（Java） | `scratch/hstest/src/InitFixOracle.java`（内存 `javac`） |
+| 测试夹具（Kotlin） | `scratch/hstest/ktfix/v1/`、`v2/` 下的 `.kt`，由 `ktfixV1`/`ktfixV2` source set 编译 |
 
-## 5. 实现状态（截至 `7c19e6e6`）
+## 5. 实现状态（截至 `881d93f0` 及其后的测试提交）
 
 状态以本表为唯一来源。`✅` 已实现，`🔶` 部分，`⬜` 未实现。
 
@@ -126,7 +76,7 @@ InitFix：热更新（Redefine）后，为**新增字段**初始化存量实例�
 | T2 纯计算切片 | 🔶 | |
 | T3 拒绝 | ✅ | |
 | T4 `@HotswapInit` | ⬜ | |
-| 效应掩码 | 🔶 | 仅 bit 3/6 与 bit 4/5 子集 |
+| 效应掩码 | 🔶 | 仅 bit 3/6 与 bit 4/5 子集；另有 Kotlin `trim` 家族的 `Object.toString` 窄例外 |
 | 参数回溯不可变证明 | ✅ | |
 | 多根构造器共识 | ✅ | |
 | 每字段独立静态方法 + `PatchDriver` | ✅ | |
@@ -138,20 +88,29 @@ InitFix：热更新（Redefine）后，为**新增字段**初始化存量实例�
 | `PatchPlan` 基线指纹 | ⬜ | |
 | 两阶段 Schema-First | ⬜ | 当前是单阶段 |
 | 构造器尾部插桩 | ⬜ | |
+| Kotlin `object` 单例形态 | ✅ | 已用真实 kotlinc 产物验证（属性为静态字段、初始化在 `<clinit>`） |
+| Java 单例形态（enum / Holder） | ✅ | 无需专门识别，走普通实例/静态路径 |
+| Kotlin `trim`/`trimStart`/`trimEnd` | ✅ | 已用真实 kotlinc 产物验证 |
+| 其它 Kotlin 行为（`?.`、`?:`、`let`、`apply`、主构造属性回溯、父类构造器委托） | ⚠ | **仅经手写 Java 仿真验证，未用 kotlinc 真实产物验证**；不要据此推断 Kotlin 真实字节码的行为 |
 
 ## 6. 测试要求
 
-- 回归任务：`hstestInitFixOracle`（挂在 `check`，30 场景 / 192 断言）。需要 Mindustry 运行期依赖（`hstestImplementation`）。
+- 回归任务：`hstestInitFixOracle`（挂在 `check`，当前 48 场景 / 318 断言，以实际输出为准）。需要 Mindustry 运行期依赖（`hstestImplementation`）。
+- 必须通过 `./gradlew hstestInitFixOracle` 运行，不要直接 `java -cp`：Kotlin 夹具由 Gradle 先编译，输出目录经 `-Dnipx.ktfix.v1/v2` 传入。
+- Kotlin 夹具的 v1/v2 输出目录**绝不能**进入任何 classpath（同名类会静默只命中其一，造成假绿）。
+- 迭代期间只跑 `hstestInitFixOracle`，收尾时才跑一次 `./gradlew check`。
 - 广域套件 `hstestRun`（`suite.sh`）有独立基线：通过=312 / 失败=0 / 已知=4。
 - 新增或放宽安全门：必须有负向阻断断言。
 - 修复缺陷：必须有先红后绿的回归断言。
+- 新增或放宽安全门例外：除正向、负向用例外，必须做**变异检查**——故意放宽一处实现，确认对应用例会变红，再撤销。
+- 新增测试注释和断言消息用英文，已有中文不改。涉及中文输出的任务需带 UTF-8 JVM 参数（`hstestInitFixOracle` 已配置）。
 - 涉及 float/double CAS：必须在真实 JDK 8 上验证（oracle 跑在 JDK 25，区分不出两种实现）。
 
 ## 7. 按需文档
 
 | 修改内容 | 先读 |
 |:--|:--|
-| 判决分层、效应检查、参数回溯、已知限制 | `docs/initfix/01-safety-gate.md` |
+| 判决分层、效应检查、参数回溯、已知限制、单例与 Kotlin 字节码事实、测试夹具机制 | `docs/initfix/01-safety-gate.md` |
 | 依赖闭包、成环、台账、失败策略 | `docs/initfix/02-closure-and-ledger.md` |
 | 补丁驱动、写入协议、`@HotswapReinit` | `docs/initfix/03-runtime-driver.md` |
 | 两阶段、基线指纹、构造器插桩、路线图（未实现） | `docs/initfix/04-target-design.md` |

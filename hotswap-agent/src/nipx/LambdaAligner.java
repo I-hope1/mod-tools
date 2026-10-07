@@ -2327,8 +2327,9 @@ public class LambdaAligner {
 			}
 			if (entry < 0) return false;
 			// 与 StackWalker 路径同构：桩之后跳过透明帧，取第一个真实调用者。
-			int skip = entry + 2;   // 跳过 onOrphanInvoked 自身与桩
-			while (skip < t.length && isTransparentFrame(t[skip].getClassName())) skip++;
+			int skip  = entry + 2;   // 跳过 onOrphanInvoked 自身与桩
+			int limit = Math.min(t.length, skip + MAX_TRANSPARENT_FRAMES + 1);
+			while (skip < limit && isTransparentFrame(t[skip].getClassName())) skip++;
 			if (skip >= t.length) return false;
 			return isUpdateRefInvoke(t[skip].getClassName(), t[skip].getMethodName());
 		} catch (Throwable ignored) { }
@@ -2337,6 +2338,26 @@ public class LambdaAligner {
 
 	/** 本类的全限定名，用于在栈帧里定位幽灵桩入口。 */
 	private static final String SELF = LambdaAligner.class.getName();
+
+	/**
+	 * Cell 属性链代理的宿主类。
+	 *
+	 * <p>{@code CellPropertyRef.makeLambda} 用 {@link java.lang.reflect.Proxy} 把 lambda 参数包成
+	 * 动态代理，其 handler 是 {@code CellPropertyRef} 里的合成 lambda 方法，handler 内又经本类的
+	 * {@code invoke(MethodHandle,...)} 辅助方法调到真实 lambda 体。因此当这条链触到幽灵桩时，
+	 * 桩与真正的调用者（{@code UpdateRef.run*}）之间会夹着这些 {@code CellPropertyRef} 帧。
+	 * 必须按类名穿透，否则 {@link #isCalledByUpdateRef()} 会误判为"非 UpdateRef"，熔断静默失效。</p>
+	 */
+	private static final String CELL_PROPERTY_REF_CLASS = "nipx.uihook.CellPropertyRef";
+
+	/**
+	 * 透明帧扫描的深度上限。
+	 *
+	 * <p>穿透代理/隐藏帧时给一个上界，避免在"整条栈全是透明帧"的病态情况下无界扫描。
+	 * 正常回调链路上透明帧屈指可数（代理 1 + handler 1 + invoke 1 + 少量 MethodHandle 帧），
+	 * 64 远超实际需要，同时仍与栈的绝对深度无关。</p>
+	 */
+	private static final int MAX_TRANSPARENT_FRAMES = 64;
 
 	/**
 	 * 透明帧：桩与真实调用者之间由 {@code invokedynamic} 生成的代理类帧。
@@ -2349,8 +2370,15 @@ public class LambdaAligner {
 	 *       {@code getStackTrace} 里本来就是可见帧。</li>
 	 * </ul>
 	 *
-	 * <p>这是<b>针对性放行</b>，不是通用扫描：只认类名里带 lambda 代理标记的帧，
-	 * 不会把"lambda 本身被 UpdateRef 持有"的严格判据放宽。</p>
+	 * <p>此外，{@link nipx.uihook.CellPropertyRef#makeLambda} 会用 {@link java.lang.reflect.Proxy}
+	 * 把 Cell 属性链里的 lambda 参数包成动态代理：幽灵桩与真正的调用者 {@code UpdateRef.run*}
+	 * 之间会夹着 <b>代理类帧</b>（JDK 9+ 的 {@code jdk.proxyN.$ProxyNN}、JDK 8 的
+	 * {@code com.sun.proxy.$ProxyNN}）、<b>代理 handler 帧</b>（{@code CellPropertyRef} 的合成
+	 * lambda）与<b>方法句柄帧</b>（{@code java.lang.invoke.*}，仅 ShowHiddenFrames 下可见）。
+	 * 这些同样必须穿透，否则熔断对"被代理的回调"永远不触发。</p>
+	 *
+	 * <p>这是<b>针对性放行</b>，不是通用扫描：只认上述固定形态的帧，不会把"lambda 本身被
+	 * UpdateRef 持有"的严格判据放宽。</p>
 	 */
 	private static boolean isTransparentFrame(String className) {
 		if (className == null || className.isEmpty()) return false;
@@ -2358,7 +2386,12 @@ public class LambdaAligner {
 		// 也避免为判断而触发类加载。
 		return className.contains("$$Lambda")
 		       || className.contains("$$$Lambda")
-		       || className.startsWith("jdk.internal.reflect.");
+		       || className.startsWith("jdk.internal.reflect.")
+		       || className.startsWith("jdk.proxy")           // JDK 9+ 动态代理 jdk.proxyN.$ProxyNN
+		       || className.startsWith("com.sun.proxy.")      // JDK 8 动态代理
+		       || className.startsWith("java.lang.reflect.")  // Proxy 调度
+		       || className.startsWith("java.lang.invoke.")   // MethodHandle 隐藏帧
+		       || CELL_PROPERTY_REF_CLASS.equals(className);  // 代理 handler / invoke 辅助方法
 	}
 
 	/**
@@ -2398,6 +2431,7 @@ public class LambdaAligner {
 			return Boolean.TRUE.equals(WALKER.walk(s -> s
 			 .dropWhile(f -> !isOrphanEntry(f))        // 定位幽灵桩入口
 			 .skip(2)                                  // 跳过 onOrphanInvoked 自身与桩
+			 .limit(MAX_TRANSPARENT_FRAMES + 1)        // 透明帧扫描深度上界
 			 .filter(f -> !isTransparentFrame(f.getClassName()))  // 穿透代理/隐藏帧
 			 .findFirst()
 			 .map(f -> isUpdateRefInvoke(f.getClassName(), f.getMethodName()))

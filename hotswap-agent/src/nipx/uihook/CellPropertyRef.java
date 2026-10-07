@@ -1241,7 +1241,7 @@ public class CellPropertyRef {
 	 "name", "disabled", "touchable", "visible", "scaling",
 	 "wrap", "ellipsis", "labelAlign", "fontScale",
 	 "scrollX", "scrollY", "maxTextLength", "valid",
-	 "tooltip", "style", "checked"
+	 "tooltip", "style", "checked", "update"
 	));
 
 	private static final Set<String> TABLE_CELL_CREATORS = new HashSet<>(Arrays.asList(

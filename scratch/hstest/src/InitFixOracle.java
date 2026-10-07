@@ -141,6 +141,12 @@ public class InitFixOracle {
 		scenario("单例 S3：Kotlin object 新增 val l by lazy { 42 }（Lazy 委托字段 + indy）→ ?", InitFixOracle::caseKtObjectLazy);
 		scenario("单例 S4：Kotlin object 新增 val a = 1 / val b = a + 1（依赖闭包 + 拓扑序）→ 放行", InitFixOracle::caseKtObjectDependency);
 		scenario("单例 S7：Kotlin object 新增 val t = System.currentTimeMillis() → 阻断并记台账", InitFixOracle::caseKtObjectNonDeterministic);
+		scenario("A+ accepted: Kotlin trimStart/trimEnd (constant receiver + whitelisted StringsKt producer)", InitFixOracle::caseKtStringOpsAccepted);
+		scenario("A+ accepted: chained \"  a \".trim().trimStart()", InitFixOracle::caseKtTrimChain);
+		scenario("A+ rejected: branch-merged receiver (field read in one arm's provenance)", InitFixOracle::caseKtTernaryMergeRejected);
+		scenario("A+ rejected: Kotlin Object.toString() without a constant whitelisted producer chain", InitFixOracle::caseKtStringOpsRejected);
+		scenario("A+ rejected: Java new Object()/field receiver/CharSequence field/hashCode/user method", InitFixOracle::caseJavaObjectToStringRejected);
+		scenario("A+ regression: Java \"  a \".trim() still accepted (no Object.toString coercion)", InitFixOracle::caseJavaTrimRegression);
 
 		System.out.println();
 		System.out.println("通过 " + passed + " 条；失败 " + failed + " 条；合计 " + (passed + failed) + " 条");
@@ -2528,8 +2534,9 @@ public class InitFixOracle {
 	//     invokestatic kotlin/text/StringsKt.trim(CharSequence)CharSequence;
 	//     invokevirtual java/lang/Object.toString()String; putstatic s
 	//   无附属类（单文件产物）。
-	// 预期：静态字段 s = ACCEPTED（StringsKt.trim 与 Object.toString 都未命中黑名单）。
-	// 实际：REJECTED —— 见方法内 EXPECTED-GAP 说明（identity-dependent dispatch）。
+	// Fixed by A+ (see allowedStringCoercion): the trailing
+	// `invokevirtual java/lang/Object.toString()Ljava/lang/String;` coercion is now accepted,
+	// because the provenance closure of its receiver is a constant plus the whitelisted call.
 
 	static void caseKtObjectTrim() throws Exception {
 		CompiledFixture cf = loadCompiledFixture("oracle.CaseKtTrim");
@@ -2537,25 +2544,21 @@ public class InitFixOracle {
 		Class<?> controlHost = Class.forName(fx.dotName, true, new ByteLoader(cf.v2));
 
 		InitFix.PatchReport report = fx.transform();
+		expect(report, true, "s", InitFix.FieldStatus.ACCEPTED, null);
+		check(report.patchGenerated(), "S2: patch generated after A+");
+		check(!unpatched(fx.host).contains("s"), "S2: s must not stay in FieldLedger");
 
-		// EXPECTED-GAP：预期 ACCEPTED（StringsKt.trim 不在黑名单），实际 REJECTED。
-		// 原因：切片尾部 `invokevirtual java/lang/Object.toString()Ljava/lang/String;`
-		// 被判为 identity-dependent dispatch —— 声明接收者类型是 Object/CharSequence，
-		// 真正执行哪个 toString 取决于运行时类型（这里是 kotlin/text/StringsKt.trim 的返回值）。
-		expect(report, true, "s", InitFix.FieldStatus.REJECTED,
-			"identity-dependent dispatch java/lang/Object.toString");
-		check(!report.patchGenerated(), "S2：未生成任何补丁");
-		check(unpatched(fx.host).contains("s"),
-			"S2：s 已记入 FieldLedger（实际 " + InitFix.getUnpatchedFields(fx.host) + "）");
+		// Reset so the patched value cannot be confused with the one <clinit> already wrote.
+		resetStaticToDefault(fx.host, "s", "Ljava/lang/String;");
+		fx.apply();
 
-		// 被拒绝 ⇒ 不得有任何静默写入：s 必须还是本类 <clinit> 自己算出来的值。
 		Field f = fx.host.getDeclaredField("s");
 		f.setAccessible(true);
 		Field cfField = controlHost.getDeclaredField("s");
 		cfField.setAccessible(true);
 		check(Objects.equals(cfField.get(null), f.get(null)),
-			"S2：被拒绝后 s 保持 <clinit> 原值（控制=" + describe(cfField.get(null))
-				+ "，实际=" + describe(f.get(null)) + "）");
+			"S2: patched s equals <clinit> value (control=" + describe(cfField.get(null))
+				+ ", patched=" + describe(f.get(null)) + ")");
 	}
 
 	// ==================== 单例形态 S3：Kotlin object + val l by lazy { 42 } ====================
@@ -2671,6 +2674,205 @@ public class InitFixOracle {
 		check(!report.patchGenerated(), "S7：未生成任何补丁");
 		check(unpatched(fx.host).contains("t"),
 			"S7：t 已记入 FieldLedger（实际 " + InitFix.getUnpatchedFields(fx.host) + "）");
+	}
+
+	// ==================== A+：Object.toString() 强制转换的来源判定 ====================
+	//
+	// Whitelisted producers (exact descriptors, verified with javap on Kotlin 2.3.0):
+	//   kotlin/text/StringsKt.trim:(Ljava/lang/CharSequence;)Ljava/lang/CharSequence;
+	//   kotlin/text/StringsKt.trimStart:(Ljava/lang/CharSequence;)Ljava/lang/CharSequence;
+	//   kotlin/text/StringsKt.trimEnd:(Ljava/lang/CharSequence;)Ljava/lang/CharSequence;
+	// These three - and only these three - make kotlinc emit a trailing
+	// `invokevirtual java/lang/Object.toString()Ljava/lang/String;` coercion when the result
+	// is stored into a String field. A+ accepts that coercion only when the whole provenance
+	// closure of the receiver is constants, checkcasts and whitelisted calls, all of them
+	// inside the slice; every other Object.toString/hashCode keeps the original rejection.
+
+	static void caseKtStringOpsAccepted() throws Exception {
+		for (String dot : new String[] { "oracle.CaseKtTrimStart", "oracle.CaseKtTrimEnd" }) {
+			CompiledFixture cf = loadCompiledFixture(dot);
+			Fixture fx = cf.fx;
+			Class<?> controlHost = Class.forName(fx.dotName, true, new ByteLoader(cf.v2));
+
+			InitFix.PatchReport report = fx.transform();
+			expect(report, true, "s", InitFix.FieldStatus.ACCEPTED, null);
+			check(report.patchGenerated(), dot + ": patch generated (whitelisted StringsKt producer)");
+			check(!unpatched(fx.host).contains("s"), dot + ": s must not stay in FieldLedger");
+
+			resetStaticToDefault(fx.host, "s", "Ljava/lang/String;");
+			fx.apply();
+
+			Field f = fx.host.getDeclaredField("s");
+			f.setAccessible(true);
+			Field cfField = controlHost.getDeclaredField("s");
+			cfField.setAccessible(true);
+			check(Objects.equals(cfField.get(null), f.get(null)),
+				dot + ": patched s equals <clinit> value (control=" + describe(cfField.get(null))
+					+ ", patched=" + describe(f.get(null)) + ")");
+		}
+	}
+
+	static void caseKtTrimChain() throws Exception {
+		CompiledFixture cf = loadCompiledFixture("oracle.CaseKtTrimChain");
+		Fixture fx = cf.fx;
+		Class<?> controlHost = Class.forName(fx.dotName, true, new ByteLoader(cf.v2));
+
+		InitFix.PatchReport report = fx.transform();
+		expect(report, true, "s", InitFix.FieldStatus.ACCEPTED, null);
+		check(report.patchGenerated(), "CaseKtTrimChain: patch generated");
+
+		resetStaticToDefault(fx.host, "s", "Ljava/lang/String;");
+		fx.apply();
+
+		Field f = fx.host.getDeclaredField("s");
+		f.setAccessible(true);
+		Field cfField = controlHost.getDeclaredField("s");
+		cfField.setAccessible(true);
+		check(Objects.equals(cfField.get(null), f.get(null)),
+			"CaseKtTrimChain: patched s equals <clinit> value (control=" + describe(cfField.get(null))
+				+ ", patched=" + describe(f.get(null)) + ")");
+	}
+
+	/**
+	 * Negative: a branch-merged receiver. At the join the provenance closure is the union of
+	 * both arms, so the field read in the other arm lands inside the closure of the coercion.
+	 * The gate must reject it instead of letting one whitelisted arm launder the value.
+	 */
+	static void caseKtTernaryMergeRejected() throws Exception {
+		CompiledFixture cf = loadCompiledFixture("oracle.CaseKtTernary");
+		Fixture fx = cf.fx;
+
+		InitFix.PatchReport report = fx.transform();
+		// Rejected upstream of effectReason, by the straight-line / expression-tree gate: a
+		// branch-merged initializer cannot form a slice in the first place.
+		expect(report, true, "s", InitFix.FieldStatus.REJECTED,
+			"contains instructions outside the expression tree");
+		check(!report.patchGenerated(), "CaseKtTernary: no patch generated for a branch-merged receiver");
+		check(unpatched(fx.host).contains("s"),
+			"CaseKtTernary: s recorded in FieldLedger (actual "
+				+ InitFix.getUnpatchedFields(fx.host) + ")");
+	}
+
+	static void caseKtStringOpsRejected() throws Exception {
+		String[][] cases = {
+			{ "oracle.CaseKtAnyToString", "s" },
+			{ "oracle.CaseKtFieldToString", "s" },
+			{ "oracle.CaseKtFieldTrim", "s" },
+			{ "oracle.CaseKtChainHelper", "s" },
+			{ "oracle.CaseKtMethodCallToString", "sAny" },
+			{ "oracle.CaseKtMethodCallToString", "sSeq" },
+		};
+		for (String[] c : cases) {
+			CompiledFixture cf = loadCompiledFixture(c[0]);
+			Fixture fx = cf.fx;
+
+			InitFix.PatchReport report = fx.transform();
+			expect(report, true, c[1], InitFix.FieldStatus.REJECTED,
+				"identity-dependent dispatch java/lang/Object.toString");
+			check(!report.patchGenerated(), c[0] + ": no patch generated for " + c[1]);
+			check(unpatched(fx.host).contains(c[1]),
+				c[0] + ": " + c[1] + " recorded in FieldLedger (actual "
+					+ InitFix.getUnpatchedFields(fx.host) + ")");
+		}
+	}
+
+	/** Minimal in-memory Java source builder for the A+ Java control cases. */
+	private static String javaSrc(String cls, String members) {
+		return "package oracle;\npublic class " + cls + " {\n" + members + "\n}\n";
+	}
+
+	private static void expectJavaRejected(String cls, String v1Members, String v2Members,
+	                                       boolean isStaticField, String field, String reasonSub)
+			throws Exception {
+		String dot = "oracle." + cls;
+		Fixture fx = loadFixture(dot, javaSrc(cls, v1Members), javaSrc(cls, v2Members));
+
+		InitFix.PatchReport report = fx.transform();
+		expect(report, isStaticField, field, InitFix.FieldStatus.REJECTED, reasonSub);
+		check(!report.patchGenerated(), dot + ": no patch generated (negative case)");
+		check(unpatched(fx.host).contains(field),
+			dot + ": " + field + " recorded in FieldLedger (actual "
+				+ InitFix.getUnpatchedFields(fx.host) + ")");
+	}
+
+	static void caseJavaObjectToStringRejected() throws Exception {
+		String identity = "identity-dependent dispatch java/lang/Object.toString";
+
+		// N2: receiver produced by NEW.
+		expectJavaRejected("CaseJNewObject", "",
+			"static String s = new Object().toString();", true, "s", identity);
+
+		// N3: receiver read from a field.
+		expectJavaRejected("CaseJFieldObject", "static Object F = new Object();",
+			"static Object F = new Object();\n\tstatic String s = F.toString();", true, "s", identity);
+
+		// N4: field receiver cast to Object (the spelling a type-based rule would let through).
+		expectJavaRejected("CaseJFieldCs", "static StringBuilder BUF = new StringBuilder(\"x\");",
+			"static StringBuilder BUF = new StringBuilder(\"x\");\n"
+				+ "\tstatic String s = ((Object) BUF).toString();", true, "s", identity);
+
+		// N5: builder obtained outside the slice is mutated -> bit 5 must still win.
+		expectJavaRejected("CaseJBuilderMutate", "static StringBuilder BUF = new StringBuilder(\"x\");",
+			"static StringBuilder BUF = new StringBuilder(\"x\");\n"
+				+ "\tstatic String s = BUF.append(\"y\").toString();",
+			true, "s", "mutates a reusable java/lang/StringBuilder");
+
+		// N6: producer chain contains a user-defined, non-whitelisted static call.
+		expectJavaRejected("CaseJHelperCall",
+			"public static Object helper(Object o) { return o; }",
+			"public static Object helper(Object o) { return o; }\n"
+				+ "\tstatic String s = helper(\"  a \").toString();", true, "s", identity);
+
+		// N7: receiver produced by an instance method call.
+		expectJavaRejected("CaseJInstanceCall", "private Object look() { return \"x\"; }",
+			"private Object look() { return \"x\"; }\n"
+				+ "\tprivate final String s = look().toString();", false, "s", identity);
+
+		// N8: hashCode stays blacklisted (A+ only opens toString).
+		expectJavaRejected("CaseJHashCode", "",
+			"static int h = ((Object) \"a\").hashCode();", true, "h",
+			"identity-dependent dispatch java/lang/Object.hashCode");
+
+		// N9: user-defined static factory returning Object.
+		expectJavaRejected("CaseJMakeObject", "static Object make() { return new Object(); }",
+			"static Object make() { return new Object(); }\n"
+				+ "\tstatic String s = make().toString();", true, "s", identity);
+
+		// Pre-existing gap, NOT widened by A+: for a CharSequence-typed receiver javac emits
+		// `invokeinterface java/lang/CharSequence.toString` (kotlinc emits java/lang/Object
+		// instead), so the identity-dispatch rule never sees this spelling and it has always
+		// been accepted. Asserted here to document the actual behaviour.
+		{
+			String dot = "oracle.CaseJCsOwner";
+			Fixture fx = loadFixture(dot,
+				javaSrc("CaseJCsOwner", "static StringBuilder BUF = new StringBuilder(\"x\");"),
+				javaSrc("CaseJCsOwner", "static StringBuilder BUF = new StringBuilder(\"x\");\n"
+					+ "\tstatic String s = ((CharSequence) BUF).toString();"));
+			InitFix.PatchReport report = fx.transform();
+			expect(report, true, "s", InitFix.FieldStatus.ACCEPTED, null);
+		}
+	}
+
+	static void caseJavaTrimRegression() throws Exception {
+		String v2 = javaSrc("CaseJTrim", "static String s = \"  a \".trim();");
+		Fixture fx = loadFixture("oracle.CaseJTrim", javaSrc("CaseJTrim", ""), v2);
+		Class<?> controlHost = Class.forName("oracle.CaseJTrim", true,
+			new ByteLoader(compile(Map.of("oracle.CaseJTrim", v2))));
+
+		InitFix.PatchReport report = fx.transform();
+		expect(report, true, "s", InitFix.FieldStatus.ACCEPTED, null);
+		check(report.patchGenerated(), "CaseJTrim: patch generated");
+
+		resetStaticToDefault(fx.host, "s", "Ljava/lang/String;");
+		fx.apply();
+
+		Field f = fx.host.getDeclaredField("s");
+		f.setAccessible(true);
+		Field cfField = controlHost.getDeclaredField("s");
+		cfField.setAccessible(true);
+		check(Objects.equals(cfField.get(null), f.get(null)),
+			"CaseJTrim: patched s equals <clinit> value (control=" + describe(cfField.get(null))
+				+ ", patched=" + describe(f.get(null)) + ")");
 	}
 
 	static Set<String> unpatched(Class<?> host) {

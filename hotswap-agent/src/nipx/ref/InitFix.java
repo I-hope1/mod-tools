@@ -2019,6 +2019,11 @@ public class InitFix {
 	 *   <li><b>黑名单</b>：非确定性（时间/随机/identityHashCode/默认时区与字符集）、
 	 *       线程局部堆状态（ThreadLocal 的 get/set/remove）、反射与动态调用、
 	 *       进程与类加载、文件/网络 IO、日志输出；</li>
+	 *   <li><b>A+ exception for the {@code Object.toString} coercion</b>: the blacklist item
+	 *       {@code identity-dependent dispatch java/lang/Object.toString} is skipped when the
+	 *       receiver is proven to be built inside the slice out of constants, checkcasts and one
+	 *       of the whitelisted {@code kotlin.text.StringsKt} trim functions
+	 *       (see {@link #allowedStringCoercion}). {@code hashCode} is never exempted.</li>
 	 *   <li><b>接收者敏感的可复用 builder 判定</b>：{@code StringBuilder}/{@code StringBuffer}
 	 *       的变异方法，接收者不是本切片内 {@code NEW} 出来的对象时拒绝
 	 *       （见 {@link #builderMutatorReason}）；</li>
@@ -2027,12 +2032,15 @@ public class InitFix {
 	 * </ol>
 	 * @return null 表示放行；否则返回拒绝原因
 	 */
-	private static String effectReason(AbstractInsnNode n) {
+	private static String effectReason(AbstractInsnNode n, InsnList insns,
+	                                   Frame<SourceValue>[] frames,
+	                                   Set<AbstractInsnNode> collected) {
 		if (n instanceof MethodInsnNode m) {
 			if (isImpureOverload(m)) {
 				return "environment-dependent call " + m.owner + "." + m.name + m.desc;
 			}
 			if (isWhitelistedCall(m)) return null;
+			if (allowedStringCoercion(m, insns, frames, collected)) return null;
 			return blacklistedCallReason(m);
 		}
 		if (n instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETSTATIC) {
@@ -2230,6 +2238,96 @@ public class InitFix {
 	private static void appendOrigin(StringBuilder sb, String what) {
 		if (sb.length() > 0) sb.append(", ");
 		sb.append(what);
+	}
+
+	/**
+	 * A+ whitelist: the exact {@code owner.name+desc} keys whose result a String field may
+	 * coerce with {@code Object.toString()}. Verified with javap on Kotlin 2.3.0 — these are the
+	 * only string ops that return {@code CharSequence} and therefore force that coercion.
+	 */
+	private static final Set<String> STRING_COERCION_PRODUCERS = Set.of(
+		"kotlin/text/StringsKt.trim(Ljava/lang/CharSequence;)Ljava/lang/CharSequence;",
+		"kotlin/text/StringsKt.trimStart(Ljava/lang/CharSequence;)Ljava/lang/CharSequence;",
+		"kotlin/text/StringsKt.trimEnd(Ljava/lang/CharSequence;)Ljava/lang/CharSequence;");
+
+	/** True for exactly an INVOKESTATIC call to one of {@link #STRING_COERCION_PRODUCERS}. */
+	private static boolean isStringCoercionProducer(AbstractInsnNode n) {
+		return n instanceof MethodInsnNode m
+		       && m.getOpcode() == Opcodes.INVOKESTATIC
+		       && STRING_COERCION_PRODUCERS.contains(m.owner + "." + m.name + m.desc);
+	}
+
+	/** Producers that create no value of their own: constants and identity-preserving casts. */
+	private static boolean isInertProducer(AbstractInsnNode n) {
+		return n instanceof LdcInsnNode
+		       || (n instanceof TypeInsnNode t && t.getOpcode() == Opcodes.CHECKCAST);
+	}
+
+	/**
+	 * The {@code Object.toString()} coercion itself (or an intermediate one of a chained
+	 * expression). Restricted to the virtual/interface dispatch that can actually target
+	 * {@code Object.toString} and, deliberately, excludes {@code hashCode} so it keeps being
+	 * rejected.
+	 */
+	private static boolean isIntermediateObjectToString(AbstractInsnNode n) {
+		return n instanceof MethodInsnNode m
+		       && (m.getOpcode() == Opcodes.INVOKEVIRTUAL
+		           || m.getOpcode() == Opcodes.INVOKEINTERFACE)
+		       && "java/lang/Object".equals(m.owner)
+		       && "toString".equals(m.name)
+		       && "()Ljava/lang/String;".equals(m.desc);
+	}
+
+	/**
+	 * A+ exception for the {@code identity-dependent dispatch java/lang/Object.toString} rule.
+	 *
+	 * <p>Kotlin's {@code "  a ".trim()} compiles to {@code ldc; checkcast CharSequence;
+	 * invokestatic StringsKt.trim; invokevirtual java/lang/Object.toString}, so the coercion is
+	 * dispatched through {@code Object} even though the value is always a String. Accept it only
+	 * when the receiver is <b>proven</b> to be built inside the slice:</p>
+	 * <ol>
+	 *   <li>the direct producer (checkcasts ignored) is one of {@link #STRING_COERCION_PRODUCERS};</li>
+	 *   <li>every instruction in the receiver's provenance closure is inert, a whitelisted
+	 *       producer, or an intermediate {@code Object.toString()} of the same chained
+	 *       expression, and all of them lie inside {@code collected};</li>
+	 *   <li>fails closed — no frames, no frame, no receiver or an empty closure means "reject",
+	 *       so the original rule still covers {@code Any().toString()}, field receivers and
+	 *       user-defined methods.</li>
+	 * </ol>
+	 * {@code hashCode} is deliberately never exempted.
+	 */
+	private static boolean allowedStringCoercion(MethodInsnNode m, InsnList insns,
+	                                             Frame<SourceValue>[] frames,
+	                                             Set<AbstractInsnNode> collected) {
+		if (!isIntermediateObjectToString(m)) return false;
+		if (frames == null || collected == null) return false;
+
+		int idx = insns.indexOf(m);
+		if (idx < 0 || idx >= frames.length) return false;
+		Frame<SourceValue> fr = frames[idx];
+		if (fr == null) return false;
+
+		int recvIdx = fr.getStackSize() - 1 - Type.getArgumentTypes(m.desc).length;
+		if (recvIdx < 0) return false;
+		SourceValue recv = fr.getStack(recvIdx);
+		if (recv == null || recv.insns.isEmpty()) return false;
+
+		int directIdx = -1;
+		for (AbstractInsnNode src : recv.insns) {
+			int at = insns.indexOf(src);
+			if (at < 0 || !collected.contains(src)) return false;   // rule 2: slice-local only
+			if (isStringCoercionProducer(src)) {
+				if (at > directIdx) directIdx = at;                  // rule 1: the direct producer
+			} else if (isIntermediateObjectToString(src)) {
+				// A chained coercion: "  a ".trim().trimStart() emits two Object.toString calls
+				// and AliasInterpreter merges the first into the second one's closure. Admitting
+				// it is sound because `src` is in `collected`, so the in-order slice walk
+				// (minIdx..putIdx, first failure wins) vetted it on its own beforehand.
+			} else if (!isInertProducer(src)) {
+				return false;                                        // rule 2: nothing else
+			}
+		}
+		return directIdx >= 0;
 	}
 
 	// ==================== 构造器参数 -> 字段扫描 ====================
@@ -3501,7 +3599,7 @@ public class InitFix {
 			}
 
 			// §4.2 的最小效应防御（P0 版）：明确非确定性 / 环境依赖 / IO 的调用直接拒绝。
-			String effect = effectReason(n);
+			String effect = effectReason(n, insns, frames, collected);
 			if (effect != null) return effect;
 
 			// §4.2 局部逃逸豁免的接收者敏感判定：可复用 builder 的接收者必须来自本切片。

@@ -655,6 +655,45 @@ tasks.register("hstestLayoutGate", JavaExec) {
 }
 tasks.named("check") { dependsOn tasks.named("hstestLayoutGate") }
 
+// ---- SemAssert 场景迁移用的夹具编译（真实 javac 21，与 suite.sh 逐项对齐）----
+//
+// suite.sh 用 `javac -nowarn -encoding UTF-8`（无 -g/-parameters），SemAssert 的 15 个夹具
+// 全部 JDK21。Gradle 的 JavaCompile 默认会加 `-g`，必须显式把 debugLevel 钉成 javac 默认
+// 的 "source,lines"，否则 .class 字节不同、与 suite.sh 产物对不上哈希。
+//
+// 源位置：Case 在 scratch/hstest/<group>/<ver>/，helper（同包替身）在 scratch/hstest/<group>/。
+// 输出：build/hstest-fixtures/jdk21/<group>/<ver>/（DirFx 按 <group>/<ver>/<pkg>/<Case>.class 取）。
+def hstestFixtureRoot = layout.buildDirectory.dir("hstest-fixtures")
+def hstestFixtureSpecs = [
+	// [group, ver, helper 源(相对 scratch/hstest，可为 null)]
+	["swap2", "v1", "swap2/Time.java"], ["swap2", "v2", "swap2/Time.java"],
+	["leaf",  "v1", null],              ["leaf",  "v2", null], ["leaf", "v3", null],
+	["deep",  "v1", "deep/Time.java"],  ["deep",  "v2", "deep/Time.java"],
+	["two",   "v1", "two/Time2.java"],  ["two",   "v2", "two/Time2.java"],
+	["deep2", "v1", "deep2/Time3.java"],["deep2", "v2", "deep2/Time3.java"], ["deep2", "v3", "deep2/Time3.java"],
+	["save3", "v1", "save3/Time4.java"],["save3", "v2", "save3/Time4.java"], ["save3", "v3", "save3/Time4.java"],
+]
+def hstestFixtureJdk = 21
+def hstestFixtureTasks = hstestFixtureSpecs.collect { g, v, helper ->
+	tasks.register("hstestFx_${g}_${v}", JavaCompile) {
+		group = "verification"
+		description = "编译 SemAssert 夹具 ${g}/${v} (jdk${hstestFixtureJdk})"
+		source = files(fileTree("scratch/hstest/${g}/${v}") { include "**/*.java" },
+		               helper ? [file("scratch/hstest/${helper}")] : [])
+		classpath = files()   // 夹具不依赖项目库
+		destinationDirectory = hstestFixtureRoot.map { it.dir("jdk${hstestFixtureJdk}/${g}/${v}") }
+		javaCompiler = javaToolchains.compilerFor {
+			languageVersion = JavaLanguageVersion.of(hstestFixtureJdk)
+		}
+		options.encoding = "UTF-8"
+		options.warnings = false                          // -nowarn
+		options.debug = true
+		options.debugOptions.debugLevel = "source,lines"  // javac 默认；不写 Gradle 会发 -g（含 vars）
+		sourceCompatibility = "${hstestFixtureJdk}"
+		targetCompatibility = "${hstestFixtureJdk}"
+	}
+}
+
 // JUnit 试点入口：把 hstest 里可纯函数化、可场景隔离的断言逐步迁到 JUnit。
 // 与 hstestRun（suite.sh / main 程序 + expected-count 基线）并存并跑，迁移期间两套都在。
 // 注意：
@@ -663,16 +702,19 @@ tasks.named("check") { dependsOn tasks.named("hstestLayoutGate") }
 //  • 运行期仍需 hotswap-agent / jni-agent 的 jar（runtimeClasspath 走 build/libs）。
 tasks.register("hstestJunit", Test) {
 	group = "verification"
-	description = "hstest 的 JUnit 入口（试点：布局门接线）"
+	description = "hstest 的 JUnit 入口（试点：布局门接线 + SemAssert 场景）"
 	testClassesDirs = sourceSets.hstest.output.classesDirs
 	classpath = sourceSets.hstest.runtimeClasspath
 	dependsOn tasks.named("hstestClasses")
 	dependsOn project(":hotswap-agent").tasks.named("jar")
 	dependsOn project(":jni-agent").tasks.named("jar")
+	dependsOn hstestFixtureTasks
+	inputs.dir(hstestFixtureRoot)   // 夹具变了必须重跑
 	useJUnitPlatform()
 	maxParallelForks = 1
 	jvmArgs "--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",
 	        "-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8"
+	systemProperty "hstest.fixtures", hstestFixtureRoot.get().asFile.absolutePath
 	testLogging {
 		events "failed"
 		exceptionFormat "full"

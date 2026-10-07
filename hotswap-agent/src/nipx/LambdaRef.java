@@ -169,6 +169,10 @@ public class LambdaRef {
 		var bytes = fetchCurrentBytecode(Cell.class);
 		bytes = injectCell(bytes);
 		Injector.redefineOneClass(Cell.class, bytes);
+		// 必须回写缓存：否则紧随其后的 CellPropertyRef.redefineCellProperties()
+		// 会因 bytecodeCache 未命中而降级读取纯净原始字节码，从零重建 Cell，
+		// 抹掉这里注入的 wrapCellUpdate/Disabled/Tooltip/Checked 钩子。
+		bytecodeCache.put(Cell.class.getName(), bytes);
 	}
 	/**
 	 * @see UpdateRef#wrap(Element, Cons)

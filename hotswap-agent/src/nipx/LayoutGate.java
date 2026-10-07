@@ -250,6 +250,23 @@ public final class LayoutGate {
 		return new Result(Verdict.REMOVED_FIELD, "field(s) removed: " + pureRemoved);
 	}
 
+	/**
+	 * 该组 {@code changedFields} 是否涉及<b>静态字段</b>（条目名带 {@code *} 前缀）。
+	 *
+	 * <p>用于存活实例分级：实例字段的旧值只存在于实例上，没有实例就无所谓"读到旧值/零值"；
+	 * 而静态字段的值是<b>类级别共享</b>的，与有无实例无关——类只要加载过就可能已被写入。
+	 * 因此静态字段的增删改<b>不能</b>因"无存活实例"而放行。</p>
+	 */
+	public static boolean hasStaticFieldChange(List<String> changedFields) {
+		if (changedFields == null) return false;
+		for (String raw : changedFields) {
+			if (raw == null || raw.length() < 2 || raw.charAt(0) == ' ') continue;
+			String body = raw.substring(1).trim();
+			if (body.startsWith("*")) return true;
+		}
+		return false;
+	}
+
 	/** 命名常量：默认模式。{@code warn}/{@code off} 见 {@code HotSwapAgent.ANON_LAYOUT_GATE}。 */
 	public static final String MODE_REJECT = "reject";
 	public static final String MODE_WARN   = "warn";

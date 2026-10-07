@@ -1,6 +1,7 @@
 import nipx.HotSwapAgent;
 import nipx.HotSwapAgent.LayoutAction;
 import nipx.HotSwapAgent.LayoutDecision;
+import nipx.HotSwapAgent.Liveness;
 import nipx.LayoutGate.Verdict;
 import org.junit.jupiter.api.Test;
 
@@ -13,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>与 {@code LayoutGateAssert} 的分工：那边守"规则表 + changedFields 格式对接"；本类守
  * {@link HotSwapAgent#decideLayout} 这个纯函数 —— 它把接线里最易错的部分（取哪份字节、
- * 拒绝要带哪些类、off/skip 两个出口）抽了出来，可脱离 Instrumentation 单测。</p>
+ * 拒绝要带哪些类、off/skip/waive 三个出口、存活实例分级）抽了出来，可脱离 Instrumentation 单测。</p>
  *
  * <p>调用位置（必须在 {@code applyRedefinitions} 之前）不在本类覆盖范围内，属已知缺口。</p>
  */
@@ -29,20 +30,25 @@ class LayoutGateWiringTest {
 		return b;
 	}
 
-	private static byte[] withField()   { return cls(HOST, "package lg;\npublic class Host { int a; }\n"); }
-	private static byte[] withoutField(){ return cls(HOST, "package lg;\npublic class Host { }\n"); }
-	private static byte[] addedField()  { return cls(HOST, "package lg;\npublic class Host { int a; int b; }\n"); }
-	private static byte[] retypedField(){ return cls(HOST, "package lg;\npublic class Host { long a; }\n"); }
+	private static byte[] withField()    { return cls(HOST, "package lg;\npublic class Host { int a; }\n"); }
+	private static byte[] withoutField() { return cls(HOST, "package lg;\npublic class Host { }\n"); }
+	private static byte[] addedField()   { return cls(HOST, "package lg;\npublic class Host { int a; int b; }\n"); }
+	private static byte[] retypedField() { return cls(HOST, "package lg;\npublic class Host { long a; }\n"); }
+	private static byte[] staticField()  { return cls(HOST, "package lg;\npublic class Host { static int s; }\n"); }
+	private static byte[] noStatic()     { return cls(HOST, "package lg;\npublic class Host { }\n"); }
 
 	/** 批次类名集：宿主 + 两个匿名类 + 一个具名内部类（后者不得被整组带走）+ 无关类。 */
 	private static final Set<String> BATCH = new LinkedHashSet<>(List.of(
 		HOST, "lg.Host$1", "lg.Host$2", "lg.Host$Builder", "lg.Other"));
 
+	private static LayoutDecision decide(byte[] oldB, byte[] newB, String mode, Liveness live) {
+		return HotSwapAgent.decideLayout(HOST, oldB, newB, mode, live, BATCH);
+	}
+
 	@Test
 	void removedFieldDropsWholeGroup() {
-		LayoutDecision d = HotSwapAgent.decideLayout(HOST, withField(), withoutField(),
-			"reject", BATCH);
-		assertEquals(LayoutAction.REJECT, d.action(), "删除字段必须拒绝");
+		LayoutDecision d = decide(withField(), withoutField(), "reject", Liveness.LIVE);
+		assertEquals(LayoutAction.REJECT, d.action(), "删除字段 + 有实例必须拒绝");
 		assertEquals(Verdict.REMOVED_FIELD, d.layout().verdict(), "档位应为 REMOVED_FIELD");
 		assertEquals(HOST, d.hostName());
 		assertEquals(Set.of(HOST, "lg.Host$1", "lg.Host$2"), d.dropped(),
@@ -51,8 +57,7 @@ class LayoutGateWiringTest {
 
 	@Test
 	void typeChangeDropsWholeGroup() {
-		LayoutDecision d = HotSwapAgent.decideLayout(HOST, withField(), retypedField(),
-			"reject", BATCH);
+		LayoutDecision d = decide(withField(), retypedField(), "reject", Liveness.LIVE);
 		assertEquals(LayoutAction.REJECT, d.action());
 		assertEquals(Verdict.CHANGED_FIELD_TYPE, d.layout().verdict());
 		assertTrue(d.dropped().contains(HOST) && d.dropped().contains("lg.Host$1"));
@@ -60,8 +65,7 @@ class LayoutGateWiringTest {
 
 	@Test
 	void pureAddPasses() {
-		LayoutDecision d = HotSwapAgent.decideLayout(HOST, withField(), addedField(),
-			"reject", BATCH);
+		LayoutDecision d = decide(withField(), addedField(), "reject", Liveness.LIVE);
 		assertEquals(LayoutAction.PASS, d.action(), "纯新增字段放行，交给 InitFix");
 		assertTrue(d.layout().compatible());
 		assertTrue(d.dropped().isEmpty(), "放行时不得移出任何类");
@@ -69,8 +73,7 @@ class LayoutGateWiringTest {
 
 	@Test
 	void warnModePassesButReports() {
-		LayoutDecision d = HotSwapAgent.decideLayout(HOST, withField(), withoutField(),
-			"warn", BATCH);
+		LayoutDecision d = decide(withField(), withoutField(), "warn", Liveness.LIVE);
 		assertEquals(LayoutAction.PASS, d.action(), "warn 模式必须放行");
 		assertNotNull(d.layout());
 		assertFalse(d.layout().compatible(), "但规则结果必须非兼容，调用方据此强告警");
@@ -79,8 +82,7 @@ class LayoutGateWiringTest {
 
 	@Test
 	void offModeSkipsEntirely() {
-		LayoutDecision d = HotSwapAgent.decideLayout(HOST, withField(), withoutField(),
-			"off", BATCH);
+		LayoutDecision d = decide(withField(), withoutField(), "off", Liveness.LIVE);
 		assertEquals(LayoutAction.PASS, d.action());
 		assertNull(d.layout(), "off 模式完全不解析字节");
 		assertTrue(d.dropped().isEmpty());
@@ -88,17 +90,43 @@ class LayoutGateWiringTest {
 
 	@Test
 	void missingBaselineIsNotSilent() {
-		LayoutDecision d = HotSwapAgent.decideLayout(HOST, null, withoutField(), "reject", BATCH);
-		assertEquals(LayoutAction.SKIP, d.action(), "取不到旧字节 → SKIP（放行但调用方必须告警）");
+		assertEquals(LayoutAction.SKIP,
+			decide(null, withoutField(), "reject", Liveness.LIVE).action(),
+			"取不到旧字节 → SKIP（放行但调用方必须告警）");
+		assertEquals(LayoutAction.SKIP,
+			decide(withField(), null, "reject", Liveness.LIVE).action());
+	}
+
+	@Test
+	void noLiveInstancesWaivesInstanceFieldChange() {
+		LayoutDecision d = decide(withField(), withoutField(), "reject", Liveness.NONE);
+		assertEquals(LayoutAction.WAIVE, d.action(),
+			"无存活实例的实例字段变更 → 放行（新建实例走新构造器）");
+		assertFalse(d.layout().compatible(), "但仍带非兼容规则结果供调用方记 waived");
 		assertTrue(d.dropped().isEmpty());
-		LayoutDecision d2 = HotSwapAgent.decideLayout(HOST, withField(), null, "reject", BATCH);
-		assertEquals(LayoutAction.SKIP, d2.action());
+	}
+
+	@Test
+	void unknownLivenessIsTreatedAsLive() {
+		LayoutDecision d = decide(withField(), withoutField(), "reject", Liveness.UNKNOWN);
+		assertEquals(LayoutAction.REJECT, d.action(),
+			"实例判定取不到时必须按『可能有实例』处理，不得当成零实例放行");
+		assertTrue(d.dropped().contains(HOST));
+	}
+
+	@Test
+	void staticChangeNeverWaivedEvenWithoutInstances() {
+		LayoutDecision d = decide(staticField(), noStatic(), "reject", Liveness.NONE);
+		assertEquals(LayoutAction.REJECT, d.action(),
+			"静态字段的旧值类级别共享，无实例也必须拒绝（不得 waive）");
+		assertTrue(d.dropped().contains(HOST));
 	}
 
 	@Test
 	void nestedAnonHostResolvesToOuter() {
-		LayoutDecision d = HotSwapAgent.decideLayout("lg.Host$1$2", withField(), withoutField(),
-			"reject", new LinkedHashSet<>(List.of("lg.Host", "lg.Host$1", "lg.Host$1$2")));
+		LayoutDecision d = HotSwapAgent.decideLayout("lg.Host$1$2",
+			withField(), withoutField(), "reject", Liveness.LIVE,
+			new LinkedHashSet<>(List.of("lg.Host", "lg.Host$1", "lg.Host$1$2")));
 		assertEquals("lg.Host", d.hostName(), "Foo$1$2 的宿主应归约到 Foo");
 		assertEquals(LayoutAction.REJECT, d.action());
 		assertTrue(d.dropped().contains("lg.Host$1") && d.dropped().contains("lg.Host$1$2"),

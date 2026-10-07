@@ -1145,6 +1145,9 @@ public class HotSwapAgent {
 	/** 布局门拒绝的类/宿主次数（诊断用，见 {@link #applyRedefineLayoutGate}）。 */
 	static final java.util.concurrent.atomic.AtomicLong LAYOUT_GATE_REJECTED =
 	 new java.util.concurrent.atomic.AtomicLong();
+	/** 布局门"放行但记录"的次数（warn 模式 / 无存活实例 waive）。 */
+	static final java.util.concurrent.atomic.AtomicLong LAYOUT_GATE_WAIVED =
+	 new java.util.concurrent.atomic.AtomicLong();
 
 	/**
 	 * 实例状态布局安全门（重定义层入口，§7.2 风险 1，全体类）。
@@ -1179,8 +1182,28 @@ public class HotSwapAgent {
 				oldBytes = fetchOriginalBytecode(targetClass);
 				if (oldBytes != null) bytecodeCache.put(className, oldBytes);
 			}
+			if (oldBytes == null) {
+				warn("[LAYOUT-SKIP] " + className + ": layout gate skipped — no baseline bytecode"
+				     + " to diff. Redefining without a field-layout check.");
+				continue;
+			}
 
-			LayoutDecision d = decideLayout(className, oldBytes, newBytes, LAYOUT_GATE,
+			List<String> changed;
+			try {
+				changed = ClassDiffUtil.diff(oldBytes, newBytes).changedFields;
+			} catch (Throwable t) {
+				warn("[LAYOUT-SKIP] " + className + ": layout gate skipped — cannot diff ("
+				     + t.getClass().getSimpleName() + "). Redefining without a field-layout check.");
+				continue;
+			}
+
+			// 只有布局不兼容时才去扫堆 —— 一次全堆遍历会触发 safepoint，不能每类都做。
+			// hasLiveInstances 已把"取不到实例信息"保守折叠成 LIVE（见其 javadoc）。
+			Liveness liveness = LayoutGate.checkChangedFields(changed).compatible()
+			 ? Liveness.LIVE
+			 : (hasLiveInstances(className) ? Liveness.LIVE : Liveness.NONE);
+
+			LayoutDecision d = decideLayout(className, changed, LAYOUT_GATE, liveness,
 			                                newBatchBytes.keySet());
 
 			// 显式出口：取不到基线 / 无法 diff 就不是"放行"，而是"没法判"。
@@ -1188,6 +1211,14 @@ public class HotSwapAgent {
 			if (d.action() == LayoutAction.SKIP) {
 				warn("[LAYOUT-SKIP] " + className + ": layout gate skipped — no usable baseline"
 				     + " bytecode to diff. Redefining without a field-layout check.");
+				continue;
+			}
+
+			if (d.action() == LayoutAction.WAIVE) {
+				LAYOUT_GATE_WAIVED.incrementAndGet();
+				warn("[LAYOUT-WAIVE] " + className + ": incompatible field layout ("
+				     + d.layout().detail() + ") but no live instances; redefining anyway — new"
+				     + " instances go through the new constructor and initialize correctly.");
 				continue;
 			}
 
@@ -1207,7 +1238,7 @@ public class HotSwapAgent {
 
 			// action == PASS：可能是"字段没变/纯新增"，也可能是 warn 模式下的强制放行。
 			if (d.layout() != null && !d.layout().compatible()) {
-				LAYOUT_GATE_REJECTED.incrementAndGet();
+				LAYOUT_GATE_WAIVED.incrementAndGet();
 				warn("[LAYOUT-WARN] " + className + ": incompatible field layout ("
 				     + d.layout().detail() + "); redefining anyway because nipx.agent.layout_gate=warn."
 				     + " Surviving instances may read 0 / misread old values until recreated.");
@@ -1221,6 +1252,8 @@ public class HotSwapAgent {
 	public enum LayoutAction {
 		/** 放行（含 warn 模式下的强制放行，与字段未变）。 */
 		PASS,
+		/** 布局不兼容，但无存活实例且不涉及静态字段 —— 放行（调用方应记 waived + 告警）。 */
+		WAIVE,
 		/** 拒绝并整组移出本批。 */
 		REJECT,
 		/** 无法判定（取不到基线 / diff 失败）—— 放行但必须告警，不得静默。 */
@@ -1228,8 +1261,14 @@ public class HotSwapAgent {
 	}
 
 	/**
+	 * 存活实例判定结果（三态）。{@link #UNKNOWN} 必须按"可能有实例"处理 ——
+	 * 信它会误判成"无实例"而放行，那正是我们最不想要的方向。
+	 */
+	public enum Liveness { LIVE, NONE, UNKNOWN }
+
+	/**
 	 * 布局门判决（纯函数，无副作用）。
-	 * @param action   PASS / REJECT / SKIP
+	 * @param action   PASS / WAIVE / REJECT / SKIP
 	 * @param layout   规则结果；{@code null} 表示 OFF 或无法判定（此时看 {@code action}）
 	 * @param hostName 由类名推出的宿主名（{@code Foo$1$2 -> Foo}）
 	 * @param dropped  仅 REJECT 时非空：宿主 + 其下属全部匿名类（取自批次类名集）
@@ -1238,37 +1277,61 @@ public class HotSwapAgent {
 	                             String hostName, Set<String> dropped) { }
 
 	/**
-	 * 纯函数：给定一个类的旧/新字节、开关模式与批次类名集，判定布局门动作。
-	 *
-	 * <p>"给定旧字节 / 新字节 / 开关，返回放行或拒绝的类集合"——把接线里最容易出错的部分
-	 * （diff 取哪个字节、拒绝要带哪些类、off/skip 出口）抽成可单测的纯逻辑。调用位置
-	 * （必须在 {@code applyRedefinitions} 之前）由 {@code applyRedefineLayoutGate} 的接线守卫。</p>
-	 *
-	 * <ul>
-	 *   <li>{@code OFF} → PASS，不解析字节。</li>
-	 *   <li>旧字节为 null / diff 抛异常 → SKIP（调用方负责告警）。</li>
-	 *   <li>字段兼容（含纯新增）→ PASS。</li>
-	 *   <li>不兼容 + {@code warn} → PASS，但 {@code layout} 非兼容（调用方强告警）。</li>
-	 *   <li>不兼容 + {@code reject}（默认）→ REJECT + {@code dropped} = 宿主 + 匿名子类。</li>
-	 * </ul>
+	 * 便捷重载：先 diff 两版字节，再交给核心纯函数。diff 失败 / 取不到字节 → SKIP。
 	 */
 	public static LayoutDecision decideLayout(String className, byte[] oldBytes, byte[] newBytes,
-	                                          String mode, Set<String> batchNames) {
+	                                          String mode, Liveness liveness, Set<String> batchNames) {
+		if (LayoutGate.MODE_OFF.equals(mode)) {
+			return new LayoutDecision(LayoutAction.PASS, null, hostNameOf(className), Set.of());
+		}
+		if (oldBytes == null || newBytes == null) {
+			return new LayoutDecision(LayoutAction.SKIP, null, hostNameOf(className), Set.of());
+		}
+		List<String> changed;
+		try {
+			changed = ClassDiffUtil.diff(oldBytes, newBytes).changedFields;
+		} catch (Throwable t) {
+			return new LayoutDecision(LayoutAction.SKIP, null, hostNameOf(className), Set.of());
+		}
+		return decideLayout(className, changed, mode, liveness, batchNames);
+	}
+
+	/**
+	 * 核心纯函数：给定已算出的 {@code changedFields}、模式、存活实例判定与批次类名集，判定动作。
+	 *
+	 * <p>把接线里最容易出错的部分（拒绝要带哪些类、off/skip/waive 出口）抽成可单测的纯逻辑。
+	 * 调用位置（必须在 {@code applyRedefinitions} 之前）由 {@code applyRedefineLayoutGate} 的接线守卫。</p>
+	 *
+	 * <ul>
+	 *   <li>{@code OFF} → PASS，不解析。</li>
+	 *   <li>{@code changedFields == null}（无法 diff）→ SKIP（调用方负责告警）。</li>
+	 *   <li>字段兼容（含纯新增）→ PASS。</li>
+	 *   <li>不兼容 + {@code warn} → PASS，但 {@code layout} 非兼容（调用方强告警）。</li>
+	 *   <li>不兼容 + {@code reject}（默认）+ <b>无存活实例且非静态字段</b> → WAIVE。</li>
+	 *   <li>不兼容 + {@code reject} + 有/未知存活实例，或涉及静态字段 → REJECT +
+	 *       {@code dropped} = 宿主 + 匿名子类。</li>
+	 * </ul>
+	 *
+	 * <p><b>为什么有一条静态例外</b>：实例字段的旧值只在实例上，没有实例就无所谓"读到旧值/零值"；
+	 * 静态字段是类级别共享的，类只要加载过就可能已被写入，故不因无实例而放行。</p>
+	 */
+	public static LayoutDecision decideLayout(String className, List<String> changedFields,
+	                                          String mode, Liveness liveness, Set<String> batchNames) {
 		String host = hostNameOf(className);
 		if (LayoutGate.MODE_OFF.equals(mode)) {
 			return new LayoutDecision(LayoutAction.PASS, null, host, Set.of());
 		}
-		if (oldBytes == null || newBytes == null) {
+		if (changedFields == null) {
 			return new LayoutDecision(LayoutAction.SKIP, null, host, Set.of());
 		}
-		LayoutGate.Result res;
-		try {
-			res = LayoutGate.checkChangedFields(ClassDiffUtil.diff(oldBytes, newBytes).changedFields);
-		} catch (Throwable t) {
-			return new LayoutDecision(LayoutAction.SKIP, null, host, Set.of());
-		}
+		LayoutGate.Result res = LayoutGate.checkChangedFields(changedFields);
 		if (res.compatible() || LayoutGate.MODE_WARN.equals(mode)) {
 			return new LayoutDecision(LayoutAction.PASS, res, host, Set.of());
+		}
+		// 无存活实例且不涉及静态字段：没有状态会被错读，放行。
+		// UNKNOWN 落入下面的 REJECT 分支（按"可能有实例"处理）。
+		if (liveness == Liveness.NONE && !LayoutGate.hasStaticFieldChange(changedFields)) {
+			return new LayoutDecision(LayoutAction.WAIVE, res, host, Set.of());
 		}
 		Set<String> dropped = new LinkedHashSet<>();
 		dropped.add(host);

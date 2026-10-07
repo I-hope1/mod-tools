@@ -70,6 +70,24 @@ public class HotSwapAgent {
 	 */
 	public static String ANON_LAYOUT_GATE = strProp("nipx.agent.anon_layout_gate", "reject");
 
+	/**
+	 * 实例状态布局门（重定义层，全体类，非仅匿名类）模式：{@code reject} / {@code warn} / {@code off}（§7.2 风险 1）。
+	 *
+	 * <p>与 {@link #ANON_LAYOUT_GATE} 的分工：后者在<b>对齐器</b>里挡"匿名类合成捕获字段变化"
+	 * （Tier 4 配对前）；本开关在<b>重定义层</b>挡"具名类 / 匿名类用户声明字段的删/改类型/改静态性"，
+	 * 判据是现成的 {@code ClassDiff.changedFields}。两者互补，默认都是 {@code reject}。</p>
+	 *
+	 * <ul>
+	 *   <li>{@code reject}（默认）—— 字段被删除 / 改类型 / 改静态性时，把该宿主及其匿名类
+	 *       整组移出本轮重定义（复用 §4.3 的宿主组拒绝通道），存活实例继续跑旧逻辑；</li>
+	 *   <li>{@code warn} —— 照旧重定义，只打强告警（给"界面马上会重建"的场景用）；</li>
+	 *   <li>{@code off} —— 完全恢复旧行为：不做任何布局检查。</li>
+	 * </ul>
+	 *
+	 * <p>纯新增字段一律放行：InitFix 会为存活实例补初始化，这正是热更时新增字段的期望语义。</p>
+	 */
+	public static String LAYOUT_GATE = strProp("nipx.agent.layout_gate", "reject");
+
 	/** 读字符串属性并做合法性校验；非法值回退到默认值并告警（不静默接受拼错的开关）。 */
 	private static String strProp(String key, String def) {
 		String v = System.getProperty(key);
@@ -300,7 +318,7 @@ public class HotSwapAgent {
 		info("Anon Align: " + ANON_ALIGN + " (strict=" + ANON_STRICT + ", debug=" + ANON_DEBUG
 		     + ", maxPerHost=" + AnonClassAligner.MAX_ANON_PER_HOST
 		     + ", timeoutMs=" + AnonClassAligner.ALIGN_TIMEOUT_MS
-		     + ", layoutGate=" + ANON_LAYOUT_GATE + ")");
+		     + ", layoutGate=" + ANON_LAYOUT_GATE + ", redefineLayoutGate=" + LAYOUT_GATE + ")");
 		if (ANON_ALIGN) {
 			info("Anonymous Class Alignment ENABLED. Ambiguity is resolved conservatively (never by class name).");
 		} else {
@@ -445,7 +463,7 @@ public class HotSwapAgent {
 			if (!ANON_ALIGN) {
 				// 总开关关闭：**不能**退化成"按类名照旧重定义" —— 那正是编号位移篡夺场景本身。
 				// 唯一安全的关闭语义是把该宿主组整体移出本批重定义。
-				rejectHostGroup(newBatchBytes, classToPath, hostName, newAnon,
+				rejectHostGroup(newBatchBytes, classToPath, hostName,
 				 new AnonClassAligner.AlignmentRejectedException(hostSlash,
 					"anonymous class alignment disabled (nipx.agent.anon_align=false)"));
 				continue;
@@ -475,7 +493,7 @@ public class HotSwapAgent {
 				// 结果是"本轮所有类的热更静默失效"（异常最终只留在 ScheduledFuture 里，无人观测）；
 				// 而对齐失败也不能只跳过匿名类 —— 该宿主的新字节码会引用到未对齐的 Foo$N。
 				// 因此正确做法是连宿主一起移出本批，其余宿主照常处理。
-				rejectHostGroup(newBatchBytes, classToPath, hostName, newAnon, t);
+				rejectHostGroup(newBatchBytes, classToPath, hostName, t);
 				continue;
 			}
 
@@ -510,6 +528,17 @@ public class HotSwapAgent {
 			}
 			transactions.put(hostName, tx);
 		}
+
+		// ---- 实例状态布局安全门（§7.2 风险 1，全体类，非仅匿名类）----
+		//
+		// 位置：宿主对齐之后、逐类 redefine 之前。这样具名类与匿名类一起被覆盖，
+		// 且被拒的宿主组可以干净地复用 §4.3 的"宿主 + 下属匿名类整组移出本批"通道
+		// （`rejectHostGroup` / `dropHostGroup`）。
+		//
+		// 分工：对齐器的 Tier 4 门只挡匿名类的**合成捕获字段**（ClassDiff 会过滤掉它们，
+		// 这里看不见）；本门只看现成的 `ClassDiff.changedFields`，即**非合成**字段的
+		// 删/改类型/改静态性。纯新增放行（交给 InitFix）。
+		applyRedefineLayoutGate(newBatchBytes, classToPath, transactions);
 
 		for (Map.Entry<String, byte[]> batchEntry : newBatchBytes.entrySet()) {
 			String className = batchEntry.getKey();
@@ -1064,7 +1093,7 @@ public class HotSwapAgent {
 	 *          （打 {@code [HOTSWAP-REJECT]} 告警），其它异常视为对齐器缺陷（打 error + 堆栈）
 	 */
 	private static void rejectHostGroup(Map<String, byte[]> newBatchBytes, Map<String, Path> classToPath,
-	                                    String hostName, Map<String, byte[]> newAnon, Throwable t) {
+	                                    String hostName, Throwable t) {
 		boolean expected = t instanceof AnonClassAligner.AlignmentRejectedException;
 		String reason = expected
 		 ? ((AnonClassAligner.AlignmentRejectedException) t).reason
@@ -1078,10 +1107,7 @@ public class HotSwapAgent {
 			      + ". Redefine skipped safely. Reason: " + reason
 			      + ". Please hot-swap again or restart.", t);
 		}
-		dropFromBatch(newBatchBytes, classToPath, hostName);
-		for (String anonName : newAnon.keySet()) {
-			dropFromBatch(newBatchBytes, classToPath, anonName);
-		}
+		dropHostGroup(newBatchBytes, classToPath, hostName);
 	}
 
 	/** 从批次中移除一个类（点分与斜杠两种键形态都移除，避免因键写法不同而漏删）。 */
@@ -1092,6 +1118,112 @@ public class HotSwapAgent {
 		String alt = className.indexOf('/') >= 0 ? className.replace('/', '.') : className.replace('.', '/');
 		newBatchBytes.remove(alt);
 		classToPath.remove(alt);
+	}
+
+	/**
+	 * 宿主组移除核心：把「宿主 + 其下属全部匿名类」从本批移出。
+	 *
+	 * <p>{@link #rejectHostGroup}（对齐器拒绝）与 {@link #applyRedefineLayoutGate}（布局门拒绝）
+	 * 共用同一机制，只是日志与触发理由不同 —— 保证两种拒绝的"原子单元"语义完全一致。</p>
+	 */
+	private static void dropHostGroup(Map<String, byte[]> newBatchBytes, Map<String, Path> classToPath,
+	                                  String hostName) {
+		String hostSlash = hostName.replace('.', '/');
+		List<String> anons = new ArrayList<>();
+		for (String cn : new ArrayList<>(newBatchBytes.keySet())) {
+			if (AnonClassAligner.isAnonymousClassName(hostSlash, cn)) anons.add(cn);
+		}
+		dropFromBatch(newBatchBytes, classToPath, hostName);
+		for (String anon : anons) dropFromBatch(newBatchBytes, classToPath, anon);
+	}
+
+	/** 由点分类名求宿主类名：{@code Foo$1$2 -> Foo}；非匿名（含具名内部类 {@code Foo$Bar}）原样返回。 */
+	private static String hostNameOf(String className) {
+		return className.replaceAll("\\$\\d+(\\$\\d+)*$", "");
+	}
+
+	/** 布局门拒绝的类/宿主次数（诊断用，见 {@link #applyRedefineLayoutGate}）。 */
+	static final java.util.concurrent.atomic.AtomicLong LAYOUT_GATE_REJECTED =
+	 new java.util.concurrent.atomic.AtomicLong();
+
+	/**
+	 * 实例状态布局安全门（重定义层入口，§7.2 风险 1，全体类）。
+	 *
+	 * <p>判据直接用现成的 {@code ClassDiff.changedFields}：纯新增放行（InitFix 初始化存活实例），
+	 * 删除 / 同名改类型 / 改静态性则把该宿主及其匿名类整组移出本轮重定义。与对齐器 Tier 4 门互补 ——
+	 * 那个门挡匿名类的合成捕获字段（被 {@code ClassDiff} 过滤，这里看不见），本门挡非合成字段。</p>
+	 *
+	 * <p>只检查<b>已加载</b>（有旧字节码、可能存在存活实例/静态状态）的类。未加载类没有旧状态可言，
+	 * 首次加载会走新构造器，放行不会让任何东西读到零值。</p>
+	 *
+	 * <p>纯函数 {@link LayoutGate#checkChangedFields} 负责规则，这里只负责"取旧字节 → 逐步 diff →
+	 * 拒绝并整组移出 + 撤销事务"的接线。{@code nipx.agent.layout_gate=off} 时整体跳过。</p>
+	 */
+	private static void applyRedefineLayoutGate(Map<String, byte[]> newBatchBytes,
+	                                            Map<String, Path> classToPath,
+	                                            Map<String, AlignmentTransaction> transactions) {
+		if (LayoutGate.MODE_OFF.equals(LAYOUT_GATE)) return;
+
+		Set<String> rejectedHosts = new LinkedHashSet<>();
+		for (String className : new ArrayList<>(newBatchBytes.keySet())) {
+			if (isBlacklisted(className)) continue;
+			if (rejectedHosts.contains(hostNameOf(className))) continue;
+
+			Class<?> targetClass = loadedClassesMap.get(className);
+			if (targetClass == null) continue; // 未加载：无旧状态需要保护
+
+			byte[] newBytes = newBatchBytes.get(className);
+			if (newBytes == null) continue;
+			byte[] oldBytes = bytecodeCache.get(className);
+			if (oldBytes == null) {
+				oldBytes = fetchOriginalBytecode(targetClass);
+				if (oldBytes != null) bytecodeCache.put(className, oldBytes);
+			}
+			if (oldBytes == null) {
+				// 显式出口：取不到基线就不是"放行"，而是"没法判"。静默放行会重演
+				// "整轮静默失效"那类难排查的问题，所以必须说出来。
+				warn("[LAYOUT-SKIP] " + className + ": layout gate skipped — no baseline bytecode"
+				     + " to diff. Redefining without a field-layout check.");
+				continue;
+			}
+
+			ClassDiffUtil.ClassDiff diff;
+			try {
+				diff = ClassDiffUtil.diff(oldBytes, newBytes);
+			} catch (Throwable t) {
+				warn("[LAYOUT-REJECT] Cannot diff " + className + " for the layout gate ("
+				     + t.getClass().getSimpleName() + "); skipping the gate for this class.");
+				continue;
+			}
+
+			LayoutGate.Result res = LayoutGate.checkChangedFields(diff.changedFields);
+			if (res.compatible()) {
+				if (!diff.changedFields.isEmpty()) {
+					log("[LAYOUT-ALLOW] " + className + ": " + res.detail());
+				}
+				continue;
+			}
+
+			String hostName = hostNameOf(className);
+			if (LayoutGate.MODE_WARN.equals(LAYOUT_GATE)) {
+				LAYOUT_GATE_REJECTED.incrementAndGet();
+				warn("[LAYOUT-WARN] " + className + ": incompatible field layout ("
+				     + res.detail() + "); redefining anyway because nipx.agent.layout_gate=warn."
+				     + " Surviving instances may read 0 / misread old values until recreated.");
+				continue;
+			}
+
+			LAYOUT_GATE_REJECTED.incrementAndGet();
+			warn("[LAYOUT-REJECT] " + className + ": REFUSED redefine — field layout incompatible ("
+			     + res.detail() + "). Host " + hostName + " and its anonymous classes are skipped this"
+			     + " round; existing instances keep running the OLD code, so this edit will NOT take"
+			     + " effect for them until the class is recreated/restarted. Fix the field layout, or set"
+			     + " -Dnipx.agent.layout_gate=warn to force it.");
+			dropHostGroup(newBatchBytes, classToPath, hostName);
+			AlignmentTransaction tx = transactions.remove(hostName);
+			if (tx != null) tx.rollback(false);
+			rejectedHosts.add(hostName);
+		}
 	}
 
 	/**

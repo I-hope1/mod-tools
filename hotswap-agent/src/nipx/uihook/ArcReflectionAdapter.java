@@ -17,7 +17,7 @@ import static nipx.HotSwapAgent.error;
  */
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class ArcReflectionAdapter {
-	/** @see Cell#unset  */
+	/** @see Cell#unset */
 	static final float UNSET = Float.NEGATIVE_INFINITY;
 
 	private static Field f_table_columns;
@@ -33,13 +33,13 @@ public class ArcReflectionAdapter {
 	}
 
 	private static void initFields() {
-		f_table_columns      = nl(() -> Table.class.getDeclaredField("columns"));
-		f_table_rows         = nl(() -> Table.class.getDeclaredField("rows"));
+		f_table_columns = nl(() -> Table.class.getDeclaredField("columns"));
+		f_table_rows = nl(() -> Table.class.getDeclaredField("rows"));
 		f_table_implicitEndRow = nl(() -> Table.class.getDeclaredField("implicitEndRow"));
-		f_cell_row           = nl(() -> Cell.class.getDeclaredField("row"));
-		f_cell_column        = nl(() -> Cell.class.getDeclaredField("column"));
-		f_endRow             = nl(() -> Cell.class.getDeclaredField("endRow"));
-		f_colspan            = nl(() -> Cell.class.getDeclaredField("colspan"));
+		f_cell_row = nl(() -> Cell.class.getDeclaredField("row"));
+		f_cell_column = nl(() -> Cell.class.getDeclaredField("column"));
+		f_endRow = nl(() -> Cell.class.getDeclaredField("endRow"));
+		f_colspan = nl(() -> Cell.class.getDeclaredField("colspan"));
 	}
 
 	private static <T> T nl(NLSupplier<T> supplier) {
@@ -120,13 +120,13 @@ public class ArcReflectionAdapter {
 	public static void recalculateColumns(Table table) {
 		if (table == null) return;
 		try {
-			int maxCols = 0;
-			Seq<Cell> cells = table.getCells();
+			int       maxCols = 0;
+			Seq<Cell> cells   = table.getCells();
 			if (cells == null) return;
 
 			for (int i = 0; i < cells.size; ) {
-				Cell c = cells.get(i);
-				int rowCols = 0;
+				Cell c       = cells.get(i);
+				int  rowCols = 0;
 				do {
 					rowCols += getColspan(c);
 					i++;

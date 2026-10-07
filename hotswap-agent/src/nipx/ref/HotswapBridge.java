@@ -168,9 +168,8 @@ public final class HotswapBridge {
 
 	/**
 	 * 读取并清零全部条件 CAS 统计（补丁结束时调用一次）。
-	 *
 	 * @return {@code "owner#field"} -> {@code [written, skipped]}；无数据时返回空 Map。
-	 *         清零后条目被移除：下一轮重新开始计数，不会把历史累计混进本轮告警。
+	 * 清零后条目被移除：下一轮重新开始计数，不会把历史累计混进本轮告警。
 	 */
 	public static Map<String, long[]> drainConditionalStats() {
 		Map<String, long[]> out = new LinkedHashMap<>();
@@ -300,7 +299,7 @@ public final class HotswapBridge {
 	 * --filterArguments(floatToRawIntBits)--> {@code (Object,long,float)boolean}。</p>
 	 */
 	private static MethodHandle rawBitsConditional(Class<?> valueClass) throws Throwable {
-		boolean isFloat = valueClass == float.class;
+		boolean  isFloat   = valueClass == float.class;
 		Class<?> bitsClass = isFloat ? int.class : long.class;
 
 		MethodType casType = MethodType.methodType(
@@ -361,7 +360,7 @@ public final class HotswapBridge {
 				// 让上层统一按 boolean 处理（此处"写入成功"是事实）。
 				return MethodHandles.dropArguments(
 				 MethodHandles.insertArguments(
-				  MethodHandles.constant(boolean.class, true), 0),
+					MethodHandles.constant(boolean.class, true), 0),
 				 0, Object.class, long.class, valueClass);
 			}
 		}
@@ -394,7 +393,7 @@ public final class HotswapBridge {
 			name = "casChar";
 		} else if (valueClass == short.class) {
 			name = "casShort";
-		} else return null;
+		} else { return null; }
 		MethodHandle h = MethodHandles.lookup().findStatic(HotswapBridge.class, name,
 		 MethodType.methodType(boolean.class, Object.class, long.class, valueClass, valueClass));
 		// 保留 boolean：调用点要统计"因已有值而跳过"

@@ -1061,12 +1061,12 @@ for j in $CP; do unzip -l "$j" | grep -q 'asm/tree/ClassNode' && echo "$j"; done
 
 ### 已做并实测
 
-| 项                                | 证据                                                                                                                                                              |
-|-----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **手写 classpath 的问题消失**     | 新增 `hstest` source set（只放测试入口）+ `project(":hotswap-agent")` 传递 ASM ⇒ `:hstestClasses` **BUILD SUCCESSFUL**，不再列 jar、不受宿主 `CLASSPATH` 泄漏影响 |
-| **toolchain 固定 21**             | `javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }`，不依赖 `PATH` 上是哪个 javac                                        |
-| **"断言失败 ⇒ 构建变红"实测成立** | `hstestCanary`（不依赖任何源文件的故意失败任务）：`> Task :hstestCanary FAILED` / `BUILD FAILED`                                                                  |
-| **区分了"编译失败"与"运行失败"**  | `hstestSemAssert` 失败在**运行期**（缺夹具参数），不是编译期 —— 此前那次红是编译失败，只证明了一半                                                                |
+| 项                                | 证据                                                                                                                                                                   |
+|-----------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **手写 classpath 的问题消失**     | 新增 `hstest<br/>` source set（只放测试入口）+ `project(":hotswap-agent")` 传递 ASM ⇒ `:hstestClasses` **BUILD SUCCESSFUL**，不再列 jar、不受宿主 `CLASSPATH` 泄漏影响 |
+| **toolchain 固定 21**             | `javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }`，不依赖 `PATH` 上是哪个 javac                                             |
+| **"断言失败 ⇒ 构建变红"实测成立** | `hstestCanary`（不依赖任何源文件的故意失败任务）：`> Task :hstestCanary FAILED` / `BUILD FAILED`                                                                       |
+| **区分了"编译失败"与"运行失败"**  | `hstestSemAssert` 失败在**运行期**（缺夹具参数），不是编译期 —— 此前那次红是编译失败，只证明了一半                                                                     |
 
 `hstestCanary` 保留在 `build.gradle` 里作为可复用的金丝雀（故意失败，预期红）。
 

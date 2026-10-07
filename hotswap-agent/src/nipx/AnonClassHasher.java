@@ -37,7 +37,6 @@ public final class AnonClassHasher {
 
 	/**
 	 * 计算匿名类的内容哈希。
-	 *
 	 * @param anonClassName 内部名（如 {@code com/example/Foo$1}）
 	 * @param anonBytes     字节码（为 null 则通过 resolver 获取）
 	 * @param hostClassName 宿主外层类内部名（如 {@code com/example/Foo}）

@@ -80,7 +80,7 @@ public class MountManager {
 
 		// 解除当前类所属包的密封限制，防止挂载后加载报错 sealing violation
 		try {
-			Path rel = rootDir.relativize(classFilePath.toAbsolutePath());
+			Path rel    = rootDir.relativize(classFilePath.toAbsolutePath());
 			Path parent = rel.getParent();
 			if (parent != null) {
 				String pkgName = parent.toString().replace('/', '.').replace('\\', '.');

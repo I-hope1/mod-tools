@@ -4,8 +4,8 @@ package nipx.profiler;
 public final class LookupKey implements CharSequence, Comparable<LookupKey> {
 
 	private final StringBuilder sb;
-	private int     hash;
-	private boolean hashComputed;
+	private       int           hash;
+	private       boolean       hashComputed;
 
 	public LookupKey() {
 		this(128);
@@ -115,7 +115,7 @@ public final class LookupKey implements CharSequence, Comparable<LookupKey> {
 			for (int i = 0; i < len; i++) {
 				h = 31 * h + sb.charAt(i);
 			}
-			hash         = h;
+			hash = h;
 			hashComputed = true;
 		}
 		return hash;
@@ -126,7 +126,7 @@ public final class LookupKey implements CharSequence, Comparable<LookupKey> {
 		if (this == obj) return true;
 		if (obj instanceof LookupKey) {
 			LookupKey other = (LookupKey) obj;
-			int len = sb.length();
+			int       len   = sb.length();
 			if (len != other.sb.length()) return false;
 			if (this.hashCode() != other.hashCode()) return false;
 			StringBuilder b2 = other.sb;
@@ -136,8 +136,8 @@ public final class LookupKey implements CharSequence, Comparable<LookupKey> {
 			return true;
 		}
 		if (obj instanceof String) {
-			String s = (String) obj;
-			int len = sb.length();
+			String s   = (String) obj;
+			int    len = sb.length();
 			if (len != s.length()) return false;
 			if (this.hashCode() != s.hashCode()) return false;
 			for (int i = 0; i < len; i++) {

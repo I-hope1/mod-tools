@@ -46,11 +46,11 @@ public class HotSwapAgent {
 	 * <p><b>关闭语义</b>：不是"按类名照旧重定义"（那正是编号位移篡夺场景本身），而是把含有匿名类的
 	 * 宿主组整体移出本批重定义（见 {@link #rejectHostGroup}）。</p>
 	 */
-	public static boolean      ANON_ALIGN        = boolProp("nipx.agent.anon_align", "nipx.anonAlign.enabled", true);
+	public static boolean      ANON_ALIGN         = boolProp("nipx.agent.anon_align", "nipx.anonAlign.enabled", true);
 	/** 严格模式（§6.4）：Tier 4 歧义 / 嵌套深度超限时按 §4.3 拒绝整个宿主组。 */
-	public static boolean      ANON_STRICT       = boolProp("nipx.agent.anon_strict", "nipx.anonAlign.strict", false);
+	public static boolean      ANON_STRICT        = boolProp("nipx.agent.anon_strict", "nipx.anonAlign.strict", false);
 	/** 匿名类对齐诊断日志（§6.4）：打印层级决策链。 */
-	public static boolean      ANON_DEBUG        = boolProp("nipx.agent.anon_debug", "nipx.anonAlign.debug", false);
+	public static boolean      ANON_DEBUG         = boolProp("nipx.agent.anon_debug", "nipx.anonAlign.debug", false);
 
 	/**
 	 * 实例状态布局门模式（§7.2 的精确变体）：{@code reject} / {@code warn} / {@code off}。
@@ -68,7 +68,7 @@ public class HotSwapAgent {
 	 * <p>用字符串而非 boolean，是因为将来可能加更多档（如按类注解 {@code @HotswapReinit}），
 	 * 那时再加一个值即可，不用再破坏一次属性语义。</p>
 	 */
-	public static String       ANON_LAYOUT_GATE  = strProp("nipx.agent.anon_layout_gate", "reject");
+	public static String ANON_LAYOUT_GATE = strProp("nipx.agent.anon_layout_gate", "reject");
 
 	/** 读字符串属性并做合法性校验；非法值回退到默认值并告警（不静默接受拼错的开关）。 */
 	private static String strProp(String key, String def) {
@@ -398,8 +398,8 @@ public class HotSwapAgent {
 		}
 
 		// 记录所有对齐过程中产生的旧孤儿类（不得在本次重定义中被误更新）
-		Set<String> allOrphanClasses = new HashSet<>();
-		Map<String, AlignmentTransaction> transactions = new LinkedHashMap<>();
+		Set<String>                       allOrphanClasses = new HashSet<>();
+		Map<String, AlignmentTransaction> transactions     = new LinkedHashMap<>();
 
 		// 【指纹延后落账】类名 hash → 新磁盘指纹。循环里只登记，不写 fileDiskHashes；
 		// 待 applyRedefinitions 完成后，仅对**确实成功**的类落账（见本方法末尾）。
@@ -446,8 +446,8 @@ public class HotSwapAgent {
 				// 总开关关闭：**不能**退化成"按类名照旧重定义" —— 那正是编号位移篡夺场景本身。
 				// 唯一安全的关闭语义是把该宿主组整体移出本批重定义。
 				rejectHostGroup(newBatchBytes, classToPath, hostName, newAnon,
-					new AnonClassAligner.AlignmentRejectedException(hostSlash,
-						"anonymous class alignment disabled (nipx.agent.anon_align=false)"));
+				 new AnonClassAligner.AlignmentRejectedException(hostSlash,
+					"anonymous class alignment disabled (nipx.agent.anon_align=false)"));
 				continue;
 			}
 
@@ -457,7 +457,9 @@ public class HotSwapAgent {
 			}
 
 			byte[] hostBytes = newBatchBytes.get(hostName);
-			if (DEBUG) log("[ANON_ALIGN] Aligning anonymous classes for host: " + hostName + " (old=" + oldAnon.size() + ", new=" + newAnon.size() + ")");
+			if (DEBUG) {
+				log("[ANON_ALIGN] Aligning anonymous classes for host: " + hostName + " (old=" + oldAnon.size() + ", new=" + newAnon.size() + ")");
+			}
 
 			java.util.function.Function<String, byte[]> oldRes = name -> bytecodeCache.get(name.replace('/', '.'));
 			java.util.function.Function<String, byte[]> newRes = name -> newBatchBytes.get(name.replace('/', '.'));
@@ -465,7 +467,7 @@ public class HotSwapAgent {
 			AnonClassAligner.Result res;
 			try {
 				res = AnonClassAligner.align(hostSlash, hostBytes, oldAnon, newAnon, oldRes, newRes,
-					HotSwapAgent::hasLiveInstances);
+				 HotSwapAgent::hasLiveInstances);
 			} catch (Throwable t) {
 				// §4.3：以「宿主类 + 其下属全部匿名类」为原子单元整体拒绝。
 				//
@@ -493,8 +495,8 @@ public class HotSwapAgent {
 			// 将对齐重命名后的新匿名类注入批次并登记到事务
 			Path hostPath = classToPath.get(hostName);
 			for (Map.Entry<String, byte[]> entry : res.alignedAnonClasses.entrySet()) {
-				String targetSlash = entry.getKey();
-				String targetDot = targetSlash.replace('/', '.');
+				String targetSlash  = entry.getKey();
+				String targetDot    = targetSlash.replace('/', '.');
 				byte[] alignedBytes = entry.getValue();
 
 				newBatchBytes.put(targetDot, alignedBytes);
@@ -511,8 +513,8 @@ public class HotSwapAgent {
 
 		for (Map.Entry<String, byte[]> batchEntry : newBatchBytes.entrySet()) {
 			String className = batchEntry.getKey();
-			byte[] bytecode = batchEntry.getValue();
-			Path path = classToPath.get(className);
+			byte[] bytecode  = batchEntry.getValue();
+			Path   path      = classToPath.get(className);
 			if (DEBUG) log("Processing changes: " + (path != null ? path : className));
 
 			if (allOrphanClasses.contains(className)) {
@@ -582,12 +584,12 @@ public class HotSwapAgent {
 							if (HOTSWAP_PLUS) {
 								String slashClassName = className.replace('.', '/');
 								newBytecode = AnnotationTransformer.forceStaticLambdas(
-									newBytecode, slashClassName, targetClass.getClassLoader());
+								 newBytecode, slashClassName, targetClass.getClassLoader());
 							}
 							java.util.function.Function<String, byte[]> oldResolver =
-								name -> bytecodeCache.get(name.replace('/', '.'));
+							 name -> bytecodeCache.get(name.replace('/', '.'));
 							java.util.function.Function<String, byte[]> newResolver =
-								name -> newBatchBytes.get(name.replace('/', '.'));
+							 name -> newBatchBytes.get(name.replace('/', '.'));
 							newBytecode = LambdaAligner.align(oldBytecode, newBytecode, oldResolver, newResolver);
 						}
 					}
@@ -665,9 +667,9 @@ public class HotSwapAgent {
 		}
 
 		// 批量执行重定义（针对已加载类）
-		RedefineOutcome outcome = applyRedefinitions(definitions, transactions.values());
-		Set<String> redefinedOk  = outcome.successful();
-		Set<String> rolledBack    = outcome.rolledBack();
+		RedefineOutcome outcome     = applyRedefinitions(definitions, transactions.values());
+		Set<String>     redefinedOk = outcome.successful();
+		Set<String>     rolledBack  = outcome.rolledBack();
 
 		// ---- 指纹落账 + 失败回队 ----
 		//
@@ -680,7 +682,7 @@ public class HotSwapAgent {
 		//
 		// **例外：被 rollback 的事务组不回队。** 那种情况下宿主可能已生效、而 cache/pending
 		// 被钉回旧版本；重试会拿与 JVM 实际状态不一致的基线重新对齐。只提示重启。
-		int requeued = 0;
+		int requeued    = 0;
 		int notRequeued = 0;
 		for (Map.Entry<String, Path> e : retryCandidates.entrySet()) {
 			String className = e.getKey();
@@ -759,7 +761,7 @@ public class HotSwapAgent {
 		if (cached != null) return cached;
 
 		boolean result;
-		long t0 = System.nanoTime();
+		long    t0 = System.nanoTime();
 		try {
 			if (!LibTool.initialized()) {
 				// 尝试初始化；失败会抛 UnsatisfiedLinkError
@@ -796,9 +798,9 @@ public class HotSwapAgent {
 	}
 
 	/** 实例判定缓存：点分类名 → 是否存活实例。见 {@link #hasLiveInstances}。 */
-	private static final Map<String, Boolean> LIVE_INSTANCE_CACHE = new ConcurrentHashMap<>();
+	private static final Map<String, Boolean>                   LIVE_INSTANCE_CACHE       = new ConcurrentHashMap<>();
 	/** 累计的实例扫描耗时（毫秒），用于观察全堆遍历开销。 */
-	static final java.util.concurrent.atomic.AtomicLong LIVE_INSTANCE_SCAN_MILLIS =
+	static final         java.util.concurrent.atomic.AtomicLong LIVE_INSTANCE_SCAN_MILLIS =
 	 new java.util.concurrent.atomic.AtomicLong();
 
 	/** 在 applyRedefinitions(definitions) 后调用 */
@@ -995,13 +997,13 @@ public class HotSwapAgent {
 	 * </ul>
 	 */
 	public static class AlignmentTransaction {
-		public final String hostName;
-		public final Map<String, byte[]> pendingAdds = new LinkedHashMap<>();
-		public final Map<String, byte[]> cacheUpdates = new LinkedHashMap<>();
-		public final Map<String, byte[]> pinOldBytes = new LinkedHashMap<>();
-		public final Set<String> targetClasses = new LinkedHashSet<>();
-		public boolean preRegistered = false;
-		public boolean committed = false;
+		public final String              hostName;
+		public final Map<String, byte[]> pendingAdds   = new LinkedHashMap<>();
+		public final Map<String, byte[]> cacheUpdates  = new LinkedHashMap<>();
+		public final Map<String, byte[]> pinOldBytes   = new LinkedHashMap<>();
+		public final Set<String>         targetClasses = new LinkedHashSet<>();
+		public       boolean             preRegistered = false;
+		public       boolean             committed     = false;
 
 		public AlignmentTransaction(String hostName) {
 			this.hostName = hostName;
@@ -1012,8 +1014,8 @@ public class HotSwapAgent {
 			preRegistered = true;
 			for (Map.Entry<String, byte[]> entry : pendingAdds.entrySet()) {
 				String targetSlash = entry.getKey().replace('.', '/');
-				String targetDot = entry.getKey().replace('/', '.');
-				byte[] bytes = entry.getValue();
+				String targetDot   = entry.getKey().replace('/', '.');
+				byte[] bytes       = entry.getValue();
 				AnnotationTransformer.pendingAlignedClasses.put(targetSlash, bytes);
 				AnnotationTransformer.pendingAlignedClasses.put(targetDot, bytes);
 			}
@@ -1039,7 +1041,7 @@ public class HotSwapAgent {
 				for (Map.Entry<String, byte[]> entry : pinOldBytes.entrySet()) {
 					if (entry.getValue() != null) {
 						String slash = entry.getKey().replace('.', '/');
-						String dot = entry.getKey().replace('/', '.');
+						String dot   = entry.getKey().replace('/', '.');
 						AnnotationTransformer.pendingAlignedClasses.put(slash, entry.getValue());
 						AnnotationTransformer.pendingAlignedClasses.put(dot, entry.getValue());
 					}
@@ -1058,7 +1060,6 @@ public class HotSwapAgent {
 	 *
 	 * <p>因此拒绝的语义是"这一组本轮完全不动"，与 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md}
 	 * §4.3 的"以宿主 + 其下属全部匿名类为原子单元整体拒绝回滚"一致。</p>
-	 *
 	 * @param t 触发拒绝的异常；{@link AnonClassAligner.AlignmentRejectedException} 视为**预期**拒绝
 	 *          （打 {@code [HOTSWAP-REJECT]} 告警），其它异常视为对齐器缺陷（打 error + 堆栈）
 	 */
@@ -1084,7 +1085,8 @@ public class HotSwapAgent {
 	}
 
 	/** 从批次中移除一个类（点分与斜杠两种键形态都移除，避免因键写法不同而漏删）。 */
-	private static void dropFromBatch(Map<String, byte[]> newBatchBytes, Map<String, Path> classToPath, String className) {
+	private static void dropFromBatch(Map<String, byte[]> newBatchBytes, Map<String, Path> classToPath,
+	                                  String className) {
 		newBatchBytes.remove(className);
 		classToPath.remove(className);
 		String alt = className.indexOf('/') >= 0 ? className.replace('/', '.') : className.replace('.', '/');
@@ -1097,18 +1099,18 @@ public class HotSwapAgent {
 	 *
 	 * <p>注：真正的多类原子一致性依赖 JVM 批量 {@code inst.redefineClasses(definitions)} 的原子调用；
 	 * 当批量失败切换到单类模式时，属于尽力挽救兜底，客观上存在短暂的类间不一致时间窗口。</p>
-	 *
 	 * @return 确实重定义成功的类名集合。调用方据此决定是否落账文件指纹、以及失败类是否回队重试。
-	 *         <p>另有两条必须区分的语义，通过 {@link RedefineOutcome} 一并返回：</p>
-	 *         <ul>
-	 *           <li>{@code rejectedHierarchy} —— 因 {@code hierarchyChanged} 被拒的类。
-	 *               受 JVM 能力限制，重试永不会成功，<b>不得回队</b>。</li>
-	 *           <li>{@code rolledBackGroups} —— 因事务组不一致而 {@code rollback} 的类。
-	 *               这些类的宿主可能<b>已经在 JVM 里生效</b>，而 cache/pending 被钉回旧版本；
-	 *               此时重试会拿"基线与 JVM 实际状态不一致"的数据重新对齐，<b>不得回队</b>。</li>
-	 *         </ul>
+	 * <p>另有两条必须区分的语义，通过 {@link RedefineOutcome} 一并返回：</p>
+	 * <ul>
+	 *   <li>{@code rejectedHierarchy} —— 因 {@code hierarchyChanged} 被拒的类。
+	 *       受 JVM 能力限制，重试永不会成功，<b>不得回队</b>。</li>
+	 *   <li>{@code rolledBackGroups} —— 因事务组不一致而 {@code rollback} 的类。
+	 *       这些类的宿主可能<b>已经在 JVM 里生效</b>，而 cache/pending 被钉回旧版本；
+	 *       此时重试会拿"基线与 JVM 实际状态不一致"的数据重新对齐，<b>不得回队</b>。</li>
+	 * </ul>
 	 */
-	private static RedefineOutcome applyRedefinitions(List<ClassDefinition> definitions, Collection<AlignmentTransaction> transactions) {
+	private static RedefineOutcome applyRedefinitions(List<ClassDefinition> definitions,
+	                                                  Collection<AlignmentTransaction> transactions) {
 		Set<String> successfulClasses = new HashSet<>();
 		Set<String> rolledBackClasses = new HashSet<>();
 		if (definitions.isEmpty()) {
@@ -1159,7 +1161,7 @@ public class HotSwapAgent {
 			}
 			// 校验事务组的一致性
 			for (AlignmentTransaction tx : transactions) {
-				boolean hostOk = successfulClasses.contains(tx.hostName);
+				boolean hostOk     = successfulClasses.contains(tx.hostName);
 				boolean allAnonsOk = true;
 				for (String target : tx.targetClasses) {
 					if (loadedClassesMap.containsKey(target) && !successfulClasses.contains(target)) {
@@ -1188,10 +1190,9 @@ public class HotSwapAgent {
 
 	/**
 	 * {@link #applyRedefinitions} 的结果。
-	 *
-	 * @param successful    确实重定义成功的类名
-	 * @param rolledBack    因事务组不一致被 rollback 的类名（宿主 + 其匿名类）——
-	 *                      这些类<b>不得回队重试</b>，理由见该方法 javadoc
+	 * @param successful 确实重定义成功的类名
+	 * @param rolledBack 因事务组不一致被 rollback 的类名（宿主 + 其匿名类）——
+	 *                   这些类<b>不得回队重试</b>，理由见该方法 javadoc
 	 */
 	private record RedefineOutcome(Set<String> successful, Set<String> rolledBack) { }
 	//endregion
@@ -1435,9 +1436,9 @@ public class HotSwapAgent {
 		// 静默的并发数据竞争，必须无条件暴露。将来有人新增绕过锁的入口时会立刻在这里炸掉。
 		if (!HOTSWAP_LOCK.isHeldByCurrentThread()) {
 			throw new IllegalStateException(
-				"triggerHotswapWith called without HOTSWAP_LOCK on thread "
-				+ Thread.currentThread().getName()
-				+ " — all hot-swap entry points must acquire HOTSWAP_LOCK first");
+			 "triggerHotswapWith called without HOTSWAP_LOCK on thread "
+			 + Thread.currentThread().getName()
+			 + " — all hot-swap entry points must acquire HOTSWAP_LOCK first");
 		}
 
 		// 并发探针：测试用，记录同时处于热更流程内的线程数及其历史峰值。

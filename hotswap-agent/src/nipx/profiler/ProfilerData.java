@@ -15,11 +15,13 @@ public class ProfilerData {
 		private final LongAdder count;
 		public MethodStats(LongAdder time, LongAdder count) {
 			if (time == null || count == null) throw new NullPointerException("null argument");
-			this.time = time; this.count = count;
+			this.time = time;
+			this.count = count;
 		}
-		public LongAdder time()  { return time; }
+		public LongAdder time() { return time; }
 		public LongAdder count() { return count; }
-		@Override public String toString() {
+		@Override
+		public String toString() {
 			return "MethodStats[time=" + time + ", count=" + count + ']';
 		}
 	}
@@ -63,7 +65,7 @@ public class ProfilerData {
 	public static volatile FlameNode flameRoot = new FlameNode("(all)");
 
 	private static final ThreadLocal<ArrayDeque<FlameNode>> nodeStack =
-		ThreadLocal.withInitial(ArrayDeque::new);
+	 ThreadLocal.withInitial(ArrayDeque::new);
 
 	// ── 热路径三件套（ASM 注入调用） ──────────────────────────────────────────
 
@@ -107,12 +109,12 @@ public class ProfilerData {
 	public static void printReport() {
 		info("=== Profiler Report ===");
 		stats.forEach((method, s) -> {
-			long   nanos = s.time().sum();
-			long   count = s.count().sum();
+			long nanos = s.time().sum();
+			long count = s.count().sum();
 			if (count == 0) return;
 			double avgMs = (nanos / 1_000_000.0) / count;
 			info(String.format("[%s] Total: %d ms, Calls: %d, Avg: %.4f ms",
-				method, nanos / 1_000_000, count, avgMs));
+			 method, nanos / 1_000_000, count, avgMs));
 		});
 	}
 }

@@ -11,8 +11,8 @@ public class PackageUnsealer {
 	private static final VarHandle SEAL_BASE_DIRECT_VH;
 
 	static {
-		VarHandle versionInfoVh = null;
-		VarHandle sealBaseVh = null;
+		VarHandle versionInfoVh    = null;
+		VarHandle sealBaseVh       = null;
 		VarHandle sealBaseDirectVh = null;
 		try {
 			Lookup lookup = Reflect.IMPL_LOOKUP;

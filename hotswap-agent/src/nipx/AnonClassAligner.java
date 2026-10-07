@@ -56,7 +56,7 @@ public final class AnonClassAligner {
 	 *
 	 * <p>设为 {@link Integer#MAX_VALUE} 可关闭该上限（仅供诊断）。</p>
 	 */
-	public static int  MAX_ANON_PER_HOST = 128;
+	public static int MAX_ANON_PER_HOST = 128;
 
 	/**
 	 * 对齐流程的软超时（毫秒，§6.3-3）。超时即按 §4.3 拒绝该宿主组。
@@ -65,7 +65,7 @@ public final class AnonClassAligner {
 	 * 设为 {@link Long#MAX_VALUE} 可关闭超时；设为 {@code <= 0} 表示"无预算"，
 	 * 在第一个检查点即确定性熔断（便于回归测试，不依赖墙上时钟分辨率）。</p>
 	 */
-	public static long ALIGN_TIMEOUT_MS  = 2000L;
+	public static long ALIGN_TIMEOUT_MS = 2000L;
 
 	/**
 	 * 对齐被安全门拒绝（§4.3）。
@@ -100,7 +100,7 @@ public final class AnonClassAligner {
 	private static void checkTimeout(String hostSlash, long startNanos) {
 		if (isTimedOut(startNanos)) {
 			throw new AlignmentRejectedException(hostSlash,
-				"alignment exceeded the " + ALIGN_TIMEOUT_MS + "ms soft timeout (§6.3-3)");
+			 "alignment exceeded the " + ALIGN_TIMEOUT_MS + "ms soft timeout (§6.3-3)");
 		}
 	}
 
@@ -112,17 +112,17 @@ public final class AnonClassAligner {
 	}
 
 	public static class AlignmentStats {
-		public int tier1Matches;
-		public int tier2Matches;
-		public int tier3Matches;
-		public int tier4Matches;
+		public int  tier1Matches;
+		public int  tier2Matches;
+		public int  tier3Matches;
+		public int  tier4Matches;
 		/**
 		 * 布局门拒绝的配对数（{@code reject} 模式）。见 {@code LayoutGate} 与 §7.2。
 		 *
 		 * <p>"用了哪一层"的纪律同样适用：光看映射结果分不清"没配上"是因为歧义、
 		 * 还是因为被布局门挡了。断言这个计数器才能钉住门确实生效。</p>
 		 */
-		public int layoutGateRejected;
+		public int  layoutGateRejected;
 		/**
 		 * 布局门放行的配对数（{@code warn} 模式，或布局不兼容但<b>无存活实例</b>）。
 		 *
@@ -130,11 +130,11 @@ public final class AnonClassAligner {
 		 * "本来会被拒绝的有几次"。无存活实例时放行是安全的 ——
 		 * 新建实例会走新构造器，初始化正常（真机对照实验结论）。</p>
 		 */
-		public int layoutGateWaived;
+		public int  layoutGateWaived;
 		/** 布局门扫描存活实例的总耗时（毫秒），用于观察全堆遍历的开销。 */
 		public long layoutGateScanMillis;
-		public int tier5Matches;
-		public int ambiguousMatches;
+		public int  tier5Matches;
+		public int  ambiguousMatches;
 		/**
 		 * 在**禁止 minDiff 仲裁的层**（Tier 2 / Tier 4）完成"双向唯一"配对后，仍然无法确定性区分的候选对数（§4.3-①）。
 		 *
@@ -145,20 +145,20 @@ public final class AnonClassAligner {
 		 * <p>非严格模式下这些类退化为"新增/孤儿"；严格模式（{@code -Dnipx.agent.anon_strict=true}）
 		 * 下与 {@link #ambiguousMatches} 一起构成"缺乏唯一证据"的完整集合，任一非零即拒绝整个宿主组。</p>
 		 */
-		public int ambiguousPairs;
+		public int  ambiguousPairs;
 		/**
 		 * 由**拓扑判据**决定并采纳的配对数（§4.1 Tier 3 拓扑过滤）。
 		 *
 		 * <p>刻意**不计入** {@link #tier3Matches}：后者表示"靠内容哈希/结构签名配上的"，
 		 * 混在一起以后就分不清某个配对是内容配的还是拓扑配的。</p>
 		 */
-		public int topologyMatches;
+		public int  topologyMatches;
 		/** 拓扑过滤前：剩余新类在剩余旧类中的候选总数（诊断用，配合 debug 日志定位拒绝来源） */
-		public int topologyCandidatesBefore;
+		public int  topologyCandidatesBefore;
 		/** 拓扑过滤后：签名严格相等且仍在剩余集里的候选总数（诊断用） */
-		public int topologyCandidatesAfter;
-		public int newClasses;
-		public int orphanClasses;
+		public int  topologyCandidatesAfter;
+		public int  newClasses;
+		public int  orphanClasses;
 
 		@Override
 		public String toString() {
@@ -175,15 +175,15 @@ public final class AnonClassAligner {
 
 	public static class Result {
 		/** 对齐重命名后的宿主类字节码（若输入了 hostBytes） */
-		public final byte[] alignedHostBytes;
+		public final byte[]              alignedHostBytes;
 		/** 对齐重命名后的所有新匿名类：目标对齐内部名 -> 对齐字节码 */
 		public final Map<String, byte[]> alignedAnonClasses;
 		/** 重命名映射表：原编译内部名 -> 目标对齐内部名 */
 		public final Map<String, String> renameMap;
 		/** 未被匹配上的旧匿名类（孤儿类内部名），应在 JVM 中保留不动不触发重定义 */
-		public final Set<String> orphanOldClasses;
+		public final Set<String>         orphanOldClasses;
 		/** 对齐统计数据 */
-		public final AlignmentStats stats;
+		public final AlignmentStats      stats;
 
 		public Result(
 		 byte[] alignedHostBytes,
@@ -211,9 +211,8 @@ public final class AnonClassAligner {
 
 	/**
 	 * 对齐匿名类并重写宿主与匿名类字节码。
-	 *
-	 * @param hostClassName 宿主外层类类名（支持点分或斜杠格式，如 {@code com/example/Foo}）
-	 * @param newHostBytes  新编译的宿主类字节码（可为 null）
+	 * @param hostClassName  宿主外层类类名（支持点分或斜杠格式，如 {@code com/example/Foo}）
+	 * @param newHostBytes   新编译的宿主类字节码（可为 null）
 	 * @param oldAnonClasses 旧版本匿名类字节码表（内部名或点分名 -> 字节码）
 	 * @param newAnonClasses 新编译的匿名类字节码表（内部名或点分名 -> 字节码）
 	 * @return 对齐结果 {@link Result}
@@ -244,7 +243,6 @@ public final class AnonClassAligner {
 
 	/**
 	 * 对齐匿名类并重写宿主与匿名类字节码（带字节码解析器 + 布局门实例判定）。
-	 *
 	 * @param hasLiveInstances 布局门用：给定点分类名，判断它是否还有存活实例。
 	 *                         {@code null} 表示沿用已注入的判定（默认保守：视为有实例）。
 	 *                         由调用方注入，使本类保持纯函数、不依赖 JVMTI。
@@ -298,7 +296,6 @@ public final class AnonClassAligner {
 	 *   <li><b>前缀派生</b>：未匹配新类的类名前缀强制继承其父类重映射后的目标名称，保证 JVM 内部类层级不被破坏；</li>
 	 *   <li><b>严格校验</b>：对齐映射结果执行单射性与前缀不变量校验，不符合则阻断提交。</li>
 	 * </ul>
-	 *
 	 * @param hasLiveInstances 布局门的实例判定；{@code null} 表示沿用已注入的判定。
 	 */
 	public static Result alignCascading(
@@ -317,211 +314,211 @@ public final class AnonClassAligner {
 		Predicate<String> prevHasLive = hotswapAlignerHasLiveInstances;
 		if (hasLiveInstances != null) hotswapAlignerHasLiveInstances = hasLiveInstances;
 		try {
-		final String hostSlash = hostClassName.replace('.', '/');
-		final long   startNanos = System.nanoTime();
-		dbg("begin alignment for host " + hostSlash + " (maxPerHost=" + MAX_ANON_PER_HOST + ", timeoutMs=" + ALIGN_TIMEOUT_MS + ", strict=" + HotSwapAgent.ANON_STRICT + ")");
+			final String hostSlash  = hostClassName.replace('.', '/');
+			final long   startNanos = System.nanoTime();
+			dbg("begin alignment for host " + hostSlash + " (maxPerHost=" + MAX_ANON_PER_HOST + ", timeoutMs=" + ALIGN_TIMEOUT_MS + ", strict=" + HotSwapAgent.ANON_STRICT + ")");
 
-		// 归一化输入 Map 为内部名
-		Map<String, byte[]> normOld = normalizeMap(oldAnonClasses, hostSlash);
-		Map<String, byte[]> normNew = normalizeMap(newAnonClasses, hostSlash);
+			// 归一化输入 Map 为内部名
+			Map<String, byte[]> normOld = normalizeMap(oldAnonClasses, hostSlash);
+			Map<String, byte[]> normNew = normalizeMap(newAnonClasses, hostSlash);
 
-		// 构造能够解析宿主类的安全 Resolver，防止默认 fallback 导致宿主方法追溯永远返回 null
-		Function<String, byte[]> effectiveOldResolver = oldResolver != null ? oldResolver :
-			(name -> {
-				if (name.equals(hostSlash)) {
-					byte[] b = oldAnonClasses != null ? oldAnonClasses.get(hostSlash) : null;
-					if (b != null) return b;
-					return newHostBytes;
-				}
-				return normOld.get(name);
-			});
+			// 构造能够解析宿主类的安全 Resolver，防止默认 fallback 导致宿主方法追溯永远返回 null
+			Function<String, byte[]> effectiveOldResolver = oldResolver != null ? oldResolver :
+			 (name -> {
+				 if (name.equals(hostSlash)) {
+					 byte[] b = oldAnonClasses != null ? oldAnonClasses.get(hostSlash) : null;
+					 if (b != null) return b;
+					 return newHostBytes;
+				 }
+				 return normOld.get(name);
+			 });
 
-		Function<String, byte[]> effectiveNewResolver = newResolver != null ? newResolver :
-			(name -> name.equals(hostSlash) ? newHostBytes : normNew.get(name));
+			Function<String, byte[]> effectiveNewResolver = newResolver != null ? newResolver :
+			 (name -> name.equals(hostSlash) ? newHostBytes : normNew.get(name));
 
-		// 单次解析宿主 ClassNode 供整个流程复用，杜绝多次构建 AST 导致的停顿与 GC 压力
-		ClassNode oldHostNode = parseHostNode(hostSlash, effectiveOldResolver);
-		ClassNode newHostNode = parseHostNode(hostSlash, effectiveNewResolver);
+			// 单次解析宿主 ClassNode 供整个流程复用，杜绝多次构建 AST 导致的停顿与 GC 压力
+			ClassNode oldHostNode = parseHostNode(hostSlash, effectiveOldResolver);
+			ClassNode newHostNode = parseHostNode(hostSlash, effectiveNewResolver);
 
-		// 解析新旧匿名类特征（接入严密准入分类器，并复用宿主节点）
-		List<AnonInfo> oldInfos = parseInfos(hostSlash, oldHostNode, normOld, effectiveOldResolver);
-		List<AnonInfo> newInfos = parseInfos(hostSlash, newHostNode, normNew, effectiveNewResolver);
+			// 解析新旧匿名类特征（接入严密准入分类器，并复用宿主节点）
+			List<AnonInfo> oldInfos = parseInfos(hostSlash, oldHostNode, normOld, effectiveOldResolver);
+			List<AnonInfo> newInfos = parseInfos(hostSlash, newHostNode, normNew, effectiveNewResolver);
 
-		// §6.3-2 数量硬上限： pathological 输入（代码生成产物、巨型 switch 表达式）下
-		// O(N^2) 对齐会无提示地变慢，因此这里设硬上限并整体拒绝，而不是"降级为不对齐"（见 MAX_ANON_PER_HOST javadoc）。
-		int anonCount = Math.max(oldInfos.size(), newInfos.size());
-		if (anonCount > MAX_ANON_PER_HOST) {
-			throw new AlignmentRejectedException(hostSlash,
-				"anonymous class count " + anonCount + " exceeds MAX_ANON_PER_HOST=" + MAX_ANON_PER_HOST + " (§6.3-2)");
-		}
-		checkTimeout(hostSlash, startNanos);
-
-		AlignmentStats stats = new AlignmentStats();
-
-		// 按层级（depth of '$'）组织类信息
-		Map<Integer, List<AnonInfo>> oldByLevel = new TreeMap<>();
-		Map<Integer, List<AnonInfo>> newByLevel = new TreeMap<>();
-		for (AnonInfo o : oldInfos) {
-			oldByLevel.computeIfAbsent(getHierarchyLevel(hostSlash, o.name), k -> new ArrayList<>()).add(o);
-		}
-		for (AnonInfo n : newInfos) {
-			newByLevel.computeIfAbsent(getHierarchyLevel(hostSlash, n.name), k -> new ArrayList<>()).add(n);
-		}
-
-		int maxLevel = 1;
-		for (int l : oldByLevel.keySet()) maxLevel = Math.max(maxLevel, l);
-		for (int l : newByLevel.keySet()) maxLevel = Math.max(maxLevel, l);
-		if (maxLevel > 4) {
-			String msg = "anonymous class nesting depth " + maxLevel + " > 4 detected";
-			if (HotSwapAgent.ANON_STRICT) {
-				throw new AlignmentRejectedException(hostSlash, msg + "; strict mode rejects the host group (§4.3-2)");
+			// §6.3-2 数量硬上限： pathological 输入（代码生成产物、巨型 switch 表达式）下
+			// O(N^2) 对齐会无提示地变慢，因此这里设硬上限并整体拒绝，而不是"降级为不对齐"（见 MAX_ANON_PER_HOST javadoc）。
+			int anonCount = Math.max(oldInfos.size(), newInfos.size());
+			if (anonCount > MAX_ANON_PER_HOST) {
+				throw new AlignmentRejectedException(hostSlash,
+				 "anonymous class count " + anonCount + " exceeds MAX_ANON_PER_HOST=" + MAX_ANON_PER_HOST + " (§6.3-2)");
 			}
-			// 注意：这只是一个**诊断阈值**，不是能力边界 —— 层级推进本身与深度无关，
-			// 真正的闸门是 MAX_ANON_PER_HOST（§6.3-2）与 ALIGN_TIMEOUT_MS（§6.3-3）。
-			// 早期注释曾声称此处"内容哈希退化为 #ANON_relId#"，那是错的：AnonClassHasher.MAX_DEPTH 从不生效（见该类注释）。
-			HotSwapAgent.warn("[ANON_ALIGN] " + msg + ". Diagnostic threshold only"
-				+ " (cascade is depth-generic; the real guards are MAX_ANON_PER_HOST=" + MAX_ANON_PER_HOST
-				+ " and ALIGN_TIMEOUT_MS=" + ALIGN_TIMEOUT_MS + "ms).");
-		}
-
-		Map<AnonInfo, AnonInfo> matchedNewToOld = new LinkedHashMap<>();
-		Map<String, String> renameMap = new LinkedHashMap<>();
-		Set<String> takenTargetNames = new HashSet<>(normOld.keySet());
-
-		// 自顶向下逐层推进（Top-down Cascading Progression）
-		for (int level = 1; level <= maxLevel; level++) {
 			checkTimeout(hostSlash, startNanos);
-			List<AnonInfo> oldLevelInfos = oldByLevel.getOrDefault(level, Collections.emptyList());
-			List<AnonInfo> newLevelInfos = newByLevel.getOrDefault(level, Collections.emptyList());
-			dbg("level " + level + ": old=" + oldLevelInfos.size() + ", new=" + newLevelInfos.size());
 
-			if (level == 1) {
-				// Level 1: 宿主直接子匿名类 (如 Foo$1, Foo$2)
-				Map<AnonInfo, AnonInfo> l1Matches = matchHierarchical(oldLevelInfos, newLevelInfos, stats, hostSlash, startNanos);
-				for (Map.Entry<AnonInfo, AnonInfo> entry : l1Matches.entrySet()) {
-					matchedNewToOld.put(entry.getKey(), entry.getValue());
-					renameMap.put(entry.getKey().name, entry.getValue().name);
-					dbg("  level 1 matched " + entry.getKey().name + " -> " + entry.getValue().name);
+			AlignmentStats stats = new AlignmentStats();
+
+			// 按层级（depth of '$'）组织类信息
+			Map<Integer, List<AnonInfo>> oldByLevel = new TreeMap<>();
+			Map<Integer, List<AnonInfo>> newByLevel = new TreeMap<>();
+			for (AnonInfo o : oldInfos) {
+				oldByLevel.computeIfAbsent(getHierarchyLevel(hostSlash, o.name), k -> new ArrayList<>()).add(o);
+			}
+			for (AnonInfo n : newInfos) {
+				newByLevel.computeIfAbsent(getHierarchyLevel(hostSlash, n.name), k -> new ArrayList<>()).add(n);
+			}
+
+			int maxLevel = 1;
+			for (int l : oldByLevel.keySet()) maxLevel = Math.max(maxLevel, l);
+			for (int l : newByLevel.keySet()) maxLevel = Math.max(maxLevel, l);
+			if (maxLevel > 4) {
+				String msg = "anonymous class nesting depth " + maxLevel + " > 4 detected";
+				if (HotSwapAgent.ANON_STRICT) {
+					throw new AlignmentRejectedException(hostSlash, msg + "; strict mode rejects the host group (§4.3-2)");
 				}
-				for (AnonInfo n : newLevelInfos) {
-					if (!renameMap.containsKey(n.name)) {
-						int idx = 1;
-						String candidate;
-						do {
-							candidate = hostSlash + "$" + idx++;
-						} while (takenTargetNames.contains(candidate));
-						takenTargetNames.add(candidate);
-						renameMap.put(n.name, candidate);
-						dbg("  level 1 unmatched " + n.name + " -> new number " + candidate);
+				// 注意：这只是一个**诊断阈值**，不是能力边界 —— 层级推进本身与深度无关，
+				// 真正的闸门是 MAX_ANON_PER_HOST（§6.3-2）与 ALIGN_TIMEOUT_MS（§6.3-3）。
+				// 早期注释曾声称此处"内容哈希退化为 #ANON_relId#"，那是错的：AnonClassHasher.MAX_DEPTH 从不生效（见该类注释）。
+				HotSwapAgent.warn("[ANON_ALIGN] " + msg + ". Diagnostic threshold only"
+				                  + " (cascade is depth-generic; the real guards are MAX_ANON_PER_HOST=" + MAX_ANON_PER_HOST
+				                  + " and ALIGN_TIMEOUT_MS=" + ALIGN_TIMEOUT_MS + "ms).");
+			}
+
+			Map<AnonInfo, AnonInfo> matchedNewToOld  = new LinkedHashMap<>();
+			Map<String, String>     renameMap        = new LinkedHashMap<>();
+			Set<String>             takenTargetNames = new HashSet<>(normOld.keySet());
+
+			// 自顶向下逐层推进（Top-down Cascading Progression）
+			for (int level = 1; level <= maxLevel; level++) {
+				checkTimeout(hostSlash, startNanos);
+				List<AnonInfo> oldLevelInfos = oldByLevel.getOrDefault(level, Collections.emptyList());
+				List<AnonInfo> newLevelInfos = newByLevel.getOrDefault(level, Collections.emptyList());
+				dbg("level " + level + ": old=" + oldLevelInfos.size() + ", new=" + newLevelInfos.size());
+
+				if (level == 1) {
+					// Level 1: 宿主直接子匿名类 (如 Foo$1, Foo$2)
+					Map<AnonInfo, AnonInfo> l1Matches = matchHierarchical(oldLevelInfos, newLevelInfos, stats, hostSlash, startNanos);
+					for (Map.Entry<AnonInfo, AnonInfo> entry : l1Matches.entrySet()) {
+						matchedNewToOld.put(entry.getKey(), entry.getValue());
+						renameMap.put(entry.getKey().name, entry.getValue().name);
+						dbg("  level 1 matched " + entry.getKey().name + " -> " + entry.getValue().name);
 					}
-				}
-			} else {
-				// Level > 1: 嵌套匿名类 (如 Foo$1$1, Foo$2$1)
-				// 作用域收敛：候选严格限制在已配对的父级类名所对应的旧子级范围内
-				Map<String, List<AnonInfo>> newByParent = new LinkedHashMap<>();
-				for (AnonInfo n : newLevelInfos) {
-					newByParent.computeIfAbsent(getParentName(hostSlash, n.name), k -> new ArrayList<>()).add(n);
-				}
-
-				Map<String, List<AnonInfo>> oldByParent = new LinkedHashMap<>();
-				for (AnonInfo o : oldLevelInfos) {
-					oldByParent.computeIfAbsent(getParentName(hostSlash, o.name), k -> new ArrayList<>()).add(o);
-				}
-
-				for (Map.Entry<String, List<AnonInfo>> entry : newByParent.entrySet()) {
-					String newParent = entry.getKey();
-					List<AnonInfo> newChildren = entry.getValue();
-					String targetParent = renameMap.get(newParent);
-					if (targetParent == null) {
-						targetParent = newParent;
-					}
-					dbg("  level " + level + " scope " + newParent + " -> " + targetParent + " (new=" + newChildren.size() + ")");
-
-					List<AnonInfo> oldCandidateChildren = oldByParent.getOrDefault(targetParent, Collections.emptyList());
-					Map<AnonInfo, AnonInfo> childMatches = matchHierarchical(oldCandidateChildren, newChildren, stats, hostSlash, startNanos);
-					for (Map.Entry<AnonInfo, AnonInfo> m : childMatches.entrySet()) {
-						matchedNewToOld.put(m.getKey(), m.getValue());
-						renameMap.put(m.getKey().name, m.getValue().name);
-						dbg("  level " + level + " matched " + m.getKey().name + " -> " + m.getValue().name);
-					}
-
-					for (AnonInfo n : newChildren) {
+					for (AnonInfo n : newLevelInfos) {
 						if (!renameMap.containsKey(n.name)) {
-							int idx = 1;
+							int    idx = 1;
 							String candidate;
 							do {
-								candidate = targetParent + "$" + idx++;
+								candidate = hostSlash + "$" + idx++;
 							} while (takenTargetNames.contains(candidate));
 							takenTargetNames.add(candidate);
 							renameMap.put(n.name, candidate);
-							dbg("  level " + level + " unmatched " + n.name + " -> new number " + candidate);
+							dbg("  level 1 unmatched " + n.name + " -> new number " + candidate);
+						}
+					}
+				} else {
+					// Level > 1: 嵌套匿名类 (如 Foo$1$1, Foo$2$1)
+					// 作用域收敛：候选严格限制在已配对的父级类名所对应的旧子级范围内
+					Map<String, List<AnonInfo>> newByParent = new LinkedHashMap<>();
+					for (AnonInfo n : newLevelInfos) {
+						newByParent.computeIfAbsent(getParentName(hostSlash, n.name), k -> new ArrayList<>()).add(n);
+					}
+
+					Map<String, List<AnonInfo>> oldByParent = new LinkedHashMap<>();
+					for (AnonInfo o : oldLevelInfos) {
+						oldByParent.computeIfAbsent(getParentName(hostSlash, o.name), k -> new ArrayList<>()).add(o);
+					}
+
+					for (Map.Entry<String, List<AnonInfo>> entry : newByParent.entrySet()) {
+						String         newParent    = entry.getKey();
+						List<AnonInfo> newChildren  = entry.getValue();
+						String         targetParent = renameMap.get(newParent);
+						if (targetParent == null) {
+							targetParent = newParent;
+						}
+						dbg("  level " + level + " scope " + newParent + " -> " + targetParent + " (new=" + newChildren.size() + ")");
+
+						List<AnonInfo>          oldCandidateChildren = oldByParent.getOrDefault(targetParent, Collections.emptyList());
+						Map<AnonInfo, AnonInfo> childMatches         = matchHierarchical(oldCandidateChildren, newChildren, stats, hostSlash, startNanos);
+						for (Map.Entry<AnonInfo, AnonInfo> m : childMatches.entrySet()) {
+							matchedNewToOld.put(m.getKey(), m.getValue());
+							renameMap.put(m.getKey().name, m.getValue().name);
+							dbg("  level " + level + " matched " + m.getKey().name + " -> " + m.getValue().name);
+						}
+
+						for (AnonInfo n : newChildren) {
+							if (!renameMap.containsKey(n.name)) {
+								int    idx = 1;
+								String candidate;
+								do {
+									candidate = targetParent + "$" + idx++;
+								} while (takenTargetNames.contains(candidate));
+								takenTargetNames.add(candidate);
+								renameMap.put(n.name, candidate);
+								dbg("  level " + level + " unmatched " + n.name + " -> new number " + candidate);
+							}
 						}
 					}
 				}
 			}
-		}
 
-		// 收集孤儿类
-		Set<String> matchedOldNames = new HashSet<>();
-		for (AnonInfo o : matchedNewToOld.values()) {
-			matchedOldNames.add(o.name);
-		}
-		Set<String> orphanOldClasses = new LinkedHashSet<>();
-		for (AnonInfo o : oldInfos) {
-			if (!matchedOldNames.contains(o.name)) {
-				orphanOldClasses.add(o.name);
+			// 收集孤儿类
+			Set<String> matchedOldNames = new HashSet<>();
+			for (AnonInfo o : matchedNewToOld.values()) {
+				matchedOldNames.add(o.name);
 			}
-		}
-
-		stats.newClasses = newInfos.size() - matchedNewToOld.size();
-		stats.orphanClasses = orphanOldClasses.size();
-		dbg("level pass done: " + stats + ", orphans=" + orphanOldClasses);
-
-		// §4.3-① 严格模式：只要本轮存在**未被唯一证据证成**的候选配对，就熔断整个宿主组。
-		//
-		// 两个计数的含义（合起来才是"无法唯一证明"的完整集合）：
-		//   • ambiguousMatches —— 历史上用于统计"允许 minDiff 的层"（Tier 1）的仲裁次数。
-		//     Tier 3 的 minDiff 已被拓扑相等过滤取代，因此现在几乎恒为 0。
-		//   • ambiguousPairs  —— 四层走完后，在最宽谓词（Tier 4）下**仍未唯一确定**的候选对数。
-		//     非严格模式下这些类退化为"新增/孤儿"。
-		//
-		// strict 的定位是**安全门，不是匹配策略**：它不改变任何"双向唯一"配对（含拓扑判定）的结论。
-		if (HotSwapAgent.ANON_STRICT) {
-			int unproven = stats.ambiguousMatches + stats.ambiguousPairs;
-			if (unproven > 0) {
-				throw new AlignmentRejectedException(hostSlash,
-					"strict mode: " + unproven + " candidate pair(s) lack unique evidence"
-					+ " (minDiff-arbitrated=" + stats.ambiguousMatches + " at Tier 1,"
-					+ " unresolved-after-bi-unique=" + stats.ambiguousPairs + " at Tier 2/4) (§4.3-1)");
+			Set<String> orphanOldClasses = new LinkedHashSet<>();
+			for (AnonInfo o : oldInfos) {
+				if (!matchedOldNames.contains(o.name)) {
+					orphanOldClasses.add(o.name);
+				}
 			}
-		} else if (stats.ambiguousPairs > 0) {
-			// ⚠️ 保守性损失必须**可见**：非严格模式下不仲裁意味着相关的旧匿名类保持为孤儿、
-			// 其**存活实例继续跑旧逻辑**。若这里不打日志，用户看到热更"成功"却没有任何效果，
-			// 会误以为已生效（曾评估的夹具 L：两个同构匿名类原地改体，两条编辑都不作用于存活实例）。
-			HotSwapAgent.warn("[ANON_ALIGN] Host " + hostSlash + ": " + stats.ambiguousPairs
-				+ " candidate pair(s) lack unique evidence; refused to guess"
-				+ " (topology-equal candidates " + stats.topologyCandidatesBefore
-				+ " -> " + stats.topologyCandidatesAfter + ", topology-decided " + stats.topologyMatches + ")."
-				+ " Affected old anonymous classes are kept as orphans, so their LIVE instances keep running"
-				+ " the OLD code — RESTART is required for those edits to affect existing instances.");
-		}
 
-		// 后置严格校验 (Validation Invariants)
-		validateRenameMap(renameMap, hostSlash);
-		dbg("renameMap=" + renameMap);
+			stats.newClasses = newInfos.size() - matchedNewToOld.size();
+			stats.orphanClasses = orphanOldClasses.size();
+			dbg("level pass done: " + stats + ", orphans=" + orphanOldClasses);
 
-		// 应用 ClassRemapper 重写所有新匿名类字节码
-		Map<String, byte[]> alignedAnonClasses = new LinkedHashMap<>();
-		for (AnonInfo n : newInfos) {
-			String targetName = renameMap.get(n.name);
-			byte[] remapped = remapClass(n.bytecode, renameMap);
-			alignedAnonClasses.put(targetName, remapped);
-		}
+			// §4.3-① 严格模式：只要本轮存在**未被唯一证据证成**的候选配对，就熔断整个宿主组。
+			//
+			// 两个计数的含义（合起来才是"无法唯一证明"的完整集合）：
+			//   • ambiguousMatches —— 历史上用于统计"允许 minDiff 的层"（Tier 1）的仲裁次数。
+			//     Tier 3 的 minDiff 已被拓扑相等过滤取代，因此现在几乎恒为 0。
+			//   • ambiguousPairs  —— 四层走完后，在最宽谓词（Tier 4）下**仍未唯一确定**的候选对数。
+			//     非严格模式下这些类退化为"新增/孤儿"。
+			//
+			// strict 的定位是**安全门，不是匹配策略**：它不改变任何"双向唯一"配对（含拓扑判定）的结论。
+			if (HotSwapAgent.ANON_STRICT) {
+				int unproven = stats.ambiguousMatches + stats.ambiguousPairs;
+				if (unproven > 0) {
+					throw new AlignmentRejectedException(hostSlash,
+					 "strict mode: " + unproven + " candidate pair(s) lack unique evidence"
+					 + " (minDiff-arbitrated=" + stats.ambiguousMatches + " at Tier 1,"
+					 + " unresolved-after-bi-unique=" + stats.ambiguousPairs + " at Tier 2/4) (§4.3-1)");
+				}
+			} else if (stats.ambiguousPairs > 0) {
+				// ⚠️ 保守性损失必须**可见**：非严格模式下不仲裁意味着相关的旧匿名类保持为孤儿、
+				// 其**存活实例继续跑旧逻辑**。若这里不打日志，用户看到热更"成功"却没有任何效果，
+				// 会误以为已生效（曾评估的夹具 L：两个同构匿名类原地改体，两条编辑都不作用于存活实例）。
+				HotSwapAgent.warn("[ANON_ALIGN] Host " + hostSlash + ": " + stats.ambiguousPairs
+				                  + " candidate pair(s) lack unique evidence; refused to guess"
+				                  + " (topology-equal candidates " + stats.topologyCandidatesBefore
+				                  + " -> " + stats.topologyCandidatesAfter + ", topology-decided " + stats.topologyMatches + ")."
+				                  + " Affected old anonymous classes are kept as orphans, so their LIVE instances keep running"
+				                  + " the OLD code — RESTART is required for those edits to affect existing instances.");
+			}
 
-		// 应用 ClassRemapper 重写宿主类字节码
-		byte[] alignedHostBytes = newHostBytes != null ? remapClass(newHostBytes, renameMap) : null;
+			// 后置严格校验 (Validation Invariants)
+			validateRenameMap(renameMap, hostSlash);
+			dbg("renameMap=" + renameMap);
 
-		return new Result(alignedHostBytes, alignedAnonClasses, renameMap, orphanOldClasses, stats);
+			// 应用 ClassRemapper 重写所有新匿名类字节码
+			Map<String, byte[]> alignedAnonClasses = new LinkedHashMap<>();
+			for (AnonInfo n : newInfos) {
+				String targetName = renameMap.get(n.name);
+				byte[] remapped   = remapClass(n.bytecode, renameMap);
+				alignedAnonClasses.put(targetName, remapped);
+			}
+
+			// 应用 ClassRemapper 重写宿主类字节码
+			byte[] alignedHostBytes = newHostBytes != null ? remapClass(newHostBytes, renameMap) : null;
+
+			return new Result(alignedHostBytes, alignedAnonClasses, renameMap, orphanOldClasses, stats);
 		} finally {
 			// 恢复调用前的实例判定，避免本次注入泄漏到后续调用
 			hotswapAlignerHasLiveInstances = prevHasLive;
@@ -546,8 +543,8 @@ public final class AnonClassAligner {
 			return classBytes;
 		}
 
-		ClassReader cr = new ClassReader(classBytes);
-		ClassWriter cw = new ClassWriter(0);
+		ClassReader   cr       = new ClassReader(classBytes);
+		ClassWriter   cw       = new ClassWriter(0);
 		ClassRemapper remapper = new ClassRemapper(cw, new SimpleRemapper(renameMap));
 		cr.accept(remapper, 0);
 		return cw.toByteArray();
@@ -556,7 +553,7 @@ public final class AnonClassAligner {
 	public static int getHierarchyLevel(String hostSlash, String anonSlash) {
 		if (hostSlash == null || anonSlash == null || !anonSlash.startsWith(hostSlash + "$")) return 1;
 		String suffix = anonSlash.substring(hostSlash.length() + 1);
-		int count = 1;
+		int    count  = 1;
 		for (int i = 0; i < suffix.length(); i++) {
 			if (suffix.charAt(i) == '$') count++;
 		}
@@ -604,14 +601,14 @@ public final class AnonClassAligner {
 			String tgt = e.getValue();
 			if (!seenTargets.add(tgt)) {
 				throw new AlignmentRejectedException(hostSlash,
-					"non-injective mapping: multiple classes map to " + tgt + " [ANON_ALIGN_VALIDATION]");
+				 "non-injective mapping: multiple classes map to " + tgt + " [ANON_ALIGN_VALIDATION]");
 			}
-			String srcParent = getParentName(hostSlash, src);
+			String srcParent      = getParentName(hostSlash, src);
 			String expectedPrefix = renameMap.getOrDefault(srcParent, srcParent);
 			if (!tgt.startsWith(expectedPrefix + "$")) {
 				throw new AlignmentRejectedException(hostSlash,
-					"prefix invariant violated for " + src + " -> " + tgt +
-					" (expected prefix: " + expectedPrefix + "$) [ANON_ALIGN_VALIDATION]");
+				 "prefix invariant violated for " + src + " -> " + tgt +
+				 " (expected prefix: " + expectedPrefix + "$) [ANON_ALIGN_VALIDATION]");
 			}
 		}
 	}
@@ -643,7 +640,7 @@ public final class AnonClassAligner {
 	public static boolean isAnonymousClassName(String hostClassName, String className) {
 		if (hostClassName == null || className == null) return false;
 		String host = hostClassName.replace('.', '/');
-		String cls = className.replace('.', '/');
+		String cls  = className.replace('.', '/');
 		if (!cls.startsWith(host + "$")) return false;
 		String suffix = cls.substring(host.length() + 1);
 		if (suffix.isEmpty()) return false;
@@ -704,24 +701,27 @@ public final class AnonClassAligner {
 			this.childKinds = Collections.unmodifiableList(childKinds);
 		}
 
-		@Override public boolean equals(Object o) {
+		@Override
+		public boolean equals(Object o) {
 			if (this == o) return true;
 			if (!(o instanceof TopologySignature)) return false;
 			TopologySignature t = (TopologySignature) o;
 			return anonChildren == t.anonChildren
-				&& anonDescendants == t.anonDescendants
-				&& indySites == t.indySites
-				&& lambdaMethods == t.lambdaMethods
-				&& childKinds.equals(t.childKinds);
+			       && anonDescendants == t.anonDescendants
+			       && indySites == t.indySites
+			       && lambdaMethods == t.lambdaMethods
+			       && childKinds.equals(t.childKinds);
 		}
 
-		@Override public int hashCode() {
+		@Override
+		public int hashCode() {
 			return Objects.hash(anonChildren, anonDescendants, indySites, lambdaMethods, childKinds);
 		}
 
-		@Override public String toString() {
+		@Override
+		public String toString() {
 			return "(anonChild=" + anonChildren + ", anonDesc=" + anonDescendants
-				+ ", indy=" + indySites + ", lambdaM=" + lambdaMethods + ", kinds=" + childKinds + ")";
+			       + ", indy=" + indySites + ", lambdaM=" + lambdaMethods + ", kinds=" + childKinds + ")";
 		}
 	}
 
@@ -732,8 +732,8 @@ public final class AnonClassAligner {
 	private static TopologySignature computeTopologySignature(ClassNode cn, String hostSlash,
 	                                                          Function<String, byte[]> resolver) {
 		if (cn == null || cn.methods == null) return null;
-		int anonChildren = 0, anonDescendants = 0, indySites = 0, lambdaMethods = 0;
-		Set<String> childNames = new LinkedHashSet<>();
+		int         anonChildren = 0, anonDescendants = 0, indySites = 0, lambdaMethods = 0;
+		Set<String> childNames   = new LinkedHashSet<>();
 		for (MethodNode mn : cn.methods) {
 			if (mn.name != null && mn.name.startsWith("lambda$")) lambdaMethods++;
 			if (mn.instructions == null) continue;
@@ -798,18 +798,18 @@ public final class AnonClassAligner {
 	}
 
 	static class AnonInfo {
-		final String name;
-		final byte[] bytecode;
-		final Long contentHash;
-		final String superName;
-		final List<String> interfaces;
-		final String outerMethod;
-		final String outerMethodDesc;
-		final List<String> fields;
-		final List<String> methods;
-		final int orderIndex;
+		final String                     name;
+		final byte[]                     bytecode;
+		final Long                       contentHash;
+		final String                     superName;
+		final List<String>               interfaces;
+		final String                     outerMethod;
+		final String                     outerMethodDesc;
+		final List<String>               fields;
+		final List<String>               methods;
+		final int                        orderIndex;
 		/** 拓扑签名；{@code null} 表示未知（不得当作与任何签名相等） */
-		final TopologySignature topology;
+		final TopologySignature          topology;
 		/**
 		 * 布局门的判定输入（{@code LayoutGate.of(...)} 的产物）。
 		 *
@@ -890,10 +890,13 @@ public final class AnonClassAligner {
 			// 统一规约为源码方法名，抹除 lambda 编号位移与跨 JDK 差异。
 			int lastDollar = outerMethod.lastIndexOf('$');
 			if (lastDollar > 7) {
-				String suffix = outerMethod.substring(lastDollar + 1);
+				String  suffix    = outerMethod.substring(lastDollar + 1);
 				boolean allDigits = true;
 				for (int i = 0; i < suffix.length(); i++) {
-					if (!Character.isDigit(suffix.charAt(i))) { allDigits = false; break; }
+					if (!Character.isDigit(suffix.charAt(i))) {
+						allDigits = false;
+						break;
+					}
 				}
 				if (allDigits) {
 					return outerMethod.substring(7, lastDollar);
@@ -929,7 +932,7 @@ public final class AnonClassAligner {
 				HotSwapAgent.warn("[ANON_ALIGN] Multiple instantiator methods found for " + anonSlash + ": " + instantiators.size() + " candidates. Picking first.");
 			}
 
-			MethodNode current = instantiators.get(0);
+			MethodNode  current = instantiators.get(0);
 			Set<String> visited = new HashSet<>();
 			visited.add(current.name + ":" + current.desc);
 
@@ -956,12 +959,13 @@ public final class AnonClassAligner {
 	}
 
 	public static String resolveHostMethodForAnon(String hostSlash, String anonSlash, Function<String, byte[]> resolver) {
-		ClassNode hostNode = parseHostNode(hostSlash, resolver);
-		EnclosingMethodInfo info = resolveHostMethodForAnon(hostSlash, hostNode, anonSlash);
+		ClassNode           hostNode = parseHostNode(hostSlash, resolver);
+		EnclosingMethodInfo info     = resolveHostMethodForAnon(hostSlash, hostNode, anonSlash);
 		return info != null ? info.name : null;
 	}
 
-	private static MethodNode findCallerMethod(ClassNode hostNode, String calleeMethodName, String calleeMethodDesc, Set<String> visited) {
+	private static MethodNode findCallerMethod(ClassNode hostNode, String calleeMethodName, String calleeMethodDesc,
+	                                           Set<String> visited) {
 		for (MethodNode mn : hostNode.methods) {
 			if (visited.contains(mn.name + ":" + mn.desc) || mn.instructions == null) continue;
 			for (org.objectweb.asm.tree.AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
@@ -990,7 +994,7 @@ public final class AnonClassAligner {
 	 ClassNode hostNode,
 	 Map<String, byte[]> classes,
 	 Function<String, byte[]> resolver) {
-		List<AnonInfo> list = new ArrayList<>();
+		List<AnonInfo>    list      = new ArrayList<>();
 		Map<String, Long> hashCache = new HashMap<>();
 		// 直接父类的 ClassNode 缓存。嵌套匿名类（Foo$1$1）的实例化点位于**它的直接父匿名类
 		// Foo$1** 的方法里，而不是宿主 Foo 里 —— 拿宿主去扫嵌套层永远找不到实例化点
@@ -998,7 +1002,7 @@ public final class AnonClassAligner {
 		Map<String, ClassNode> parentNodeCache = new HashMap<>();
 
 		for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
-			String name = entry.getKey();
+			String name  = entry.getKey();
 			byte[] bytes = entry.getValue();
 			if (bytes == null || bytes.length == 0) continue;
 
@@ -1008,14 +1012,14 @@ public final class AnonClassAligner {
 			new ClassReader(bytes).accept(cn, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
 			if (!isAnonymousClass(cn, hostSlash)) continue;
 
-			Long hash = AnonClassHasher.hash(name, bytes, hostSlash, resolver, hashCache, null, 0);
+			Long              hash     = AnonClassHasher.hash(name, bytes, hostSlash, resolver, hashCache, null, 0);
 			TopologySignature topology = computeTopologySignature(cn, hostSlash, resolver);
 
-			String superName = cn.superName != null ? cn.superName : "java/lang/Object";
+			String       superName  = cn.superName != null ? cn.superName : "java/lang/Object";
 			List<String> interfaces = cn.interfaces != null ? new ArrayList<>(cn.interfaces) : new ArrayList<>();
 			Collections.sort(interfaces);
 
-			String outerMethod = normalizeEnclosingMethod(cn.outerMethod);
+			String outerMethod     = normalizeEnclosingMethod(cn.outerMethod);
 			String outerMethodDesc = cn.outerMethodDesc;
 			// 针对 javac 8 的嵌套 lambda 缺陷（EnclosingMethod 生成虚拟的 lambda$null$0，
 			// normalizeEnclosingMethod 会把它归约成字面量 "null"）：回退到字节码扫描，
@@ -1024,8 +1028,8 @@ public final class AnonClassAligner {
 			// 扫描上下文必须是**直接父类**（level 1 时父类即宿主），否则嵌套匿名类永远扫不到：
 			//   Foo$1$1 的 NEW 指令在 Foo$1 里，不在 Foo 里。
 			if (outerMethod == null || "null".equals(outerMethod)) {
-				String    scanSlash = getParentName(hostSlash, name);
-				ClassNode scanNode  = scanSlash.equals(hostSlash)
+				String scanSlash = getParentName(hostSlash, name);
+				ClassNode scanNode = scanSlash.equals(hostSlash)
 				 ? hostNode
 				 : (resolver != null ? parentNodeCache.computeIfAbsent(scanSlash, k -> parseHostNode(k, resolver)) : null);
 				if (scanNode != null) {
@@ -1073,8 +1077,8 @@ public final class AnonClassAligner {
 	 List<AnonInfo> oldList, List<AnonInfo> newList, AlignmentStats stats,
 	 String hostSlash, long startNanos) {
 		Map<AnonInfo, AnonInfo> matchedNewToOld = new LinkedHashMap<>();
-		List<AnonInfo> oldToUse = new ArrayList<>(oldList);
-		List<AnonInfo> newToUse = new ArrayList<>(newList);
+		List<AnonInfo>          oldToUse        = new ArrayList<>(oldList);
+		List<AnonInfo>          newToUse        = new ArrayList<>(newList);
 		if (TEST_REVERSE_ORDER) {
 			Collections.reverse(oldToUse);
 			Collections.reverse(newToUse);
@@ -1085,29 +1089,29 @@ public final class AnonClassAligner {
 
 		// Tier 1: 内容哈希精确相同 + 宿主方法相同 (允许 minDiff 仲裁，且强制要求 contentHash != null)
 		matchTier(1, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
-		 n.contentHash != null
-		  && Objects.equals(n.contentHash, o.contentHash)
-		  && Objects.equals(n.outerMethod, o.outerMethod)
-		  && Objects.equals(n.outerMethodDesc, o.outerMethodDesc),
+			n.contentHash != null
+			&& Objects.equals(n.contentHash, o.contentHash)
+			&& Objects.equals(n.outerMethod, o.outerMethod)
+			&& Objects.equals(n.outerMethodDesc, o.outerMethodDesc),
 		 true, false, hostSlash, startNanos
 		);
 
 		// Tier 2: 内容哈希全局精确相同 (禁止跨方法 minDiff，仅全类唯一孤本采纳，且强制要求 contentHash != null)
 		matchTier(2, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
-		 n.contentHash != null
-		  && Objects.equals(n.contentHash, o.contentHash),
+			n.contentHash != null
+			&& Objects.equals(n.contentHash, o.contentHash),
 		 false, false, hostSlash, startNanos
 		);
 
 		// Tier 3: 结构签名相同（应对修改方法体导致的哈希变化，允许 minDiff 仲裁）
 		// 同宿主方法、同父类、同接口、同字段、同声明方法
 		matchTier(3, remainingNew, remainingOld, matchedNewToOld, stats, (n, o) ->
-		 Objects.equals(n.outerMethod, o.outerMethod)
-		  && Objects.equals(n.outerMethodDesc, o.outerMethodDesc)
-		  && Objects.equals(n.superName, o.superName)
-		  && Objects.equals(n.interfaces, o.interfaces)
-		  && Objects.equals(n.fields, o.fields)
-		  && Objects.equals(n.methods, o.methods),
+			Objects.equals(n.outerMethod, o.outerMethod)
+			&& Objects.equals(n.outerMethodDesc, o.outerMethodDesc)
+			&& Objects.equals(n.superName, o.superName)
+			&& Objects.equals(n.interfaces, o.interfaces)
+			&& Objects.equals(n.fields, o.fields)
+			&& Objects.equals(n.methods, o.methods),
 		 true, true, hostSlash, startNanos
 		);
 
@@ -1118,9 +1122,9 @@ public final class AnonClassAligner {
 		// Tier 3 非双向唯一 ⇒ 边更多的 Tier 4 也非双向唯一。夹具 M 的"零配对"断言守住它。
 		MatchPredicate tier4Predicate = (n, o) ->
 		 Objects.equals(n.outerMethod, o.outerMethod)
-		  && Objects.equals(n.outerMethodDesc, o.outerMethodDesc)
-		  && Objects.equals(n.superName, o.superName)
-		  && Objects.equals(n.interfaces, o.interfaces);
+		 && Objects.equals(n.outerMethodDesc, o.outerMethodDesc)
+		 && Objects.equals(n.superName, o.superName)
+		 && Objects.equals(n.interfaces, o.interfaces);
 		// ---- 实例状态布局门（§7.2 的精确变体）----
 		//
 		// 只作用在 Tier 4：Tier 1/2 的哈希含字段表、Tier 3 显式比较 fields，
@@ -1142,26 +1146,26 @@ public final class AnonClassAligner {
 				if (!hasLive) {
 					stats.layoutGateWaived++;
 					HotSwapAgent.warn("[ANON-LAYOUT] " + n.name + " -> " + o.name
-						+ ": incompatible layout but no live instances; pairing anyway (new instances"
-						+ " initialize correctly). Reason: " + res.detail());
+					                  + ": incompatible layout but no live instances; pairing anyway (new instances"
+					                  + " initialize correctly). Reason: " + res.detail());
 					return true;
 				}
 				if (LayoutGate.MODE_WARN.equals(HotSwapAgent.ANON_LAYOUT_GATE)) {
 					stats.layoutGateWaived++;
 					HotSwapAgent.warn("[ANON-LAYOUT] " + n.name + " -> " + o.name
-						+ ": incompatible layout with LIVE instances, pairing anyway because"
-						+ " nipx.agent.anon_layout_gate=warn. Surviving instances will read 0 for"
-						+ " the affected field until they are recreated. Reason: " + res.detail());
+					                  + ": incompatible layout with LIVE instances, pairing anyway because"
+					                  + " nipx.agent.anon_layout_gate=warn. Surviving instances will read 0 for"
+					                  + " the affected field until they are recreated. Reason: " + res.detail());
 					return true;
 				}
 				// reject：不配对。新类随后分配未占用编号，旧类成为孤儿并保留（§1.2），
 				// 存活实例继续跑旧逻辑 —— 安全但不再更新，所以必须让用户看得见。
 				stats.layoutGateRejected++;
 				HotSwapAgent.warn("[ANON-LAYOUT] " + n.name + " -> " + o.name
-					+ ": REFUSED to pair (incompatible layout with live instances)."
-					+ " The old class is kept as an orphan; its LIVE instances keep running the OLD"
-					+ " code, so this edit will NOT take effect for them until they are recreated."
-					+ " Reason: " + res.detail());
+				                  + ": REFUSED to pair (incompatible layout with live instances)."
+				                  + " The old class is kept as an orphan; its LIVE instances keep running the OLD"
+				                  + " code, so this edit will NOT take effect for them until they are recreated."
+				                  + " Reason: " + res.detail());
 				return false;
 			};
 		}
@@ -1202,7 +1206,7 @@ public final class AnonClassAligner {
 	private static class CandidatePair {
 		final AnonInfo n;
 		final AnonInfo o;
-		final int diff;
+		final int      diff;
 
 		CandidatePair(AnonInfo n, AnonInfo o) {
 			this.n = n;
@@ -1256,10 +1260,10 @@ public final class AnonClassAligner {
 		List<AnonInfo> uniqueNew = new ArrayList<>();
 		List<AnonInfo> uniqueOld = new ArrayList<>();
 		for (Map.Entry<AnonInfo, List<AnonInfo>> entry : newToOld.entrySet()) {
-			AnonInfo n = entry.getKey();
+			AnonInfo       n       = entry.getKey();
 			List<AnonInfo> oldList = entry.getValue();
 			if (oldList.size() == 1) {
-				AnonInfo o = oldList.get(0);
+				AnonInfo       o       = oldList.get(0);
 				List<AnonInfo> newList = oldToNew.get(o);
 				if (newList != null && newList.size() == 1) {
 					uniqueNew.add(n);
@@ -1398,16 +1402,16 @@ public final class AnonClassAligner {
 	 Map<AnonInfo, AnonInfo> matchedNewToOld,
 	 AlignmentStats stats,
 	 String hostSlash) {
-		boolean progress = true;
+		boolean progress  = true;
 		boolean firstPass = true;
 		while (progress) {
 			progress = false;
 			// 第一趟：每个剩余新类保留"拓扑严格相等且仍可用"的候选
 			Map<AnonInfo, List<AnonInfo>> survivors = new LinkedHashMap<>();
 			for (AnonInfo n : remainingNew) {
-				List<AnonInfo> all = newToOld.get(n);
-				List<AnonInfo> keep = new ArrayList<>();
-				int available = 0;
+				List<AnonInfo> all       = newToOld.get(n);
+				List<AnonInfo> keep      = new ArrayList<>();
+				int            available = 0;
 				if (all != null) {
 					for (AnonInfo o : all) {
 						if (!remainingOld.contains(o)) continue;
@@ -1420,10 +1424,10 @@ public final class AnonClassAligner {
 				// 计数只在首轮做：诊断口径是"过滤前可用候选数 -> 过滤后候选数"
 				if (firstPass && stats != null) {
 					stats.topologyCandidatesBefore += available;
-					stats.topologyCandidatesAfter  += keep.size();
+					stats.topologyCandidatesAfter += keep.size();
 				}
 				dbg("  tier3 topology filter: " + n.name + " topology=" + n.topology
-					+ " candidates " + available + " -> " + keep.size());
+				    + " candidates " + available + " -> " + keep.size());
 			}
 			firstPass = false;
 
@@ -1438,8 +1442,8 @@ public final class AnonClassAligner {
 			for (Map.Entry<AnonInfo, List<AnonInfo>> e : survivors.entrySet()) {
 				List<AnonInfo> keep = e.getValue();
 				if (keep.size() != 1) continue;
-				AnonInfo o = keep.get(0);
-				int suitors = 0;
+				AnonInfo o       = keep.get(0);
+				int      suitors = 0;
 				for (List<AnonInfo> l : survivors.values()) {
 					if (l.contains(o)) suitors++;
 				}
@@ -1457,7 +1461,7 @@ public final class AnonClassAligner {
 				progress = true;
 				if (HotSwapAgent.DEBUG) {
 					HotSwapAgent.info("[ANON_MATCH] Tier 3 topology paired: " + n.name + " -> " + o.name
-						+ " " + n.topology);
+					                  + " " + n.topology);
 				}
 			}
 		}
@@ -1466,11 +1470,21 @@ public final class AnonClassAligner {
 	private static void recordTierMatch(AlignmentStats stats, int tier) {
 		if (stats == null) return;
 		switch (tier) {
-			case 1: stats.tier1Matches++; break;
-			case 2: stats.tier2Matches++; break;
-			case 3: stats.tier3Matches++; break;
-			case 4: stats.tier4Matches++; break;
-			case 5: stats.tier5Matches++; break;
+			case 1:
+				stats.tier1Matches++;
+				break;
+			case 2:
+				stats.tier2Matches++;
+				break;
+			case 3:
+				stats.tier3Matches++;
+				break;
+			case 4:
+				stats.tier4Matches++;
+				break;
+			case 5:
+				stats.tier5Matches++;
+				break;
 		}
 	}
 

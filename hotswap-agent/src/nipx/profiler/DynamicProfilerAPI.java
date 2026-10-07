@@ -7,8 +7,8 @@ import java.lang.instrument.*;
 import java.util.*;
 
 public class DynamicProfilerAPI {
-	public static final ProfilerTransformer transformer = new ProfilerTransformer();
-	public static final GlTimerInjector glTimerInjector = new GlTimerInjector();
+	public static final ProfilerTransformer transformer     = new ProfilerTransformer();
+	public static final GlTimerInjector     glTimerInjector = new GlTimerInjector();
 
 	public static void init() {
 		try {
@@ -62,21 +62,21 @@ public class DynamicProfilerAPI {
 		inst.redefineClasses(new ClassDefinition(Walker, bytes));
 
 		StackWalker internalWalker = StackWalker.getInstance(
-			 StackWalker.Option.RETAIN_CLASS_REFERENCE
-			);
-			new Thread(() -> {
-				try {
-					Thread.sleep(1000);
-				} catch (InterruptedException e) {
-					throw new RuntimeException(e);
-				}
-				internalWalker.walk(s -> {
-					s.forEach(frame -> {
-						System.out.println("捕获到线程 A 的栈帧: " + frame);
-					});
-					return null;
+		 StackWalker.Option.RETAIN_CLASS_REFERENCE
+		);
+		new Thread(() -> {
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
+				throw new RuntimeException(e);
+			}
+			internalWalker.walk(s -> {
+				s.forEach(frame -> {
+					System.out.println("捕获到线程 A 的栈帧: " + frame);
 				});
-			}).start();
+				return null;
+			});
+		}).start();
 	}
 	/**
 	 * @param baseClass  基类，如 Building.class, Unit.class

@@ -18,9 +18,9 @@ import java.util.*;
 /** ClassHierarchyOracle backed exclusively by bytecode metadata and the agent cache. */
 public final class HierarchyTreeOracle implements ClassHierarchyOracle {
 	private final WeakReference<ClassLoader> loader;
-	private final ClassNode preferredClass;
-	private final Map<String, ClassNode> resolved = new HashMap<>();
-	private final Map<String, ClassNode> nestResolved = new HashMap<>();
+	private final ClassNode                  preferredClass;
+	private final Map<String, ClassNode>     resolved     = new HashMap<>();
+	private final Map<String, ClassNode>     nestResolved = new HashMap<>();
 
 	public HierarchyTreeOracle(ClassLoader loader) {
 		this(loader, null);
@@ -67,7 +67,7 @@ public final class HierarchyTreeOracle implements ClassHierarchyOracle {
 		if ("<init>".equals(name)) return declaredMethod(className, name, desc);
 
 		Set<String> classChain = new LinkedHashSet<>();
-		String current = className;
+		String      current    = className;
 		while (current != null && classChain.add(current)) {
 			ClassNode node = resolve(current);
 			if (node == null) return Optional.empty();
@@ -106,8 +106,8 @@ public final class HierarchyTreeOracle implements ClassHierarchyOracle {
 			}
 		}
 		return node.superName == null
-			? Optional.empty()
-			: findField(lookupType, node.superName, name, desc, visited);
+		 ? Optional.empty()
+		 : findField(lookupType, node.superName, name, desc, visited);
 	}
 
 	private Optional<MemberRef> findInterfaceMethod(String lookupType, String interfaceType, String name, String desc,
@@ -153,8 +153,8 @@ public final class HierarchyTreeOracle implements ClassHierarchyOracle {
 	public List<ClassNode> getNestMembers(String className) {
 		ClassNode member = resolveNestNode(className);
 		if (member == null) throw new IllegalStateException("nest class metadata unavailable: " + className);
-		String hostName = member.nestHostClass == null ? member.name : member.nestHostClass;
-		ClassNode host = resolveNestNode(hostName);
+		String    hostName = member.nestHostClass == null ? member.name : member.nestHostClass;
+		ClassNode host     = resolveNestNode(hostName);
 		if (host == null) throw new IllegalStateException("nest host metadata unavailable: " + hostName);
 
 		Map<String, ClassNode> members = new LinkedHashMap<>();
@@ -174,8 +174,8 @@ public final class HierarchyTreeOracle implements ClassHierarchyOracle {
 
 	@Override
 	public List<NestFieldWrite> getNestFieldWrites(String className) {
-		List<ClassNode> members = getNestMembers(className);
-		List<NestFieldWrite> writes = new ArrayList<>();
+		List<ClassNode>      members = getNestMembers(className);
+		List<NestFieldWrite> writes  = new ArrayList<>();
 		for (ClassNode member : members) {
 			if (member == preferredClass) {
 				for (MethodNode method : member.methods) {
@@ -192,13 +192,13 @@ public final class HierarchyTreeOracle implements ClassHierarchyOracle {
 					new ClassReader(bytes).accept(new ClassVisitor(Opcodes.ASM9) {
 						@Override
 						public MethodVisitor visitMethod(int access, String methodName, String methodDesc,
-						                                String signature, String[] exceptions) {
+						                                 String signature, String[] exceptions) {
 							return new MethodVisitor(Opcodes.ASM9) {
 								@Override
 								public void visitFieldInsn(int opcode, String owner, String name, String desc) {
 									if (isPut(opcode)) {
 										writes.add(new NestFieldWrite(member.name, methodName, methodDesc,
-											new FieldInsnNode(opcode, owner, name, desc)));
+										 new FieldInsnNode(opcode, owner, name, desc)));
 									}
 								}
 							};
@@ -225,7 +225,7 @@ public final class HierarchyTreeOracle implements ClassHierarchyOracle {
 		try {
 			ClassNode node = new ClassNode();
 			new ClassReader(bytes).accept(node,
-				ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+			 ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
 			nestResolved.put(internalName, node);
 			return node;
 		} catch (Throwable ignored) {
@@ -242,7 +242,7 @@ public final class HierarchyTreeOracle implements ClassHierarchyOracle {
 		try {
 			ClassNode node = new ClassNode();
 			new ClassReader(bytes).accept(node,
-				ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+			 ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
 			resolved.put(internalName, node);
 			return node;
 		} catch (Throwable ignored) {

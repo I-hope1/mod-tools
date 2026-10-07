@@ -47,32 +47,32 @@ public class GlTimerProfiler {
 	// ── 配置 ─────────────────────────────────────────────────────────────────
 	public static volatile boolean enabled = false;
 
-	/** 环形缓冲大小：同时飞行中的 query 数量上限，每帧 flush 次数通常 < 64。*/
+	/** 环形缓冲大小：同时飞行中的 query 数量上限，每帧 flush 次数通常 < 64。 */
 	private static final int RING = 128;
 
 	// ── 环形缓冲 ─────────────────────────────────────────────────────────────
-	private static int[]   queryIds  = null;   // glGenQueries 分配，一次性
+	private static int[]    queryIds  = null;   // glGenQueries 分配，一次性
 	private static String[] queryKeys = new String[RING];
 
 	private static int writeIdx = 0;
 	private static int readIdx  = 0;
 
-	/** 复用的 NIO buffer，避免每帧分配。只在 GL 线程访问，无并发问题。*/
+	/** 复用的 NIO buffer，避免每帧分配。只在 GL 线程访问，无并发问题。 */
 	private static final IntBuffer tmpInt = ByteBuffer
-		.allocateDirect(RING * 4)
-		.order(ByteOrder.nativeOrder())
-		.asIntBuffer();
+	 .allocateDirect(RING * 4)
+	 .order(ByteOrder.nativeOrder())
+	 .asIntBuffer();
 
 	private static final IntBuffer oneInt = ByteBuffer
-		.allocateDirect(4)
-		.order(ByteOrder.nativeOrder())
-		.asIntBuffer();
+	 .allocateDirect(4)
+	 .order(ByteOrder.nativeOrder())
+	 .asIntBuffer();
 
-	/** 复用的 LookupKey，避免每帧生成 "[gpu]" 节点名时产生 String 垃圾。只在 GL 线程访问。*/
+	/** 复用的 LookupKey，避免每帧生成 "[gpu]" 节点名时产生 String 垃圾。只在 GL 线程访问。 */
 	private static final LookupKey gpuLookupKey = new LookupKey(64);
 
 	// ── 输出数据 ─────────────────────────────────────────────────────────────
-	/** flushKey → 累计 GPU 纳秒。供 FlameGraphWindow 渲染 GPU 泳道。*/
+	/** flushKey → 累计 GPU 纳秒。供 FlameGraphWindow 渲染 GPU 泳道。 */
 	public static final ConcurrentHashMap<String, LongAdder> gpuData = new ConcurrentHashMap<>();
 
 	// ── 初始化 ────────────────────────────────────────────────────────────────
@@ -173,7 +173,7 @@ public class GlTimerProfiler {
 						gpuLookupKey.append(key).append("[gpu]");
 					}
 					ProfilerData.FlameNode gpuNode =
-						ProfilerData.flameRoot.getOrCreateChild(gpuLookupKey);
+					 ProfilerData.flameRoot.getOrCreateChild(gpuLookupKey);
 					gpuNode.totalNanos.add(gpuNs);
 
 					queryKeys[slot] = null;
@@ -191,7 +191,7 @@ public class GlTimerProfiler {
 	public static void clear() {
 		gpuData.clear();
 		writeIdx = 0;
-		readIdx  = 0;
+		readIdx = 0;
 		Arrays.fill(queryKeys, null);
 	}
 
@@ -206,7 +206,7 @@ public class GlTimerProfiler {
 		for (int id : queryIds) tmpInt.put(id);
 		tmpInt.flip();
 		Core.gl30.glDeleteQueries(RING, tmpInt);
-		queryIds    = null;
+		queryIds = null;
 		initialized = false;
 		info("[GlTimer] Disposed");
 	}

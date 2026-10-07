@@ -66,8 +66,8 @@ public class UpdateRef {
 	 * </p>
 	 */
 	public static class CompositeAction implements Runnable {
-		final Seq<Runnable> actions = new Seq<>(2);
-		private volatile boolean executed;
+		final            Seq<Runnable> actions = new Seq<>(2);
+		private volatile boolean       executed;
 
 		public CompositeAction(Runnable first) {
 			if (first != null && first != NOOP && first != REMOVED) {
@@ -120,13 +120,13 @@ public class UpdateRef {
 	}
 
 	/** 原始函数式接口实例（熔断时与 fn 一同置空切断闭包引用），供解包、比较与哈希 */
-	private volatile Object                original;
+	private volatile Object   original;
 	/** 原始函数式接口的哈希码缓存，保证对象在熔断与置空前后 hashCode 恒定不变 */
-	private final    int                   originalHash;
+	private final    int      originalHash;
 	/** 当前被代理的目标函数式接口实例（例如 {@link Runnable}、{@link Cons} 等）；发生异常或注销后置为 null */
-	private volatile Object                fn;
+	private volatile Object   fn;
 	/** 自定义熔断/销毁动作；为 null 时表示静默失效；为 {@link #REMOVED} 时表示已触发熔断清理 */
-	private volatile Runnable              onRemove;
+	private volatile Runnable onRemove;
 
 	/** 线程本地上下文，支持通过 {@link #withOnRemove} 跨调用栈隐式传递熔断清理回调 */
 	private static final ThreadLocal<Runnable> CONTEXT_ON_REMOVE = new ThreadLocal<>();
@@ -932,8 +932,9 @@ public class UpdateRef {
 
 	private static final Field ELEMENT_UPDATE_FIELD;
 	private static final Field BUTTON_DISABLED_PROVIDER_FIELD;
+
 	static {
-		Field updateField = null;
+		Field updateField   = null;
 		Field disabledField = null;
 		try {
 			updateField = Element.class.getDeclaredField("update");
@@ -1049,7 +1050,7 @@ public class UpdateRef {
 			if (onRemove != null && ref != null) ref.addOnRemove(onRemove);
 			return original;
 		}
-		UpdateRef ref = new UpdateRef(original, onRemove);
+		UpdateRef            ref     = new UpdateRef(original, onRemove);
 		WrappedEventListener wrapper = new WrappedEventListener(ref);
 		ref.addOnRemove(new RemoveListenerAction(element, wrapper));
 		return wrapper;
@@ -1077,7 +1078,7 @@ public class UpdateRef {
 			}
 			return original;
 		}
-		UpdateRef ref = new UpdateRef(original, null);
+		UpdateRef       ref     = new UpdateRef(original, null);
 		WrappedRunnable wrapper = new WrappedRunnable(ref);
 		ref.addOnRemove(new RemoveUpdateAction(element, wrapper));
 		return wrapper;
@@ -1103,7 +1104,7 @@ public class UpdateRef {
 			}
 			return original;
 		}
-		UpdateRef ref = new UpdateRef(original, null);
+		UpdateRef    ref     = new UpdateRef(original, null);
 		WrappedBoolp wrapper = new WrappedBoolp(ref, () -> element == null || element.visible);
 		ref.addOnRemove(new RemoveVisibleAction(element, wrapper));
 		return wrapper;
@@ -1130,9 +1131,9 @@ public class UpdateRef {
 			}
 			return original;
 		}
-		Prov<Touchable> fallback = () -> element != null ? element.touchable : Touchable.enabled;
-		UpdateRef ref = new UpdateRef(original, null);
-		WrappedProv<Touchable> wrapper = new WrappedProv<>(ref, fallback);
+		Prov<Touchable>        fallback = () -> element != null ? element.touchable : Touchable.enabled;
+		UpdateRef              ref      = new UpdateRef(original, null);
+		WrappedProv<Touchable> wrapper  = new WrappedProv<>(ref, fallback);
 		ref.addOnRemove(new RemoveTouchableAction(element, wrapper));
 		return wrapper;
 	}
@@ -1157,7 +1158,7 @@ public class UpdateRef {
 			}
 			return original;
 		}
-		UpdateRef ref = new UpdateRef(original, null);
+		UpdateRef    ref     = new UpdateRef(original, null);
 		WrappedBoolp wrapper = new WrappedBoolp(ref, () -> element instanceof Button b && b.isDisabled());
 		ref.addOnRemove(new RemoveButtonDisabledAction(element, wrapper));
 		return wrapper;
@@ -1192,7 +1193,7 @@ public class UpdateRef {
 			}
 			return original;
 		}
-		UpdateRef ref = new UpdateRef(original, null);
+		UpdateRef        ref     = new UpdateRef(original, null);
 		WrappedValidator wrapper = new WrappedValidator(ref, text -> true);
 		ref.addOnRemove(new RemoveValidatorAction(element, wrapper));
 		return wrapper;
@@ -1215,7 +1216,7 @@ public class UpdateRef {
 			}
 			return original;
 		}
-		UpdateRef ref = new UpdateRef(original, null);
+		UpdateRef            ref     = new UpdateRef(original, null);
 		WrappedEventListener wrapper = new WrappedEventListener(ref);
 		ref.addOnRemove(new RemoveListenerAction(element, wrapper));
 		return wrapper;
@@ -1238,7 +1239,7 @@ public class UpdateRef {
 			}
 			return original;
 		}
-		UpdateRef ref = new UpdateRef(original, null);
+		UpdateRef            ref     = new UpdateRef(original, null);
 		WrappedEventListener wrapper = new WrappedEventListener(ref);
 		ref.addOnRemove(new RemoveCaptureListenerAction(element, wrapper));
 		return wrapper;
@@ -1341,7 +1342,7 @@ public class UpdateRef {
 	 * <b>关于形参与设计说明：</b><br>
 	 * 1) 保留形参 {@code cell} 是为了保持与字节码注入器（Injector）在拦截 {@code Cell.tooltip(Cons)} 时的调用签名一致；<br>
 	 * 2) 复用静默熔断逻辑，直接构造具备静默保护的代理实例（{@code new WrappedCons<>(new UpdateRef(original, NOOP))}），
-	 *    发生 {@link LinkageError} 时仅内部引用置空静默失效，绝不调用 {@code cell.tooltip(null)} 避免重新实例化空 Tooltip 监听器。
+	 * 发生 {@link LinkageError} 时仅内部引用置空静默失效，绝不调用 {@code cell.tooltip(null)} 避免重新实例化空 Tooltip 监听器。
 	 * </p>
 	 * @param cell     目标表格单元（仅用于注入签名协议兼容，不被持有）
 	 * @param original 原始提示构建回调
@@ -1452,10 +1453,10 @@ public class UpdateRef {
 		eventsMap = map;
 	}
 
-	private static final Seq<Runnable> DEFERRED_REMOVALS = new Seq<>();
-	private static volatile boolean hasDeferredRemovals;
-	private static volatile boolean flushScheduled;
-	private static volatile boolean flushFailLogged;
+	private static final    Seq<Runnable> DEFERRED_REMOVALS = new Seq<>();
+	private static volatile boolean       hasDeferredRemovals;
+	private static volatile boolean       flushScheduled;
+	private static volatile boolean       flushFailLogged;
 
 	private static void deferRemoval(Runnable r) {
 		if (r == null || r == NOOP || r == REMOVED) return;
@@ -1956,8 +1957,8 @@ public class UpdateRef {
 	 */
 	public static boolean isHotSwapLinkageError(Throwable t) {
 		if (t == null) return false;
-		Throwable cur = t;
-		int depth = 0;
+		Throwable cur   = t;
+		int       depth = 0;
 		while (cur != null && depth++ < 10) {
 			if (cur instanceof ExceptionInInitializerError) {
 				return false;

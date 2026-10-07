@@ -131,7 +131,7 @@ public final class LayoutGate {
 		for (FieldInfo f : newFields) newByKey.put(f.name(), f);
 
 		// 先查同名项的类型与 static 性变化（这两档最危险，优先报出）
-		List<String> typeChanged = new ArrayList<>();
+		List<String> typeChanged   = new ArrayList<>();
 		List<String> staticChanged = new ArrayList<>();
 		for (Map.Entry<String, FieldInfo> e : newByKey.entrySet()) {
 			FieldInfo o = oldByKey.get(e.getKey());
@@ -142,7 +142,7 @@ public final class LayoutGate {
 			}
 			if (o.isStatic() != n.isStatic()) {
 				staticChanged.add(n.name() + " " + (o.isStatic() ? "static" : "instance")
-				                 + " -> " + (n.isStatic() ? "static" : "instance"));
+				                  + " -> " + (n.isStatic() ? "static" : "instance"));
 			}
 		}
 		if (!typeChanged.isEmpty()) {
@@ -154,7 +154,7 @@ public final class LayoutGate {
 
 		// 新增字段
 		List<String> addedSynthetic = new ArrayList<>();
-		List<String> addedPlain = new ArrayList<>();
+		List<String> addedPlain     = new ArrayList<>();
 		for (Map.Entry<String, FieldInfo> e : newByKey.entrySet()) {
 			if (oldByKey.containsKey(e.getKey())) continue;
 			(e.getValue().isSynthetic() ? addedSynthetic : addedPlain).add(e.getValue().toString());
@@ -174,7 +174,7 @@ public final class LayoutGate {
 
 		StringBuilder detail = new StringBuilder("compatible");
 		if (!addedPlain.isEmpty()) detail.append("; added plain field (InitFix handles): ").append(addedPlain);
-		if (!removed.isEmpty())   detail.append("; removed field (harmless): ").append(removed);
+		if (!removed.isEmpty()) detail.append("; removed field (harmless): ").append(removed);
 		return new Result(Verdict.COMPATIBLE, detail.toString());
 	}
 

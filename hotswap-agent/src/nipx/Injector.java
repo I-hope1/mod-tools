@@ -51,7 +51,8 @@ public class Injector {
 	public static void redefineTask(Class<?> clazz, String methodName, String methodDesc, String lambdaType) {
 		redefineTask(clazz, methodName, methodDesc, lambdaType, 1);
 	}
-	public static void redefineTask(Class<?> clazz, String methodName, String methodDesc, String lambdaType, String wrapMethodName) {
+	public static void redefineTask(Class<?> clazz, String methodName, String methodDesc, String lambdaType,
+	                                String wrapMethodName) {
 		redefineTask(clazz, methodName, methodDesc, lambdaType, 1, wrapMethodName);
 	}
 	public static void redefineTask(Class<?> clazz, String methodName, String methodDesc, String lambdaType,

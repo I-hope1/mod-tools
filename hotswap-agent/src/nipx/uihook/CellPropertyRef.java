@@ -273,9 +273,9 @@ public class CellPropertyRef {
 				String cls  = f.getClassName().replace('.', '/');
 				String name = f.getMethodName();
 
-          if (cls.equals(CL_CELL)
-              || cls.startsWith("arc/util/pooling/")
-              || cls.startsWith("nipx/")) { continue; }
+				if (cls.equals(CL_CELL)
+				    || cls.startsWith("arc/util/pooling/")
+				    || cls.startsWith("nipx/")) { continue; }
 
 				if (cls.equals(CL_TABLE)) {
 					if (TABLE_CELL_CREATORS.contains(name)) creatorName = name;
@@ -427,8 +427,9 @@ public class CellPropertyRef {
 				busy[0] = false;
 			}
 		};
-      if (Thread.currentThread() == uiThread) { work.run(); } else if (Core.app != null) { Core.app.post(work); } else
-          work.run();
+		if (Thread.currentThread() == uiThread) { work.run(); } else if (Core.app != null) { Core.app.post(work); } else {
+			work.run();
+		}
 	}
 
 	private static void afterRedefinedImpl(String slashName, byte[] newBytecode) {
@@ -1175,16 +1176,16 @@ public class CellPropertyRef {
 				 Object[] allArgs = new Object[li.captures().length
 				                               + (methodArgs == null ? 0 : methodArgs.length)];
 				 System.arraycopy(li.captures(), 0, allArgs, 0, li.captures().length);
-           if (methodArgs != null) {
-               System.arraycopy(methodArgs, 0, allArgs, li.captures().length, methodArgs.length);
-           }
+				 if (methodArgs != null) {
+					 System.arraycopy(methodArgs, 0, allArgs, li.captures().length, methodArgs.length);
+				 }
 
 				 if (isStatic) return invoke(handle, allArgs);
 
 				 Object instance = allArgs.length > 0 ? allArgs[0] : null;
 				 if (instance == null) return null;
 				 Object[] actual = new Object[Math.max(0, allArgs.length - 1)];
-           if (actual.length > 0) { System.arraycopy(allArgs, 1, actual, 0, actual.length); }
+				 if (actual.length > 0) { System.arraycopy(allArgs, 1, actual, 0, actual.length); }
 				 return invoke(handle, instance, actual);
 			 } catch (Throwable t) {
 				 error("[CellProperty] Lambda invocation failed", t);
@@ -1301,14 +1302,14 @@ public class CellPropertyRef {
 	/** 先扫站点，扫不到就不 analyze（大多数方法没有 Cell 调用，这一步省掉 Analyzer 开销）。 */
 	private static MethodExtraction extractFromMethod(ClassNode cn, MethodNode mn) {
 		List<List<PropertyCall>> chains = new ArrayList<>();
-      if (mn.instructions == null || mn.instructions.size() == 0) { return new MethodExtraction(true, chains); }
+		if (mn.instructions == null || mn.instructions.size() == 0) { return new MethodExtraction(true, chains); }
 
 		List<MethodInsnNode> cellCallSites = new ArrayList<>();
 		for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
 			if (!(insn instanceof MethodInsnNode mi)) continue;
 			if (!returnsCell(mi)) continue;
-        if (!isTableCellCreator(cn, mi.owner, mi.name)
-            && !isCellProperty(cn, mi.owner, mi.name, mi.desc)) { continue; }
+			if (!isTableCellCreator(cn, mi.owner, mi.name)
+			    && !isCellProperty(cn, mi.owner, mi.name, mi.desc)) { continue; }
 			cellCallSites.add(mi);
 		}
 		if (cellCallSites.isEmpty()) return new MethodExtraction(true, chains);
@@ -1360,8 +1361,8 @@ public class CellPropertyRef {
 			AbstractInsnNode prev = recv.insns.iterator().next();
 			if (!(prev instanceof MethodInsnNode prevCall)) return curr;
 			if (!returnsCell(prevCall)) return curr;
-        if (!isTableCellCreator(cn, prevCall.owner, prevCall.name)
-            && !isCellProperty(cn, prevCall.owner, prevCall.name, prevCall.desc)) { return curr; }
+			if (!isTableCellCreator(cn, prevCall.owner, prevCall.name)
+			    && !isCellProperty(cn, prevCall.owner, prevCall.name, prevCall.desc)) { return curr; }
 			curr = prevCall;
 		}
 	}
@@ -1532,8 +1533,8 @@ public class CellPropertyRef {
 			}
 		}
 
-      if (insn instanceof IntInsnNode iin
-          && (iin.getOpcode() == BIPUSH || iin.getOpcode() == SIPUSH)) { return iin.operand; }
+		if (insn instanceof IntInsnNode iin
+		    && (iin.getOpcode() == BIPUSH || iin.getOpcode() == SIPUSH)) { return iin.operand; }
 
 		if (insn instanceof VarInsnNode vin) {
 			int op = vin.getOpcode();
@@ -1770,8 +1771,8 @@ public class CellPropertyRef {
 
 				if (name.startsWith("<")) return mv;
 				if (!CELL_PROPERTY_METHODS.contains(name)) return mv;
-          if (!(descriptor.endsWith(")Larc/scene/ui/layout/Cell;")
-                || ("row".equals(name) && "()V".equals(descriptor)))) { return mv; }
+				if (!(descriptor.endsWith(")Larc/scene/ui/layout/Cell;")
+				      || ("row".equals(name) && "()V".equals(descriptor)))) { return mv; }
 
 				return new AdviceAdapter(ASM9, mv, access, name, descriptor) {
 					@Override
@@ -1838,13 +1839,13 @@ public class CellPropertyRef {
 	}
 
 	private static void pushInt(MethodVisitor mv, int value) {
-      if (value >= -1 && value <= 5) {
-          mv.visitInsn(ICONST_0 + value);
-      } else if (value >= Byte.MIN_VALUE && value <= Byte.MAX_VALUE) {
-          mv.visitIntInsn(BIPUSH, value);
-      } else if (value >= Short.MIN_VALUE && value <= Short.MAX_VALUE) { mv.visitIntInsn(SIPUSH, value); } else {
-          mv.visitLdcInsn(value);
-      }
+		if (value >= -1 && value <= 5) {
+			mv.visitInsn(ICONST_0 + value);
+		} else if (value >= Byte.MIN_VALUE && value <= Byte.MAX_VALUE) {
+			mv.visitIntInsn(BIPUSH, value);
+		} else if (value >= Short.MIN_VALUE && value <= Short.MAX_VALUE) { mv.visitIntInsn(SIPUSH, value); } else {
+			mv.visitLdcInsn(value);
+		}
 	}
 	//endregion
 
@@ -1864,13 +1865,13 @@ public class CellPropertyRef {
 			enabled = true;
 			info("[CellProperty] Enabled, UI thread = " + uiThread.getName());
 		};
-      if (Core.app != null) { Core.app.post(init); } else init.run();
+		if (Core.app != null) { Core.app.post(init); } else init.run();
 	}
 
 	public static void disable() {
 		if (!enabled) return;
 		enabled = false;
-      if (Core.app != null) { Core.app.post(CellPropertyRef::performRollback); } else clearAll();
+		if (Core.app != null) { Core.app.post(CellPropertyRef::performRollback); } else clearAll();
 		info("[CellProperty] Disabled (rollback scheduled)");
 	}
 

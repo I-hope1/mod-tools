@@ -40,7 +40,7 @@ import java.util.*;
 @SuppressWarnings("unused")
 public final class MethodFingerprinter extends MethodVisitor {
 	public static final ThreadLocal<MethodFingerprinter> CONTEXT =
-		ThreadLocal.withInitial(MethodFingerprinter::new);
+	 ThreadLocal.withInitial(MethodFingerprinter::new);
 
 	//region 上下文
 	/** 当前方法的所属类名（内部名），由 {@link #setContext} 设置。 */
@@ -113,7 +113,6 @@ public final class MethodFingerprinter extends MethodVisitor {
 
 	/**
 	 * 获取标签的唯一 ID，如果不存在则分配新的 ID。
-	 *
 	 * @param l 标签对象
 	 * @return 标签的整数 ID
 	 */
@@ -145,7 +144,6 @@ public final class MethodFingerprinter extends MethodVisitor {
 	 *
 	 * <p>允许 {@code owner} 为 {@code null}（例如 catch-any/finally 的
 	 * 异常类型），与 {@link #maskDescriptor} 保持一致：{@code null} 原样返回。</p>
-	 *
 	 * @return 屏蔽编号后的安全描述符
 	 */
 	private String maskAnonymousClass(String owner) {
@@ -170,7 +168,7 @@ public final class MethodFingerprinter extends MethodVisitor {
 		anonMasked = true;
 		Long h = anonHashes != null ? anonHashes.get(owner) : null;
 		return h != null ? "#ANON_" + relId + "_" + Long.toHexString(h) + "#"
-		                 : "#ANON_" + relId + "#";
+		 : "#ANON_" + relId + "#";
 	}
 
 	/**
@@ -246,7 +244,6 @@ public final class MethodFingerprinter extends MethodVisitor {
 
 	/**
 	 * 获取最终计算出的哈希值。
-	 *
 	 * @return 64 位 CRC 哈希值
 	 */
 	public long getHash() {

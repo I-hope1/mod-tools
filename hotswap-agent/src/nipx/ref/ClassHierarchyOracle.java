@@ -22,7 +22,7 @@ public interface ClassHierarchyOracle {
 
 	final class MemberRef {
 		public final String declaringClass;
-		public final int access;
+		public final int    access;
 
 		public MemberRef(String declaringClass, int access) {
 			this.declaringClass = declaringClass;
@@ -37,9 +37,9 @@ public interface ClassHierarchyOracle {
 	List<NestFieldWrite> getNestFieldWrites(String className);
 
 	final class NestFieldWrite {
-		public final String className;
-		public final String methodName;
-		public final String methodDesc;
+		public final String        className;
+		public final String        methodName;
+		public final String        methodDesc;
 		public final FieldInsnNode instruction;
 
 		public NestFieldWrite(String className, String methodName, String methodDesc, FieldInsnNode instruction) {

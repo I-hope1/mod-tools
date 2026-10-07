@@ -485,7 +485,7 @@ public class InitFix {
 			// 这些新增字段从此不再出现在 Diff 里。必须在这里记账，否则永久遗忘。
 			// 已有的台账条目原样保留（ledgerPut 会覆盖原因，这里跳过以免丢掉上一轮的结论）。
 			Map<String, String> existing = ledgerSnapshot(host);
-			String reason = "patch generation failed: " + e;
+			String              reason   = "patch generation failed: " + e;
 			for (String f : addedInstanceFields) {
 				if (!existing.containsKey(f)) ledgerPut(host, f, reason);
 			}
@@ -533,7 +533,7 @@ public class InitFix {
 						fields.add(task.fieldName());
 					}
 					stale.add(new StalePatch(new WeakReference<>(k), fields,
-					                         TimeUnit.NANOSECONDS.toSeconds(age)));
+					 TimeUnit.NANOSECONDS.toSeconds(age)));
 					return true;
 				}
 				return false;
@@ -1143,7 +1143,6 @@ public class InitFix {
 	 * 因此安全性不依赖这个函数，它只决定"少拒了多少"。</p>
 	 *
 	 * <p>实现是 Tarjan 迭代版（避免深依赖链上的栈溢出）。</p>
-	 *
 	 * @return 环成员集合；无环返回空集
 	 */
 	private static Set<String> cycleMembers(
@@ -1151,19 +1150,19 @@ public class InitFix {
 
 		Map<String, Set<String>> deps = dependencyGraph(fields, extracts, className);
 
-		Map<String, Integer> index    = new HashMap<>();
-		Map<String, Integer> lowlink  = new HashMap<>();
-		Set<String>          onStack  = new LinkedHashSet<>();
-		Deque<String>        stack    = new ArrayDeque<>();
-		Set<String>          members  = new LinkedHashSet<>();
-		int[]                counter  = {0};
+		Map<String, Integer> index   = new HashMap<>();
+		Map<String, Integer> lowlink = new HashMap<>();
+		Set<String>          onStack = new LinkedHashSet<>();
+		Deque<String>        stack   = new ArrayDeque<>();
+		Set<String>          members = new LinkedHashSet<>();
+		int[]                counter = {0};
 
 		for (String root : fields) {
 			if (index.containsKey(root)) continue;
 
 			// 迭代式 Tarjan：显式栈保存 (节点, 待访问邻居迭代器)
-			Deque<String>                       nodeStack = new ArrayDeque<>();
-			Deque<Iterator<String>>             iterStack = new ArrayDeque<>();
+			Deque<String>           nodeStack = new ArrayDeque<>();
+			Deque<Iterator<String>> iterStack = new ArrayDeque<>();
 
 			index.put(root, counter[0]);
 			lowlink.put(root, counter[0]);
@@ -1174,7 +1173,7 @@ public class InitFix {
 			iterStack.push(deps.getOrDefault(root, Set.of()).iterator());
 
 			while (!nodeStack.isEmpty()) {
-				String   v   = nodeStack.peek();
+				String           v  = nodeStack.peek();
 				Iterator<String> it = iterStack.peek();
 
 				if (it.hasNext()) {
@@ -1263,7 +1262,6 @@ public class InitFix {
 	 * GETSTATIC 整个漏掉，而"实例字段读静态字段"恰恰是跨组漏网的主要形态：
 	 * 曾经只传 {@code depInstance}，导致这道校验对它的目标场景完全失明
 	 * （已由"关闭闭包传播"的安全探针实测暴露）。</p>
-	 *
 	 * @return 违规描述；闭合则返回 {@code null}
 	 */
 	private static String closureViolation(
@@ -1434,8 +1432,8 @@ public class InitFix {
 		for (Map.Entry<String, List<String>> e : byReason.entrySet()) {
 			HotSwapAgent.warn("Field init patch refused for "
 			                  + (e.getValue().size() == 1
-			                     ? e.getValue().get(0)
-			                     : e.getValue().size() + " fields of " + className)
+			 ? e.getValue().get(0)
+			 : e.getValue().size() + " fields of " + className)
 			                  + " in " + className + ": " + e.getKey());
 		}
 	}
@@ -1777,7 +1775,7 @@ public class InitFix {
 	 */
 	private static final class NestView {
 		private final List<ClassHierarchyOracle.NestFieldWrite> writes;
-		private final boolean complete;
+		private final boolean                                   complete;
 
 		private NestView(List<ClassHierarchyOracle.NestFieldWrite> writes, boolean complete) {
 			this.writes = writes;
@@ -1809,7 +1807,7 @@ public class InitFix {
 				if (field.getOpcode() != putOp) continue;
 				if (!field.owner.equals(ownerInternal)
 				    || !field.name.equals(name)
-				    || !field.desc.equals(desc)) continue;
+				    || !field.desc.equals(desc)) { continue; }
 				n++;
 			}
 			return n;
@@ -1826,7 +1824,7 @@ public class InitFix {
 				if (field.getOpcode() != putOp || field == self) continue;
 				if (!field.owner.equals(ownerInternal)
 				    || !field.name.equals(name)
-				    || !field.desc.equals(desc)) continue;
+				    || !field.desc.equals(desc)) { continue; }
 				return write.className + "." + write.methodName + write.methodDesc;
 			}
 			return null;
@@ -2246,9 +2244,9 @@ public class InitFix {
 	 * only string ops that return {@code CharSequence} and therefore force that coercion.
 	 */
 	private static final Set<String> STRING_COERCION_PRODUCERS = Set.of(
-		"kotlin/text/StringsKt.trim(Ljava/lang/CharSequence;)Ljava/lang/CharSequence;",
-		"kotlin/text/StringsKt.trimStart(Ljava/lang/CharSequence;)Ljava/lang/CharSequence;",
-		"kotlin/text/StringsKt.trimEnd(Ljava/lang/CharSequence;)Ljava/lang/CharSequence;");
+	 "kotlin/text/StringsKt.trim(Ljava/lang/CharSequence;)Ljava/lang/CharSequence;",
+	 "kotlin/text/StringsKt.trimStart(Ljava/lang/CharSequence;)Ljava/lang/CharSequence;",
+	 "kotlin/text/StringsKt.trimEnd(Ljava/lang/CharSequence;)Ljava/lang/CharSequence;");
 
 	/** True for exactly an INVOKESTATIC call to one of {@link #STRING_COERCION_PRODUCERS}. */
 	private static boolean isStringCoercionProducer(AbstractInsnNode n) {
@@ -2815,12 +2813,12 @@ public class InitFix {
 		Class<?> pc = h.lookupClass();
 
 		// 必须在取 Handle 时就 asType 适配：init$F 的形参是宿主类型，驱动手里只有 Object。
-		BoundInstanceTask[] instanceTasks = new BoundInstanceTask[plan.instanceTasks().size()];
-		boolean hasInstanceDependencies = false;
+		BoundInstanceTask[] instanceTasks           = new BoundInstanceTask[plan.instanceTasks().size()];
+		boolean             hasInstanceDependencies = false;
 		for (int i = 0; i < instanceTasks.length; i++) {
 			FieldPatchTask task = plan.instanceTasks().get(i);
 			MethodHandle handle = h.findStatic(pc, task.methodName(), MethodType.methodType(void.class, host))
-				.asType(MethodType.methodType(void.class, Object.class));
+			 .asType(MethodType.methodType(void.class, Object.class));
 			instanceTasks[i] = new BoundInstanceTask(task.fieldName(), task.dependencies(), handle);
 			hasInstanceDependencies |= !task.dependencies().isEmpty();
 		}
@@ -2910,7 +2908,7 @@ public class InitFix {
 		// 那是预期行为，报成 warn 会误导。重试轮因此降为 info。
 		Map<String, long[]> casStats = HotswapBridge.drainConditionalStats();
 		if (!casStats.isEmpty()) {
-			long totalSkipped = 0;
+			long         totalSkipped = 0;
 			List<String> skippedNames = new ArrayList<>();
 			for (Map.Entry<String, long[]> e : casStats.entrySet()) {
 				long skipped = e.getValue()[1];
@@ -2933,7 +2931,7 @@ public class InitFix {
 		}
 	}
 
-	private record BoundInstanceTask(String fieldName, Set<String> dependencies, MethodHandle handle) {}
+	private record BoundInstanceTask(String fieldName, Set<String> dependencies, MethodHandle handle) { }
 
 	private static void runIndependentInstanceTasks(
 	 Class<?> host, List<Object> targets, BoundInstanceTask[] tasks,
@@ -3136,7 +3134,8 @@ public class InitFix {
 		return !(cause instanceof LinkageError);
 	}
 
-	private static Set<String> intersection(Set<String> deps, Set<String> a, Set<String> b) {		Set<String> out = new LinkedHashSet<>();
+	private static Set<String> intersection(Set<String> deps, Set<String> a, Set<String> b) {
+		Set<String> out = new LinkedHashSet<>();
 		for (String d : deps) {
 			if (a.contains(d) || b.contains(d)) out.add(d);
 		}
@@ -3652,7 +3651,7 @@ public class InitFix {
 			}
 
 			if (n instanceof FieldInsnNode f && isFieldAccessOpcode(f.getOpcode())) {
-				Boolean prot = isProtectedCrossPackageAccess(oracle, host,f.owner, f.name, f.desc, true);
+				Boolean prot = isProtectedCrossPackageAccess(oracle, host, f.owner, f.name, f.desc, true);
 				if (prot == null) {
 					return "cannot determine protected status of field access "
 					       + f.owner + "." + f.name + ":" + f.desc;
@@ -3747,7 +3746,7 @@ public class InitFix {
 		if (ownerInternal.isEmpty() || ownerInternal.charAt(0) == '[') return Boolean.FALSE;
 
 		Optional<ClassHierarchyOracle.MemberRef> member =
-			oracle.resolveMember(ownerInternal, name, desc, isField);
+		 oracle.resolveMember(ownerInternal, name, desc, isField);
 		if (member.isEmpty()) return null;
 
 		String hostInternal = host.getName().replace('.', '/');

@@ -119,7 +119,7 @@ public class LambdaAligner {
 	}
 
 	/** 仅供单线程测试断言读取的最近一次对齐统计。测试调用前请先置 null。 */
-	public static volatile AlignmentStats LAST_STATS;
+	public static volatile AlignmentStats    LAST_STATS;
 	public static volatile Map<String, Long> LAST_OLD_ANON_HASHES;
 	public static volatile Map<String, Long> LAST_NEW_ANON_HASHES;
 
@@ -284,8 +284,8 @@ public class LambdaAligner {
 		 * <p><b>填充时机</b>：必须在 {@code scan} 建完该侧**全部** SyntheticInfo 之后，
 		 * 否则会查到 null（幽灵重注入也会改变方法表）。</p>
 		 */
-		final Map<String, SyntheticInfo> oldNameIndex = new HashMap<>(64);
-		final Map<String, SyntheticInfo> newNameIndex = new HashMap<>(64);
+		final Map<String, SyntheticInfo> oldNameIndex  = new HashMap<>(64);
+		final Map<String, SyntheticInfo> newNameIndex  = new HashMap<>(64);
 		final Map<String, Long>          oldAnonHashes = new HashMap<>(16);
 		final Map<String, Long>          newAnonHashes = new HashMap<>(16);
 
@@ -336,7 +336,6 @@ public class LambdaAligner {
 
 	/**
 	 * 对齐 Lambda 表达式的主入口方法（含匿名类字节码解析器）。
-	 *
 	 * @param oldBytes            上一轮实际生效的字节码
 	 * @param newBytes            本次新编译出的字节码
 	 * @param oldBytecodeResolver 旧侧字节码解析器（传入类内部名，返回对应字节码；可为 null）
@@ -1306,7 +1305,7 @@ public class LambdaAligner {
 	}
 
 	private static boolean isAmbiguousAnonCollision(List<SyntheticInfo> newGroup, List<SyntheticInfo> oldGroup,
-	                                               SyntheticInfo ni, SyntheticInfo oi) {
+	                                                SyntheticInfo ni, SyntheticInfo oi) {
 		if (!ni.anonMasked && !oi.anonMasked) return false;
 		return hasMultipleAnonMaskedWithSameHash(newGroup, ni.hash)
 		       || hasMultipleAnonMaskedWithSameHash(oldGroup, oi.hash);

@@ -21,10 +21,10 @@ public class EntityKeyExtractor {
 	// ── 反射字段缓存：Class → 已解析的字段组（不存在则为 MISSING） ──────────
 	private static final ConcurrentHashMap<Class<?>, FieldBundle> fieldCache = new ConcurrentHashMap<>();
 
-	/** 哨兵：标记该类已确认无法提取有意义字段，后续直接走 fallback。*/
+	/** 哨兵：标记该类已确认无法提取有意义字段，后续直接走 fallback。 */
 	private static final FieldBundle MISSING = new FieldBundle(null, null, null, null);
 
-	record FieldBundle(Field block, Field blockName, Field tileX, Field tileY) {}
+	record FieldBundle(Field block, Field blockName, Field tileX, Field tileY) { }
 
 	// ── 公共 API ──────────────────────────────────────────────────────────────
 
@@ -34,8 +34,8 @@ public class EntityKeyExtractor {
 	 */
 	public static String key(Object self) {
 		if (self == null) return "null";
-		Class<?> cls = self.getClass();
-		FieldBundle fb = fieldCache.computeIfAbsent(cls, EntityKeyExtractor::resolve);
+		Class<?>    cls = self.getClass();
+		FieldBundle fb  = fieldCache.computeIfAbsent(cls, EntityKeyExtractor::resolve);
 		if (fb == MISSING) return simpleName(cls);
 		return buildKey(self, fb, cls);
 	}
@@ -73,7 +73,7 @@ public class EntityKeyExtractor {
 			// block/type 名称
 			Object container = fb.block().get(self);
 			if (container == null) return simpleName(cls);
-			Object name = fb.blockName().get(container);
+			Object name     = fb.blockName().get(container);
 			String baseName = name != null ? name.toString() : simpleName(cls);
 
 			if (fb.tileY() != null) {
@@ -95,19 +95,19 @@ public class EntityKeyExtractor {
 
 	// ── 反射工具 ─────────────────────────────────────────────────────────────
 
-	/** 在类及父类中查找指定名称的第一个字段，并设为可访问。*/
+	/** 在类及父类中查找指定名称的第一个字段，并设为可访问。 */
 	private static Field findField(Class<?> cls, String name) {
 		for (Class<?> c = cls; c != null && c != Object.class; c = c.getSuperclass()) {
 			try {
 				Field f = c.getDeclaredField(name);
 				f.setAccessible(true);
 				return f;
-			} catch (NoSuchFieldException ignored) {}
+			} catch (NoSuchFieldException ignored) { }
 		}
 		return null;
 	}
 
-	/** 按候选名称列表依次尝试，返回第一个找到的字段。*/
+	/** 按候选名称列表依次尝试，返回第一个找到的字段。 */
 	private static Field findFieldByName(Class<?> cls, String... names) {
 		for (String name : names) {
 			Field f = findField(cls, name);

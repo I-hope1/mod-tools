@@ -26,10 +26,6 @@ dependencyResolutionManagement {
 	repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
 	repositories {
 		mavenLocal()
-		// Gradle 9 的 mavenCentral() 默认走 repo.maven.apache.org，在部分网络环境下 TLS
-		// 握手被中断（实测 000）。repo1.maven.org 是同一份 Maven Central 的规范主机名，
-		// 在这里显式前置，保证依赖（JUnit 等）在受限网络下也可解析。
-		maven { url 'https://repo1.maven.org/maven2' }
 		mavenCentral()
 		maven { url 'https://jitpack.io' }
 		maven { url 'https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository' }

@@ -52,6 +52,14 @@ public final class LayoutGate {
 		/** 同名字段改了类型 —— 存活实例的旧值按旧类型存放，按新类型读会错。 */
 		CHANGED_FIELD_TYPE,
 		/**
+		 * 字段被删除（重定义层入口专有）。
+		 *
+		 * <p>与 {@link #check} 中"纯删除放行"不同：重定义层面对的是<b>用户显式编辑</b>，
+		 * 静默删掉字段会让用户以为无损（旧值随新布局消失）。因此这里保守地拒绝，
+		 * 交给用户重新热更一次或重启确认。见 §7.2 风险 1 的分级门表。</p>
+		 */
+		REMOVED_FIELD,
+		/**
 		 * 同名字段在 static 与实例之间切换。
 		 *
 		 * <p>单独成档的理由：文档 1 记录的内容哈希只含 {@code name:desc}、<b>不含访问标志</b>，
@@ -176,6 +184,70 @@ public final class LayoutGate {
 		if (!addedPlain.isEmpty()) detail.append("; added plain field (InitFix handles): ").append(addedPlain);
 		if (!removed.isEmpty()) detail.append("; removed field (harmless): ").append(removed);
 		return new Result(Verdict.COMPATIBLE, detail.toString());
+	}
+
+	/**
+	 * 重定义层入口：从 {@link ClassDiffUtil.ClassDiff#changedFields} 判定（§7.2 风险 1）。
+	 *
+	 * <p><b>为什么需要第二个入口</b>：{@code changedFields} 已经被
+	 * {@code ClassDiffUtil.isInternalMarkerField} 过滤掉合成字段，因此本入口只覆盖
+	 * <b>非合成</b>字段（具名类与匿名类里用户自己声明的字段）。匿名类的合成捕获字段
+	 * （{@code val$*} / {@code this$0}）由对齐器的 Tier 4 门经 {@link #check} 挡住 ——
+	 * 两个入口互补，判据同源。</p>
+	 *
+	 * <p><b>条目格式</b>：{@code "+ name"} / {@code "- name"}，静态字段名带 {@code *} 前缀
+	 * （如 {@code "- *a"}）。{@code ClassDiffUtil} 的映射销毁法保证了四种情形：</p>
+	 * <ul>
+	 *   <li>纯新增 → 只有 {@code "+ name"} → <b>放行</b>（InitFix 初始化存活实例的新字段）；</li>
+	 *   <li>纯删除 → 只有 {@code "- name"} → {@link Verdict#REMOVED_FIELD}；</li>
+	 *   <li>同名改类型 → {@code "- a"} + {@code "+ a"}（desc 不同使旧 key 不匹配）→
+	 *       {@link Verdict#CHANGED_FIELD_TYPE}；</li>
+	 *   <li>静态性变更 → {@code "- a"} + {@code "+ *a"}（或反向）→
+	 *       {@link Verdict#CHANGED_STATICNESS}。</li>
+	 * </ul>
+	 *
+	 * <p>按字段名把 {@code +}/{@code -} 配对即可区分，比重写一个字段布局比较器便宜。</p>
+	 */
+	public static Result checkChangedFields(List<String> changedFields) {
+		if (changedFields == null || changedFields.isEmpty()) {
+			return new Result(Verdict.COMPATIBLE, "compatible");
+		}
+		Map<String, Boolean> added   = new LinkedHashMap<>();
+		Map<String, Boolean> removed = new LinkedHashMap<>();
+		for (String raw : changedFields) {
+			if (raw == null || raw.length() < 2) continue;
+			char   sign   = raw.charAt(0);
+			String body   = raw.substring(1).trim();
+			boolean statik = body.startsWith("*");
+			String  name   = statik ? body.substring(1) : body;
+			if (sign == '+')      added.put(name, statik);
+			else if (sign == '-') removed.put(name, statik);
+		}
+		if (removed.isEmpty()) {
+			return new Result(Verdict.COMPATIBLE,
+			 "added field(s) only (InitFix initializes surviving instances): " + added.keySet());
+		}
+		List<String> typeChanged   = new ArrayList<>();
+		List<String> staticChanged = new ArrayList<>();
+		List<String> pureRemoved   = new ArrayList<>();
+		for (Map.Entry<String, Boolean> e : removed.entrySet()) {
+			String  name = e.getKey();
+			Boolean neu  = added.get(name);
+			if (neu == null) {
+				pureRemoved.add(name);
+			} else if (!neu.equals(e.getValue())) {
+				staticChanged.add(name);
+			} else {
+				typeChanged.add(name);
+			}
+		}
+		if (!typeChanged.isEmpty()) {
+			return new Result(Verdict.CHANGED_FIELD_TYPE, "field type changed: " + typeChanged);
+		}
+		if (!staticChanged.isEmpty()) {
+			return new Result(Verdict.CHANGED_STATICNESS, "field staticness changed: " + staticChanged);
+		}
+		return new Result(Verdict.REMOVED_FIELD, "field(s) removed: " + pureRemoved);
 	}
 
 	/** 命名常量：默认模式。{@code warn}/{@code off} 见 {@code HotSwapAgent.ANON_LAYOUT_GATE}。 */

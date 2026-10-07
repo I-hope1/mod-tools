@@ -899,9 +899,15 @@ public class CellPropertyRef {
 		}
 
 		if (!allUsable) {
-			// 部分应用：只补"新增或改变且参数已知"的调用，不动旧属性
+			// 部分应用：默认只补"新增或改变且参数已知"的调用，不动旧属性。
+			//
+			// 但 elementUpdated 时旧子元素已被 BindCell.replace 换掉，挂在旧元素上的回调
+			// （update/disabled/tooltip/checked）与文本随替换一起丢失；此时只补"新变化"不足，
+			// 未变化的回调不会被重新挂到新元素上。故 elementUpdated 时把参数已知的新属性整体重放
+			// （几何在 Cell 上幂等，回调在新元素上是首次挂载），未知参数的属性仍只能放弃。
 			for (PropertyCall p : newProps) {
-				if (hasUsableArgs(p) && !containsCall(oldProps, p)) {
+				if (!hasUsableArgs(p)) continue;
+				if (elementUpdated || !containsCall(oldProps, p)) {
 					invokeCellMethod(cell, p.method, p.desc, p.args);
 				}
 			}

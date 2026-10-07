@@ -1187,6 +1187,10 @@ public class CellPropertyRef {
 				 Object[] actual = new Object[Math.max(0, allArgs.length - 1)];
 				 if (actual.length > 0) { System.arraycopy(allArgs, 1, actual, 0, actual.length); }
 				 return invoke(handle, instance, actual);
+			 } catch (LinkageError le) {
+				 // 透传给外层 UpdateRef.Wrapped*，触发精准局部熔断；若在此吞掉，
+				 // 被删除/改签名的旧方法会在 60FPS 热路径上每帧刷屏且熔断永不触发。
+				 throw le;
 			 } catch (Throwable t) {
 				 error("[CellProperty] Lambda invocation failed", t);
 				 return null;

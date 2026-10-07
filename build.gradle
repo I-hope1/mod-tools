@@ -74,9 +74,9 @@ jmh {
 	//   ./gradlew jmh -PjmhIncludes=AlignBenchmark -PjmhProfilers=gc
 	includes = ["AlignBenchmark"]
 	profilers = ["gc"]
-    iterations = 2
-    warmupIterations = 2
-    fork = 1
+	iterations = 2
+	warmupIterations = 2
+	fork = 1
 	jvm = 'F:/files/java/jdks/jbrsdk_jcef-25.0.2/bin/java.exe'
 }
 
@@ -180,8 +180,25 @@ task jarAndroid(type: JavaExec) {
 	def dependencies = (configurations.compileClasspath.asList())
 			.collectMany { ["--classpath", "$it.path"] }
 
-	def d8Root = file("$sdkRoot/build-tools/").listFiles().sort().reverse().find {
-		it.listFiles().any { it.name.contains("d8") } && Integer.valueOf(it.name.substring(0, 2)) >= Integer.parseInt(minApi)
+	def buildToolsDir = file("$sdkRoot/build-tools")
+	def minApiInt = minApi as int
+	def d8Root = buildToolsDir.exists() ? buildToolsDir.listFiles()
+			?.findAll { it.isDirectory() }
+			// 提取目录名开头的数字主版本号（例如 "34.0.0" -> 34）
+			?.collect { dir ->
+				def matcher = (dir.name =~ /^(\d+)/)
+				def majorVersion = matcher ? matcher[0][1] as int : -1
+				[dir: dir, major: majorVersion]
+			}
+			// 按主版本号降序排列（优先选用最新、支持特性最多的 build-tools）
+			?.sort { a, b -> b.major <=> a.major }
+			// 找到第一个主版本满足 minApi 且目录下包含 d8 的工具目录
+			?.find { item ->
+				item.major >= minApiInt && item.dir.listFiles()?.any { it.name.startsWith("d8") }
+			}?.dir : null
+
+	if (!d8Root) {
+       throw new GradleException("未能在 $sdkRoot/build-tools 下找到满足 minApi ($minApi) 的 d8 工具，请检查 Android SDK 配置！")
 	}
 
 	classpath("$d8Root/lib/d8.jar")
@@ -421,13 +438,13 @@ task ZCompileAll(type: Jar) {
 
 	from(zipTree("$buildDir0/libs/$modName-${version}.jar")) { include "**" }
 	from(zipTree("$buildDir0/libs/$modName-android.jar")) { include "classes.dex" }
-	doLast {
-		copy {
-			from "$buildDir0/libs/$modName[$version].jar"
-			into "$buildDir0/libs/"
-			rename("\\[$version]", "-deploy")
-		}
-	}
+
+	finalizedBy 'deployModJar' // 打包完成后自动执行复制
+}
+tasks.register('deployModJar', Copy) {
+	from "$buildDir0/libs/$modName[$version].jar"
+	into "$buildDir0/libs/"
+	rename("\\[$version]", "-deploy")
 }
 
 tasks.register('mergeLibs', Jar) {
@@ -723,10 +740,10 @@ tasks.register("hstestRun", Exec) {
 	def cp = sourceSets.hstest.runtimeClasspath.asPath
 	def javaBin = "${System.getProperty('java.home')}/bin/java"
 	// 三个 javac 在 Gradle 侧解析成**绝对路径**，与 daemon 的 PATH 解耦
-	def jdk8  = System.getenv('HSTEST_JAVAC8')  ?: 'F:/files/java/jdks/jdk-1.8/bin/javac.exe'
+	def jdk8 = System.getenv('HSTEST_JAVAC8') ?: 'F:/files/java/jdks/jdk-1.8/bin/javac.exe'
 	def jdk17 = System.getenv('HSTEST_JAVAC17') ?: 'F:/files/java/jdks/jdk-17.0.2/bin/javac.exe'
 	def jdk21 = System.getenv('HSTEST_JAVAC21') ?: 'F:/files/java/jdks/openjdk-21.0.2/bin/javac.exe'
-	[ [jdk8, true], [jdk17, true], [jdk21, true] ].each { f, _ ->
+	[[jdk8, true], [jdk17, true], [jdk21, true]].each { f, _ ->
 		if (!new File(f).exists()) logger.warn("hstest: javac 不存在: " + f)
 	}
 	doFirst {

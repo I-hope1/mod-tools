@@ -582,6 +582,11 @@ dependencies {
 	// 版本交由 KGP 的 kotlin-stdlib 约束解析（与 main 的 kotlin-stdlib-jdk8 同源）。
 	ktfixV1Implementation "org.jetbrains.kotlin:kotlin-stdlib"
 	ktfixV2Implementation "org.jetbrains.kotlin:kotlin-stdlib"
+	// hstest 的 JUnit 试点入口（hstestJunit）。与 main 的 test 无关，只挂在 hstest 这套
+	// 手工夹具体系上。BOM 统一版本；launcher 必须在 runtimeOnly。
+	hstestImplementation platform("org.junit:junit-bom:5.11.4")
+	hstestImplementation "org.junit.jupiter:junit-jupiter"
+	hstestRuntimeOnly "org.junit.platform:junit-platform-launcher"
 }
 
 // javaLauncher 只管**运行**，不管编译：不设这一行，测试入口会被编成宿主 JDK 的
@@ -649,6 +654,32 @@ tasks.register("hstestLayoutGate", JavaExec) {
 	mainClass = "LayoutGateAssert"
 }
 tasks.named("check") { dependsOn tasks.named("hstestLayoutGate") }
+
+// JUnit 试点入口：把 hstest 里可纯函数化、可场景隔离的断言逐步迁到 JUnit。
+// 与 hstestRun（suite.sh / main 程序 + expected-count 基线）并存并跑，迁移期间两套都在。
+// 注意：
+//  • useJUnitPlatform + junit-platform-launcher（runtimeOnly）缺一不可；
+//  • maxParallelForks=1：对齐器与 HotSwapAgent 有可变静态状态（bytecodeCache 等）；
+//  • 运行期仍需 hotswap-agent / jni-agent 的 jar（runtimeClasspath 走 build/libs）。
+tasks.register("hstestJunit", Test) {
+	group = "verification"
+	description = "hstest 的 JUnit 入口（试点：布局门接线）"
+	testClassesDirs = sourceSets.hstest.output.classesDirs
+	classpath = sourceSets.hstest.runtimeClasspath
+	dependsOn tasks.named("hstestClasses")
+	dependsOn project(":hotswap-agent").tasks.named("jar")
+	dependsOn project(":jni-agent").tasks.named("jar")
+	useJUnitPlatform()
+	maxParallelForks = 1
+	jvmArgs "--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",
+	        "-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8"
+	testLogging {
+		events "failed"
+		exceptionFormat "full"
+		showStandardStreams = false
+	}
+}
+tasks.named("check") { dependsOn tasks.named("hstestJunit") }
 
 // 幽灵桩熔断的栈探测判据（先红后绿）：透明帧必须穿透动态代理 / CellPropertyRef handler /
 // 方法句柄帧，否则被 CellPropertyRef 代理包过的回调在 UpdateRef 发起时不熔断（60FPS 空转）。

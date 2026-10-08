@@ -179,7 +179,7 @@ class AnonClassReproJUnitTest {
 	}
 
 	@Test void s14_nestedAnonymousClasses() throws Exception {
-		AnonClassReproTest.testScenario14_NestedAnonymousClasses(javac(21), base.toFile()); expect(3);
+		AnonClassReproTest.testScenario14_NestedAnonymousClasses(javac(21), base.toFile()); expect(4);
 	}
 
 	@Test void s15_transactionRollbackAndPinning() throws Exception {

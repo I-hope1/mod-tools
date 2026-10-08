@@ -928,6 +928,11 @@ public class AnonClassReproTest {
 		check(AnonClassAligner.isAnonymousClassName("testNestAnon/NestHost", "testNestAnon/NestHost$1$1"), "Scenario 14: isAnonymousClassName 准确识别嵌套匿名类 $1$1");
 		Long hInner = AnonClassHasher.hash("testNestAnon/NestHost$1$1", v1_1_1, "testNestAnon/NestHost", null, null, null, 0);
 		check(hInner != null, "Scenario 14: AnonClassHasher 成功计算嵌套匿名类哈希");
+		// 负向对照：只校验 hInner != null 会被"哈希恒为常量"的空过（实测：hash 返回常量时本场景仍绿）。
+		// 钉住"内层哈希 != 外层哈希"，使常量/恒等哈希在此变红。
+		Long hOuter = AnonClassHasher.hash("testNestAnon/NestHost$1", v1_1, "testNestAnon/NestHost", null, null, null, 0);
+		check(hOuter != null && !hOuter.equals(hInner),
+			"Scenario 14: 外层 $1 与嵌套 $1$1 的哈希必须互异（非空过负向对照）outer=" + hOuter + " inner=" + hInner);
 		check(MethodFingerprinter.isUnstableNestedSuffix("1$1"), "Scenario 14: isUnstableNestedSuffix 识别 1$1 为不稳定匿名类后缀");
 	}
 

@@ -153,7 +153,7 @@ class AnonClassReproJUnitTest {
 	}
 
 	@Test void s08_orderIndependenceReverseHook() throws Exception {
-		AnonClassReproTest.testScenario8_OrderIndependenceWithReverseHook(javac(21), base.toFile()); expect(2);
+		AnonClassReproTest.testScenario8_OrderIndependenceWithReverseHook(javac(21), base.toFile()); expect(3);
 	}
 
 	@Test void s09_lambdaEnclosingMethodUnified() throws Exception {

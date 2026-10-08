@@ -514,6 +514,12 @@ public class AnonClassReproTest {
 
 		check(Objects.equals(resFwd.renameMap, resRev.renameMap), "Scenario 8: 互换场景在正序与反向遍历下映射结果严格一致");
 		check(Arrays.equals(resFwd.alignedHostBytes, resRev.alignedHostBytes), "Scenario 8: 正反序宿主对齐字节码严格一致");
+		// 负向对照：上面两条只比较正/反序两个结果，若对齐器"什么都不做"，两边都是空结果 → 空过。
+		// 明确钉住互换映射与零孤儿，使 no-op 对齐在本场景也变红（§3.1 潜伏缺陷的同一种形态）。
+		check("testSwap/SwapCase$2".equals(resFwd.renameMap.get("testSwap/SwapCase$1"))
+			&& "testSwap/SwapCase$1".equals(resFwd.renameMap.get("testSwap/SwapCase$2"))
+			&& resFwd.orphanOldClasses.isEmpty(),
+			"Scenario 8: 正序结果确实是互换映射、无孤儿（非空过负向对照）renameMap=" + resFwd.renameMap);
 	}
 
 	// 9. Lambda 内匿名类 EnclosingMethod 归一化对齐（验证第 1 点）

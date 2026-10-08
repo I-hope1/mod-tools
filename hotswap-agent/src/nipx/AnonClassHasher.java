@@ -97,11 +97,21 @@ public final class AnonClassHasher {
 				}
 			}
 
+			// 字段描述符必须与方法描述符同源屏蔽：嵌套匿名类的 this$N:LOuter$K; 会随父类位移而变，
+			// 不屏蔽则子类内容哈希必变、Tier 1/2 对嵌套层全面失效。注意 this$N 并非旧 JDK 专属：
+			// javac 18+ 仅在外层实例**未被用到**时才省略它；嵌套匿名类一旦使用外层实例（读外层字段/
+			// 调外层方法，生产最常见），8/11/17/21 都会生成 this$N。屏蔽是定向的：只改写 L本宿主$<纯数字>;。
+			//
+			// 单独用一个 fieldMasker：方法循环仍保持"整块一个 fp + 每方法 reset"的原状，
+			// 避免把字段的 relId 消耗带进方法哈希（无 this$N 的类哈希必须逐字节不变）。
+			MethodFingerprinter fieldMasker = new MethodFingerprinter();
+			fieldMasker.setContext(hostClassName);
+
 			// 3. 排序后的字段名和描述符（如 val$x, this$0）
 			if (cn.fields != null && !cn.fields.isEmpty()) {
 				List<String> fieldEntries = new ArrayList<>(cn.fields.size());
 				for (FieldNode fn : cn.fields) {
-					fieldEntries.add(fn.name + ":" + fn.desc);
+					fieldEntries.add(fn.name + ":" + fieldMasker.maskDescriptor(fn.desc));
 				}
 				Collections.sort(fieldEntries);
 				for (String fe : fieldEntries) {

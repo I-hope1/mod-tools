@@ -87,10 +87,20 @@ public final class LayoutGate {
 
 	/** 从 ASM 字段表构造判定输入。合成判定用 {@code ACC_SYNTHETIC} 加名字前缀双保险。 */
 	public static List<FieldInfo> of(List<FieldNode> fields) {
+		return of(fields, java.util.function.Function.identity());
+	}
+
+	/**
+	 * 带描述符屏蔽的变体：对齐器用。{@code this$N:LOuter$K;} 的描述符会随父匿名类位移而变；
+	 * javac 18+ 仅在外层实例**未被用到**时才省略 {@code this$N}，使用外层实例时 8/11/17/21 都生成。
+	 * 真实重定义时 {@code ClassRemapper} 会把描述符改成目标名、布局其实相同；故比较前先屏蔽，
+	 * 免得把"内容未变的位移"读成"改类型"而误拒。
+	 */
+	public static List<FieldInfo> of(List<FieldNode> fields, java.util.function.Function<String, String> descMask) {
 		List<FieldInfo> out = new ArrayList<>();
 		if (fields == null) return out;
 		for (FieldNode f : fields) {
-			out.add(new FieldInfo(f.name, f.desc,
+			out.add(new FieldInfo(f.name, descMask.apply(f.desc),
 			 (f.access & Opcodes.ACC_STATIC) != 0, isSyntheticCapture(f)));
 		}
 		out.sort(Comparator.comparing(FieldInfo::name).thenComparing(FieldInfo::desc));

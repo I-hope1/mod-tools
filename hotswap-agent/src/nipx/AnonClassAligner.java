@@ -586,8 +586,8 @@ public final class AnonClassAligner {
 				                  + " the OLD code — RESTART is required for those edits to affect existing instances.");
 			}
 
-			// 后置严格校验 (Validation Invariants)
-			validateRenameMap(renameMap, hostSlash);
+			// 后置严格校验 (Validation Invariants)：单射/前缀 + 改名后字段布局
+			validateRenameMap(renameMap, hostSlash, matchedNewToOld);
 			dbg("renameMap=" + renameMap);
 
 			// 应用 ClassRemapper 重写所有新匿名类字节码
@@ -660,6 +660,19 @@ public final class AnonClassAligner {
 		}
 	}
 
+	/**
+	 * 为本宿主构造"描述符定向屏蔽器"：把 {@code L本宿主$<纯数字>;} 归一为 {@code #ANON_k#}，
+	 * 其余描述符原样返回（含 {@code val$a:I}、{@code Ljava/lang/String;} 以及具名内部类引用）。
+	 *
+	 * <p>每次调用返回**独立**的实例（relId 从 0 起）；调用方必须**每类一个** —— 同一实例跨多个
+	 * 类复用会让 relId 编号串起来，两侧不对称。对齐器内部就是这么用的。</p>
+	 */
+	public static Function<String, String> anonymousDescMasker(String hostSlash) {
+		MethodFingerprinter fp = new MethodFingerprinter();
+		fp.setContext(hostSlash);
+		return fp::maskDescriptor;
+	}
+
 	public static ClassNode parseHostNode(String hostSlash, Function<String, byte[]> resolver) {
 		if (hostSlash == null || resolver == null) return null;
 		try {
@@ -677,6 +690,20 @@ public final class AnonClassAligner {
 	}
 
 	public static void validateRenameMap(Map<String, String> renameMap, String hostSlash) {
+		validateRenameMap(renameMap, hostSlash, null);
+	}
+
+	/**
+	 * 后置校验（§4.3-③ 同一拒绝通道）。除单射/前缀不变量外，若给了配对表，还对每对已配对的类做
+	 * **改名后字段布局**校验：把新类的原始字段描述符过一遍最终 {@code renameMap}，必须与旧类同名字段
+	 * 描述符相等，否则整组拒绝。
+	 *
+	 * <p>为什么需要它：Tier 4 的布局门为了容纳 {@code this$N} 位移，比较的是**屏蔽后**描述符，
+	 * 这是个宽松近似 —— {@code val$x:LFoo$1; → LFoo$2;} 若 {@code Foo$2} 最终映射到别处，是真实
+	 * 类型变更却会被判等放行。门的宽松近似不能变成静默放行，故由这条兜底。</p>
+	 */
+	public static void validateRenameMap(Map<String, String> renameMap, String hostSlash,
+	                                     Map<AnonInfo, AnonInfo> matchedNewToOld) {
 		if (renameMap == null || renameMap.isEmpty()) return;
 		Set<String> seenTargets = new HashSet<>();
 		for (Map.Entry<String, String> e : renameMap.entrySet()) {
@@ -692,6 +719,33 @@ public final class AnonClassAligner {
 				throw new AlignmentRejectedException(hostSlash,
 				 "prefix invariant violated for " + src + " -> " + tgt +
 				 " (expected prefix: " + expectedPrefix + "$) [ANON_ALIGN_VALIDATION]");
+			}
+		}
+		if (matchedNewToOld != null && !matchedNewToOld.isEmpty()) {
+			org.objectweb.asm.commons.Remapper remapper =
+			 new org.objectweb.asm.commons.SimpleRemapper(renameMap);
+			for (Map.Entry<AnonInfo, AnonInfo> e : matchedNewToOld.entrySet()) {
+				verifyFieldLayoutAfterRename(remapper, hostSlash, e.getKey(), e.getValue());
+			}
+		}
+	}
+
+	/** 改名后布局校验：新字段描述符经最终 renameMap 改写后，必须等于旧字段描述符。 */
+	private static void verifyFieldLayoutAfterRename(org.objectweb.asm.commons.Remapper remapper,
+	                                                 String hostSlash, AnonInfo n, AnonInfo o) {
+		Map<String, String> newByName = new HashMap<>();
+		for (LayoutGate.FieldInfo fi : n.rawFieldInfos) {
+			newByName.put(fi.name(), remapper.mapDesc(fi.desc()));
+		}
+		for (LayoutGate.FieldInfo fi : o.rawFieldInfos) {
+			String rewritten = newByName.get(fi.name());
+			if (rewritten != null && !rewritten.equals(fi.desc())) {
+				throw new AlignmentRejectedException(hostSlash,
+				 "post-rename field layout mismatch on field '" + fi.name() + "': new '" + fi.desc()
+				 + "' rewrites to '" + rewritten + "' but old is '" + fi.desc()
+				 + "' — the field's anonymous-class type does not survive renaming, so this host group"
+				 + " cannot be redefined safely. The host group is rejected; hot-swap again or restart"
+				 + " the JVM for this edit to take effect [ANON_ALIGN_VALIDATION]");
 			}
 		}
 	}
@@ -901,6 +955,13 @@ public final class AnonClassAligner {
 		 * （见 {@code LayoutGate.Verdict.CHANGED_STATICNESS}）。</p>
 		 */
 		final List<LayoutGate.FieldInfo> fieldInfos;
+		/**
+		 * **未屏蔽**的字段表（原始描述符）。后置校验 {@code validateRenameMap} 用它：把新字段
+		 * 描述符过一遍最终 {@code renameMap}，必须等于旧描述符 —— 屏蔽只负责让配对能发生，
+		 * 真正"改名后布局确实相同"由这条兜底（否则 {@code val$x:LFoo$1; → LFoo$2;} 这种
+		 * "屏蔽后判等、实际映射到别处"的真实类型变更会被静默放行）。
+		 */
+		final List<LayoutGate.FieldInfo> rawFieldInfos;
 
 		AnonInfo(
 		 String name,
@@ -914,7 +975,8 @@ public final class AnonClassAligner {
 		 List<String> methods,
 		 int orderIndex,
 		 TopologySignature topology,
-		 List<LayoutGate.FieldInfo> fieldInfos) {
+		 List<LayoutGate.FieldInfo> fieldInfos,
+		 List<LayoutGate.FieldInfo> rawFieldInfos) {
 			this.name = name;
 			this.bytecode = bytecode;
 			this.contentHash = contentHash;
@@ -927,6 +989,7 @@ public final class AnonClassAligner {
 			this.orderIndex = orderIndex;
 			this.topology = topology;
 			this.fieldInfos = fieldInfos;
+			this.rawFieldInfos = rawFieldInfos;
 		}
 
 		@Override
@@ -1124,10 +1187,16 @@ public final class AnonClassAligner {
 				}
 			}
 
+			// 描述符必须屏蔽匿名类位移（this$N:LOuter$K;）——与哈希器同源。**字段与方法共用同一个
+			// masker**，使同一 LOuter$K; 在 fields 与 methods 两处得到同一 relId（与 AnonClassHasher
+			// 里"字段+方法共用一个 fp"的口径一致）。每类一个 fresh masker 保证 old/new 确定性一致。
+			MethodFingerprinter descMasker = new MethodFingerprinter();
+			descMasker.setContext(hostSlash);
+
 			List<String> fields = new ArrayList<>();
 			if (cn.fields != null) {
 				for (FieldNode fn : cn.fields) {
-					fields.add(fn.name + ":" + fn.desc);
+					fields.add(fn.name + ":" + descMasker.maskDescriptor(fn.desc));
 				}
 				Collections.sort(fields);
 			}
@@ -1137,7 +1206,9 @@ public final class AnonClassAligner {
 				for (MethodNode mn : cn.methods) {
 					// 排除合成方法
 					if ((mn.access & Opcodes.ACC_SYNTHETIC) == 0) {
-						methods.add(mn.name + ":" + mn.desc);
+						// 嵌套匿名类的 <init> 形如 `<init>(LOuter$1;)V`，父类位移后描述符必变，
+						// Tier 3 的结构签名也要屏蔽，否则内容变化时又会漏回 Tier 4。
+						methods.add(mn.name + ":" + descMasker.maskDescriptor(mn.desc));
 					}
 				}
 				Collections.sort(methods);
@@ -1147,6 +1218,7 @@ public final class AnonClassAligner {
 			list.add(new AnonInfo(
 			 name, bytes, hash, superName, interfaces,
 			 outerMethod, outerMethodDesc, fields, methods, orderIdx, topology,
+			 LayoutGate.of(cn.fields, descMasker::maskDescriptor),
 			 LayoutGate.of(cn.fields)
 			));
 		}

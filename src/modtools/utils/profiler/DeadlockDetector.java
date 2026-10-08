@@ -175,10 +175,10 @@ public class DeadlockDetector {
 	 * 统一记录死锁日志：安全控制台格式化输出、磁盘追加写入（带时间戳）、主线程 UI 提示。
 	 */
 	private static void writeLog(String report, String uiNotice) {
-		// 1. 控制台输出
+		// 控制台输出
 		Log.err("[DeadlockDetector] @", report);
 
-		// 2. 磁盘文件追加写入，带时间戳分隔
+		// 磁盘文件追加写入，带时间戳分隔
 		try {
 			if (IntVars.dataDirectory != null) {
 				String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
@@ -190,7 +190,7 @@ public class DeadlockDetector {
 			Log.err("[DeadlockDetector] Failed to write deadlock.log", t);
 		}
 
-		// 3. 若主线程仍然存活，向顶层弹出浮动提示
+		// 若主线程仍然存活，向顶层弹出浮动提示
 		if (Core.app != null) {
 			Core.app.post(() -> {
 				try {

@@ -27,11 +27,10 @@ import java.util.function.Function;
  * {@code scratch/hstest/README.md} 与 {@code suite.sh} 的迁移注记）。每个场景自己用外部 javac
  * 现编夹具，不依赖预编译产物，也不依赖 {@code HSTEST_JAVAC*} 环境变量（路径由 JUnit 传入）。</p>
  *
- * <p><b>场景间有隐式依赖 —— 必须整类运行，不能单独跑某一个方法。</b>
- * 场景 6/7/8/11 会读取场景 1/2 写在同一个 {@code baseDir} 下的 {@code s1}/{@code s2} 产物；
- * 在 IDE 里单独跑 {@code s07} 会因缺文件失败。故 JUnit 侧用共享的 static {@code @TempDir} +
- * 方法名顺序还原原 {@code main} 的调用次序。解耦计划（抽幂等 {@code ensureScenario1Fixtures()}）
- * 见后续迭代。</p>
+ * <p><b>场景可独立运行</b>：场景 6/7/8/11 需要的 {@code s1}/{@code s2} 夹具由幂等的
+ * {@code ensureScenario1Fixtures()} / {@code ensureScenario2Fixtures()}（类级锁 + 存在性判据）
+ * 生成，任一场景都能单独跑（此前它们只是"顺带"读到场景 1/2 留下的文件，单跑 {@code s07} 会失败）。
+ * JUnit 侧仍用共享的 static {@code @TempDir}，但顺序不再是正确性前提。</p>
  *
  * <p><b>两种结果标记</b>：{@code check} 计通过/失败；{@code known} 计"有意付出的保守代价"
  * （套件保持绿，代价消失则转 {@code check(false)} 变红）。{@code AnonClassReproJUnitTest}
@@ -72,45 +71,104 @@ public class AnonClassReproTest {
 		known++;
 	}
 
+	/** 类级锁：夹具只生成一次；先到者建，后来者命中存在性判据直接复用。 */
+	private static final Object FIXTURE_LOCK = new Object();
+
+	/**
+	 * 幂等生成场景 1 的夹具（V1/V2 编译产物）到 {@code baseDir/s1}。
+	 *
+	 * <p>场景 1 自己 + 依赖它的场景 6/7/11 都调用本方法，使任一场景可独立运行 —— 解耦前
+	 * 6/7/11 只是"顺带"读到场景 1 留下的文件，单独跑 {@code s07} 会因缺文件失败。</p>
+	 */
+	static File ensureScenario1Fixtures(String javac, File baseDir) throws Exception {
+		File dir = new File(baseDir, "s1");
+		synchronized (FIXTURE_LOCK) {
+			if (new File(dir, "out_v1/testAnon/AnonCase.class").exists()
+			 && new File(dir, "out_v2/testAnon/AnonCase$3.class").exists()) {
+				return dir;
+			}
+			dir.mkdirs();
+			File fV1 = new File(dir, "AnonV1.java");
+			File fV2 = new File(dir, "AnonV2.java");
+			Files.writeString(fV1.toPath(),
+				"package testAnon;\n" +
+				"class AnonCase {\n" +
+				"    public void setup() {\n" +
+				"        Runnable save = new Runnable() { public void run() { doSave(); } };\n" +
+				"        Runnable delete = new Runnable() { public void run() { doDelete(); } };\n" +
+				"    }\n" +
+				"    void doSave() {}\n" +
+				"    void doDelete() {}\n" +
+				"}\n");
+			Files.writeString(fV2.toPath(),
+				"package testAnon;\n" +
+				"class AnonCase {\n" +
+				"    public void setup() {\n" +
+				"        Runnable other = new Runnable() { public void run() { doOther(); } };\n" +
+				"        Runnable save = new Runnable() { public void run() { doSave(); } };\n" +
+				"        Runnable delete = new Runnable() { public void run() { doDelete(); } };\n" +
+				"    }\n" +
+				"    void doOther() {}\n" +
+				"    void doSave() {}\n" +
+				"    void doDelete() {}\n" +
+				"}\n");
+			File outV1 = new File(dir, "out_v1");
+			File outV2 = new File(dir, "out_v2");
+			outV1.mkdirs();
+			outV2.mkdirs();
+			runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.getAbsolutePath(), fV1.getAbsolutePath());
+			runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.getAbsolutePath(), fV2.getAbsolutePath());
+			return dir;
+		}
+	}
+
+	/** 幂等生成场景 2 的夹具（互换两份）到 {@code baseDir/s2}；场景 2 与 8 共用。 */
+	static File ensureScenario2Fixtures(String javac, File baseDir) throws Exception {
+		File dir = new File(baseDir, "s2");
+		synchronized (FIXTURE_LOCK) {
+			if (new File(dir, "out_v1/testSwap/SwapCase.class").exists()
+			 && new File(dir, "out_v2/testSwap/SwapCase$2.class").exists()) {
+				return dir;
+			}
+			dir.mkdirs();
+			File fV1 = new File(dir, "SwapV1.java");
+			File fV2 = new File(dir, "SwapV2.java");
+			Files.writeString(fV1.toPath(),
+				"package testSwap;\n" +
+				"class SwapCase {\n" +
+				"    public void run() {\n" +
+				"        Runnable a = new Runnable() { public void run() { doA(); } };\n" +
+				"        Runnable b = new Runnable() { public void run() { doB(); } };\n" +
+				"    }\n" +
+				"    void doA() {}\n" +
+				"    void doB() {}\n" +
+				"}\n");
+			Files.writeString(fV2.toPath(),
+				"package testSwap;\n" +
+				"class SwapCase {\n" +
+				"    public void run() {\n" +
+				"        Runnable b = new Runnable() { public void run() { doB(); } };\n" +
+				"        Runnable a = new Runnable() { public void run() { doA(); } };\n" +
+				"    }\n" +
+				"    void doA() {}\n" +
+				"    void doB() {}\n" +
+				"}\n");
+			File outV1 = new File(dir, "out_v1");
+			File outV2 = new File(dir, "out_v2");
+			outV1.mkdirs();
+			outV2.mkdirs();
+			runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.getAbsolutePath(), fV1.getAbsolutePath());
+			runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.getAbsolutePath(), fV2.getAbsolutePath());
+			return dir;
+		}
+	}
+
 	// 1. 前面插入匿名类
 	static void testScenario1_InsertInFront(String javac, File baseDir) throws Exception {
 		System.out.println("\n--- Scenario 1: 前面插入匿名类 ---");
-		File dir = new File(baseDir, "s1");
-		dir.mkdirs();
-		File fV1 = new File(dir, "AnonV1.java");
-		File fV2 = new File(dir, "AnonV2.java");
-
-		Files.writeString(fV1.toPath(),
-			"package testAnon;\n" +
-			"class AnonCase {\n" +
-			"    public void setup() {\n" +
-			"        Runnable save = new Runnable() { public void run() { doSave(); } };\n" +
-			"        Runnable delete = new Runnable() { public void run() { doDelete(); } };\n" +
-			"    }\n" +
-			"    void doSave() {}\n" +
-			"    void doDelete() {}\n" +
-			"}\n");
-
-		Files.writeString(fV2.toPath(),
-			"package testAnon;\n" +
-			"class AnonCase {\n" +
-			"    public void setup() {\n" +
-			"        Runnable other = new Runnable() { public void run() { doOther(); } };\n" +
-			"        Runnable save = new Runnable() { public void run() { doSave(); } };\n" +
-			"        Runnable delete = new Runnable() { public void run() { doDelete(); } };\n" +
-			"    }\n" +
-			"    void doOther() {}\n" +
-			"    void doSave() {}\n" +
-			"    void doDelete() {}\n" +
-			"}\n");
-
+		File dir = ensureScenario1Fixtures(javac, baseDir);
 		File outV1 = new File(dir, "out_v1");
 		File outV2 = new File(dir, "out_v2");
-		outV1.mkdirs();
-		outV2.mkdirs();
-
-		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.getAbsolutePath(), fV1.getAbsolutePath());
-		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.getAbsolutePath(), fV2.getAbsolutePath());
 
 		byte[] v1Anon1 = Files.readAllBytes(new File(outV1, "testAnon/AnonCase$1.class").toPath());
 		byte[] v1Anon2 = Files.readAllBytes(new File(outV1, "testAnon/AnonCase$2.class").toPath());
@@ -172,40 +230,9 @@ public class AnonClassReproTest {
 	// 2. 两个匿名类互换位置
 	static void testScenario2_SwapPositions(String javac, File baseDir) throws Exception {
 		System.out.println("\n--- Scenario 2: 两个匿名类互换位置 ---");
-		File dir = new File(baseDir, "s2");
-		dir.mkdirs();
-		File fV1 = new File(dir, "SwapV1.java");
-		File fV2 = new File(dir, "SwapV2.java");
-
-		Files.writeString(fV1.toPath(),
-			"package testSwap;\n" +
-			"class SwapCase {\n" +
-			"    public void run() {\n" +
-			"        Runnable a = new Runnable() { public void run() { doA(); } };\n" +
-			"        Runnable b = new Runnable() { public void run() { doB(); } };\n" +
-			"    }\n" +
-			"    void doA() {}\n" +
-			"    void doB() {}\n" +
-			"}\n");
-
-		Files.writeString(fV2.toPath(),
-			"package testSwap;\n" +
-			"class SwapCase {\n" +
-			"    public void run() {\n" +
-			"        Runnable b = new Runnable() { public void run() { doB(); } };\n" +
-			"        Runnable a = new Runnable() { public void run() { doA(); } };\n" +
-			"    }\n" +
-			"    void doA() {}\n" +
-			"    void doB() {}\n" +
-			"}\n");
-
+		File dir = ensureScenario2Fixtures(javac, baseDir);
 		File outV1 = new File(dir, "out_v1");
 		File outV2 = new File(dir, "out_v2");
-		outV1.mkdirs();
-		outV2.mkdirs();
-
-		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.getAbsolutePath(), fV1.getAbsolutePath());
-		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.getAbsolutePath(), fV2.getAbsolutePath());
 
 		byte[] v1_1 = Files.readAllBytes(new File(outV1, "testSwap/SwapCase$1.class").toPath());
 		byte[] v1_2 = Files.readAllBytes(new File(outV1, "testSwap/SwapCase$2.class").toPath());
@@ -410,7 +437,7 @@ public class AnonClassReproTest {
 		System.out.println("\n--- Scenario 6: 新增未加载的匿名类 ---");
 		// 验证原理：若未对齐，加载期会加载磁盘上的错误编号
 		// 验证对齐产物：新类经过 ClassRemapper 处理后，自身类名已改为目标名称
-		File dir = new File(baseDir, "s1");
+		File dir = ensureScenario1Fixtures(javac, baseDir);
 		byte[] v2Anon1 = Files.readAllBytes(new File(dir, "out_v2/testAnon/AnonCase$1.class").toPath());
 		byte[] v2Anon2 = Files.readAllBytes(new File(dir, "out_v2/testAnon/AnonCase$2.class").toPath());
 		byte[] v2Anon3 = Files.readAllBytes(new File(dir, "out_v2/testAnon/AnonCase$3.class").toPath());
@@ -440,7 +467,7 @@ public class AnonClassReproTest {
 	// 7. 恒等性与幂等性
 	static void testScenario7_IdentityAndIdempotence(String javac, File baseDir) throws Exception {
 		System.out.println("\n--- Scenario 7: 恒等性与幂等性测试 ---");
-		File dir = new File(baseDir, "s1");
+		File dir = ensureScenario1Fixtures(javac, baseDir);
 		byte[] v1Host = Files.readAllBytes(new File(dir, "out_v1/testAnon/AnonCase.class").toPath());
 		byte[] v1_1 = Files.readAllBytes(new File(dir, "out_v1/testAnon/AnonCase$1.class").toPath());
 		byte[] v1_2 = Files.readAllBytes(new File(dir, "out_v1/testAnon/AnonCase$2.class").toPath());
@@ -490,7 +517,7 @@ public class AnonClassReproTest {
 	// 8. 顺序无关性测试（反向遍历钩子）
 	static void testScenario8_OrderIndependenceWithReverseHook(String javac, File baseDir) throws Exception {
 		System.out.println("\n--- Scenario 8: 顺序无关性测试 (TEST_REVERSE_ORDER) ---");
-		File dir = new File(baseDir, "s2");
+		File dir = ensureScenario2Fixtures(javac, baseDir);
 		byte[] v2Host = Files.readAllBytes(new File(dir, "out_v2/testSwap/SwapCase.class").toPath());
 		byte[] v1_1 = Files.readAllBytes(new File(dir, "out_v1/testSwap/SwapCase$1.class").toPath());
 		byte[] v1_2 = Files.readAllBytes(new File(dir, "out_v1/testSwap/SwapCase$2.class").toPath());
@@ -653,7 +680,7 @@ public class AnonClassReproTest {
 	// 11. 位移后未加载类的磁盘覆盖与加载期拦截验证
 	static void testScenario11_SwapWithUnloadedClass(String javac, File baseDir) throws Exception {
 		System.out.println("\n--- Scenario 11: 位移后未加载类的磁盘覆盖与加载期拦截验证 ---");
-		File dir = new File(baseDir, "s1");
+		File dir = ensureScenario1Fixtures(javac, baseDir);
 		byte[] v1_1 = Files.readAllBytes(new File(dir, "out_v1/testAnon/AnonCase$1.class").toPath()); // Save
 		byte[] v1_2 = Files.readAllBytes(new File(dir, "out_v1/testAnon/AnonCase$2.class").toPath()); // Delete
 		byte[] v2_1 = Files.readAllBytes(new File(dir, "out_v2/testAnon/AnonCase$1.class").toPath()); // Other (on disk)

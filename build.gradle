@@ -693,6 +693,15 @@ tasks.register("hstestJunit", Test) {
 	inputs.dir(hstestFixtureRoot)   // 夹具变了必须重跑
 	useJUnitPlatform()
 	maxParallelForks = 1
+	// 三个真实 javac 由 Gradle toolchain 解析后以系统属性交给测试，不再硬编码 F:/... 默认值。
+	// 测试侧会校验 javac -version，防止 toolchain 解析到别的 JDK 而让 "javac 8" 场景悄悄用 21 编。
+	doFirst {
+		[8, 17, 21].each { v ->
+			systemProperty "hstest.javac${v}", javaToolchains.compilerFor {
+				languageVersion = JavaLanguageVersion.of(v)
+			}.get().executablePath.asFile.absolutePath
+		}
+	}
 	jvmArgs "--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",
 	        "-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8"
 	systemProperty "hstest.fixtures", hstestFixtureRoot.get().asFile.absolutePath

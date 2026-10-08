@@ -37,9 +37,20 @@ public class AnonClassReproTest {
 	static int failed = 0;
 	static int known  = 0;
 
+	/** 失败的断言消息（JUnit 迁移用：把失败原因带给断言层，不依赖 stdout）。 */
+	static final List<String> failures = new ArrayList<>();
+
 	static void check(boolean ok, String msg) {
 		System.out.println((ok ? "   PASS  " : "   FAIL  ") + msg);
-		if (ok) passed++; else failed++;
+		if (ok) passed++; else { failed++; failures.add(msg); }
+	}
+
+	/** JUnit 迁移用：清零计数器；直接影响 main 路径的调用方可忽略（main 只跑一次）。 */
+	static void reset() {
+		passed = 0;
+		failed = 0;
+		known  = 0;
+		failures.clear();
 	}
 
 	/**

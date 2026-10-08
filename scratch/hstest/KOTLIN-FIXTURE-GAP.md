@@ -39,21 +39,21 @@ oracle 的运行期 classpath**，oracle 也没有任何 API 入口消费它。
 
 ### 2.1 被阻断：依赖真 Kotlin `object` 字节码（5 个）
 
-| 场景 | 内容 | 为何必须真 Kotlin |
-|:--|:--|:--|
-| S1 | Kotlin `object` 新增 `val x: Int = 1 + 2` | `object` 的初始化落在 `<clinit>`，并伴随 `public static final INSTANCE` 字段 + 私有构造器，是 kotlinc 的布局产物 |
-| S2 | Kotlin `object` 新增 `val s: String = "  a ".trim()` | 同上；`trim()` 的接收者形态与 Kotlin 空断言/intrinsics 相关 |
-| S3 | Kotlin `object` 新增 `val l by lazy { 42 }` | `lazy` 生成 `Lazy` 委托字段 + `getL()` 访问器，字段形态与初始化位置由 kotlinc 决定 |
-| S4 | Kotlin `object` 新增 `val a = 1` / `val b = a + 1`（b 依赖新字段 a） | 需要真实的 `object` 单例内字段依赖拓扑 |
-| S7 | 负例：Kotlin `object` 新增 `val t = System.currentTimeMillis()` | 需要真实 `object` 形态才能验证"单例初始化"路径上 bit 6 拒绝是否成立 |
+| 场景 | 内容                                                                 | 为何必须真 Kotlin                                                                                                |
+|:-----|:---------------------------------------------------------------------|:-----------------------------------------------------------------------------------------------------------------|
+| S1   | Kotlin `object` 新增 `val x: Int = 1 + 2`                            | `object` 的初始化落在 `<clinit>`，并伴随 `public static final INSTANCE` 字段 + 私有构造器，是 kotlinc 的布局产物 |
+| S2   | Kotlin `object` 新增 `val s: String = "  a ".trim()`                 | 同上；`trim()` 的接收者形态与 Kotlin 空断言/intrinsics 相关                                                      |
+| S3   | Kotlin `object` 新增 `val l by lazy { 42 }`                          | `lazy` 生成 `Lazy` 委托字段 + `getL()` 访问器，字段形态与初始化位置由 kotlinc 决定                               |
+| S4   | Kotlin `object` 新增 `val a = 1` / `val b = a + 1`（b 依赖新字段 a） | 需要真实的 `object` 单例内字段依赖拓扑                                                                           |
+| S7   | 负例：Kotlin `object` 新增 `val t = System.currentTimeMillis()`      | 需要真实 `object` 形态才能验证"单例初始化"路径上 bit 6 拒绝是否成立                                              |
 
 ### 2.2 不受阻断：纯 Java 单例形态（3 个）
 
-| 场景 | 内容 | 现有基建可用性 |
-|:--|:--|:--|
-| S5 | Java enum 单例新增 `int` 字段，初始化 `Math.abs(-3)` | `loadFixture` 直接可用（普通 Java 类，含 `enum`） |
-| S6 | Java Holder 懒加载单例（静态内部类持 `INSTANCE`），已实例化，新增 `String` 字段 `"ab".concat("cd")` | `loadFixture` 直接可用；实例检索可走 `InstanceTracker.register` |
-| S8 | 负例：Java 单例新增 `String` 字段 `"ab".toUpperCase()`（无 Locale 参数） | `loadFixture` 直接可用 |
+| 场景 | 内容                                                                                                | 现有基建可用性                                                  |
+|:-----|:----------------------------------------------------------------------------------------------------|:----------------------------------------------------------------|
+| S5   | Java enum 单例新增 `int` 字段，初始化 `Math.abs(-3)`                                                | `loadFixture` 直接可用（普通 Java 类，含 `enum`）               |
+| S6   | Java Holder 懒加载单例（静态内部类持 `INSTANCE`），已实例化，新增 `String` 字段 `"ab".concat("cd")` | `loadFixture` 直接可用；实例检索可走 `InstanceTracker.register` |
+| S8   | 负例：Java 单例新增 `String` 字段 `"ab".toUpperCase()`（无 Locale 参数）                            | `loadFixture` 直接可用                                          |
 
 本报告不实施这三个场景——按"全部暂停"的指示保持未动。
 

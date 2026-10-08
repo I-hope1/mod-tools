@@ -20,16 +20,23 @@ import java.util.*;
 import java.util.function.Function;
 
 /**
- * 匿名类对齐 6 大核心场景复现与验证套件：
- * <ol>
- *   <li>前面插入匿名类 (InsertInFront)</li>
- *   <li>两个匿名类互换位置 (SwapPositions)</li>
- *   <li>修改匿名类方法体 (ModifyBody)</li>
- *   <li>删除匿名类 (DeleteClass)</li>
- *   <li>删除后又加回 (DeleteAndReAdd)</li>
- *   <li>新增未加载的匿名类加载期对齐 (UnloadedNewClass)</li>
- *   <li>事务回滚与旧版本字节码钉扎保护 (TransactionRollbackAndPinning)</li>
- * </ol>
+ * 匿名类对齐 27 个场景复现与验证套件。
+ *
+ * <p><b>驱动方式</b>：由 {@code AnonClassReproJUnitTest}（JUnit）调用本类的
+ * {@code testScenarioN(javac, baseDir)} 静态方法；{@code main}/汇总打印已下线（2026-10，见
+ * {@code scratch/hstest/README.md} 与 {@code suite.sh} 的迁移注记）。每个场景自己用外部 javac
+ * 现编夹具，不依赖预编译产物，也不依赖 {@code HSTEST_JAVAC*} 环境变量（路径由 JUnit 传入）。</p>
+ *
+ * <p><b>场景间有隐式依赖 —— 必须整类运行，不能单独跑某一个方法。</b>
+ * 场景 6/7/8/11 会读取场景 1/2 写在同一个 {@code baseDir} 下的 {@code s1}/{@code s2} 产物；
+ * 在 IDE 里单独跑 {@code s07} 会因缺文件失败。故 JUnit 侧用共享的 static {@code @TempDir} +
+ * 方法名顺序还原原 {@code main} 的调用次序。解耦计划（抽幂等 {@code ensureScenario1Fixtures()}）
+ * 见后续迭代。</p>
+ *
+ * <p><b>两种结果标记</b>：{@code check} 计通过/失败；{@code known} 计"有意付出的保守代价"
+ * （套件保持绿，代价消失则转 {@code check(false)} 变红）。{@code AnonClassReproJUnitTest}
+ * 的 {@code expect(pass, known)} 同时校验两者 —— 场景 26 的 {@code known} 是活机制，勿弱化成
+ * 只打印。</p>
  */
 public class AnonClassReproTest {
 
@@ -45,7 +52,7 @@ public class AnonClassReproTest {
 		if (ok) passed++; else { failed++; failures.add(msg); }
 	}
 
-	/** JUnit 迁移用：清零计数器；直接影响 main 路径的调用方可忽略（main 只跑一次）。 */
+	/** JUnit 迁移用：清零计数器（每次 @BeforeEach 调一次）。 */
 	static void reset() {
 		passed = 0;
 		failed = 0;
@@ -63,93 +70,6 @@ public class AnonClassReproTest {
 	static void known(String msg) {
 		System.out.println("   KNOWN " + msg);
 		known++;
-	}
-
-	static File findFile(String rel) {
-		File f = new File(rel);
-		if (f.exists()) return f;
-		File f2 = new File("scratch/hstest", rel);
-		if (f2.exists()) return f2;
-		return f;
-	}
-
-	public static void main(String[] args) throws Exception {
-		System.out.println("=== AnonClassReproTest: 匿名类对齐 6 大场景规范验证 ===");
-
-		String javac = System.getenv("HSTEST_JAVAC21");
-		if (javac == null) javac = "F:/files/java/jdks/openjdk-21.0.2/bin/javac.exe";
-		if (!new File(javac).exists()) javac = "javac";
-
-		File baseDir = Files.createTempDirectory("repro_anon").toFile();
-		try {
-			// 编译辅助：测试 1 前面插入匿名类
-			testScenario1_InsertInFront(javac, baseDir);
-			// 测试 2 两个匿名类互换位置
-			testScenario2_SwapPositions(javac, baseDir);
-			// 测试 3 修改匿名类方法体
-			testScenario3_ModifyBody(javac, baseDir);
-			// 测试 4 删除匿名类
-			testScenario4_DeleteClass(javac, baseDir);
-			// 测试 5 删除后又加回
-			testScenario5_DeleteAndReAdd(javac, baseDir);
-			// 测试 6 新增未加载的匿名类
-			testScenario6_UnloadedNewClass(javac, baseDir);
-			// 测试 7 恒等性与幂等性
-			testScenario7_IdentityAndIdempotence(javac, baseDir);
-			// 测试 8 顺序无关性测试 (TEST_REVERSE_ORDER)
-			testScenario8_OrderIndependenceWithReverseHook(javac, baseDir);
-			// 测试 9 Lambda 内匿名类 EnclosingMethod 归一化对齐
-			testScenario9_LambdaEnclosingMethodUnified(javac, baseDir);
-			// 测试 10 匿名类包含内部 Lambda 的对齐流水线验证
-			testScenario10_AnonymousClassWithInnerLambda(javac, baseDir);
-			// 测试 11 互换位置且包含未加载类的加载期拦截验证
-			testScenario11_SwapWithUnloadedClass(javac, baseDir);
-			// 测试 12 javac 8 嵌套 Lambda 匿名类宿主扫描对齐
-			testScenario12_Javac8NestedLambdaNullEnclosingMethod(javac, baseDir);
-			// 测试 13 复合位移与哈希器命中断言
-			testScenario13_CombinedShiftAndHasherTableHit(javac, baseDir);
-			// 测试 14 嵌套匿名类 Foo$1$1 结构识别与对齐
-			testScenario14_NestedAnonymousClasses(javac, baseDir);
-			// 测试 15 事务回滚与旧版本字节码钉扎保护
-			testScenario15_TransactionRollbackAndPinning(javac, baseDir);
-			// 测试 16 双向唯一匹配与遍历顺序无关性验证（确证真 Bug 1 修复）
-			testScenario16_BidirectionalMatchingAndOrderIndependence(javac, baseDir);
-			// 测试 17 宿主方法逆向追溯时的 owner 归属强校验（确证真 Bug 2 修复）
-			testScenario17_CallerTracingOwnerValidation(javac, baseDir);
-			// 测试 18 多层嵌套匿名类末尾前缀保护（确证缺陷 3 修复）
-			testScenario18_NestedAnonymousClassPrefixRetention(javac, baseDir);
-			// 测试 19 级联树拓扑对齐与蜕变测试套件（Milestone 2 核心引擎）
-			testScenario19_CascadingTreeAndMetamorphicSuite(javac, baseDir);
-			// 测试 20 深度白盒漏洞复现与防御验证（7 大修复项确证）
-			testScenario20_WhiteboxVulnerabilityReproAndDefense(javac, baseDir);
-			// 测试 21 安全门与熔断（§6.3 数量上限/软超时、§6.4 strict、§4.3 拒绝通道）
-			testScenario21_SafetyGatesAndCircuitBreaker(javac, baseDir);
-			// 测试 22 嵌套匿名类的内容哈希可用性 + 设计不变量（描述符定向屏蔽、Lambda 不加层级）
-			testScenario22_NestedContentHashAvailability(javac, baseDir);
-			// 测试 23 strict 是安全门而非匹配策略（Tier 3 minDiff 止血 + 拒绝粒度）
-			testScenario23_StrictIsSafetyGateNotPolicy(javac, baseDir);
-			// 测试 24 javac 8 嵌套回退扫描必须用直接父类节点（§8.3 第 5 条）
-			testScenario24_Javac8ParentScopedFallback(javac, baseDir);
-			// 测试 25 设计不变量 INV-1（自描述指纹）/ INV-2（禁止两个 aligner 互相递归）
-			testScenario25_DesignInvariants(javac, baseDir);
-			// 测试 26 Tier 3 拓扑相等过滤（取代 minDiff 仲裁）
-			testScenario26_Tier3TopologyFilter(javac, baseDir);
-			// 测试 27 实例状态布局门（§7.2 精确变体）
-			testScenario27_LayoutGateForAnonClasses(javac, baseDir);
-		} finally {
-			deleteRecursively(baseDir);
-		}
-
-		System.out.println("AnonClassReproTest 汇总: 通过=" + passed + ", 失败=" + failed + ", 已知限制=" + known);
-	}
-
-	static void deleteRecursively(File f) {
-		if (f == null || !f.exists()) return;
-		File[] children = f.listFiles();
-		if (children != null) {
-			for (File c : children) deleteRecursively(c);
-		}
-		f.delete();
 	}
 
 	// 1. 前面插入匿名类

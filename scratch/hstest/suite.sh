@@ -109,7 +109,9 @@ step "FixtureATest (三 JDK + 正反序)" run FixtureATest
 step "PassBTest (验证 Pass B 计数器非零可达性)" run PassBTest
 step "CompeteDeleteTest (三层竞争夹具: 删 A 链 + B 叶子改捕获)" run CompeteDeleteTest
 step "AnonClassTest (匿名类内容哈希: 防止 Save/Delete 静默对调)" run AnonClassTest
-step "AnonClassReproTest (匿名类 6 大场景规范验证)" run AnonClassReproTest
+# AnonClassReproTest 的 27 个场景（183 条 + 1 KNOWN）已迁到 JUnit：AnonClassReproJUnitTest。
+# 该入口不再由本脚本运行。它的夹具由每个场景**内部**用 javac 现编（不经本脚本的 fx/ 编译段），
+# 故此处无需保留任何 AnonClassRepro 专属的编译段；HSTEST_JAVAC8/17/21 仍被 comp/xgroup/compA 使用。
 step "InterfaceLambdaMarkerTest (接口 lambda 改写/验证/链接)" run InterfaceLambdaMarkerTest
 step "ClassHierarchyOracleTest (离线层级/成员/Nest 元数据)" run ClassHierarchyOracleTest
 

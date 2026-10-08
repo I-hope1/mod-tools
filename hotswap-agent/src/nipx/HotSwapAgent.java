@@ -6,6 +6,7 @@ import nipx.profiler.DynamicProfilerAPI;
 import nipx.ref.InitFix;
 import nipx.uihook.CellPropertyRef;
 import nipx.util.*;
+import org.objectweb.asm.tree.ClassNode;
 
 import java.io.*;
 import java.lang.instrument.*;
@@ -87,6 +88,24 @@ public class HotSwapAgent {
 	 * <p>纯新增字段一律放行：InitFix 会为存活实例补初始化，这正是热更时新增字段的期望语义。</p>
 	 */
 	public static String LAYOUT_GATE = strProp("nipx.agent.layout_gate", "reject");
+
+	/**
+	 * 同名局部类编号漂移止血门（§7.2 风险 2）模式：{@code reject} / {@code warn} / {@code off}。
+	 *
+	 * <p>局部类原名直通（{@code isAnonymousClassName} 拒绝准入），重定义按类名一一对应。同一宿主内
+	 * 同简单名的局部类（{@code Foo$1Helper}、{@code Foo$2Helper}）在前插/删除/换序后物理编号整体
+	 * 位移 → 存活实例被无关实现顶替（静默错配）。触发条件与匿名类位移同类，但局部类不在对齐器视野内。</p>
+	 *
+	 * <ul>
+	 *   <li>{@code reject}（默认）—— 本批里某宿主出现"同名局部类"，且**新旧任一侧**同名计数 ≥2 时，
+	 *       把该宿主及其 {@code host$...} 整族移出本轮重定义（复用 §4.3 宿主组拒绝通道）；</li>
+	 *   <li>{@code warn} —— 照旧重定义，只打强告警（观测用）；</li>
+	 *   <li>{@code off} —— 完全恢复旧行为：不做任何局部类检查。</li>
+	 * </ul>
+	 *
+	 * <p>只把"新批次里出现局部类"的宿主纳入候选；简单名唯一、或本批未触及局部类的宿主不受影响。</p>
+	 */
+	public static String LOCAL_CLASS_GUARD = strProp("nipx.agent.local_class_guard", "reject");
 
 	/** 读字符串属性并做合法性校验；非法值回退到默认值并告警（不静默接受拼错的开关）。 */
 	private static String strProp(String key, String def) {
@@ -321,7 +340,8 @@ public class HotSwapAgent {
 		info("Anon Align: " + ANON_ALIGN + " (strict=" + ANON_STRICT + ", debug=" + ANON_DEBUG
 		     + ", maxPerHost=" + AnonClassAligner.MAX_ANON_PER_HOST
 		     + ", timeoutMs=" + AnonClassAligner.ALIGN_TIMEOUT_MS
-		     + ", layoutGate=" + ANON_LAYOUT_GATE + ", redefineLayoutGate=" + LAYOUT_GATE + ")");
+		     + ", layoutGate=" + ANON_LAYOUT_GATE + ", redefineLayoutGate=" + LAYOUT_GATE
+		     + ", localClassGuard=" + LOCAL_CLASS_GUARD + ")");
 		if (ANON_ALIGN) {
 			info("Anonymous Class Alignment ENABLED. Ambiguity is resolved conservatively (never by class name).");
 		} else {
@@ -535,6 +555,12 @@ public class HotSwapAgent {
 			}
 			transactions.put(hostName, tx);
 		}
+
+		// ---- 同名局部类编号漂移止血门（§7.2 风险 2）----
+		//
+		// 位置：宿主匿名对齐之后、实例布局门之前。局部类不在匿名对齐视野内（名字含简单名，被准入闸门
+		// 拒绝），故单开一道门。命中即把宿主及其 `host$...` 整族移出本批，复用同一宿主组拒绝通道。
+		applyLocalClassGuard(newBatchBytes, classToPath, transactions);
 
 		// ---- 实例状态布局安全门（§7.2 风险 1，全体类，非仅匿名类）----
 		//
@@ -1147,6 +1173,105 @@ public class HotSwapAgent {
 	/** 由点分类名求宿主类名：{@code Foo$1$2 -> Foo}；非匿名（含具名内部类 {@code Foo$Bar}）原样返回。 */
 	private static String hostNameOf(String className) {
 		return className.replaceAll("\\$\\d+(\\$\\d+)*$", "");
+	}
+
+	/** 局部类止血门拒绝的宿主次数（诊断用，见 {@link #applyLocalClassGuard}）。 */
+	static final java.util.concurrent.atomic.AtomicLong LOCAL_CLASS_REJECTED =
+	 new java.util.concurrent.atomic.AtomicLong();
+
+	/** 局部类止血门"放行但记录"（warn 模式）的次数。 */
+	static final java.util.concurrent.atomic.AtomicLong LOCAL_CLASS_WAIVED =
+	 new java.util.concurrent.atomic.AtomicLong();
+
+	/**
+	 * 同名局部类编号漂移止血（§7.2 风险 2）的接线。
+	 *
+	 * <p>判决是纯函数 {@link LocalClassGuard#decide}；这里只负责"解析批次与已加载旧侧字节、执行动作、
+	 * 回滚事务"。</p>
+	 *
+	 * <p>候选宿主 = 本批里出现的局部类（{@code EnclosingMethod.owner}）。对每个候选宿主，旧侧扫
+	 * {@link #loadedClassesMap} 中其 {@code host$...} 已加载家族；新旧两侧交给纯函数按
+	 * {@code (宿主, 简单名)} 归并，任一侧同名计数 ≥2 即命中。{@code reject} 时把宿主及其
+	 * {@code host$...} 整族移出本批。</p>
+	 */
+	private static void applyLocalClassGuard(Map<String, byte[]> newBatchBytes,
+	                                         Map<String, Path>   classToPath,
+	                                         Map<String, AlignmentTransaction> transactions) {
+		if (LocalClassGuard.MODE_OFF.equals(LOCAL_CLASS_GUARD)) return;
+
+		// 新侧：解析批次全部类，收集局部类宿主（斜杠内部名）。
+		List<ClassNode> newClasses = new ArrayList<>();
+		Set<String> hosts = new LinkedHashSet<>();
+		for (Map.Entry<String, byte[]> e : newBatchBytes.entrySet()) {
+			ClassNode cn = parseClass(e.getValue());
+			if (cn == null) continue;
+			newClasses.add(cn);
+			String h = LocalClassGuard.hostOf(cn);
+			if (h != null) hosts.add(h);
+		}
+		if (hosts.isEmpty()) return;
+
+		// 旧侧：对每个候选宿主，扫已加载的 host$... 家族。
+		List<ClassNode> oldClasses = new ArrayList<>();
+		for (String hostSlash : hosts) {
+			String hostDot = hostSlash.replace('/', '.');
+			for (Map.Entry<String, Class<?>> e : loadedClassesMap.entrySet()) {
+				String name = e.getKey();
+				if (!name.startsWith(hostDot + "$")) continue;
+				byte[] bytes = bytecodeCache.get(name);
+				if (bytes == null) {
+					bytes = fetchOriginalBytecode(e.getValue());
+					if (bytes != null) bytecodeCache.put(name, bytes);
+				}
+				if (bytes == null) continue;
+				ClassNode cn = parseClass(bytes);
+				if (cn != null) oldClasses.add(cn);
+			}
+		}
+
+		LocalClassGuard.Decision d = LocalClassGuard.decide(oldClasses, newClasses, LOCAL_CLASS_GUARD,
+			newBatchBytes.keySet());
+
+		if (d.action() == LocalClassGuard.Action.PASS) {
+			if (!d.collisions().isEmpty()) {
+				LOCAL_CLASS_WAIVED.incrementAndGet();
+				warn("[LOCAL-CLASS-WARN] same-named local classes in " + d.hosts()
+				     + " (" + d.collisions() + "); redefining anyway because nipx.agent."
+				     + "local_class_guard=warn. Numbering may have shifted -> a live instance can silently"
+				     + " run the wrong implementation. Set the default reject to refuse instead.");
+			}
+			return;
+		}
+
+		for (String hostDot : d.hosts()) {
+			warn("[LOCAL-CLASS-REJECT] same-named local classes in " + hostDot + " (" + d.collisions()
+			     + "). Redefine skipped safely: inserting/removing/reordering a same-named local class"
+			     + " shifts their physical numbering, which would silently swap implementations for live"
+			     + " instances. Host and its local/anonymous classes are skipped this round. TO PROCEED:"
+			     + " restart (or make the local class simple name unique), or set -Dnipx.agent."
+			     + "local_class_guard=warn to force it and accept the mismatch.");
+		}
+		for (String dropped : d.dropped()) dropFromBatch(newBatchBytes, classToPath, dropped);
+		for (String hostDot : d.hosts()) {
+			LOCAL_CLASS_REJECTED.incrementAndGet();
+			AlignmentTransaction tx = transactions.remove(hostDot);
+			if (tx != null) tx.rollback(false);
+		}
+	}
+
+	/** 解析类元数据（不取指令，只要 InnerClasses/EnclosingMethod）；失败返回 null（不阻断本批）。 */
+	private static ClassNode parseClass(byte[] bytes) {
+		if (bytes == null) return null;
+		try {
+			ClassNode cn = new ClassNode();
+			new org.objectweb.asm.ClassReader(bytes)
+			 .accept(cn, org.objectweb.asm.ClassReader.SKIP_CODE
+			           | org.objectweb.asm.ClassReader.SKIP_DEBUG
+			           | org.objectweb.asm.ClassReader.SKIP_FRAMES);
+			return cn;
+		} catch (Throwable t) {
+			return null;
+		}
 	}
 
 	/** 布局门拒绝的类/宿主次数（诊断用，见 {@link #applyRedefineLayoutGate}）。 */

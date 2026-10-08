@@ -694,11 +694,29 @@ tasks.register("hstestJunit", Test) {
 	maxParallelForks = 1
 	// 三个真实 javac 由 Gradle toolchain 解析后以系统属性交给测试，不再硬编码 F:/... 默认值。
 	// 测试侧会校验 javac -version，防止 toolchain 解析到别的 JDK 而让 "javac 8" 场景悄悄用 21 编。
+	//
+	// CI 守卫：四个 JDK 都必须能被 toolchain 解析。缺任何一个默认**直接失败**（并列出缺失项），
+	// 避免"某个 JDK 悄悄跑不到却在 CI 里全绿"。无全部 JDK 的环境可传
+	// -Dhstest.requireJdks=false 继续（相关测试会因缺少 hstest.javacN 而硬失败）。
+	def requiredJdkMajors = [8, 11, 17, 21]
 	doFirst {
-		[8, 11, 17, 21].each { v ->
-			systemProperty "hstest.javac${v}", javaToolchains.compilerFor {
-				languageVersion = JavaLanguageVersion.of(v)
-			}.get().executablePath.asFile.absolutePath
+		def missing = []
+		requiredJdkMajors.each { v ->
+			try {
+				systemProperty "hstest.javac${v}", javaToolchains.compilerFor {
+					languageVersion = JavaLanguageVersion.of(v)
+				}.get().executablePath.asFile.absolutePath
+			} catch (Exception e) {
+				missing << v
+			}
+		}
+		if (!missing.isEmpty()) {
+			def msg = "hstestJunit: 缺少 javac toolchain " + missing.join(", ") +
+				"（配置 org.gradle.java.installations.paths，或传 -Dhstest.requireJdks=false 跳过）"
+			if (!"false".equalsIgnoreCase(System.getProperty("hstest.requireJdks", "true"))) {
+				throw new GradleException(msg)
+			}
+			logger.warn("hstest: " + msg)
 		}
 	}
 	jvmArgs "--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",

@@ -2,10 +2,9 @@ import nipx.AnonClassAligner;
 import nipx.AnnotationTransformer;
 import nipx.HotSwapAgent;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.BufferedReader;
@@ -17,32 +16,35 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * {@code AnonClassReproTest} 27 个场景的 JUnit 化（迁移第 1 步：并跑）。
+ * {@code AnonClassReproTest} 27 个场景的 JUnit 化。
  *
- * <p>纯机械迁移：调用的还是 {@code AnonClassReproTest.testScenarioN(javac, baseDir)}，用的是
- * 同样的 javac 21/8，场景条数不变（合计 184 通过 + 1 KNOWN）。迁移期间 {@code main} 与
- * {@code suite.sh} 的该步骤保持不动，两套并跑，直到对账一致才下线。</p>
+ * <p>调用的还是 {@code AnonClassReproTest.testScenarioN(javac, baseDir)}，用的是同样的
+ * javac 21/8，条数 184 通过 + 1 KNOWN。</p>
  *
  * <p><b>javac 来源</b>：由 Gradle toolchain 解析后经系统属性 {@code hstest.javac8/17/21} 传入，
  * 不再用 {@code F:/...} 默认值。每个版本都会跑 {@code javac -version} 校验实际版本 —— 解析到
  * 别的 JDK 时<b>直接失败</b>，绝不 assumeTrue 跳过（跳过会变成"全绿但什么都没跑"）。</p>
  *
- * <p><b>顺序</b>：第一版用确定顺序（方法名补零 + {@link MethodOrderer.MethodName}），与
- * {@code main} 的调用顺序一致，这样对账出问题只可能是迁移引起的。Random 顺序待种子浸泡后单独开。</p>
+ * <p><b>顺序</b>：默认 {@code MethodName}（由 {@code hstestJunit} 设
+ * {@code junit.jupiter.testmethod.order.default}）；传 {@code -Dhstest.order=random} 改为
+ * {@code Random} 以浸泡隐式依赖，种子经 {@code -Dhstest.seed=NNN} 传入
+ * {@code junit.jupiter.execution.order.random.seed}。因夹具已解耦，顺序不再是正确性前提。</p>
  *
  * <p><b>静态状态</b>：对齐器/代理有可变静态（{@code TEST_REVERSE_ORDER} 等）与全局 map
  * （{@code pendingAlignedClasses} / {@code bytecodeCache}），场景 8/11/15/16/21/23/26/27 会动它们。
  * {@code @BeforeEach} 快照默认值、{@code @AfterEach} 写回，且前后都清那两个 map（同 JVM 内其它
  * 测试类共用）。不硬编码复位值，改默认值不必同步改测试。</p>
  */
-@TestMethodOrder(MethodOrderer.MethodName.class)
 class AnonClassReproJUnitTest {
 
-	/**
-	 * 全类共享的临时目录：<b>必须</b>与 {@code main} 的单 baseDir 一致 —— 场景 6/7/8/11 会读取
-	 * 场景 1/2 写下的 {@code s1}/{@code s2} 产物，不是各自独立的。故用 static @TempDir
-	 * （每类一次），配合方法名顺序还原 main 的调用次序。
-	 */
+	@BeforeAll
+	static void reportOrder() {
+		System.out.println("[hstest] AnonClassReproJUnitTest method order="
+			+ System.getProperty("junit.jupiter.testmethod.order.default", "(default)")
+			+ " random.seed=" + System.getProperty("junit.jupiter.execution.order.random.seed", "(none)"));
+	}
+
+	/** 全类共享的临时目录（每类一次）。夹具已由场景内的幂等 builder 生成，顺序不再是前提。 */
 	@TempDir
 	static Path base;
 

@@ -705,6 +705,17 @@ tasks.register("hstestJunit", Test) {
 	jvmArgs "--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",
 	        "-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8"
 	systemProperty "hstest.fixtures", hstestFixtureRoot.get().asFile.absolutePath
+	// 方法顺序：默认 MethodName（确定性）；-Dhstest.order=random 改 Random 以浸泡隐式依赖。
+	// 种子用 -Dhstest.seed=NNN 传入（映射到 junit 的 random.seed 配置参数）。Random 不设为默认，
+	// 免得每次构建多个随机因素。
+	systemProperty "junit.jupiter.testmethod.order.default",
+		System.getProperty("hstest.order", "methodname").equalsIgnoreCase("random")
+			? 'org.junit.jupiter.api.MethodOrderer$Random'
+			: 'org.junit.jupiter.api.MethodOrderer$MethodName'
+	def hstestSeed = System.getProperty("hstest.seed")
+	if (hstestSeed != null) {
+		systemProperty "junit.jupiter.execution.order.random.seed", hstestSeed
+	}
 	testLogging {
 		events "failed"
 		exceptionFormat "full"

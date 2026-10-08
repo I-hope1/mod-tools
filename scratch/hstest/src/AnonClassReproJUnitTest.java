@@ -12,6 +12,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
@@ -61,13 +62,13 @@ class AnonClassReproJUnitTest {
 
 	private static void assertJavacMajor(int requested, int wantMajor) throws Exception {
 		String path = javac(requested);
-		Path d = java.nio.file.Files.createTempDirectory("jmajor");
+		Path d = Files.createTempDirectory("jmajor");
 		Path src = d.resolve("P.java");
-		java.nio.file.Files.writeString(src, "public class P {}");
+		Files.writeString(src, "public class P {}");
 		Process p = new ProcessBuilder(path, "-d", d.toString(), src.toString())
 			.redirectErrorStream(true).start();
 		p.waitFor();
-		byte[] b = java.nio.file.Files.readAllBytes(d.resolve("P.class"));
+		byte[] b = Files.readAllBytes(d.resolve("P.class"));
 		int major = ((b[6] & 0xff) << 8) | (b[7] & 0xff);
 		assertEquals(wantMajor, major, "javac(" + requested + ") 产物 class 文件 major（证明真的用了该 JDK）");
 	}

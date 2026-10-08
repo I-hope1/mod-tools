@@ -52,35 +52,6 @@ public class SemAssert {
 		else { failed++; failures.add("[已知限制已变化] " + msg); System.out.println("   FAIL  [已知限制已变化] " + msg); }
 	}
 
-	/**
-	 * 自检：故意对一个已知输入断言一个已知错误的值。
-	 *
-	 * <p>用途是验证 <b>{@code check()} → 失败计数 → 退出码</b> 的整条链，
-	 * 而不是验证匹配逻辑。它必须被记成一次失败，但**不让整体变红**
-	 * （否则套件永远红）；开关打开时才真正暴露出来。</p>
-	 */
-	static void selfCheck() {
-		boolean run = Boolean.getBoolean("hstest.selfcheck.run")
-			|| "1".equals(System.getenv("HSTEST_SELFCHECK_RUN"));
-		if (!run) return;
-		System.out.println("== 自检：check() → 退出码 的整条链 ==");
-		int before = failed;
-		// 已知输入是 1+1==2，这里故意断言错误的值 —— 必须被记为一次失败。
-		check(1 + 1 == 3, "自检（预期失败）：故意断言 1+1==3");
-		boolean recorded = (failed == before + 1);
-		System.out.println(recorded
-			? "   PASS  自检：错误断言确实被记为一次失败"
-			: "   FAIL  自检：错误断言没有被记为失败 —— check() 到计数这条链是断的");
-		// 把这次自检造成的失败抵消掉；开关打开时不抵消，让它真的暴露。
-		boolean expose = Boolean.getBoolean("hstest.selfcheck.expose")
-			|| "1".equals(System.getenv("HSTEST_SELFCHECK_EXPOSE"));
-		if (expose) {
-			System.out.println("   [自检暴露模式] 保留这次失败，用于验证退出码非零");
-		} else {
-			failed = before;
-		}
-	}
-
 	static ClassNode parse(byte[] b) {
 		ClassNode cn = new ClassNode();
 		new ClassReader(b).accept(cn, 0);
@@ -235,8 +206,8 @@ public class SemAssert {
 	// ==================== 场景（每个可独立单测）====================
 	//
 	// 原先是 main 里 8 个 "{ }" 块，按位置参数 args[0..14] 取夹具。
-	// 抽成方法后：main 走 ArgsFx（suite.sh 继续传 15 个路径，行为不变），
-	// JUnit 走 DirFx（按 group/ver 名字取，见 SemAssertTest）。
+	// 现已全部由 SemAssertTest（JUnit）驱动，夹具走 DirFx 按 group/ver 名字取。
+	// suite.sh 不再调用本类，因此 main / ArgsFx / selfCheck 均已删除。
 	// 每个场景自己守断言条数，漏跑一条就能指出是哪个场景。
 
 	/** 1) swap2 删除变体。 */
@@ -401,25 +372,5 @@ public class SemAssert {
 			if (!now.equals(e.getValue())) swapped.add(e.getKey() + " 旧=" + e.getValue() + " 现=" + now);
 		}
 		check(swapped.isEmpty(), "存活名字的子树形状跨轮不变（错绑=" + swapped + "）");
-	}
-
-	public static void main(String[] args) throws Exception {
-		Fx fx = new ArgsFx(args);
-		scenario1(fx);
-		scenario2(fx);
-		scenario3(fx);
-		scenario4(fx);
-		scenario5(fx);
-		scenario6(fx);
-		scenario7(fx);
-		scenario8(fx);
-
-		selfCheck();
-
-		System.out.println();
-		System.out.println("通过 " + passed + " 条；失败 " + failed + " 条；已知限制 "
-			+ knownFailures + " 条；合计 " + (passed + failed + knownFailures) + " 条");
-		System.out.println(failed == 0 ? "ALL ASSERTIONS PASSED" : (failed + " ASSERTION(S) FAILED"));
-		if (failed != 0) System.exit(1);
 	}
 }

@@ -1059,6 +1059,12 @@ for j in $CP; do unzip -l "$j" | grep -q 'asm/tree/ClassNode' && echo "$j"; done
 
 ## 进展：套件已部分接入构建（按 review 改用 source set，不再手写 classpath）
 
+> **⚠️ 本节及以下的自检/金丝雀叙述已废弃（2026-10）**：`hstestCanary`、`hstestSelfCheckRun/Expose`、
+> `SemAssertSelfCheck`、`SemAssert.selfCheck()`、`hstestSemAssert`、`hstestEntry` 均已删除。
+> 这些机制要守的"断言失败 ⇒ 构建变红"现在由 JUnit `Test` 任务（`hstestJunit`）承担：
+> 变异检查见 `SwitchMapAlignTest` 同批 —— 临时让 `LambdaAligner.align` 返回输入即 `:hstestJunit FAILED`。
+> 下文保留为历史 review 记录，**不要**据此手工运行那些已不存在的任务。
+
 ### 已做并实测
 
 | 项                                | 证据                                                                                                                                                                   |

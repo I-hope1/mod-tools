@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * {@code SemAssert} 8 个场景的 JUnit 化（试点第二批）。
  *
  * <p>{@code SemAssert} 的 {@code check}/{@code main} 只累计计数、不直接 exit，所以无需重写：
- * 场景已抽成静态方法，这里逐场景调用并守各自的断言条数（sum = 40，与 suite.sh 输出一致）。</p>
+ * 场景已抽成静态方法，这里逐场景调用并守各自的断言条数（sum = 40）。</p>
  *
  * <p>刻意随机顺序：尽早暴露对 {@code HierarchyTree.register} 这类全局状态的隐式顺序依赖。
  * 6 个夹具组的 Case 类名互不相同，同组内每次 {@code force} 前都重新注册，预期无污染。</p>

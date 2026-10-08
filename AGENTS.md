@@ -99,7 +99,7 @@ InitFix：热更新（Redefine）后，为**新增字段**初始化存量实例�
 - 必须通过 `./gradlew hstestInitFixOracle` 运行，不要直接 `java -cp`：Kotlin 夹具由 Gradle 先编译，输出目录经 `-Dnipx.ktfix.v1/v2` 传入。
 - Kotlin 夹具的 v1/v2 输出目录**绝不能**进入任何 classpath（同名类会静默只命中其一，造成假绿）。
 - 迭代期间只跑 `hstestInitFixOracle`，收尾时才跑一次 `./gradlew check`。
-- 广域套件 `hstestRun`（`suite.sh`）有独立基线：通过=312 / 失败=0 / 已知=4。
+- 匿名类/对齐主题套件已从 `suite.sh`（`hstestRun`）迁到 JUnit：`./gradlew hstestJunit`（挂在 `check`）。入口用 `-Dhstest.javac8/11/17/21` 现编夹具，不再有 `expected-count.txt` 基线。
 - 新增或放宽安全门：必须有负向阻断断言。
 - 修复缺陷：必须有先红后绿的回归断言。
 - 新增或放宽安全门例外：除正向、负向用例外，必须做**变异检查**——故意放宽一处实现，确认对应用例会变红，再撤销。

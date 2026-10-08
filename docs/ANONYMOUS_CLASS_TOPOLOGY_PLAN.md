@@ -722,7 +722,7 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
   > **归属建议（架构层面）**：这道门应该做在**事务/重定义层**（`ClassDiffUtil` / `applyRedefinitions` 一侧），而不是只塞进 `AnonClassAligner` —— 因为具名类的字段类型变更同样没有守卫，而那是用户显式编辑，语义上更该由统一的重定义门来判。对齐器需要额外做的只有一件：**用户只改了外层方法、却在背后触发了匿名类布局变化**，这种"用户没主动要求改字段"的情形必须由对齐器自己拒绝配对。
 * **未决问题 1：ECJ 编译器的 EnclosingMethod 特殊表现**  
   * *跟踪*：当前已在 javac 8/11/17/21 上完成完备实测，后续需对 Eclipse ECJ 编译器生成的嵌套匿名类展开真实样本集差分测试。
-  * **[仍开放]** —— `scratch/hstest` 下的夹具与 `suite.sh` 只覆盖 javac 8/17/21，没有 ECJ 产物。代码侧对 ECJ 仅有一处顺带处理：`MethodFingerprinter.isExcluded` 把 `$SWITCH_TABLE$`（Eclipse 的 switch 表方法名）列入排除 —— 那是**方法**名，与本文 §2.1 讨论的**类**名无关，ECJ 的匿名类准入/`EnclosingMethod` 行为仍未经任何真实样本验证。
+  * **[仍开放]** —— `scratch/hstest` 下的夹具与 `hstestJunit` 只覆盖 javac 8/11/17/21，没有 ECJ 产物。代码侧对 ECJ 仅有一处顺带处理：`MethodFingerprinter.isExcluded` 把 `$SWITCH_TABLE$`（Eclipse 的 switch 表方法名）列入排除 —— 那是**方法**名，与本文 §2.1 讨论的**类**名无关，ECJ 的匿名类准入/`EnclosingMethod` 行为仍未经任何真实样本验证。
   * **已确认的一处差异（与 §2.1 直接相关）**：ECJ **不生成** `Foo$N` 形态的 enum switch 映射**类**；它把 switch 表放成宿主类里的 `$SWITCH_TABLE$` **方法**。因此 §2.1 的"SwitchMap 类被当作匿名类纳入对齐 / 是否排除"整条对 ECJ **不适用** —— ECJ 产物里根本没有那个类。javac 的实测见 `SwitchMapAlignTest`。
 * **风险 2：同名局部类的编号漂移（原名直通路径）** —— `[红用例已答；止血已实现（默认 reject）；完整对齐未做]`
   * *触发条件*：同一外层类内存在 ≥2 个同简单名的局部类（跨方法、跨代码块），且编辑在其之前新增/删除/换序了同名局部类。
@@ -764,7 +764,7 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 
 | 规范条目                                                        | 状态               | 落地位置 / 证据                                                                                                                                                                                                                                                                                                                                |
 |:----------------------------------------------------------------|:-------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| §1.1 受支持范围（javac 8/11/17/21）                             | ✅                 | `suite.sh` 用 `HSTEST_JAVAC8/17/21` 三套 javac 编译夹具                                                                                                                                                                                                                                                                                        |
+| §1.1 受支持范围（javac 8/11/17/21）                             | ✅                 | `hstestJunit` 经 `hstest.javac8/11/17/21`（Gradle toolchain）现编夹具                                                                                                                                                                                                        |
 | §1.1 受支持范围（ECJ）                                          | ⬜                 | 无夹具（§7.2 未决问题 1）                                                                                                                                                                                                                                                                                                                      |
 | §1.2 类身份与实例状态保真不变量                                 | ✅                 | 移除 Tier 5 + `orphanOldClasses` 保留 + 新类分配未占用编号                                                                                                                                                                                                                                                                                     |
 | §1.3 `renameMap` 方向与 `ClassRemapper` 改写范围                | ✅                 | `AnonClassAligner.remapClass`（`ClassWriter(0)` + `SimpleRemapper`）                                                                                                                                                                                                                                                                           |
@@ -809,13 +809,13 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 
 ### 8.2 验收基线（回归门槛）
 
-本系统的回归门槛**不在 Gradle 的 `test` 任务里**，而是 `scratch/hstest` 下的一组 main 程序，经 `suite.sh` 由 `:hstestRun`（`Exec`，走 Git Bash）驱动，并已挂在根项目的 `check` 上：
+本系统的回归门槛**在 Gradle 的 `hstestJunit`（`Test` + `useJUnitPlatform`）任务里**，已挂在根项目的 `check` 上。`suite.sh` / `:hstestRun` / `expected-count.txt` 已全部下线（2026-10）：剩余 main 程序入口逐批迁成 JUnit。
 
-* **入口**：`./gradlew check` → `:hstestRun` → `scratch/hstest/suite.sh`。
-* **本主题直接相关**：`AnonClassTest`（Save/Delete 静默对调防线）、`AnonClassReproTest`（**26 场景**，§1~§4 的绝大多数断言来自它；Scenario 21 专测 §4.3 拒绝通道与 §6.3/§6.4 闸门与开关，Scenario 22 专测嵌套匿名类的内容哈希可用性与设计不变量，Scenario 23 专测 strict 的行为边界，Scenario 24 专测 javac 8 回退扫描上下文，Scenario 25 专测设计不变量 INV-1/INV-2，Scenario 26 专测 Tier 3 拓扑相等过滤）。
-* **同一次运行还包括**（Lambda 对齐主题，与本主题共用夹具与哈希器）：`SemAssert`、`CompeteDeleteTest`、`PassBTest`、`NameIndexTest`、`FixtureATest`、`XGroupTest`。
-* **数量基线**：`scratch/hstest/expected-count.txt` 记录 `<通过> <失败> <已知限制>` 三元组，实测值与基线不符即构建失败；另有"一条断言都没执行即判 FAIL"的空绿金丝雀。当前基线 `266 0 4`（KNOWN 的第 4 条即夹具 L 的保守代价）。
-* **注意**：`AnonClassReproTest` 的夹具由脚本按 JDK 版本分别编译（同包同名不能混编），且 `hstestRun` 依赖 `hotswap-agent` 的 **jar 重建** —— hstest 的 `runtimeClasspath` 解析到的是 `build/libs` 下的 jar 而非 `classes` 目录，少了这一步会静默跑陈旧产物。
+* **入口**：`./gradlew check` → `:hstestJunit`（`./gradlew hstestJunit` 单独跑）。
+* **夹具**：由各测试用 `-Dhstest.javac8/11/17/21`（Gradle toolchain 注入）现编到 `@TempDir`；不再有脚本预编的 `fx/` 产物与数量基线。
+* **本主题直接相关**：`AnonClassReproJUnitTest`（27 场景；Scenario 21 专测 §4.3 拒绝通道与 §6.3/§6.4 闸门与开关，Scenario 22 专测嵌套匿名类的内容哈希可用性与设计不变量，Scenario 23 专测 strict 的行为边界，Scenario 24 专测 javac 8 回退扫描上下文，Scenario 25 专测 INV-1/INV-2，Scenario 26 专测 Tier 3 拓扑相等过滤 —— 其中 s19/s22/s26 参数化到 javac 8/11/17/21）、`AnonClassTest`、`FieldDescriptorMaskTest`、`FieldDescriptorMaskScopeTest`、`LayoutGateWiringTest`、`ReservedSlotsAlignTest`、`SwitchMapAlignTest`、`LocalClassNameDriftTest`、`LocalClassGuardTest`、`nipx.FieldLayoutValidationTest`。
+* **同一次运行还包括**（Lambda 对齐主题，与本主题共用夹具与哈希器）：`SemAssertTest`、`CompeteDeleteTest`、`PassBTest`、`NameIndexTest`、`FixtureATest`、`XGroupTest`（后三者与 `FixtureATest` 运行时用 `HstestFixtures` 现编 compA/xgroup 源）。
+* **注意**：`hstestJunit` 依赖 `hotswap-agent` 的 **jar 重建** —— hstest 的 `runtimeClasspath` 解析到的是 `build/libs` 下的 jar 而非 `classes` 目录，少了这一步会静默跑陈旧产物。
 
 ### 8.3 建议的实施优先级
 

@@ -675,8 +675,7 @@ def hstestFixtureTasks = hstestFixtureSpecs.collect { g, v, helper ->
 	}
 }
 
-// JUnit 试点入口：把 hstest 里可纯函数化、可场景隔离的断言逐步迁到 JUnit。
-// 与 hstestRun（suite.sh / main 程序 + expected-count 基线）并存并跑，迁移期间两套都在。
+// JUnit 入口：hstest 的全部断言都在这里（main 程序入口已逐批迁入；suite.sh / hstestRun 已下线）。
 // 注意：
 //  • useJUnitPlatform + junit-platform-launcher（runtimeOnly）缺一不可；
 //  • maxParallelForks=1：对齐器与 HotSwapAgent 有可变静态状态（bytecodeCache 等）；
@@ -742,7 +741,7 @@ tasks.named("check") { dependsOn tasks.named("hstestGhostProbe") }
 // 与 SemAssert 不同，它**不需要**任何外部 javac：夹具用 javax.tools 在内存里编译，
 // 因此可以作为 check 的常驻门槛。但必须依赖 hotswap-agent 的 jar 重建 ——
 // runtimeClasspath 解析到的是 build/libs 下的 jar，而不是 classes 目录
-// （见 hstestRun 上方同一坑的注释），少了 dependsOn jar 会跑出陈旧结果。
+// （见 hstestJunit 上方同一坑的注释），少了 dependsOn jar 会跑出陈旧结果。
 tasks.register("hstestInitFixOracle", JavaExec) {
 	group = "verification"
 	description = "运行 InitFix 差分 Oracle（正向值比对 + 负向阻断断言）"
@@ -767,58 +766,10 @@ tasks.register("hstestInitFixOracle", JavaExec) {
 }
 tasks.named("check") { dependsOn tasks.named("hstestInitFixOracle") }
 
-// 套件唯一入口：classpath 由 Gradle 解析后经环境变量传入，脚本内不手写 classpath。
-tasks.register("hstestRun", Exec) {
-	// 必须同时依赖 **jar 重建**！
-	//
-	// hstest 的 runtimeClasspath 通过 project(":hotswap-agent") 解析到
-	// build/libs/hotswap-agent-1.6.0.jar（**不是** build/classes/java/main），
-	// 而 Gradle 不会因为 compileJava 就自动重打 jar。
-	// 少了下面两行，测试跑的是**陈旧 jar** —— 实测代价：数轮里匹配逻辑的改动
-	// 全部"改了没生效"，因为改动只进了 classes、没进 jar。
-	dependsOn tasks.named("hstestClasses")
-	dependsOn project(":hotswap-agent").tasks.named("jar")
-	dependsOn project(":jni-agent").tasks.named("jar")
-	group = "verification"
-	description = "运行对齐器验证套件（含数量基线；失败则构建失败）"
-	workingDir = file("$rootDir/scratch/hstest")
-	// 用命令行参数传 classpath（环境变量在 Exec 下不可靠），
-	// 并在配置期冻结为字符串，避免 Exec 延迟求值时拿到空值。
-	def cp = sourceSets.hstest.runtimeClasspath.asPath
-	def javaBin = "${System.getProperty('java.home')}/bin/java"
-	// 三个 javac 在 Gradle 侧解析成**绝对路径**，与 daemon 的 PATH 解耦
-	def jdk8 = System.getenv('HSTEST_JAVAC8') ?: 'F:/files/java/jdks/jdk-1.8/bin/javac.exe'
-	def jdk17 = System.getenv('HSTEST_JAVAC17') ?: 'F:/files/java/jdks/jdk-17.0.2/bin/javac.exe'
-	def jdk21 = System.getenv('HSTEST_JAVAC21') ?: 'F:/files/java/jdks/openjdk-21.0.2/bin/javac.exe'
-	[[jdk8, true], [jdk17, true], [jdk21, true]].each { f, _ ->
-		if (!new File(f).exists()) logger.warn("hstest: javac 不存在: " + f)
-	}
-	doFirst {
-		// 必须指定 **Git Bash 的绝对路径**。
-		//
-		// PATH 上的 `bash` 会解析到 C:\Windows\System32\bash.exe —— 那是 **WSL**，
-		// 而 WSL 是 Linux，**根本执行不了 Windows 的 javac.exe**（F: 也不在 /mnt 下）。
-		// 实测症状：cwd=/mnt/e/...、javac=/mnt/f/...: No such file or directory。
-		// 因此不依赖 PATH，直接找 Git Bash。
-		def candidates = ["E:/Program Files/Git/bin/bash.exe",
-		                  "C:/Program Files/Git/bin/bash.exe",
-		                  "E:/Program Files/Git/usr/bin/bash.exe",
-		                  "C:/Program Files/Git/usr/bin/bash.exe"]
-		def gitBash = candidates.find { new File(it).exists() }
-		if (gitBash == null) {
-			throw new GradleException("hstest 需要 Git Bash，但以下路径都没有: " + candidates)
-		}
-		logger.lifecycle("hstest: Git Bash = " + gitBash)
-		commandLine gitBash, "suite.sh", cp
-		environment "HSTEST_JAVA", javaBin
-		environment "HSTEST_JAVAC8", jdk8
-		environment "HSTEST_JAVAC17", jdk17
-		environment "HSTEST_JAVAC21", jdk21
-	}
-	standardOutput = System.out
-	errorOutput = System.err
-}
-tasks.named("check") { dependsOn tasks.named("hstestRun") }
+// hstestRun（suite.sh / main 程序 + expected-count 基线）已下线：
+// 剩余入口全部迁到 JUnit（hstestJunit），夹具由各测试用 hstest.javacN 现编到 @TempDir。
+// 原 main 程序保留在源码树里作为可手工运行的探针，但不再参与 check。
+tasks.named("check") { dependsOn tasks.named("hstestJunit") }
 
 // 打印 hstest 运行 classpath，供手工实验复用（唯一可信来源，避免手拼）
 tasks.register("hstestCp") {

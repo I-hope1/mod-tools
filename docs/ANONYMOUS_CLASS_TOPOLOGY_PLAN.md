@@ -700,6 +700,7 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 * **未决问题 1：ECJ 编译器的 EnclosingMethod 特殊表现**  
   * *跟踪*：当前已在 javac 8/11/17/21 上完成完备实测，后续需对 Eclipse ECJ 编译器生成的嵌套匿名类展开真实样本集差分测试。
   * **[仍开放]** —— `scratch/hstest` 下的夹具与 `suite.sh` 只覆盖 javac 8/17/21，没有 ECJ 产物。代码侧对 ECJ 仅有一处顺带处理：`MethodFingerprinter.isExcluded` 把 `$SWITCH_TABLE$`（Eclipse 的 switch 表方法名）列入排除 —— 那是**方法**名，与本文 §2.1 讨论的**类**名无关，ECJ 的匿名类准入/`EnclosingMethod` 行为仍未经任何真实样本验证。
+  * **已确认的一处差异（与 §2.1 直接相关）**：ECJ **不生成** `Foo$N` 形态的 enum switch 映射**类**；它把 switch 表放成宿主类里的 `$SWITCH_TABLE$` **方法**。因此 §2.1 的"SwitchMap 类被当作匿名类纳入对齐 / 是否排除"整条对 ECJ **不适用** —— ECJ 产物里根本没有那个类。javac 的实测见 `SwitchMapAlignTest`。
 
 ---
 

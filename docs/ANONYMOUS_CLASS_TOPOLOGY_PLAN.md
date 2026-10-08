@@ -29,6 +29,7 @@
 > **在 JVM 中已经存在存活实例的已加载类（Loaded Class），其物理类名只能被源码上与之对应的新版本实现重定义，其既有存活实例的方法调用与字段状态必须维持预期的语义连续性，禁止被无关的新生类占用物理槽位。**
 
 > **实现注记**：该不变量靠三条机制共同保证 —— ① Tier 5（按名字盲配）被彻底移除，前 4 层未匹配一律判为"新类/孤儿"而非"沿用旧物理槽位"；② 未匹配的旧类进入 `orphanOldClasses`，在 `HotSwapAgent.processChanges` 里被显式跳过重定义（`[ORPHAN-RETAIN]`）；③ 新类一律分配**未被占用**的编号后再经 `pendingAlignedClasses` 在首次加载时拦截。回归证据：`AnonClassReproTest` Scenario 4/5/6/20。
+> 本不变量目前**只对匿名类成立**。具名局部类走原名直通，不受 §1.2 保护（§7.2 风险 2）。
 
 ### 1.3 映射方向与改写范围
 * **映射方向定义**：
@@ -58,7 +59,7 @@
 | **标准匿名类**               | `InnerClasses` 属性中 `innerName == null`，且包含 `EnclosingMethod` | **准入**         | 提取其宿主类与父级前缀，加入拓扑树 |
 | **多层嵌套匿名类**           | `innerName == null`，其 `EnclosingMethod` 指向另一个匿名类          | **准入**         | 逻辑父为该外层匿名类               |
 | **具名内部类**               | `innerName != null` 且不为纯数字                                    | **排除**         | 不对齐，父前缀路径完全冻结         |
-| **具名局部类**               | `innerName != null` 且包含局部命名前缀                              | **排除**         | 保持原有类名                       |
+| **具名局部类**               | `innerName != null` 且 `outer_class == null` | **排除（不对齐）⚠️ 见 §7.2 风险 2** | 现状为原名直通，**编号会漂移，存在槽位篡夺路径** |
 | **javac 枚举 Switch 映射表** | `ACC_SYNTHETIC` + 仅含 `$SwitchMap$` 字段                           | **排除（保留）** | 识别为编译器缓存，保持原名直通     |
 | **Kotlin When 映射类**       | 类名含 `$WhenMappings`                                              | **排除**         | 保持原名直通                       |
 | **枚举常量体**               | 带有 `ACC_ENUM` 且基类为直接封闭枚举                                | **排除**         | 声明顺序与常量严格绑定，不可重命名 |
@@ -78,6 +79,18 @@
 > **另一处偏差**：表中"标准匿名类"要求"包含 `EnclosingMethod`"，实现里没有这条校验（`cn.outerMethod == null` 时会走 `resolveHostMethodForAnon` 反向追溯补救，而不是排除）。这是有意为之：javac 8 的嵌套 lambda 会把 `EnclosingMethod` 记成虚拟的 `lambda$null$0`（`AnonClassReproTest` Scenario 12 已固化该事实），若强校验 `EnclosingMethod` 反而会漏掉真实匿名类。
 >
 > **关于 SwitchMap 的"当前安全"性质（务必别读成"已验证安全"）**：`SwitchMapAlignTest` 形态 C（删掉字段匿名类、新增 enum switch）之所以不配对，是因为**两侧 scope 不一致**：旧匿名类的类级 `EnclosingMethod` 被实例化点回退解析成 `<init>`，而 SwitchMap 没有 `NEW` 实例化点、`outerMethod` 保持 `null`，于是 Tier 4 谓词（要求 `outerMethod` 相等）不成立。这是**偶然**，不是设计出来的规则 —— 一旦有人改进 `resolveHostMethodForAnon`，或出现"旧匿名类宿主方法同样解析失败"的形态，两侧都为 `null`，Tier 4 就可能唯一配对，而布局门对 SwitchMap 也不设防（它新增的是**静态合成字段**，不触发布局门的实例字段判据）。该残余形态**未覆盖、未验证**；要补需先构造出"旧匿名类宿主方法解析失败"的真实夹具，成本不低，故当前只作文档记录，**不实现**。
+> **⚠️ 局部类（具名局部类）的排除是"原名直通"，与 §1.2 不变量存在潜在冲突 `[未验证]`**
+>
+> javac 对局部类的命名是 `外层类$<N><简单名>`，N 按 (直接外层类, 简单名) 各自计数，取第一个未占用的正整数。
+> 简单名在外层类内唯一时 N 恒为 1，名字稳定，直通安全；一旦同一外层类出现**同名**局部类
+> （不同方法里各有一个 `class Helper`），在前面新增一个同名局部类就会使后面的整体后移：
+> v2 的 `Foo$1Helper`（新增者）会重定义内存中旧的 `Foo$1Helper`（原 A 的），原 A、B 依次后移。
+> 这与匿名类位移是同一种篡夺，且局部类的捕获字段 `val$x` 是合成字段，被 `ClassDiff` 过滤，
+> §7.2 风险 1 的布局门也看不到它。
+>
+> 编号取决于 Attr 的访问顺序，不一定等于源码顺序（lambda 体内的局部类尤其如此），不能假设位移规律简单。
+>
+> 待红用例回答的问题见 §7.2 风险 2。在此之前，本行**不得**标 ✅。
 
 ### 2.2 全局保留名集合（Reserved Names Domain）`[部分实现]`
 在为未匹配类分配新编号时，`takenTargetNames` 集合必须严密涵盖以下范围，杜绝任何物理碰撞：
@@ -705,6 +718,27 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
   * *跟踪*：当前已在 javac 8/11/17/21 上完成完备实测，后续需对 Eclipse ECJ 编译器生成的嵌套匿名类展开真实样本集差分测试。
   * **[仍开放]** —— `scratch/hstest` 下的夹具与 `suite.sh` 只覆盖 javac 8/17/21，没有 ECJ 产物。代码侧对 ECJ 仅有一处顺带处理：`MethodFingerprinter.isExcluded` 把 `$SWITCH_TABLE$`（Eclipse 的 switch 表方法名）列入排除 —— 那是**方法**名，与本文 §2.1 讨论的**类**名无关，ECJ 的匿名类准入/`EnclosingMethod` 行为仍未经任何真实样本验证。
   * **已确认的一处差异（与 §2.1 直接相关）**：ECJ **不生成** `Foo$N` 形态的 enum switch 映射**类**；它把 switch 表放成宿主类里的 `$SWITCH_TABLE$` **方法**。因此 §2.1 的"SwitchMap 类被当作匿名类纳入对齐 / 是否排除"整条对 ECJ **不适用** —— ECJ 产物里根本没有那个类。javac 的实测见 `SwitchMapAlignTest`。
+* **风险 2：同名局部类的编号漂移（原名直通路径）** —— `[已识别；现状未实测；无防护]`
+  * *触发条件*：同一外层类内存在 ≥2 个同简单名的局部类（跨方法、跨代码块），且编辑在其之前新增/删除/换序了同名局部类。
+  * *后果*：与匿名类位移相同——老实例的方法表被无关类的实现替换。保守性损失之外的**静默错配**。
+  * *与匿名类相比的有利点*：局部类的 `EnclosingMethod` 带方法名，加上简单名，
+    `(outerMethod, outerMethodDesc, 简单名)` 的区分度远强于匿名类，多数情况下 Tier 3 谓词加简单名即可唯一配对，无需新机制。
+  * *与已落地修复的交互*：`maskDescriptor` 当前只改写 `L<宿主>$<纯数字>;`。局部类内部的嵌套匿名类，
+    其 `this$N` 与构造器描述符里嵌的是 `LFoo$1Helper;`，**不会被屏蔽**，将重演 `this$N` 缺陷
+    （父类位移后子类哈希必变，Tier 1 失效）。扩展屏蔽时必须保留简单名
+    （如 `#LOCAL_<relId>_Helper#`），否则 `Foo$1Helper` 与 `Foo$1Other` 会被抹成相同。
+  * *待红用例回答的三个问题*（先写，再决定实现）：
+    1. 现状局部类是原名直通，还是别处有隐式处理？（夹具：A/B/N 三个同名 `Helper`，各带 TAG，
+       断言送去重定义旧 `Foo$1Helper` 的字节码是否带 TAG_A。）
+    2. `Foo$1Helper$1`（局部类内的匿名类）会被准入，还是被名字模式挡掉？
+    3. lambda 体内的局部类，编号与源码序是否一致？
+  * *分步方案*：
+    1. **止血**：对每个 `(宿主, 简单名)`，新旧任一侧出现 ≥2 个同名局部类，走现有
+       `AlignmentRejectedException` 拒绝宿主组。须带开关（暂名 `nipx.agent.local_class_guard`，
+       `reject/warn/off`），拒绝文案给出路。简单名唯一的宿主不受影响。代价：这类宿主的任何编辑都被拒，直到完整对齐落地。
+    2. **完整对齐**：准入判定用 `InnerClasses` 的 `outer_class == null && innerName != null`，
+       不靠名字模式（`$` 在标识符中合法，名字解析有歧义）。分配新号只改数字、保留简单名，同族内唯一。
+       局部类名并入 `takenTargetNames`。
 
 ---
 
@@ -754,6 +788,8 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 | §7.1-1/2/3 置换不变性 / 幂等 / 尾部追加                         | ✅                 | Scenario 19                                                                                                                                                                    |
 | §7.1-4 故障注入拒绝率                                           | ✅                 | "零静默错配"（Scenario 16/20）+ "两种模式差异化行为"（Scenario 21）                                                                                                            |
 | §7.2 风险 1 字段布局差异                                        | ✅                 | **真机实测已做**（JBR 21 增强模式：8/8 接受，改类型/改静态性 = 旧值静默丢弃并置默认值；非增强模式 8/8 被 JVM 拒绝）；**分级门已实现**：对齐器 Tier 4 门（`LayoutGate.check`，合成捕获字段，Scenario 27）+ 重定义层门（`HotSwapAgent.applyRedefineLayoutGate`，`ClassDiff.changedFields`，具名类 + 非合成字段，`LayoutGateAssert` 第 10/11 节）              |
+| §2.1 具名局部类（原名直通）                                    | ⚠️ 未验证          | 编号漂移路径已识别，无红用例、无防护；见 §7.2 风险 2 |
+| §7.2 风险 2 同名局部类漂移                                      | ⬜                 | 先写红用例（三个问题），再止血，再完整对齐 |
 | 实例状态布局守卫（全体类，非仅匿名类）                          | ✅                 | `HotSwapAgent.applyRedefineLayoutGate` 在 `applyRedefinitions` 之前用 `ClassDiff.changedFields` 判决：纯新增放行、删除/改类型/改静态性复用 `dropHostGroup` 整组移出本轮；开关 `nipx.agent.layout_gate`（`reject`/`warn`/`off`，默认 `reject`）                                          |
 | §7.2 未决问题 1 ECJ                                             | ⬜                 | 无样本                                                                                                                                                                         |
 
@@ -779,9 +815,11 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 6. ~~**把 INV-1 / INV-2 写进代码注释与测试**~~ ✅ **已完成**（§3.6）：`AnonClassReproTest` Scenario 25 用"只改子层 → 父层指纹必须不变"把 INV-1 变成受保护断言（若有人让 `AnonClassHasher` 恢复递归折入子哈希，此处立刻变红），并用字节码常量池扫描做 INV-2 架构守卫。
 7. ~~**§7.2 风险 1 升级为实例状态布局安全门**~~ ✅ **已完成**（两处门：对齐器 Tier 4 门挡匿名类合成捕获字段 + 重定义层门 `applyRedefineLayoutGate` 用 `ClassDiff.changedFields` 挡全体类的删/改类型/改静态性，纯新增放行交给 InitFix）。真机实验（§7.2 的 8 组 JBR 21 实测）已确认判据充分，无需再补。开关 `nipx.agent.anon_layout_gate` / `nipx.agent.layout_gate` 保证出事可立刻回到旧行为。回证据：`AnonClassReproTest` Scenario 27、`LayoutGateAssert`。
 8. ~~**§2.1 枚举 Switch 映射表排除 + §2.2 第 4 类保留名接入**~~：**§2.2 第 4 类 ✅ 已完成**（`align` 增 `Set<String> reserved` 重载，`HotSwapAgent` 传 `pendingAlignedClasses` 快照；守卫 `ReservedSlotsAlignTest`：平层 + 嵌套避让 + 空集等价 + 调用点字节码扫描）。**§2.1 "排除 SwitchMap" ❌ 不实现**：实测四形态全部判对，字面"排除 + 原名直通"反而危险（见 §2.1 注记）；`SwitchMapAlignTest` 作为回归守卫，并标注其安全性是"两侧 scope 不一致"带来的**偶然**结果，残余形态未覆盖。
-9. **§3.1/§3.2 的规格收敛**：先把文档改成"主哈希 + 子类引用多重集（并列独立维度）"的目标形态，再考虑实现；**在给出能同时满足父哈希稳定与 AnonCase 同构可区分的判别式之前，不要动 `MethodFingerprinter` 的匿名类占位符**。同批应一并把 §3.1 包含特征第 2 条的"非合成字段"改成"含合成捕获字段"，因为它现在是安全信号而非噪声。
-10. **补三个自动化缺口**（都属已实现但未覆盖）：① `depth > 4` 的 strict 熔断（现在有探针夹具可复用，把 `DeepNestProbe` 的 depth ≥ 5 用例搬进 Scenario 21 即可）；② `[HOTSWAP-REJECT]` 与"宿主组整体移出本批"的端到端断言（需让 `processChanges` 可测，或把拒绝决策抽成可单测的纯函数）；③ **把"用了哪一层"纳入断言**（`stats.tier1Matches` 应等于嵌套层数）—— 现有 21 个场景只断言"映射对不对"，这正是 §3.1/§4.1 两个缺陷能长期潜伏的原因。
-11. **§4.2 `sourceOrder`**：先写能红的夹具（多轮 + 同级平局），再决定是否扩 `bytecodeCache` 的数据结构。属稳定性增强，不是 correctness blocker（Tier 1/2 不依赖它）。注意 §4.1 注记里的错配**不是** `sourceOrder` 能修的（该场景下两种距离度量都选错）。
-12. **§6.3-1 摘要短路 / §6.2 全局锁**：收益明确但不紧急，可并入后续迭代。注意 §6.3-2 的硬上限已经封住 worst case，因此摘要短路现在是纯加速项。
+9. **局部类**：红用例 → 止血（同名即拒绝宿主组）→ 完整对齐。理由：后果与匿名类位移相同，
+   触发需要同名局部类所以概率较低，但目前没有任何防护。
+10. **§3.1/§3.2 的规格收敛**：先把文档改成"主哈希 + 子类引用多重集（并列独立维度）"的目标形态，再考虑实现；**在给出能同时满足父哈希稳定与 AnonCase 同构可区分的判别式之前，不要动 `MethodFingerprinter` 的匿名类占位符**。同批应一并把 §3.1 包含特征第 2 条的"非合成字段"改成"含合成捕获字段"，因为它现在是安全信号而非噪声。
+11. **补三个自动化缺口**（都属已实现但未覆盖）：① `depth > 4` 的 strict 熔断（现在有探针夹具可复用，把 `DeepNestProbe` 的 depth ≥ 5 用例搬进 Scenario 21 即可）；② `[HOTSWAP-REJECT]` 与"宿主组整体移出本批"的端到端断言（需让 `processChanges` 可测，或把拒绝决策抽成可单测的纯函数）；③ **把"用了哪一层"纳入断言**（`stats.tier1Matches` 应等于嵌套层数）—— 现有 21 个场景只断言"映射对不对"，这正是 §3.1/§4.1 两个缺陷能长期潜伏的原因。
+12. **§4.2 `sourceOrder`**：先写能红的夹具（多轮 + 同级平局），再决定是否扩 `bytecodeCache` 的数据结构。属稳定性增强，不是 correctness blocker（Tier 1/2 不依赖它）。注意 §4.1 注记里的错配**不是** `sourceOrder` 能修的（该场景下两种距离度量都选错）。
+13. **§6.3-1 摘要短路 / §6.2 全局锁**：收益明确但不紧急，可并入后续迭代。注意 §6.3-2 的硬上限已经封住 worst case，因此摘要短路现在是纯加速项。
 
 > **关于第 1 与第 2 条的排序**：有评审意见把"事务回滚"排在"总开关"之前。本文档维持**开关优先**，理由是二者解决的问题不同维度 —— 回滚修的是一个**已知**的窄窗口（对齐期异常），开关提供的是对**未知**风险的统一止血能力（默认 `true` 不改变任何现有行为）。工程上"先装上刹车再修发动机"通常是对的。两条现已一并落地。

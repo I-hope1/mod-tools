@@ -72,10 +72,12 @@
 > | 标准匿名类                   | ✅ 准入             | `innerName == null` + 名字模式；**但未强制要求存在 `EnclosingMethod`**                                                                                                                                                   |
 > | 多层嵌套匿名类               | ✅ 准入             | 名字模式允许 `$1$1`；层级由 `getHierarchyLevel` 切分                                                                                                                                                                     |
 > | 具名内部类 / 具名局部类      | ✅ 排除             | `innerName != null`；`Foo$1Local` 也会被名字模式二次挡掉                                                                                                                                                                 |
-> | **javac 枚举 Switch 映射表** | ⚠️ **排除机制缺失** | 没有任何代码检查 `ACC_SYNTHETIC` + 仅含 `$SwitchMap$` 字段；javac 生成的 `Foo$1` 恰好满足纯数字名字模式，**会被当成匿名类纳入对齐**。它自身无实例，危害限于"占用编号/参与候选集"，但会让未匹配新类的编号分配结果偏离预期 |
+> | **javac 枚举 Switch 映射表** | ⚠️ **豁免机制缺失（不改）** | 没有任何代码检查 `ACC_SYNTHETIC` + 仅含 `$SwitchMap$` 字段；javac 生成的 `Foo$N` 恰好满足纯数字名字模式，**会被当成匿名类纳入对齐**。实测（`SwitchMapAlignTest`，javac 21）四种形态 —— "前插匿名类 / case 集合变化 / 字段匿名类删除+新增 switch / 删除 switch" —— 全部判对、零槽位篡夺，故 §2.1 字面的"排除 + 原名直通"**不实现**（那会打开 §1.2 要防的槽位篡夺）。**注意：当前是"恰好安全"而非"已验证安全"**，见下方注记 |
 > | Kotlin When 映射类           | ✅ 排除（顺带）     | `$WhenMappings` 含字母，被名字模式挡掉，并非由显式规则排除                                                                                                                                                               |
 >
 > **另一处偏差**：表中"标准匿名类"要求"包含 `EnclosingMethod`"，实现里没有这条校验（`cn.outerMethod == null` 时会走 `resolveHostMethodForAnon` 反向追溯补救，而不是排除）。这是有意为之：javac 8 的嵌套 lambda 会把 `EnclosingMethod` 记成虚拟的 `lambda$null$0`（`AnonClassReproTest` Scenario 12 已固化该事实），若强校验 `EnclosingMethod` 反而会漏掉真实匿名类。
+>
+> **关于 SwitchMap 的"当前安全"性质（务必别读成"已验证安全"）**：`SwitchMapAlignTest` 形态 C（删掉字段匿名类、新增 enum switch）之所以不配对，是因为**两侧 scope 不一致**：旧匿名类的类级 `EnclosingMethod` 被实例化点回退解析成 `<init>`，而 SwitchMap 没有 `NEW` 实例化点、`outerMethod` 保持 `null`，于是 Tier 4 谓词（要求 `outerMethod` 相等）不成立。这是**偶然**，不是设计出来的规则 —— 一旦有人改进 `resolveHostMethodForAnon`，或出现"旧匿名类宿主方法同样解析失败"的形态，两侧都为 `null`，Tier 4 就可能唯一配对，而布局门对 SwitchMap 也不设防（它新增的是**静态合成字段**，不触发布局门的实例字段判据）。该残余形态**未覆盖、未验证**；要补需先构造出"旧匿名类宿主方法解析失败"的真实夹具，成本不低，故当前只作文档记录，**不实现**。
 
 ### 2.2 全局保留名集合（Reserved Names Domain）`[部分实现]`
 在为未匹配类分配新编号时，`takenTargetNames` 集合必须严密涵盖以下范围，杜绝任何物理碰撞：
@@ -89,7 +91,9 @@
 > * 第 1 类 ✅ 每分配一个即 `add`；
 > * 第 2 类 ✅ 由 `HotSwapAgent` 侧保证 —— 它先把 `loadedClassesMap` 中已加载但未缓存的历史匿名类字节码"偷"进 `bytecodeCache`，再整表作为 `oldAnonClasses` 传入；孤儿同样落在其中；
 > * 第 3 类 ⚠️ **未显式加入**。风险被"候选名恒为纯数字"这一事实大幅削弱（`Foo$Builder`、`Foo$1Local` 都不可能等于 `Foo$<n>`），故当前只有理论风险；
-> * 第 4 类 ❌ **完全未接入**。`AnonClassAligner.align(...)` 的签名里没有任何"保留名/挂起名"输入参数，上一轮还挂在 `pendingAlignedClasses` 里、尚未加载的目标名不参与避让。这是唯一有真实碰撞窗口的一条，修法只需给 `align` 加一个 `Set<String> reserved` 参数并由 `HotSwapAgent` 传入 `AnnotationTransformer.pendingAlignedClasses.keySet()`。
+> * 第 4 类 ✅ **已接入**。`AnonClassAligner.align(...)` 新增 `Set<String> reserved` 重载（旧签名保留为委托空集的重载），`HotSwapAgent` 在调用处传 `Set.copyOf(AnnotationTransformer.pendingAlignedClasses.keySet())` 的**快照**（不传并发容器的实时视图 —— 实时视图会让编号分配随挂起集合的时序漂移，破坏 `TEST_REVERSE_ORDER` 的确定性）。`reserved` **只播种 `takenTargetNames`，绝不进匹配候选**：挂起类还没被 JVM 加载、没有旧字节码，不是"旧类"，没有资格参与 Tier 匹配，唯一语义是"这个编号已有人用"。回归证据：`ReservedSlotsAlignTest`（平层避让 + `level>1` 嵌套避让 + 空集与旧重载等价 + `HotSwapAgent` 调用点字节码扫描）。
+>
+> **已知代价：编号膨胀（接受，不加测试）**：`pendingAlignedClasses` 的条目只在 ①类被加载（`AnnotationTransformer.transform` 的 `classBeingRedefined == null` 分支）或 ②事务回滚 时才移除。因此一个**永远不会被加载**的挂起类会永久占用其编号，导致同一宿主反复热更时新类编号逐轮抬高（`Foo$3` → `Foo$4` → …）。这不影响正确性（仅类名变大），也不触发 `MAX_ANON_PER_HOST`（该上限数的是单次对齐的类**数量**，不是最大编号），故接受现状、仅作记录。
 
 ---
 
@@ -716,8 +720,8 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 | §1.1 受支持范围（ECJ）                                          | ⬜                 | 无夹具（§7.2 未决问题 1）                                                                                                                                                      |
 | §1.2 类身份与实例状态保真不变量                                 | ✅                 | 移除 Tier 5 + `orphanOldClasses` 保留 + 新类分配未占用编号                                                                                                                     |
 | §1.3 `renameMap` 方向与 `ClassRemapper` 改写范围                | ✅                 | `AnonClassAligner.remapClass`（`ClassWriter(0)` + `SimpleRemapper`）                                                                                                           |
-| §2.1 Attribute-First Admission                                  | 🔶                 | `isAnonymousClass` / `isAnonymousClassName`；**枚举 Switch 映射表排除缺失**、**未强制 `EnclosingMethod`**                                                                      |
-| §2.2 全局保留名集合                                             | 🔶                 | `takenTargetNames`；**第 3 类未显式加入、第 4 类（`pendingAlignedClasses`）完全未接入**                                                                                        |
+| §2.1 Attribute-First Admission                                  | 🔶                 | `isAnonymousClass` / `isAnonymousClassName`；**枚举 Switch 映射表不排除（有意保留，见 §2.1 注记：仅"恰好安全"，残余形态未覆盖）**、**未强制 `EnclosingMethod`** |
+| §2.2 全局保留名集合                                             | ✅                 | `takenTargetNames`；第 1/2/4 类已覆盖（第 4 类 = `align` 的 `Set<String> reserved` 重载 + `HotSwapAgent` 传 `pendingAlignedClasses` 快照）；第 3 类仅理论风险（候选名恒为纯数字）；代价：无主挂起类会致编号单调抬高 |
 | §3 层级交错流水线                                               | 🔶                 | `alignCascading` 层级循环；Lambda 对齐在独立第二遍；`depth > 4` 非 strict 下只 warn                                                                                            |
 | §3.1 自身哈希（包含特征）                                       | ✅                 | 未含访问标志（不影响匹配）；`#ANON_relId#` 为增强形式；合成捕获字段**有意计入**。**描述符定向屏蔽缺陷已修复**（嵌套匿名类全层恢复 Tier 1，Scenario 22 守卫），见 §3.1 注记     |
 | §3.1 排除项 1/2（调试元数据、lambda 名归一化）                  | ✅                 | `SKIP_DEBUG`；`isSelfSynthetic` → `#SYNTHETIC_METHOD#`                                                                                                                         |
@@ -774,7 +778,7 @@ private static final Comparator<CandidatePair> PAIR_COMPARATOR = (p1, p2) -> {
 5. ~~**`parseInfos` 改用直接父类节点做实例化点扫描**~~ ✅ **已完成**（level 1 复用 `hostNode`，嵌套层按需解析并缓存直接父类节点）。靶子经实测收窄为 javac 8 的 `lambda$null$N`（`lambda$work$0` 不触发）；修复前该形态下两侧 `outerMethod` 都停在 `"null"`、方法作用域判据被抹平，导致"方法顺序反转 + 两侧改体"时两条同构链**跨方法错配**。守卫断言已进 `check`：`AnonClassReproTest` Scenario 24（真实 javac 8，6 条）。附带确认 javac 8 的嵌套命名同样是 `$1$1`。
 6. ~~**把 INV-1 / INV-2 写进代码注释与测试**~~ ✅ **已完成**（§3.6）：`AnonClassReproTest` Scenario 25 用"只改子层 → 父层指纹必须不变"把 INV-1 变成受保护断言（若有人让 `AnonClassHasher` 恢复递归折入子哈希，此处立刻变红），并用字节码常量池扫描做 INV-2 架构守卫。
 7. ~~**§7.2 风险 1 升级为实例状态布局安全门**~~ ✅ **已完成**（两处门：对齐器 Tier 4 门挡匿名类合成捕获字段 + 重定义层门 `applyRedefineLayoutGate` 用 `ClassDiff.changedFields` 挡全体类的删/改类型/改静态性，纯新增放行交给 InitFix）。真机实验（§7.2 的 8 组 JBR 21 实测）已确认判据充分，无需再补。开关 `nipx.agent.anon_layout_gate` / `nipx.agent.layout_gate` 保证出事可立刻回到旧行为。回证据：`AnonClassReproTest` Scenario 27、`LayoutGateAssert`。
-8. **§2.1 枚举 Switch 映射表排除 + §2.2 第 4 类保留名接入**（`align` 增 `Set<String> reserved` 参数）。两者都能写确定性的负向断言。
+8. ~~**§2.1 枚举 Switch 映射表排除 + §2.2 第 4 类保留名接入**~~：**§2.2 第 4 类 ✅ 已完成**（`align` 增 `Set<String> reserved` 重载，`HotSwapAgent` 传 `pendingAlignedClasses` 快照；守卫 `ReservedSlotsAlignTest`：平层 + 嵌套避让 + 空集等价 + 调用点字节码扫描）。**§2.1 "排除 SwitchMap" ❌ 不实现**：实测四形态全部判对，字面"排除 + 原名直通"反而危险（见 §2.1 注记）；`SwitchMapAlignTest` 作为回归守卫，并标注其安全性是"两侧 scope 不一致"带来的**偶然**结果，残余形态未覆盖。
 9. **§3.1/§3.2 的规格收敛**：先把文档改成"主哈希 + 子类引用多重集（并列独立维度）"的目标形态，再考虑实现；**在给出能同时满足父哈希稳定与 AnonCase 同构可区分的判别式之前，不要动 `MethodFingerprinter` 的匿名类占位符**。同批应一并把 §3.1 包含特征第 2 条的"非合成字段"改成"含合成捕获字段"，因为它现在是安全信号而非噪声。
 10. **补三个自动化缺口**（都属已实现但未覆盖）：① `depth > 4` 的 strict 熔断（现在有探针夹具可复用，把 `DeepNestProbe` 的 depth ≥ 5 用例搬进 Scenario 21 即可）；② `[HOTSWAP-REJECT]` 与"宿主组整体移出本批"的端到端断言（需让 `processChanges` 可测，或把拒绝决策抽成可单测的纯函数）；③ **把"用了哪一层"纳入断言**（`stats.tier1Matches` 应等于嵌套层数）—— 现有 21 个场景只断言"映射对不对"，这正是 §3.1/§4.1 两个缺陷能长期潜伏的原因。
 11. **§4.2 `sourceOrder`**：先写能红的夹具（多轮 + 同级平局），再决定是否扩 `bytecodeCache` 的数据结构。属稳定性增强，不是 correctness blocker（Tier 1/2 不依赖它）。注意 §4.1 注记里的错配**不是** `sourceOrder` 能修的（该场景下两种距离度量都选错）。

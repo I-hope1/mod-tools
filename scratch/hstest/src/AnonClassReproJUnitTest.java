@@ -6,6 +6,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -52,6 +54,8 @@ class AnonClassReproJUnitTest {
 	@BeforeAll
 	static void assertEffectiveJavacMajors() throws Exception {
 		assertJavacMajor(21, 65);
+		assertJavacMajor(17, 61);
+		assertJavacMajor(11, 55);
 		assertJavacMajor(8, 52);
 	}
 
@@ -72,7 +76,7 @@ class AnonClassReproJUnitTest {
 	@TempDir
 	static Path base;
 
-	/** 默认值快照：[TEST_REVERSE_ORDER, MAX_ANON_PER_HOST, ALIGN_TIMEOUT_MS, ANON_STRICT, ANON_LAYOUT_GATE, ANON_DEBUG]。 */
+	/** 默认值快照：[TEST_REVERSE_ORDER, MAX_ANON_PER_HOST, ALIGN_TIMEOUT_MS, ANON_STRICT, ANON_LAYOUT_GATE, ANON_DEBUG, FIXTURE_JDK_MAJOR]。 */
 	private Object[] snap;
 
 	/** javac 路径缓存（每版本只做一次 -version 校验）。 */
@@ -81,7 +85,6 @@ class AnonClassReproJUnitTest {
 	@BeforeEach
 	void saveStatics() {
 		AnonClassReproTest.reset();
-		AnonClassReproTest.FIXTURE_JDK_MAJOR = 21;   // 2a：全场景仍单一 JDK；2b 会按参数设置
 		snap = new Object[] {
 			AnonClassAligner.TEST_REVERSE_ORDER,
 			AnonClassAligner.MAX_ANON_PER_HOST,
@@ -89,7 +92,11 @@ class AnonClassReproJUnitTest {
 			HotSwapAgent.ANON_STRICT,
 			HotSwapAgent.ANON_LAYOUT_GATE,
 			HotSwapAgent.ANON_DEBUG,
+			AnonClassReproTest.FIXTURE_JDK_MAJOR,
 		};
+		// 快照后再置默认：参数化测试会在方法体内改成参数值，@AfterEach 用快照还原，
+		// 否则 Random 顺序下参数化场景会把 21 单版本场景带到别的 JDK 夹具目录。
+		AnonClassReproTest.FIXTURE_JDK_MAJOR = 21;
 		AnnotationTransformer.pendingAlignedClasses.clear();
 		HotSwapAgent.bytecodeCache.clear();
 	}
@@ -102,6 +109,7 @@ class AnonClassReproJUnitTest {
 		HotSwapAgent.ANON_STRICT            = (Boolean) snap[3];
 		HotSwapAgent.ANON_LAYOUT_GATE       = (String)  snap[4];
 		HotSwapAgent.ANON_DEBUG             = (Boolean) snap[5];
+		AnonClassReproTest.FIXTURE_JDK_MAJOR = (Integer) snap[6];
 		AnnotationTransformer.pendingAlignedClasses.clear();
 		HotSwapAgent.bytecodeCache.clear();
 	}
@@ -223,8 +231,16 @@ class AnonClassReproJUnitTest {
 		AnonClassReproTest.testScenario18_NestedAnonymousClassPrefixRetention(javac(21), base.toFile()); expect(3);
 	}
 
-	@Test void s19_cascadingTreeAndMetamorphicSuite() throws Exception {
-		AnonClassReproTest.testScenario19_CascadingTreeAndMetamorphicSuite(javac(21), base.toFile()); expect(11);
+	/**
+	 * 版本敏感的场景（s19/s22/s26）在 **8/11/17/21 四个 JDK** 上各跑一次：夹具由传入的 javac
+	 * 现编，且 {@code FIXTURE_JDK_MAJOR} 同步为参数值，使夹具目录带 JDK 维度。其余场景仍单跑
+	 * javac 21（只参数化受 JDK 生成策略影响的场景，以控时）。
+	 */
+	@ParameterizedTest(name = "jdk{0}")
+	@ValueSource(ints = { 8, 11, 17, 21 })
+	void s19_cascadingTreeAndMetamorphicSuite(int jdk) throws Exception {
+		AnonClassReproTest.FIXTURE_JDK_MAJOR = jdk;
+		AnonClassReproTest.testScenario19_CascadingTreeAndMetamorphicSuite(javac(jdk), base.toFile()); expect(11);
 	}
 
 	@Test void s20_whiteboxVulnerabilityReproAndDefense() throws Exception {
@@ -235,8 +251,11 @@ class AnonClassReproJUnitTest {
 		AnonClassReproTest.testScenario21_SafetyGatesAndCircuitBreaker(javac(21), base.toFile()); expect(9);
 	}
 
-	@Test void s22_nestedContentHashAvailability() throws Exception {
-		AnonClassReproTest.testScenario22_NestedContentHashAvailability(javac(21), base.toFile()); expect(5);
+	@ParameterizedTest(name = "jdk{0}")
+	@ValueSource(ints = { 8, 11, 17, 21 })
+	void s22_nestedContentHashAvailability(int jdk) throws Exception {
+		AnonClassReproTest.FIXTURE_JDK_MAJOR = jdk;
+		AnonClassReproTest.testScenario22_NestedContentHashAvailability(javac(jdk), base.toFile()); expect(12);
 	}
 
 	@Test void s23_strictIsSafetyGateNotPolicy() throws Exception {
@@ -251,8 +270,11 @@ class AnonClassReproJUnitTest {
 		AnonClassReproTest.testScenario25_DesignInvariants(javac(21), base.toFile()); expect(6);
 	}
 
-	@Test void s26_tier3TopologyFilter() throws Exception {
-		AnonClassReproTest.testScenario26_Tier3TopologyFilter(javac(21), base.toFile()); expect(18, 1);
+	@ParameterizedTest(name = "jdk{0}")
+	@ValueSource(ints = { 8, 11, 17, 21 })
+	void s26_tier3TopologyFilter(int jdk) throws Exception {
+		AnonClassReproTest.FIXTURE_JDK_MAJOR = jdk;
+		AnonClassReproTest.testScenario26_Tier3TopologyFilter(javac(jdk), base.toFile()); expect(19, 1);
 	}
 
 	@Test void s27_layoutGateForAnonClasses() throws Exception {

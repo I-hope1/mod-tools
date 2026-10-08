@@ -5,6 +5,7 @@ import nipx.LambdaAligner;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.tree.TypeInsnNode;
@@ -1135,7 +1136,7 @@ public class AnonClassReproTest {
 	}
 
 	static void testScenario19_CascadingTreeAndMetamorphicSuite(String javac, File baseDir) throws Exception {
-		File dir = new File(baseDir, "s19");
+		File dir = new File(new File(baseDir, "jdk" + FIXTURE_JDK_MAJOR), "s19");
 		dir.mkdirs();
 
 		// 1. 编译 V1 (包含两棵子树：Save -> WorkerSave, Delete -> WorkerDelete)
@@ -1499,41 +1500,66 @@ public class AnonClassReproTest {
 	 * **未屏蔽的原始描述符**，而嵌套匿名类的构造器形如 `<init>(LHost$1;)V` —— 父类一移位，
 	 * 子类哈希必变，导致 depth ≥ 2 的每一层都只能靠 **Tier 4**（不比字段表的那层）配对。
 	 * 本场景把它锁死：内容不变时**每一层都必须靠 Tier 1 命中**。</p>
+	 *
+	 * <p><b>两个夹具，四个 JDK</b>：主夹具 {@code UseOuter} 最内层读取宿主字段，故每层都捕获
+	 * 外层实例 —— 8/11/17/21 **都**生成 {@code this$N} 字段（这是修复真正要顶住的形态）。
+	 * 对照组 {@code DeepNest} 不使用外层实例：javac 18+ 省略 {@code this$N}，只有 8/11/17 有。
+	 * 两者在四个 JDK 上 {@code renameMap} 必须逐字一致 —— 证明字段形态不改变对齐结果。
+	 * 对照组的"无 this$N"价值仅在 21 上完整，8/11/17 上它是第二个有 {@code this$N} 的夹具。</p>
 	 */
 	static void testScenario22_NestedContentHashAvailability(String javac, File baseDir) throws Exception {
 		System.out.println("\n--- Scenario 22: 嵌套匿名类的内容哈希可用性 + 设计不变量 ---");
-		File dir = new File(baseDir, "s22");
+		File dir = new File(new File(baseDir, "jdk" + FIXTURE_JDK_MAJOR), "s22");
 		dir.mkdirs();
 
-		// v1: 4 层嵌套匿名类链
-		File fV1 = new File(dir, "DeepNestV1.java");
-		Files.writeString(fV1.toPath(), deepNestSource("testDeep", "DeepNest", 4, false));
-		File outV1 = new File(dir, "v1");
-		outV1.mkdirs();
-		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.getAbsolutePath(), fV1.getAbsolutePath());
+		// ===== 主夹具 UseOuter：每层使用外层实例 → 四个 JDK 都有 this$N =====
+		List<byte[]> uoOld = new ArrayList<>();
+		AnonClassAligner.Result uoRes = alignNestFixture(javac, new File(dir, "useOuter"),
+			"testDeep", "UseOuter", true, 0, uoOld);
+		int uoThisN = countThisNFields(uoOld);
+		check(uoThisN == uoOld.size() && uoOld.size() == 4,
+			"Scenario 22/use-outer 前提: 每层使用外层实例，四个 JDK 都应生成 this$N（实测 "
+				+ uoThisN + "/" + uoOld.size() + "）");
+		check(uoRes.stats.tier1Matches == 4,
+			"Scenario 22/use-outer: 4 层嵌套内容不变时必须全部靠 Tier 1 命中（实测 T1="
+				+ uoRes.stats.tier1Matches + "，修复前四个 JDK 均为 1）");
+		check(uoRes.orphanOldClasses.isEmpty() && uoRes.stats.newClasses == 1,
+			"Scenario 22/use-outer: 插入的顶层新类判为新增、4 层链全部配对且无孤儿");
+		check(uoRes.stats.tier4Matches == 0,
+			"Scenario 22/use-outer: 不得退化到不比字段表的 Tier 4（实测 T4=" + uoRes.stats.tier4Matches + "）");
 
-		// v2: 顶层**插入**一个额外匿名类，使整条链物理编号位移（链本身内容不变）
-		File fV2 = new File(dir, "DeepNestV2.java");
-		Files.writeString(fV2.toPath(), deepNestSource("testDeep", "DeepNest", 4, true));
-		File outV2 = new File(dir, "v2");
-		outV2.mkdirs();
-		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.getAbsolutePath(), fV2.getAbsolutePath());
+		// ===== 对照组 DeepNest：不使用外层实例 → javac<19 有 this$N、18+ 无 =====
+		List<byte[]> dnOld = new ArrayList<>();
+		AnonClassAligner.Result dnRes = alignNestFixture(javac, new File(dir, "deepNest"),
+			"testDeep", "DeepNest", false, 0, dnOld);
+		int dnThisN = countThisNFields(dnOld);
+		boolean expectThisN = FIXTURE_JDK_MAJOR < 19;
+		check(dnThisN == (expectThisN ? dnOld.size() : 0) && dnOld.size() == 4,
+			"Scenario 22/DeepNest 前提: javac<19 生成 this$N、18+ 省略（jdk=" + FIXTURE_JDK_MAJOR
+				+ "，实测 " + dnThisN + "/" + dnOld.size() + "）");
+		check(dnRes.stats.tier1Matches == 4,
+			"Scenario 22/DeepNest: 无论有无 this$N，内容不变都必须靠 Tier 1 全命中（实测 T1="
+				+ dnRes.stats.tier1Matches + "）");
+		check(dnRes.orphanOldClasses.isEmpty() && dnRes.stats.newClasses == 1,
+			"Scenario 22/DeepNest: 插入的顶层新类判为新增、4 层链全部配对且无孤儿");
+		check(dnRes.stats.tier4Matches == 0,
+			"Scenario 22/DeepNest: 不得退化到 Tier 4（实测 T4=" + dnRes.stats.tier4Matches + "）");
+		check(relativeRenameMap(uoRes.renameMap, "testDeep/UseOuter")
+				.equals(relativeRenameMap(dnRes.renameMap, "testDeep/DeepNest")),
+			"Scenario 22: 主夹具与对照组在四个 JDK 上相对映射必须逐字一致（字段形态不影响结果）"
+				+ " uo=" + uoRes.renameMap + " dn=" + dnRes.renameMap);
 
-		byte[] hostV2 = Files.readAllBytes(new File(outV2, "testDeep/DeepNest.class").toPath());
-		Map<String, byte[]> oldAnon = anonClasses(outV1, "testDeep/DeepNest");
-		Map<String, byte[]> newAnon = anonClasses(outV2, "testDeep/DeepNest");
-		Function<String, byte[]> oldRes = n -> readIfExists(new File(outV1, n.replace('.', '/') + ".class"));
-		Function<String, byte[]> newRes = n -> readIfExists(new File(outV2, n.replace('.', '/') + ".class"));
-
-		AnonClassAligner.Result res = AnonClassAligner.align(
-			"testDeep/DeepNest", hostV2, oldAnon, newAnon, oldRes, newRes);
-		check(res.stats.tier1Matches == 4,
-			"Scenario 22: 4 层嵌套在内容不变时必须全部靠 Tier 1 命中（实测 T1=" + res.stats.tier1Matches
-				+ "，修复前恒为 1）");
-		check(res.orphanOldClasses.isEmpty() && res.stats.newClasses == 1,
-			"Scenario 22: 插入的顶层新类判为新增、4 层链全部配对且无孤儿");
-		check(res.stats.tier4Matches == 0,
-			"Scenario 22: 内容未变时不得退化到不比字段表的 Tier 4（实测 T4=" + res.stats.tier4Matches + "）");
+		// ===== 内容变体守卫（点 2：parseInfos 字段表屏蔽）=====
+		// 最内层内容改变 → 该层 Tier 1 失效，必须由 Tier 3 用**屏蔽后的字段表**（this$N 描述符随父
+		// 类位移而变）配对。去掉 parseInfos 的字段屏蔽后这里会退化为 Tier 4（相对映射碰巧不变），
+		// 故断言必须钉在"用了哪个 Tier"，只看 renameMap 会放过。
+		AnonClassAligner.Result uoChanged = alignNestFixture(javac, new File(dir, "useOuterChanged"),
+			"testDeep", "UseOuterChanged", true, 1, null);
+		check(uoChanged.stats.tier1Matches == 3 && uoChanged.stats.tier3Matches == 1
+				&& uoChanged.stats.tier4Matches == 0,
+			"Scenario 22/内容变体: 最内层内容改变必须由 Tier 3 配对（其余三层走 Tier 1），不得退化到 Tier 4；"
+				+ "实测 T1=" + uoChanged.stats.tier1Matches + " T3=" + uoChanged.stats.tier3Matches
+				+ " T4=" + uoChanged.stats.tier4Matches);
 
 		// 定向屏蔽守卫：不引用匿名类的描述符差异必须保留（否则候选域被无端扩大）
 		File fDesc = new File(dir, "Desc.java");
@@ -1767,6 +1793,100 @@ public class AnonClassReproTest {
 		}
 		sb.append("    }\n}\n");
 		return sb.toString();
+	}
+
+	/**
+	 * 生成 levels 层嵌套匿名类源码，最内层读取宿主字段 {@code v}，使每层都捕获其直接外层实例。
+	 * javac 18+ 仍会为"使用了外层实例"的嵌套匿名类生成 {@code this$N}，故这是四 JDK 共有的形态。
+	 */
+	static String useOuterSource(String pkg, String cls, int levels, boolean insertTop) {
+		return useOuterSource(pkg, cls, levels, insertTop, 0);
+	}
+
+	/**
+	 * 同 {@link #useOuterSource(String, String, int, boolean)}，但最内层打印 {@code v + delta}。
+	 * {@code delta != 0} 时最内层内容哈希改变，Tier 1 失效 → 必须由 Tier 3（屏蔽后的字段表）配对。
+	 */
+	static String useOuterSource(String pkg, String cls, int levels, boolean insertTop, int delta) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("package ").append(pkg).append(";\n");
+		sb.append("class ").append(cls).append(" {\n");
+		sb.append("    int v = 1;\n");
+		sb.append("    public void setup() {\n");
+		String pad = "        ";
+		if (insertTop) {
+			sb.append(pad).append("Runnable extra = new Runnable() { public void run() { System.out.println(\"EXTRA\"); } };\n");
+		}
+		for (int k = 1; k <= levels; k++) {
+			sb.append(pad).append("Runnable n").append(k).append(" = new Runnable() { public void run() {\n");
+			pad = pad + "    ";
+		}
+		sb.append(pad).append("System.out.println(v").append(delta == 0 ? "" : " + " + delta).append(");\n");
+		for (int k = levels; k >= 1; k--) {
+			pad = pad.substring(4);
+			sb.append(pad).append("}};\n");
+		}
+		sb.append("    }\n}\n");
+		return sb.toString();
+	}
+
+	/**
+	 * 编译一个"{@code levels} 层嵌套匿名类 + 顶层插入"夹具并跑一次 align。
+	 *
+	 * @param useOuter true=最内层读宿主字段（每层都有 {@code this$N}）；false=对照组（不读）
+	 * @param delta    仅 useOuter 有效：v2 最内层内容偏移（0=内容不变，非 0=内容变，Tier 1 失效）
+	 * @param outOldAnon 收集旧版匿名类字节（供"前提"断言），可为 null
+	 */
+	static AnonClassAligner.Result alignNestFixture(String javac, File dir, String pkg, String cls,
+		boolean useOuter, int delta, List<byte[]> outOldAnon) throws Exception {
+		String host = pkg + "/" + cls;
+		File v1 = new File(dir, "v1"), v2 = new File(dir, "v2");
+		v1.mkdirs();
+		v2.mkdirs();
+		File f1 = new File(dir, cls + "V1.java");
+		File f2 = new File(dir, cls + "V2.java");
+		Files.writeString(f1.toPath(), nestSource(useOuter, pkg, cls, 4, false, 0));
+		Files.writeString(f2.toPath(), nestSource(useOuter, pkg, cls, 4, true, delta));
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", v1.getAbsolutePath(), f1.getAbsolutePath());
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", v2.getAbsolutePath(), f2.getAbsolutePath());
+
+		Map<String, byte[]> oldAnon = anonClasses(v1, host);
+		Map<String, byte[]> newAnon = anonClasses(v2, host);
+		if (outOldAnon != null) outOldAnon.addAll(oldAnon.values());
+		byte[] hostV2 = Files.readAllBytes(new File(v2, host + ".class").toPath());
+		Function<String, byte[]> oldRes = n -> readIfExists(new File(v1, n.replace('.', '/') + ".class"));
+		Function<String, byte[]> newRes = n -> readIfExists(new File(v2, n.replace('.', '/') + ".class"));
+		return AnonClassAligner.align(host, hostV2, oldAnon, newAnon, oldRes, newRes);
+	}
+
+	static String nestSource(boolean useOuter, String pkg, String cls, int levels, boolean insertTop, int delta) {
+		return useOuter ? useOuterSource(pkg, cls, levels, insertTop, delta)
+		                : deepNestSource(pkg, cls, levels, insertTop);
+	}
+
+	/** 把 renameMap 的宿主前缀剥掉，得到"$2->$1"这类相对映射，便于比较两个不同名的同形夹具。 */
+	static Map<String, String> relativeRenameMap(Map<String, String> m, String host) {
+		Map<String, String> out = new TreeMap<>();
+		for (Map.Entry<String, String> e : m.entrySet()) {
+			out.put(e.getKey().substring(host.length()), e.getValue().substring(host.length()));
+		}
+		return out;
+	}
+
+	/** 命中 {@code this$N} 字段的类个数（前提断言用，与具体 JDK 无关）。 */
+	static int countThisNFields(List<byte[]> classes) {
+		int n = 0;
+		for (byte[] b : classes) if (hasThisNField(b)) n++;
+		return n;
+	}
+
+	static boolean hasThisNField(byte[] b) {
+		ClassNode cn = new ClassNode();
+		new ClassReader(b).accept(cn, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+		if (cn.fields != null) {
+			for (FieldNode fn : cn.fields) if (fn.name.startsWith("this$")) return true;
+		}
+		return false;
 	}
 
 	/** 收集某个宿主类下所有匿名类字节码（内部名 -> 字节码）；按文件名排序以保证确定性。 */
@@ -2200,7 +2320,7 @@ public class AnonClassReproTest {
 	 */
 	static void testScenario26_Tier3TopologyFilter(String javac, File baseDir) throws Exception {
 		System.out.println("\n--- Scenario 26: Tier 3 拓扑相等过滤取代 minDiff 仲裁 ---");
-		File dir = new File(baseDir, "s26");
+		File dir = new File(new File(baseDir, "jdk" + FIXTURE_JDK_MAJOR), "s26");
 		dir.mkdirs();
 		boolean savedReverse = AnonClassAligner.TEST_REVERSE_ORDER;
 		try {
@@ -2216,6 +2336,15 @@ public class AnonClassReproTest {
 				"Scenario 26/T: 由拓扑判据唯一裁定（topology=" + tRes.stats.topologyMatches
 					+ ", T3=" + tRes.stats.tier3Matches + ", T4=" + tRes.stats.tier4Matches
 					+ ", ambiguousPairs=" + tRes.stats.ambiguousPairs + "）");
+			// 正向断言：只断言"没有 Tier 4"在配对因其他原因全部失败时也会成立，故必须钉住"确实配上了"。
+			// topologyMatches 是独立计数（不与 T3 合并），故合法配对数 = T1+T2+T3+topology。
+			int tLegit = tRes.stats.tier1Matches + tRes.stats.tier2Matches
+				+ tRes.stats.tier3Matches + tRes.stats.topologyMatches;
+			check(tLegit == 2 && tRes.stats.tier4Matches == 0,
+				"Scenario 26/T 正向: 两对都必须由合法判据配上（Tier1/2/3 + 拓扑），不得靠 Tier 4；"
+					+ "实测 T1=" + tRes.stats.tier1Matches + " T2=" + tRes.stats.tier2Matches
+					+ " T3=" + tRes.stats.tier3Matches + " topology=" + tRes.stats.topologyMatches
+					+ " T4=" + tRes.stats.tier4Matches);
 			check((hostT + "$1").equals(tRes.renameMap.get(hostT + "$2"))
 					&& (hostT + "$1$1").equals(tRes.renameMap.get(hostT + "$2$1"))
 					&& (hostT + "$2").equals(tRes.renameMap.get(hostT + "$1")),

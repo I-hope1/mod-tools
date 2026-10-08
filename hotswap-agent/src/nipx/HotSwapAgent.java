@@ -485,7 +485,11 @@ public class HotSwapAgent {
 			AnonClassAligner.Result res;
 			try {
 				res = AnonClassAligner.align(hostSlash, hostBytes, oldAnon, newAnon, oldRes, newRes,
-				 HotSwapAgent::hasLiveInstances);
+				 HotSwapAgent::hasLiveInstances,
+				 // 避让上一批已分配、但还没被加载的对齐类编号（挂在 pendingAlignedClasses 里）。
+				 // 传**快照**而非 keySet() 实时视图：视图会让编号分配随挂起集合的并发变化漂移，
+				 // 破坏对齐结果的可确定性。
+				 Set.copyOf(AnnotationTransformer.pendingAlignedClasses.keySet()));
 			} catch (Throwable t) {
 				// §4.3：以「宿主类 + 其下属全部匿名类」为原子单元整体拒绝。
 				//

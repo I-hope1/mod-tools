@@ -222,7 +222,33 @@ public final class AnonClassAligner {
 	 byte[] newHostBytes,
 	 Map<String, byte[]> oldAnonClasses,
 	 Map<String, byte[]> newAnonClasses) {
-		return align(hostClassName, newHostBytes, oldAnonClasses, newAnonClasses, null, null, null);
+		return align(hostClassName, newHostBytes, oldAnonClasses, newAnonClasses,
+		 Collections.<String>emptySet());
+	}
+
+	/**
+	 * 对齐匿名类并重写宿主与匿名类字节码（带"已被占用编号"避让）。
+	 *
+	 * <p>{@code reserved} 是**已由本进程分配、但对应类还没被 JVM 加载**的目标内部名集合
+	 * （例如上一批 {@code AlignmentTransaction} 提交进 {@code pendingAlignedClasses} 的
+	 * {@code Foo$3}）。它们<b>不</b>参与 Tier 匹配 —— 挂起的类还没加载，不是"旧类"，也没有可供
+	 * 比对的字节码；唯一作用是播种"已占用编号"集合，避免本轮新建类分配到同一个 {@code Foo$3}
+	 * 而与挂起类撞车。</p>
+	 *
+	 * <p>调用方应传**快照**（{@code Set.copyOf(...)}）而不是并发容器的实时视图：视图会让分配结果
+	 * 依赖挂起集合的时序变化，也会破坏 {@code TEST_REVERSE_ORDER} 的可确定性。</p>
+	 *
+	 * @param reserved 已占用（挂起）的目标内部名集合；{@code null} 等价于空集。名字可带点或斜杠，
+	 *                 内部统一成斜杠内部名。
+	 */
+	public static Result align(
+	 String hostClassName,
+	 byte[] newHostBytes,
+	 Map<String, byte[]> oldAnonClasses,
+	 Map<String, byte[]> newAnonClasses,
+	 Set<String> reserved) {
+		return align(hostClassName, newHostBytes, oldAnonClasses, newAnonClasses,
+		 null, null, null, reserved);
 	}
 
 	/**
@@ -255,8 +281,26 @@ public final class AnonClassAligner {
 	 Function<String, byte[]> oldResolver,
 	 Function<String, byte[]> newResolver,
 	 Predicate<String> hasLiveInstances) {
+		return align(hostClassName, newHostBytes, oldAnonClasses, newAnonClasses,
+		 oldResolver, newResolver, hasLiveInstances, Collections.<String>emptySet());
+	}
+
+	/**
+	 * 对齐匿名类并重写宿主与匿名类字节码（解析器 + 布局门实例判定 + 挂起编号避让）。
+	 *
+	 * @param reserved 已占用（挂起）的目标内部名集合，语义见上面的 {@code Set} 重载。
+	 */
+	public static Result align(
+	 String hostClassName,
+	 byte[] newHostBytes,
+	 Map<String, byte[]> oldAnonClasses,
+	 Map<String, byte[]> newAnonClasses,
+	 Function<String, byte[]> oldResolver,
+	 Function<String, byte[]> newResolver,
+	 Predicate<String> hasLiveInstances,
+	 Set<String> reserved) {
 		return alignCascading(hostClassName, newHostBytes, oldAnonClasses, newAnonClasses,
-		 oldResolver, newResolver, hasLiveInstances);
+		 oldResolver, newResolver, hasLiveInstances, reserved);
 	}
 
 	/**
@@ -306,6 +350,32 @@ public final class AnonClassAligner {
 	 Function<String, byte[]> oldResolver,
 	 Function<String, byte[]> newResolver,
 	 Predicate<String> hasLiveInstances) {
+		return alignCascading(hostClassName, newHostBytes, oldAnonClasses, newAnonClasses,
+		 oldResolver, newResolver, hasLiveInstances, Collections.<String>emptySet());
+	}
+
+	/**
+	 * 级联树匿名类对齐（Cascading Tree Anonymous Class Aligner）。
+	 *
+	 * <p>按 {@code $} 嵌套深度组织匿名类树形拓扑（Level 1 -> Level N），自顶向下逐层推进：
+	 * <ul>
+	 *   <li><b>Level 1</b>：宿主直接子匿名类（如 {@code Foo$1}, {@code Foo$2}），在宿主作用域内对齐；</li>
+	 *   <li><b>Level > 1</b>：嵌套匿名类（如 {@code Foo$1$1}），候选作用域严格收敛于其父类对齐映射后的目标旧类所包含的子类集合，物理阻断跨树夺舍；</li>
+	 *   <li><b>前缀派生</b>：未匹配新类的类名前缀强制继承其父类重映射后的目标名称，保证 JVM 内部类层级不被破坏；</li>
+	 *   <li><b>严格校验</b>：对齐映射结果执行单射性与前缀不变量校验，不符合则阻断提交。</li>
+	 * </ul>
+	 * @param hasLiveInstances 布局门的实例判定；{@code null} 表示沿用已注入的判定。
+	 * @param reserved 已占用（挂起）的目标内部名集合；只播种"已占用编号"，不参与匹配。
+	 */
+	public static Result alignCascading(
+	 String hostClassName,
+	 byte[] newHostBytes,
+	 Map<String, byte[]> oldAnonClasses,
+	 Map<String, byte[]> newAnonClasses,
+	 Function<String, byte[]> oldResolver,
+	 Function<String, byte[]> newResolver,
+	 Predicate<String> hasLiveInstances,
+	 Set<String> reserved) {
 		if (hostClassName == null) {
 			throw new IllegalArgumentException("hostClassName cannot be null");
 		}
@@ -384,6 +454,19 @@ public final class AnonClassAligner {
 			Map<AnonInfo, AnonInfo> matchedNewToOld  = new LinkedHashMap<>();
 			Map<String, String>     renameMap        = new LinkedHashMap<>();
 			Set<String>             takenTargetNames = new HashSet<>(normOld.keySet());
+			// 挂起编号避让：reserved 只播种"已占用"集合，**绝不**加入匹配候选。
+			//
+			// 理由：挂起的类由上一批事务注册、还没被 JVM 加载 —— 它不在 JVM 里、没有旧字节码，
+			// 因此不是"旧类"，没有资格参与 Tier 匹配（拿它当候选会把新类对上"空气"，并通过
+			// rename 把字节码写到挂起类名下，覆盖掉那段还没生效的版本）。它唯一的语义是
+			// "这个编号已经有人用了"，所以只影响下面两处新编号分配。
+			//
+			// 名字统一成斜杠内部名（调用方可能把 pendingAlignedClasses 的 slash/dot 两种键都传进来）。
+			if (reserved != null) {
+				for (String r : reserved) {
+					if (r != null) takenTargetNames.add(r.replace('.', '/'));
+				}
+			}
 
 			// 自顶向下逐层推进（Top-down Cascading Progression）
 			for (int level = 1; level <= maxLevel; level++) {

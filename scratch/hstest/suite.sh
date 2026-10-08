@@ -106,9 +106,8 @@ step "NameIndexTest (三 JDK + 正反序)" run NameIndexTest
 step "FixtureATest (三 JDK + 正反序)" run FixtureATest
 # SemAssert 的 8 个场景（40 条）已迁到 JUnit：SemAssertTest / DirFx / hstestJunit。
 # 其 s2a..sv3 夹具也由 Gradle 的 hstestFx_* 任务编译，本脚本不再涉及。
-step "PassBTest (验证 Pass B 计数器非零可达性)" run PassBTest
-step "CompeteDeleteTest (三层竞争夹具: 删 A 链 + B 叶子改捕获)" run CompeteDeleteTest
-step "AnonClassTest (匿名类内容哈希: 防止 Save/Delete 静默对调)" run AnonClassTest
+# PassBTest / CompeteDeleteTest / AnonClassTest 已迁到 JUnit（各自 @Test 方法，
+# 用 hstest.javac21 现编源 + @TempDir 输出），不再由本脚本运行。
 # AnonClassReproTest 的 27 个场景（183 条 + 1 KNOWN）已迁到 JUnit：AnonClassReproJUnitTest。
 # 该入口不再由本脚本运行。它的夹具由每个场景**内部**用 javac 现编（不经本脚本的 fx/ 编译段），
 # 故此处无需保留任何 AnonClassRepro 专属的编译段；HSTEST_JAVAC8/17/21 仍被 comp/xgroup/compA 使用。

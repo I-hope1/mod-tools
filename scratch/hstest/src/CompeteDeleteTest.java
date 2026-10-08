@@ -1,4 +1,6 @@
 import nipx.LambdaAligner;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.objectweb.asm.*;
 import org.objectweb.asm.tree.*;
 
@@ -6,19 +8,9 @@ import java.io.*;
 import java.nio.file.*;
 import java.util.*;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 public class CompeteDeleteTest {
-
-	static int passed = 0, failed = 0, known = 0;
-
-	static void check(boolean ok, String msg) {
-		System.out.println((ok ? "   PASS  " : "   FAIL  ") + msg);
-		if (ok) passed++; else failed++;
-	}
-
-	static void checkKnownLimitation(boolean stillBroken, String msg) {
-		if (stillBroken) { known++; System.out.println("   KNOWN " + msg); }
-		else { failed++; System.out.println("   FAIL  [已知限制已变化] " + msg); }
-	}
 
 	static ClassNode parse(byte[] b) {
 		ClassNode cn = new ClassNode();
@@ -87,29 +79,24 @@ public class CompeteDeleteTest {
 		return f;
 	}
 
-	public static void main(String[] args) throws Exception {
-		System.out.println("=== 竞争夹具实验：删除 A 链 (3层) + B 链 (3层) 叶子改捕获 ===");
+	@Test
+	void tripleCompetitionDeleteACaptureB(@TempDir Path tmp) throws Exception {
+		String javac = javac21();
 
-		String javac = System.getenv("HSTEST_JAVAC21");
-		if (javac == null) javac = "F:/files/java/jdks/openjdk-21.0.2/bin/javac.exe";
-		if (!new File(javac).exists()) javac = "javac";
-
-		File outV1 = findFile("fx/compB_v1");
-		File outV2 = findFile("fx/compB_v2");
-		outV1.mkdirs();
-		outV2.mkdirs();
+		Path outV1 = Files.createDirectories(tmp.resolve("v1"));
+		Path outV2 = Files.createDirectories(tmp.resolve("v2"));
 
 		File timeSrc = findFile("compB/Time.java");
 		File v1Src = findFile("compB/v1/testCompB/CompB.java");
 		File v2Src = findFile("compB/v2/testCompB/CompB.java");
 
-		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.getAbsolutePath(),
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.toString(),
 			timeSrc.getAbsolutePath(), v1Src.getAbsolutePath());
-		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.getAbsolutePath(),
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.toString(),
 			timeSrc.getAbsolutePath(), v2Src.getAbsolutePath());
 
-		byte[] oldBytes = Files.readAllBytes(new File(outV1, "testCompB/CompB.class").toPath());
-		byte[] newBytes = Files.readAllBytes(new File(outV2, "testCompB/CompB.class").toPath());
+		byte[] oldBytes = Files.readAllBytes(outV1.resolve("testCompB/CompB.class"));
+		byte[] newBytes = Files.readAllBytes(outV2.resolve("testCompB/CompB.class"));
 
 		dumpTable("Old V1 Methods", oldBytes);
 		dumpTable("New V2 (Raw javac) Methods", newBytes);
@@ -120,7 +107,7 @@ public class CompeteDeleteTest {
 		dumpTable("Aligned (Result) Methods", aligned);
 
 		System.out.println("\n=== 判定与 KNOWN LIMITATION 固化 ===");
-		check(aligned != null, "aligned 产物非空");
+		assertNotNull(aligned, "aligned 产物非空");
 
 		ClassNode cnAligned = parse(aligned);
 		boolean misboundToA = isLive(cnAligned, "lambda$build$1", "(II)V")
@@ -128,14 +115,24 @@ public class CompeteDeleteTest {
 			&& isGhost(cnAligned, "lambda$build$4", "(II)V")
 			&& isGhost(cnAligned, "lambda$build$5", "(II)V");
 
-		checkKnownLimitation(misboundToA,
+		// 已知限制固化：若该形态不再误绑（限制消失），此断言变红，逼人更新基线。
+		assertTrue(misboundToA,
 			"三层竞争: 删 A 链 + B 叶子改捕获时，Chain B 祖先按同名误绑至已删 Chain A ($1, $2)，Old Chain B 变幽灵");
 
 		int ghostCount = 0;
 		for (MethodNode mn : cnAligned.methods) {
 			if (mn.name.startsWith("lambda$") && isGhostNode(mn)) ghostCount++;
 		}
-		check(ghostCount == 4, "旧 Chain B 整链 (3个) 与旧 Chain A 叶子 (1个) 均正确幽灵化 (ghostCount=" + ghostCount + ")");
+		assertEquals(4, ghostCount, "旧 Chain B 整链 (3个) 与旧 Chain A 叶子 (1个) 均正确幽灵化 (ghostCount=" + ghostCount + ")");
+	}
+
+	static String javac21() {
+		String j = System.getProperty("hstest.javac21");
+		if (j != null && new File(j).exists()) return j;
+		j = System.getenv("HSTEST_JAVAC21");
+		if (j != null && new File(j).exists()) return j;
+		j = "F:/files/java/jdks/openjdk-21.0.2/bin/javac.exe";
+		return new File(j).exists() ? j : "javac";
 	}
 
 	static void runCmd(String... cmd) throws Exception {

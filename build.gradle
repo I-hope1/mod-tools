@@ -696,7 +696,7 @@ tasks.register("hstestJunit", Test) {
 	// 三个真实 javac 由 Gradle toolchain 解析后以系统属性交给测试，不再硬编码 F:/... 默认值。
 	// 测试侧会校验 javac -version，防止 toolchain 解析到别的 JDK 而让 "javac 8" 场景悄悄用 21 编。
 	doFirst {
-		[8, 17, 21].each { v ->
+		[8, 11, 17, 21].each { v ->
 			systemProperty "hstest.javac${v}", javaToolchains.compilerFor {
 				languageVersion = JavaLanguageVersion.of(v)
 			}.get().executablePath.asFile.absolutePath

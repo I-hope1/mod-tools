@@ -44,6 +44,30 @@ class AnonClassReproJUnitTest {
 			+ " random.seed=" + System.getProperty("junit.jupiter.execution.order.random.seed", "(none)"));
 	}
 
+	/**
+	 * 硬失败：按 {@code javac -version} 校验还不够，这里再编译一个平凡类，断言产物的 class 文件
+	 * major 与"请求的 JDK"一致（21→65、8→52、11→55、17→61）。toolchain 解析到别的 JDK 时
+	 * 直接让整个类失败，绝不跳过。
+	 */
+	@BeforeAll
+	static void assertEffectiveJavacMajors() throws Exception {
+		assertJavacMajor(21, 65);
+		assertJavacMajor(8, 52);
+	}
+
+	private static void assertJavacMajor(int requested, int wantMajor) throws Exception {
+		String path = javac(requested);
+		Path d = java.nio.file.Files.createTempDirectory("jmajor");
+		Path src = d.resolve("P.java");
+		java.nio.file.Files.writeString(src, "public class P {}");
+		Process p = new ProcessBuilder(path, "-d", d.toString(), src.toString())
+			.redirectErrorStream(true).start();
+		p.waitFor();
+		byte[] b = java.nio.file.Files.readAllBytes(d.resolve("P.class"));
+		int major = ((b[6] & 0xff) << 8) | (b[7] & 0xff);
+		assertEquals(wantMajor, major, "javac(" + requested + ") 产物 class 文件 major（证明真的用了该 JDK）");
+	}
+
 	/** 全类共享的临时目录（每类一次）。夹具已由场景内的幂等 builder 生成，顺序不再是前提。 */
 	@TempDir
 	static Path base;
@@ -57,6 +81,7 @@ class AnonClassReproJUnitTest {
 	@BeforeEach
 	void saveStatics() {
 		AnonClassReproTest.reset();
+		AnonClassReproTest.FIXTURE_JDK_MAJOR = 21;   // 2a：全场景仍单一 JDK；2b 会按参数设置
 		snap = new Object[] {
 			AnonClassAligner.TEST_REVERSE_ORDER,
 			AnonClassAligner.MAX_ANON_PER_HOST,

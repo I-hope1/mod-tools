@@ -75,13 +75,20 @@ public class AnonClassReproTest {
 	private static final Object FIXTURE_LOCK = new Object();
 
 	/**
+	 * 夹具目录的 JDK 维度（由 JUnit harness 每次设置，默认 21）。同一 JVM 里按多个 JDK 参数化时，
+	 * 若共用 {@code s1}/{@code s2}，21 产出的 {@code out_v1/...} 会被 17 的场景当成已存在直接复用，
+	 * 结果是"17 实际在测 21 的字节码且全绿"。带 JDK 维度后各 JDK 各自生成。
+	 */
+	static int FIXTURE_JDK_MAJOR = 21;
+
+	/**
 	 * 幂等生成场景 1 的夹具（V1/V2 编译产物）到 {@code baseDir/s1}。
 	 *
 	 * <p>场景 1 自己 + 依赖它的场景 6/7/11 都调用本方法，使任一场景可独立运行 —— 解耦前
 	 * 6/7/11 只是"顺带"读到场景 1 留下的文件，单独跑 {@code s07} 会因缺文件失败。</p>
 	 */
 	static File ensureScenario1Fixtures(String javac, File baseDir) throws Exception {
-		File dir = new File(baseDir, "s1");
+		File dir = new File(new File(baseDir, "jdk" + FIXTURE_JDK_MAJOR), "s1");
 		synchronized (FIXTURE_LOCK) {
 			if (new File(dir, "out_v1/testAnon/AnonCase.class").exists()
 			 && new File(dir, "out_v2/testAnon/AnonCase$3.class").exists()) {
@@ -124,7 +131,7 @@ public class AnonClassReproTest {
 
 	/** 幂等生成场景 2 的夹具（互换两份）到 {@code baseDir/s2}；场景 2 与 8 共用。 */
 	static File ensureScenario2Fixtures(String javac, File baseDir) throws Exception {
-		File dir = new File(baseDir, "s2");
+		File dir = new File(new File(baseDir, "jdk" + FIXTURE_JDK_MAJOR), "s2");
 		synchronized (FIXTURE_LOCK) {
 			if (new File(dir, "out_v1/testSwap/SwapCase.class").exists()
 			 && new File(dir, "out_v2/testSwap/SwapCase$2.class").exists()) {

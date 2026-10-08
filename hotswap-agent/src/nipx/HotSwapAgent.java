@@ -191,14 +191,7 @@ public class HotSwapAgent {
 				init(agentArgs, false);
 			} else {
 				initConfig();
-				if (transformer == null) {
-					transformer = new AnnotationTransformer();
-					inst.addTransformer(transformer, true);
-					try {
-						DynamicProfilerAPI.init();
-					} catch (Throwable ignored) {
-					}
-				}
+				initTransformer();
 			}
 		} catch (Throwable t) {
 			error("Critical error during agent initialization", t);
@@ -223,12 +216,7 @@ public class HotSwapAgent {
 	private static void init0(String agentArgs, boolean reinit) {
 		initConfig();
 
-		if (transformer == null) {
-			transformer = new AnnotationTransformer();
-			inst.addTransformer(transformer, true);
-			// if (UI_HOOK) inst.addTransformer(new UIHookTransformer(), true);
-			DynamicProfilerAPI.init();
-		}
+		initTransformer();
 		var loadedClasses = inst.getAllLoadedClasses();
 		refreshPackageLoaders(loadedClasses);
 
@@ -275,6 +263,21 @@ public class HotSwapAgent {
 			triggerHotswap();
 		}
 	}
+
+	private static void initTransformer() {
+		if (transformer == null) {
+			transformer = new AnnotationTransformer();
+			inst.addTransformer(transformer, true);
+			if (isEnhancedHotswapEnabled()) {
+				try {
+					DynamicProfilerAPI.init();
+				} catch (Throwable ignored) { }
+			} else {
+				info("Skipped dynamic profiler injector because structural hotswap is unsupported.");
+			}
+		}
+	}
+
 
 	/**
 	 * 读取布尔开关：优先 {@code primary}，缺省时回退到 {@code alias}。

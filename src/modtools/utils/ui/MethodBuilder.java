@@ -25,8 +25,13 @@ import static modtools.utils.ui.ShowInfoWindow.keyword;
 public interface MethodBuilder {
 	static Object invokeForMethod(Object o, Method m, ReflectValueLabel l, NativeArray args0,
 	                              FuncT func) throws Throwable {
-		Object[] args = convertArgs(args0, m.getParameterTypes());
-		if (l.isStatic || o != null) return func.get(args);
+		try {
+			Context.enter();
+			Object[] args = convertArgs(args0, m.getParameterTypes());
+			if (l.isStatic || o != null) return func.get(args);
+		} finally {
+			Context.exit();
+		}
 		throw new NullPointerException("'obj' is null.");
 	}
 	static Object invokeForHandle(MethodHandle handle, Object[] arr) throws Throwable {

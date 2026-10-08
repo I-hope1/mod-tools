@@ -117,10 +117,15 @@ public class ReviewElement extends Content {
 
 	@SuppressWarnings("StringTemplateMigration")
 	public static String getElementName(Element element) {
-		return element == scene.root ? "ROOT"
-		 : (anonymousInsteadSuper.enabled() ? element.getClass().getSimpleName() : ReflectTools.getSimpleNameNotAnonymous(element.getClass()))
-		   + (element instanceof TextButton tb && tb.getText().length() > 0 ? ": " + tb.getText() : "")
-		   + (element.name != null ? " ★" + element.name + "★" : "");
+		if (element == scene.root) { return "ROOT"; }
+		if (anonymousInsteadSuper.enabled()) {
+			return element.getClass().getSimpleName()
+			       + (element instanceof TextButton tb && tb.getText().length() > 0 ? ": " + tb.getText() : "")
+			       + (element.name != null ? " ★" + element.name + "★" : "");
+		}
+		return ReflectTools.getSimpleNameNotAnonymous(element.getClass())
+		       + (element instanceof TextButton tb && tb.getText().length() > 0 ? ": " + tb.getText() : "")
+		       + (element.name != null ? " ★" + element.name + "★" : "");
 	}
 
 	public void loadSettings(Data settings) {

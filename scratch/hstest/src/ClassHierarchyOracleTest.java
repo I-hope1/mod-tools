@@ -7,9 +7,13 @@ import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 
+import org.junit.jupiter.api.Test;
+
 import java.io.InputStream;
 import java.util.List;
 import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 public class ClassHierarchyOracleTest {
 	interface Marker {
@@ -59,11 +63,6 @@ public class ClassHierarchyOracleTest {
 		}
 	}
 
-	private static void check(boolean condition, String message) {
-		System.out.println((condition ? "   PASS  " : "   FAIL  ") + message);
-		if (!condition) throw new AssertionError(message);
-	}
-
 	private static byte[] classBytes(Class<?> type) throws Exception {
 		String resource = "/" + type.getName().replace('.', '/') + ".class";
 		try (InputStream in = type.getResourceAsStream(resource)) {
@@ -72,7 +71,8 @@ public class ClassHierarchyOracleTest {
 		}
 	}
 
-	public static void main(String[] args) throws Exception {
+	@Test
+	void resolvesHierarchyFromBytecode() throws Exception {
 		byte[] childBytes = classBytes(Child.class);
 		byte[] parentBytes = classBytes(Parent.class);
 		byte[] grandParentBytes = classBytes(GrandParent.class);
@@ -91,30 +91,30 @@ public class ClassHierarchyOracleTest {
 		String grandParentName = GrandParent.class.getName().replace('.', '/');
 		ClassHierarchyOracle oracle = new HierarchyTreeOracle(ClassHierarchyOracleTest.class.getClassLoader());
 
-		check(oracle.isAssignableFrom(parentName, childName), "subclass assignability resolved from bytecode");
-		check(oracle.isAssignableFrom(markerName, childName) && oracle.isInterface(markerName),
+		assertTrue(oracle.isAssignableFrom(parentName, childName), "subclass assignability resolved from bytecode");
+		assertTrue(oracle.isAssignableFrom(markerName, childName) && oracle.isInterface(markerName),
 			"implemented interface and interface modifier resolved");
-		check((oracle.getClassModifiers(childName) & Opcodes.ACC_SUPER) != 0,
+		assertTrue((oracle.getClassModifiers(childName) & Opcodes.ACC_SUPER) != 0,
 			"class access flags resolved");
 
 		String intDesc = "I";
 		Optional<Integer> inheritedField = oracle.getFieldModifiers(childName, "inheritedField", intDesc);
 		Optional<ClassHierarchyOracle.MemberRef> inheritedFieldRef =
 			oracle.resolveMember(childName, "inheritedField", intDesc, true);
-		check(inheritedField.isPresent() && (inheritedField.get() & Opcodes.ACC_PROTECTED) != 0
+		assertTrue(inheritedField.isPresent() && (inheritedField.get() & Opcodes.ACC_PROTECTED) != 0
 			&& inheritedFieldRef.isPresent() && inheritedFieldRef.get().declaringClass.equals(grandParentName),
 			"inherited field modifiers and declaring class resolved by descriptor");
-		check(oracle.getFieldModifiers(childName, "ownField", "Ljava/lang/String;").isPresent(),
+		assertTrue(oracle.getFieldModifiers(childName, "ownField", "Ljava/lang/String;").isPresent(),
 			"declared field modifiers resolved");
-		check(oracle.getFieldModifiers(childName, "ownField", "I").isEmpty(),
+		assertTrue(oracle.getFieldModifiers(childName, "ownField", "I").isEmpty(),
 			"field lookup requires an exact descriptor");
 		Optional<ClassHierarchyOracle.MemberRef> inheritedMethod =
 			oracle.resolveMember(childName, "inheritedMethod", "()V", false);
-		check(inheritedMethod.isPresent() && inheritedMethod.get().declaringClass.equals(grandParentName),
+		assertTrue(inheritedMethod.isPresent() && inheritedMethod.get().declaringClass.equals(grandParentName),
 			"inherited method resolution preserves its declaring class");
 		Optional<ClassHierarchyOracle.MemberRef> clone =
 			oracle.resolveMember(childName, "clone", "()Ljava/lang/Object;", false);
-		check(clone.isPresent() && clone.get().declaringClass.equals("java/lang/Object")
+		assertTrue(clone.isPresent() && clone.get().declaringClass.equals("java/lang/Object")
 			&& (clone.get().access & Opcodes.ACC_PROTECTED) != 0,
 			"inherited protected Object.clone retains cross-package declaring class");
 		ClassNode childNode = new ClassNode();
@@ -126,28 +126,28 @@ public class ClassHierarchyOracleTest {
 				if (insn instanceof MethodInsnNode call) thisCall = call;
 			}
 		}
-		check(thisCall != null && thisCall.owner.equals(childName)
+		assertTrue(thisCall != null && thisCall.owner.equals(childName)
 			&& oracle.getMethodModifiers(thisCall.owner, thisCall.name, thisCall.desc).isPresent(),
 			"this.superProtectedMethod() resolves package-private parent method via Child owner");
-		check(oracle.getMethodModifiers(childName, "hiddenMethod", "()V").isEmpty(),
+		assertTrue(oracle.getMethodModifiers(childName, "hiddenMethod", "()V").isEmpty(),
 			"private superclass method is not inherited");
 		Optional<Integer> classWins = oracle.getMethodModifiers(childName, "classWins", "()V");
-		check(classWins.isPresent() && (classWins.get() & Opcodes.ACC_FINAL) != 0,
+		assertTrue(classWins.isPresent() && (classWins.get() & Opcodes.ACC_FINAL) != 0,
 			"superclass method takes precedence over interface default");
 		Optional<Integer> fieldOrder = oracle.getFieldModifiers(childName, "resolutionOrder", "I");
-		check(fieldOrder.isPresent() && (fieldOrder.get() & (Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL))
+		assertTrue(fieldOrder.isPresent() && (fieldOrder.get() & (Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL))
 			== (Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL),
 			"direct interface field is searched before superclass field");
-		check(oracle.getMethodModifiers(childName, "<init>", "()V").isPresent(),
+		assertTrue(oracle.getMethodModifiers(childName, "<init>", "()V").isPresent(),
 			"constructor modifiers resolved without inheritance");
 
 		List<org.objectweb.asm.tree.ClassNode> nest = oracle.getNestMembers(childName);
-		check(nest.stream().anyMatch(node -> node.name.equals(childName))
+		assertTrue(nest.stream().anyMatch(node -> node.name.equals(childName))
 			&& nest.stream().anyMatch(node -> node.name.equals(parentName))
 			&& nest.stream().allMatch(node -> node.methods.stream()
 				.allMatch(method -> method.instructions.size() == 0)),
 			"complete nest headers resolved without retaining method bodies");
-		check(oracle.getNestFieldWrites(childName).stream().anyMatch(write ->
+		assertTrue(oracle.getNestFieldWrites(childName).stream().anyMatch(write ->
 			write.className.equals(grandParentName) && write.instruction.name.equals("inheritedField")),
 			"compact nest write index retains field-write evidence");
 	}

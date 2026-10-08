@@ -1227,8 +1227,9 @@ public class HotSwapAgent {
 				warn("[LAYOUT-REJECT] " + className + ": REFUSED redefine — field layout incompatible ("
 				     + d.layout().detail() + "). Host " + d.hostName() + " and its anonymous classes are"
 				     + " skipped this round; existing instances keep running the OLD code, so this edit will"
-				     + " NOT take effect for them until the class is recreated/restarted. Fix the field layout,"
-				     + " or set -Dnipx.agent.layout_gate=warn to force it.");
+				     + " NOT take effect for them. TO PROCEED: recreate/restart so the classes load fresh, or"
+				     + " set -Dnipx.agent.layout_gate=warn to force the redefine and accept zeroed/misread"
+				     + " fields on surviving instances.");
 				for (String dropped : d.dropped()) dropFromBatch(newBatchBytes, classToPath, dropped);
 				AlignmentTransaction tx = transactions.remove(d.hostName());
 				if (tx != null) tx.rollback(false);

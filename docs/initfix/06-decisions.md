@@ -33,9 +33,9 @@
 
 **问题**：按名字探测 `compareAndSetFloat/Double` 会随 JDK 分叉。`jdk.internal.misc.Unsafe` 有（实测 25.0.2），JDK 8 的 `sun.misc.Unsafe` 没有且无内部 Unsafe（实测 1.8.0_332）。于是同一补丁在 JDK 8 退化成 `putFloatVolatile` 无条件写，会静默覆盖其他线程已写入的值，与本类"保守方向"相反。
 
-**决定**：统一用 `compareAndSetInt/Long` + raw bits。`compareAndSwapInt/Long` 在所有目标 JDK 都存在，一条路径通吃。
+**决定**：统一将 float/double 转换为 raw bits（`floatToRawIntBits`/`doubleToRawLongBits`），经由整型 CAS 句柄写入，避免探测不存在的 `compareAndSetFloat/Double`。在当前支持的目标环境（JDK 8 ~ 21）中整型 CAS 句柄稳定存在：JDK 8 的 `sun.misc.Unsafe` 包含 `compareAndSwapInt/Long`，JDK 9+ 的 `jdk.internal.misc.Unsafe` 包含 `compareAndSetInt/Long`（面向未来更现代的 JDK 则规划迁移至 JEP 471 `VarHandle`）。一条路径统一步骤。
 
-**测试局限**：oracle 跑在 JDK 25，新断言无法区分新旧实现（旧实现同样通过）。验证方式是在真实 JDK 8 上直接跑 raw-bits 句柄：`-0.0f`/`9.0d` 被保留，`0.0f`/`0.0d` 被写入；旧回退实现会把四个值全部覆盖。
+**测试局限**：oracle 跑在 JDK 25，新断言无法区分新旧实现（旧实现同样通过）。验证方式是在真实 JDK 8 上直接跑 raw-bits 句柄：`-0.0f`/`9.0d` 被保留，`0.0f`/`0.0d` 被写入；旧回退实现会把四个值全部覆盖。自动化 CI runner 钉在 Temurin 25，因此 JDK 8 raw-bits CAS 为手工验证，非持续自动化覆盖。
 
 ## D5. 条件写跳过必须被报告
 
@@ -57,7 +57,7 @@
 
 ## D8. `@HotswapReinit` 不豁免切片安全门
 
-覆写只改变"要不要写"，改变不了"表达式能否被直线提取、读到的值是否正确"。因此它豁免 T0 与后续加工检查，但**不是**"信任通道"。Kotlin 分支类表达式的正解是 `@HotswapInit`（T4，未实现）。
+覆写只改变"要不要写"，改变不了"表达式能否被直线提取、读到的值是否正确"。因此它豁免 T0 与后续加工检查，但**不是**"信任通道"。Kotlin 分支类表达式的正解是 `@HotswapInit`（T4 逃生口设计，见路线图）。
 
 ## D9. 为什么三张内部表不用 `java.lang.ClassValue`
 

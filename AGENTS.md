@@ -72,7 +72,7 @@ InitFix：热更新（Redefine）后，为**新增字段**初始化存量实例�
 | 机制 / 领域 | 状态 | 关键说明 |
 |:--|:-:|:--|
 | 五条核心不变量 | ✅ | 全面守护，零破坏 |
-| 匿名类拓扑对齐 (Tier 1~4) | ✅ | 彻底废除 Tier 5；未匹配旧类保留为孤儿，未匹配新类分配安全新名 |
+| 匿名类拓扑对齐 (Tier 1~4) | 🔶 | 彻底废除 Tier 5；未匹配保留孤儿/新名；具名局部类内嵌套匿名类存在原名直通盲区 |
 | 实例布局门与局部类止血门 | ✅ | `LayoutGate` 阻断字段变化；`LocalClassGuard` 阻断局部类位移 |
 | InitFix 离线元数据 (`ClassHierarchyOracle`) | ✅ | 全程不触发类加载 |
 | InitFix 待补台账 (`FieldLedger`) | ✅ | 六种异常与超时场景全覆盖 |
@@ -80,7 +80,7 @@ InitFix：热更新（Redefine）后，为**新增字段**初始化存量实例�
 | T1 常量 / T2 纯计算切片 / 效应掩码 | 🔶 | 静态 `ConstantValue` 走专用通道；P0 效应黑白名单 + Kotlin `trim` 窄例外 |
 | 参数回溯不可变证明 / 多根构造器共识 | ✅ | 条件 A（final）与条件 B（NestView 单写证明）；全根构造器指纹 100% 一致 |
 | 伴生补丁类 / 逐实例驱动与失败配额 | ✅ | 独立静态方法隔离；按实例隔离；单字段失败配额封顶 8 次 |
-| 条件 CAS 写入与跳过报告 | ✅ | 默认条件 CAS；float/double 走 raw bits；跳过计数汇总报告 |
+| 条件 CAS 写入与跳过报告 | 🔶 | 默认条件 CAS；float/double 走 raw bits（JDK 8 raw bits 缺自动化 CI 差异验证）；跳过计数汇总报告 |
 | `@HotswapReinit` 存量覆写 | ✅ | 豁免 T0 与后续加工检查；不豁免切片安全门 |
 | Native JVMTI 堆遍历 (`LibTool`) | ✅ | C++ 底座；Tag 隔离与全局互斥；`InstanceTracker` 字节码回退 |
 | 两阶段重定义 / 构造器插桩 / 跨类拓扑 | ⬜ | 路线图设计（见 `docs/initfix/04-target-design.md`） |
@@ -109,7 +109,7 @@ InitFix：热更新（Redefine）后，为**新增字段**初始化存量实例�
 | 判决分层、效应检查、参数回溯、已知限制、单例与 Kotlin 字节码事实、测试夹具机制 | `docs/initfix/01-safety-gate.md` |
 | 依赖闭包、成环、台账、失败策略 | `docs/initfix/02-closure-and-ledger.md` |
 | 补丁驱动、写入协议、`@HotswapReinit` | `docs/initfix/03-runtime-driver.md` |
-| 两阶段、基线指纹、构造器插桩、路线图（未实现） | `docs/initfix/04-target-design.md` |
+| 两阶段、基线指纹、构造器插桩、目标设计路线图 | `docs/initfix/04-target-design.md` |
 | JVMTI 堆遍历 | `docs/initfix/05-jvmti-heap.md` |
 | 为什么这么设计、历史缺陷 | `docs/initfix/06-decisions.md` |
 

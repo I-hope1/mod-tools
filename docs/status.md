@@ -26,13 +26,13 @@
 
 | 模块 / 机制 | 状态 | 落地位置 / 验收证据 | 说明与决策依据 |
 |:---|:---:|:---|:---|
-| javac 8/11/17/21/25 编译矩阵支持 | ✅ | `AnonClassReproJUnitTest` / CI `.github/workflows/hstest.yml` | CI 钉死 Temurin 25 runner，5 套工具链（8/11/17/21/25）现编夹具矩阵验证通过 |
-| javac 25 / 新 javac 加旧 target 矩阵 | ⬜ | 待验证 | 新版 javac 携带 `-target 8/11` 等交叉编译产物的命名与属性表现尚未系统性覆盖 |
+| javac 8/11/17/21/25 本机编译矩阵支持 | ✅ | `AnonClassReproJUnitTest` / CI `.github/workflows/hstest.yml` | CI 钉死 Temurin 25 runner，5 套工具链（8/11/17/21/25）现编夹具矩阵验证通过；注意 `SwitchMapAlignTest` 单独在 javac 21 验证 |
+| 新 javac 加旧 -target 交叉编译矩阵 | ⬜ | 待验证 | 新版 javac 携带 `-target 8/11` 等交叉编译产物的命名与属性表现尚未系统性覆盖 |
 | ECJ 编译器支持 | ⬜ | 暂无 ECJ 真实夹具 | 见 `docs/topology/07-layout-gate-and-risks.md` §4；ECJ 不生成 SwitchMap 类 |
 | 未知 class major 显式拒绝 | ⬜ | 路线图待办 | 遇到未知高版本 class major 时显式拒绝而非尝试解析 |
-| 类身份与实例状态保真不变量 | ✅ | `AnonClassAligner` | 彻底移除 Tier 5；未匹配旧类保留为孤儿，未匹配新类分配安全新名（INV-Remap） |
+| 类身份与实例状态保真不变量 (INV-Remap) | 🔶 | `AnonClassAligner` | 彻底移除 Tier 5；未匹配旧类保留为孤儿，未匹配新类分配安全新名；**存在盲区**：局部类内部嵌套匿名类（如 `Foo$1Helper$1`）因含字母被 `isAnonymousClassName` 排除而原名直通，若局部类发生位移存在潜在槽位篡夺漏洞 |
 | `renameMap` 与字节码改写 | ✅ | `AnonClassAligner.remapClass` | ASM `ClassWriter(0)` + `SimpleRemapper`，不重算栈帧避免类加载死锁 |
-| 全局保留名域与挂起避让 | ✅ | `takenTargetNames` / `reserved` | 覆盖第 1/2/4 类保留名；快照接入 `pendingAlignedClasses`；未加载类编号抬高为已知无害代价 |
+| 全局保留名域与挂起避让 | ✅ | `takenTargetNames` / `reserved` | 覆盖第 1/2/3/4 类保留名（第 3 类为未参与对齐的排除类名，如静态嵌套类、非匿名局部类等显式占用的物理类名，防止重命名覆盖）；快照接入 `pendingAlignedClasses`；未加载类编号抬高为已知无害代价 |
 | 字节码摘要与恒等映射短路 | ✅ | `HotSwapAgent.processChanges` | 新旧字节码相同直接跳过；`renameMap` 全恒等映射直接返回原字节码 |
 | 全局独占锁互斥 | ✅ | `HotSwapAgent.HOTSWAP_LOCK` | 热更新调度入口与事务处理覆盖全局锁，杜绝重入与并发竞态 |
 | Tier 1: 内容哈希 + 宿主方法精确匹配 | ✅ | `AnonClassHasher` + `AnonClassAligner` | 双方哈希完全一致且同宿主方法，置信度最高 |
@@ -40,7 +40,7 @@
 | Tier 2: 全局唯一内容哈希匹配 | ✅ | `AnonClassAligner` | 仅全类唯一孤本采纳，严禁跨方法 minDiff |
 | Tier 3: 结构签名 + 拓扑相等过滤 | 🔶 | `AnonClassAligner.topologyEqual` | minDiff 已被拓扑相等过滤取代以杜绝前插错配；夹具 M（拓扑无信息）与夹具 L（2×2 同构）仍保守拒绝 |
 | 夹具 L KNOWN 保守代价收敛 | ⬜ | `AnonClassReproTest.known` | 夹具 L 当前作为 KNOWN 保护保守拒绝行为；未来需引入正交维度以在安全前提下恢复配对 |
-| Tier 4: 松散结构 + 状态布局门包装 | ✅ | `AnonClassAligner` + `LayoutGate` | 同宿主方法与基类/接口；禁止 minDiff；包装布局门防存活实例零值污染 |
+| Tier 4: 松散结构 + 状态布局门包装 | 🔶 | `AnonClassAligner` + `LayoutGate` | 同宿主方法与基类/接口；禁止 minDiff；包装布局门防存活实例零值污染；**存在残余风险**：依赖 `normalizeEnclosingMethod` 的 scope 偶然不一致，若旧匿名类宿主方法同样无法反向追溯退化为 null，可能与非方法匿名类或 SwitchMap 误配 |
 | Tier 5: 物理类名盲配 | ❌ 已废除 | `AnonClassAligner` | 为守卫核心不变量已彻底移除，前 4 层未匹配直接判为新类/孤儿，杜绝槽位篡夺 |
 | 嵌套匿名类描述符定向屏蔽与后置校验 | ✅ | `MethodFingerprinter.maskDescriptor` + `verifyFieldLayoutAfterRename` | 字段、方法与构造器描述符定向屏蔽外层纯数字序号，后置校验防止改名碰撞 |
 | 非方法上下文作用域归约 | 🔶 | `AnonClassAligner.normalizeEnclosingMethod` | 无三态标签（`<initializer>`/`<clinit>`/`<init>`），靠 `orderIndex` 与结构签名区分 |
@@ -59,10 +59,10 @@
 | 清理项：`tier5Matches` 死字段清理 | ⬜ | `AnonClassAligner.AlignStats` | Tier 5 移除后残留的统计字段待清理 |
 | **[偏离]** 保留内容哈希而不剥离子类引用 | 🟣 有意偏离 | 决策记录 [D-ANON-1](topology/08-decisions.md#d-anon-1) | 剥离子类引用会导致同构无参 Runnable（Save/Delete）lambda 指纹相同，引发严重静默对调劫持 |
 | **[偏离]** 不引入 `#ANON_COARSE` 粗粒度签名 | 🟣 有意偏离 | 决策记录 [D-ANON-2](topology/08-decisions.md#d-anon-2) | 粗粒度签名对同构 Runnable 逐字节相同，使宿主指令流丧失区分度，直接复发 Save/Delete 对调 |
-| **[偏离]** 不实现 SwitchMap 排除与原名直通 | 🟣 有意偏离 | 决策记录 [D-ANON-3](topology/08-decisions.md#d-anon-3) | 原名直通会打开槽位篡夺；当前靠 scope 偶然不一致安全，残余形态记录见下方风险清单 |
+| **[偏离]** 不实现 SwitchMap 排除与原名直通 | 🟣 有意偏离 | 决策记录 [D-ANON-3](topology/08-decisions.md#d-anon-3) / 验收证据 `SwitchMapAlignTest` (javac 21) | 原名直通会打开槽位篡夺；当前靠 scope 偶然不一致安全，残余形态记录见下方风险清单 |
 | **[偏离]** 合成捕获字段计入哈希而非剥离 | 🟣 有意偏离 | 决策记录 [D-ANON-4](topology/08-decisions.md#d-anon-4) | JBR 证实捕获字段变更使存活实例读零值；计入哈希以触发 Tier 4 布局门拦截，防止原地破坏 |
 | **[偏离]** `access$` 编译器访问器保名不改名 | 🟣 有意偏离 | 决策记录 [D-ANON-5](topology/08-decisions.md#d-anon-5) | 跨类调用点无法同步修改，改名会导致 NoSuchMethodError；保名可区分不同访问器 |
-| **[偏离]** 继承体系变更一律拒绝并提示重启 | 🟣 有意偏离 | `HotSwapAgent.processChanges` | 与原规划"尝试支持接口变更"相反，父类/接口变动一律熔断以守卫全局类型体系安全 |
+| **[偏离]** 继承体系变更一律拒绝并提示重启 | 🟣 有意偏离 | 决策记录 [D-ANON-7](topology/08-decisions.md#d-anon-7) / `HotSwapAgent.processChanges` | 与原规划"尝试支持接口变更"相反，父类/接口变动一律熔断以守卫全局类型体系安全 |
 
 ---
 
@@ -89,7 +89,7 @@
 | 失败策略矩阵 | 🔶 | `docs/initfix/02-closure-and-ledger.md` §3 | 已支持单字段失败跳过、依赖跳过、`LinkageError` 熔断；“放弃提交阶段 C”依赖两阶段协议 |
 | 伴生补丁类装配 | ✅ | `docs/initfix/03-runtime-driver.md` §1 | 每字段生成独立静态直线方法；宿主 hidden nestmate 隔离异常与加载死锁 |
 | 逐实例补丁驱动与失败配额 | ✅ | `docs/initfix/03-runtime-driver.md` §2 | 依赖失败按实例隔离；单字段每轮实例失败配额封顶 8 次（`MAX_INSTANCE_FAILURES_PER_FIELD`） |
-| 写入协议 (`HotswapBridge`) | ✅ | `docs/initfix/03-runtime-driver.md` §3 | 默认条件 CAS；float/double raw bits CAS；跳过计数汇总汇报；`KIND_FORCE` 强制写 |
+| 写入协议 (`HotswapBridge`) | 🔶 | `docs/initfix/03-runtime-driver.md` §3 | 默认条件 CAS；float/double raw bits CAS；跳过计数汇总汇报；`KIND_FORCE` 强制写；**缺自动化 CI 差异验证**（当前 CI 为 Temurin 25，无法区分 raw-bits 与旧实现；JDK 8 raw-bits CAS 为手工验证，非持续自动化覆盖） |
 | 存量覆写扩展 (`@HotswapReinit`) | ✅ | `docs/initfix/03-runtime-driver.md` §4 | 豁免 T0 与后续加工门；不豁免切片安全门；支持 `CONDITIONAL` 与 `OVERWRITE` |
 | 合成标记字段过滤 | ✅ | `docs/initfix/03-runtime-driver.md` §5 | `ClassDiffUtil` 对称过滤 `ACC_SYNTHETIC` 与 `$nipx$` 前缀字段 |
 | JVMTI 多态堆实例检索 | ✅ | `docs/initfix/05-jvmti-heap.md` | `LibTool.getInstances` C++ 底座；Tag 隔离与全局互斥；`InstanceTracker` 字节码回退 |
@@ -107,6 +107,8 @@
 | Analyzer 独立库化 | ⬜ | `docs/initfix/04-target-design.md` §3 | 分析器作为纯函数独立，支持在 Gradle 构建端或 PC 端离线分析 |
 | 构造器尾部插桩 | ⬜ | `docs/initfix/04-target-design.md` §4 | 在阶段 A 构造器尾部注入切片，物理消除堆遍历快照到重定义生效之间的并发对象初始化缝隙 |
 | 跨类批次拓扑排序 | ⬜ | `docs/initfix/04-target-design.md` §5 | 解决类 X 新增字段依赖类 Y 新增字段时的跨类多事务批次协调（当前仅支持类内拓扑排序） |
+| 子类引用多重集独立正交维度 | ⬜ | `docs/topology/08-decisions.md#d-anon-1` | 将子类引用建模为独立正交维度，解决 D-ANON-1 中子类改动对父类逐级向上传导的雪崩退化，并收敛夹具 L/M 保守拒绝代价 |
+| 增强重定义模式四个未覆盖盲区验证与防护 | ⬜ | `docs/topology/08-decisions.md` 附录 A | 覆盖 JIT 编译后内联代码对新布局的观察、`volatile`/`final` 复杂修饰符、继承体系跨层遮蔽、JBR 25 重复验证 |
 
 ---
 
@@ -124,3 +126,9 @@
    除 Kotlin `object` 单例与 `trim` 家族方法经过真实 `kotlinc` 产物编译与运行期检验外，其它 Kotlin 复杂行为结论（如高阶函数内联、属性委托）主要通过 Java 字节码仿真验证。
 5. **同名局部类止血门边界**：
    当前 `LocalClassGuard` 针对 `(owner, innerName)` 同名计数 $\ge 2$ 进行整族熔断。但对于“宿主内唯一简单名局部类内部的嵌套匿名类位移”，当前止血门无法感知，需待完整局部类拓扑对齐落地。
+6. **构造器尾部插桩前的并发实例化缝隙**：
+   在路线图 §4（构造器尾部插桩）落地前，从堆遍历快照完成到 JVM 执行 redefineClasses 生效之间，并发创建的新对象未被补丁驱动捕获，其存活实例依赖默认零值与后续访问安全。
+7. **InstanceTracker 字节码回退可靠性局限**：
+   在无 JVMTI native 支持的环境下，`InstanceTracker` 基于弱引用集合和构造器插桩。GC 触发可能导致弱引用丢失，且未插桩类或动态生成的实例无法被追踪，可能造成存活实例漏判。
+8. **JBR 字段布局探针实验局限**：
+   附录 A 的 8 组实验仅覆盖了基本字段重定义场景，尚未覆盖 JIT 深度优化后的内联代码观察、`volatile`/`final` 内存可见性语义、以及复杂的父子类同名字段遮蔽。

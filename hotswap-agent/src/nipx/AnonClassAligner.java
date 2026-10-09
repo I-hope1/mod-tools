@@ -16,12 +16,12 @@ import java.util.function.Predicate;
 /**
  * 匿名内部类树状拓扑与对齐器 (Anonymous Class Aligner)。
  *
- * <p>设计文档参见 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md}；实现状态参见 {@code docs/status.md} 与 {@code AGENTS.md}。</p>
+ * <p>设计文档参见 {@code docs/topology/}（索引见 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md}）；实现状态参见 {@code docs/status.md} 与 {@code AGENTS.md}。</p>
  * <p>在 DCEVM / JBR 增强重定义环境下，匿名内部类编号按源码出现顺序生成（{@code Foo$1}, {@code Foo$2} ...）。
  * 当在前部插入、删除、重排匿名类时，编译产物的编号发生位移，导致 DCEVM 将 JVM 中已存活的旧实例
  * 物理迁移到内容完全不同的新类上，造成静默内存污染与方法篡改（Method Hijacking）。</p>
  *
- * <h2>核心不变量（Core Invariant，{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §1.2）</h2>
+ * <h2>核心不变量（Core Invariant，{@code docs/topology/01-invariants-and-remapping.md} §2）</h2>
  * <p><b>在 JVM 中已经存在存活实例的已加载类，其物理类名只能被源码上与之对应的新版本实现重定义，
  * 其既有存活实例的方法调用与字段状态必须维持预期的语义连续性，禁止被无关的新生类占用物理槽位。</b></p>
  *
@@ -30,7 +30,7 @@ import java.util.function.Predicate;
  *   <li><b>Tier 1 (内容哈希 + 宿主方法)</b>：{@link AnonClassHasher} 内容哈希与所在宿主方法均精确相同；</li>
  *   <li><b>Tier 2 (全局内容哈希)</b>：跨方法或初始化块中内容哈希精确唯一匹配（仅全类唯一孤本采纳，严禁跨方法 minDiff）；</li>
  *   <li><b>Tier 3 (结构签名 + 拓扑相等过滤)</b>：同宿主方法、同基类与接口、同字段与方法签名；
- *       在双向唯一之后、minDiff 之前引入<b>拓扑签名过滤</b>（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §4.1 / §8.3-4），应对方法体修改导致的哈希漂移；</li>
+ *       在双向唯一之后、minDiff 之前引入<b>拓扑签名过滤</b>（{@code docs/topology/04-tiers-and-rejection.md} §2），应对方法体修改导致的哈希漂移；</li>
  *   <li><b>Tier 4 (松散结构 + 状态布局门)</b>：同宿主方法、同基类与接口类型；禁止 minDiff 盲猜；
  *       联动包装 {@link LayoutGate} 阻断合成捕获字段（{@code val$*}/{@code this$0}）不兼容导致的零值污染。</li>
  * </ol>
@@ -38,7 +38,7 @@ import java.util.function.Predicate;
  * （进入 {@code orphanOldClasses}，在重定义时显式保留而不被覆盖）；未匹配的新类一律分配未占用的安全新编号，
  * 并通过 {@link AnnotationTransformer#pendingAlignedClasses} 在初次加载时拦截生效。</p>
  *
- * <h2>宿主组原子拒绝（Atomic Host-Group Rejection，{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §4.3）</h2>
+ * <h2>宿主组原子拒绝（Atomic Host-Group Rejection，{@code docs/topology/04-tiers-and-rejection.md} §4）</h2>
  * <p>当遇到多候选歧义（strict 模式）、嵌套层级超限（{@code depth > 4}）、匿名类超上限（{@link #MAX_ANON_PER_HOST}）
  * 或软超时（{@link #ALIGN_TIMEOUT_MS}）时，抛出 {@link AlignmentRejectedException}，
  * 热更管线将宿主类及其全部派生内部类作为一个原子单元<b>整组移出本轮重定义</b>，存活实例继续稳定运行旧逻辑。</p>
@@ -58,7 +58,7 @@ public final class AnonClassAligner {
 	public static boolean TEST_REVERSE_ORDER = false;
 
 	/**
-	 * 单个宿主类下匿名类数量的硬上限（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §6.3-2）。超过即按 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §4.3 拒绝整个宿主组。
+	 * 单个宿主类下匿名类数量的硬上限（{@code docs/topology/06-runtime-and-perf.md} §3）。超过即按 {@code docs/topology/04-tiers-and-rejection.md} §4 拒绝整个宿主组。
 	 *
 	 * <p><b>为什么不采用"告警并降级为不重命名"</b>：不对齐时，新编译产物的 {@code Foo$2} 与 JVM 中
 	 * 已加载的旧 {@code Foo$2} 同名但语义不同，一旦进入重定义就正好是本模块要消灭的"存活实例
@@ -69,7 +69,7 @@ public final class AnonClassAligner {
 	public static int MAX_ANON_PER_HOST = 128;
 
 	/**
-	 * 对齐流程的软超时（毫秒，{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §6.3-3）。超时即按 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §4.3 拒绝该宿主组。
+	 * 对齐流程的软超时（毫秒，{@code docs/topology/06-runtime-and-perf.md} §3）。超时即按 {@code docs/topology/04-tiers-and-rejection.md} §4 拒绝该宿主组。
 	 *
 	 * <p>比对采用 elapsed 形式（{@code now - start}），因此天然不会溢出；
 	 * 设为 {@link Long#MAX_VALUE} 可关闭超时；设为 {@code <= 0} 表示"无预算"，
@@ -78,7 +78,7 @@ public final class AnonClassAligner {
 	public static long ALIGN_TIMEOUT_MS = 2000L;
 
 	/**
-	 * 对齐被安全门拒绝（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §4.3）。
+	 * 对齐被安全门拒绝（{@code docs/topology/04-tiers-and-rejection.md} §4）。
 	 *
 	 * <p>语义：<b>宿主类 + 其下属全部匿名类</b>作为一个原子单元整体放弃 —— 调用方不得把其中
 	 * 任何一项送入本次重定义（否则宿主新字节码会引用到没被对齐的 {@code Foo$N}）。</p>
@@ -110,11 +110,11 @@ public final class AnonClassAligner {
 	private static void checkTimeout(String hostSlash, long startNanos) {
 		if (isTimedOut(startNanos)) {
 			throw new AlignmentRejectedException(hostSlash,
-			 "alignment exceeded the " + ALIGN_TIMEOUT_MS + "ms soft timeout (docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md §6.3-3)");
+			 "alignment exceeded the " + ALIGN_TIMEOUT_MS + "ms soft timeout (docs/topology/06-runtime-and-perf.md §3)");
 		}
 	}
 
-	/** 诊断日志（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §6.4 {@code -Dnipx.agent.anon_debug} / 别名 {@code -Dnipx.anonAlign.debug}，或全局 DEBUG）。 */
+	/** 诊断日志（{@code docs/topology/06-runtime-and-perf.md} §4 {@code -Dnipx.agent.anon_debug} / 别名 {@code -Dnipx.anonAlign.debug}，或全局 DEBUG）。 */
 	private static void dbg(String msg) {
 		if (HotSwapAgent.ANON_DEBUG || HotSwapAgent.DEBUG) {
 			HotSwapAgent.info("[ANON_ALIGN] " + msg);
@@ -127,7 +127,7 @@ public final class AnonClassAligner {
 		public int  tier3Matches;
 		public int  tier4Matches;
 		/**
-		 * 布局门拒绝的配对数（{@code reject} 模式）。见 {@link LayoutGate} 与 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2。
+		 * 布局门拒绝的配对数（{@code reject} 模式）。见 {@link LayoutGate} 与 {@code docs/topology/07-layout-gate-and-risks.md} §1。
 		 *
 		 * <p>"用了哪一层"的纪律同样适用：光看映射结果分不清"没配上"是因为歧义、
 		 * 还是因为被布局门挡了。断言这个计数器才能钉住门确实生效。</p>
@@ -146,7 +146,7 @@ public final class AnonClassAligner {
 		public int  tier5Matches;
 		public int  ambiguousMatches;
 		/**
-		 * 在**禁止 minDiff 仲裁的层**（Tier 2 / Tier 4）完成"双向唯一"配对后，仍然无法确定性区分的候选对数（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §4.3-①）。
+		 * 在**禁止 minDiff 仲裁的层**（Tier 2 / Tier 4）完成"双向唯一"配对后，仍然无法确定性区分的候选对数（{@code docs/topology/04-tiers-and-rejection.md} §4）。
 		 *
 		 * <p>统计口径：剩余新类中拥有 &gt;= 2 个剩余旧候选的个数（1-to-N），加上剩余旧类中拥有 &gt;= 2 个
 		 * 剩余新候选的个数（N-to-1）。只要 &gt; 0 就说明该层存在真实歧义 —— 双向唯一配对是贪心且
@@ -157,7 +157,7 @@ public final class AnonClassAligner {
 		 */
 		public int  ambiguousPairs;
 		/**
-		 * 由**拓扑判据**决定并采纳的配对数（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §4.1 Tier 3 拓扑过滤）。
+		 * 由**拓扑判据**决定并采纳的配对数（{@code docs/topology/04-tiers-and-rejection.md} §2 Tier 3 拓扑过滤）。
 		 *
 		 * <p>刻意**不计入** {@link #tier3Matches}：后者表示"靠内容哈希/结构签名配上的"，
 		 * 混在一起以后就分不清某个配对是内容配的还是拓扑配的。</p>
@@ -424,12 +424,12 @@ public final class AnonClassAligner {
 			List<AnonInfo> oldInfos = parseInfos(hostSlash, oldHostNode, normOld, effectiveOldResolver);
 			List<AnonInfo> newInfos = parseInfos(hostSlash, newHostNode, normNew, effectiveNewResolver);
 
-			// docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md §6.3-2 数量硬上限： pathological 输入（代码生成产物、巨型 switch 表达式）下
+			// docs/topology/06-runtime-and-perf.md §3 数量硬上限： pathological 输入（代码生成产物、巨型 switch 表达式）下
 			// O(N^2) 对齐会无提示地变慢，因此这里设硬上限并整体拒绝，而不是"降级为不对齐"（见 MAX_ANON_PER_HOST javadoc）。
 			int anonCount = Math.max(oldInfos.size(), newInfos.size());
 			if (anonCount > MAX_ANON_PER_HOST) {
 				throw new AlignmentRejectedException(hostSlash,
-				 "anonymous class count " + anonCount + " exceeds MAX_ANON_PER_HOST=" + MAX_ANON_PER_HOST + " (docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md §6.3-2)");
+				 "anonymous class count " + anonCount + " exceeds MAX_ANON_PER_HOST=" + MAX_ANON_PER_HOST + " (docs/topology/06-runtime-and-perf.md §3)");
 			}
 			checkTimeout(hostSlash, startNanos);
 
@@ -451,10 +451,10 @@ public final class AnonClassAligner {
 			if (maxLevel > 4) {
 				String msg = "anonymous class nesting depth " + maxLevel + " > 4 detected";
 				if (HotSwapAgent.ANON_STRICT) {
-					throw new AlignmentRejectedException(hostSlash, msg + "; strict mode rejects the host group (docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md §4.3-2)");
+					throw new AlignmentRejectedException(hostSlash, msg + "; strict mode rejects the host group (docs/topology/04-tiers-and-rejection.md §4)");
 				}
 				// 注意：这只是一个**诊断阈值**，不是能力边界 —— 层级推进本身与深度无关，
-				// 真正的闸门是 MAX_ANON_PER_HOST（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §6.3-2）与 ALIGN_TIMEOUT_MS（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §6.3-3）。
+				// 真正的闸门是 MAX_ANON_PER_HOST（{@code docs/topology/06-runtime-and-perf.md} §3）与 ALIGN_TIMEOUT_MS（{@code docs/topology/06-runtime-and-perf.md} §3）。
 				// 早期注释曾声称此处"内容哈希退化为 #ANON_relId#"，那是错的：AnonClassHasher.MAX_DEPTH 从不生效（见该类注释）。
 				HotSwapAgent.warn("[ANON_ALIGN] " + msg + ". Diagnostic threshold only"
 				                  + " (cascade is depth-generic; the real guards are MAX_ANON_PER_HOST=" + MAX_ANON_PER_HOST
@@ -567,7 +567,7 @@ public final class AnonClassAligner {
 			stats.orphanClasses = orphanOldClasses.size();
 			dbg("level pass done: " + stats + ", orphans=" + orphanOldClasses);
 
-			// docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md §4.3-① 严格模式：只要本轮存在**未被唯一证据证成**的候选配对，就熔断整个宿主组。
+			// docs/topology/04-tiers-and-rejection.md §4 严格模式：只要本轮存在**未被唯一证据证成**的候选配对，就熔断整个宿主组。
 			//
 			// 两个计数的含义（合起来才是"无法唯一证明"的完整集合）：
 			//   • ambiguousMatches —— 历史上用于统计"允许 minDiff 的层"（Tier 1）的仲裁次数。
@@ -582,7 +582,7 @@ public final class AnonClassAligner {
 					throw new AlignmentRejectedException(hostSlash,
 					 "strict mode: " + unproven + " candidate pair(s) lack unique evidence"
 					 + " (minDiff-arbitrated=" + stats.ambiguousMatches + " at Tier 1,"
-					 + " unresolved-after-bi-unique=" + stats.ambiguousPairs + " at Tier 2/4) (docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md §4.3-1)");
+					 + " unresolved-after-bi-unique=" + stats.ambiguousPairs + " at Tier 2/4) (docs/topology/04-tiers-and-rejection.md §4)");
 				}
 			} else if (stats.ambiguousPairs > 0) {
 				// ⚠️ 保守性损失必须**可见**：非严格模式下不仲裁意味着相关的旧匿名类保持为孤儿、
@@ -704,7 +704,7 @@ public final class AnonClassAligner {
 	}
 
 	/**
-	 * 后置校验（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §4.3-③ 同一拒绝通道）。除单射/前缀不变量外，若给了配对表，还对每对已配对的类做
+	 * 后置校验（{@code docs/topology/04-tiers-and-rejection.md} §4 同一拒绝通道）。除单射/前缀不变量外，若给了配对表，还对每对已配对的类做
 	 * **改名后字段布局**校验：把新类的原始字段描述符过一遍最终 {@code renameMap}，必须与旧类同名字段
 	 * 描述符相等，否则整组拒绝。
 	 *
@@ -814,7 +814,7 @@ public final class AnonClassAligner {
 	//region Internal Matching Logic
 
 	/**
-	 * 拓扑签名（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §4.1「Tier 3 多候选」判据 / §8.3-4）。
+	 * 拓扑签名（{@code docs/topology/04-tiers-and-rejection.md} §2「Tier 3 多候选」判据 / {@code docs/status.md} §1）。
 	 *
 	 * <p><b>这是与内容哈希正交的独立维度，严禁折进指纹</b> —— 否则会违反 INV-1（自描述指纹），
 	 * 让"改一个后代"污染整条祖先链的哈希，`AnonClassReproTest` Scenario 25 会立刻变红。
@@ -936,7 +936,7 @@ public final class AnonClassAligner {
 	 * {@code #ANON_<relId>#}：relId 是按"遇到顺序"分配的实例状态，新旧两侧的分配顺序未必对应，
 	 * 用它反而会引入比较不对称。本维度只需要屏蔽掉"会随位移改变"的编号。</p>
 	 *
-	 * <p>这条屏蔽是必须的，理由与 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §3.1 那个缺陷同源：嵌套匿名类的父类/接口引用里嵌着会位移的名字，
+	 * <p>这条屏蔽是必须的，理由与 {@code docs/topology/03-cascading-pipeline.md} §2 那个缺陷同源：嵌套匿名类的父类/接口引用里嵌着会位移的名字，
 	 * 不屏蔽就会把结构相同的两个类误判为拓扑不等。</p>
 	 */
 	private static String maskAnonRef(String internalName, String hostSlash) {
@@ -1290,7 +1290,7 @@ public final class AnonClassAligner {
 		 && Objects.equals(n.outerMethodDesc, o.outerMethodDesc)
 		 && Objects.equals(n.superName, o.superName)
 		 && Objects.equals(n.interfaces, o.interfaces);
-		// ---- 实例状态布局门（docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md §7.2 的精确变体）----
+		// ---- 实例状态布局门（docs/topology/07-layout-gate-and-risks.md §1 的精确变体）----
 		//
 		// 只作用在 Tier 4：Tier 1/2 的哈希含字段表、Tier 3 显式比较 fields，
 		// 所以能跨字段布局配对的只有 Tier 4。门加在这里，Tier 1~3 的语义完全不动。
@@ -1323,7 +1323,7 @@ public final class AnonClassAligner {
 					                  + " the affected field until they are recreated. Reason: " + res.detail());
 					return true;
 				}
-				// reject：不配对。新类随后分配未占用编号，旧类成为孤儿并保留（docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md §1.2），
+				// reject：不配对。新类随后分配未占用编号，旧类成为孤儿并保留（docs/topology/01-invariants-and-remapping.md §2），
 				// 存活实例继续跑旧逻辑 —— 安全但不再更新，所以必须让用户看得见。
 				stats.layoutGateRejected++;
 				HotSwapAgent.warn("[ANON-LAYOUT] " + n.name + " -> " + o.name
@@ -1344,7 +1344,7 @@ public final class AnonClassAligner {
 		// 四层全部走完后，在**最终剩余集**上用最宽谓词（Tier 4）统计一次"缺乏唯一证据"的候选对。
 		//
 		// 只数一次是刻意的：Tier 2/3/4 的剩余集是同一批对象，逐层各数一次会把同一批候选
-		// 重复计入（实测 Tier 3+4 让夹具 M 报 2、夹具 L 报 8）。这里是 docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md §4.3-① strict 熔断
+		// 重复计入（实测 Tier 3+4 让夹具 M 报 2、夹具 L 报 8）。这里是 docs/topology/04-tiers-and-rejection.md §4 strict 熔断
 		// 与诊断的唯一口径。
 		if (stats != null && !remainingNew.isEmpty() && !remainingOld.isEmpty()) {
 			Map<AnonInfo, List<AnonInfo>> n2o = new LinkedHashMap<>();
@@ -1454,7 +1454,7 @@ public final class AnonClassAligner {
 			return;
 		}
 
-		// ---- Tier 3：拓扑相等过滤取代 minDiff 仲裁（docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md §4.1 / §8.3-4）----
+		// ---- Tier 3：拓扑相等过滤取代 minDiff 仲裁（docs/topology/04-tiers-and-rejection.md §2 与 docs/status.md §1）----
 		//
 		// 为什么必须换：minDiff 用物理名序号，前插场景下"插在前面的新类"总以 diff=0 抢走旧身份
 		// —— 这是确定性但语义错误的 tie-breaker（`DeepNestProbe` depth 1 即可复现）。
@@ -1511,7 +1511,7 @@ public final class AnonClassAligner {
 	}
 
 	/**
-	 * 统计"禁止 minDiff 的层"完成双向唯一配对后，仍无法确定性区分的候选对数量（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §4.3-①）。
+	 * 统计"禁止 minDiff 的层"完成双向唯一配对后，仍无法确定性区分的候选对数量（{@code docs/topology/04-tiers-and-rejection.md} §4）。
 	 *
 	 * <p>口径：剩余新类中拥有 &gt;= 2 个剩余旧候选的个数（1-to-N），加上剩余旧类中拥有 &gt;= 2 个
 	 * 剩余新候选的个数（N-to-1）。只要 &gt; 0 就说明该层存在真实歧义 —— 双向唯一配对是贪心且
@@ -1545,7 +1545,7 @@ public final class AnonClassAligner {
 	}
 
 	/**
-	 * Tier 3 的**拓扑相等过滤**（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §4.1）：在"双向唯一"之后、minDiff 之前插入的正交判据。
+	 * Tier 3 的**拓扑相等过滤**（{@code docs/topology/04-tiers-and-rejection.md} §2）：在"双向唯一"之后、minDiff 之前插入的正交判据。
 	 *
 	 * <p>规则（刻意只做**相等**，不做距离 —— 距离会引入调参空间）：</p>
 	 * <ol>

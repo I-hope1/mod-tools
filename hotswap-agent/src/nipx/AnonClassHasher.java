@@ -14,10 +14,10 @@ import java.util.function.Function;
  * 轻量级匿名内部类内容结构哈希器 (Anonymous Class Content Hasher)。
  *
  * <p><b>设计文档与状态索引</b>：
- * 设计文档参见 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §3.1；
+ * 设计文档参见 {@code docs/topology/03-cascading-pipeline.md} §2；
  * 实现状态参见 {@code docs/status.md} 与 {@code AGENTS.md}。</p>
  *
- * <p>参考 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §3.1。为匿名内部类计算与其物理类名序号无关的内容结构指纹（Self Hash），
+ * <p>参考 {@code docs/topology/03-cascading-pipeline.md} §2。为匿名内部类计算与其物理类名序号无关的内容结构指纹（Self Hash），
  * 作为 {@link AnonClassAligner} Tier 1（同宿主方法精确匹配）与 Tier 2（全局唯一匹配）的置信度基石。</p>
  *
  * <h2>计算范围与算法</h2>

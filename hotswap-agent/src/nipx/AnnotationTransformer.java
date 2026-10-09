@@ -20,7 +20,7 @@ import static org.objectweb.asm.Opcodes.*;
  * 核心类文件转换器（ClassFileTransformer）。
  *
  * <p><b>设计文档与状态索引</b>：
- * 设计文档参见 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} 与 {@code docs/initfix/}；
+ * 设计文档参见 {@code docs/topology/}（索引见 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md}）与 {@code docs/initfix/}；
  * 实现状态参见 {@code docs/status.md} 与 {@code AGENTS.md}。</p>
  *
  * <p>挂载在 {@link java.lang.instrument.Instrumentation} 上的字节码转换器，

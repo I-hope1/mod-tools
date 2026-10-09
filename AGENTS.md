@@ -103,6 +103,7 @@ InitFix：热更新（Redefine）后，为**新增字段**初始化存量实例�
 
 ## 7. 按需文档
 
+### InitFix 存量初始化
 | 修改内容 | 先读 |
 |:--|:--|
 | 判决分层、效应检查、参数回溯、已知限制、单例与 Kotlin 字节码事实、测试夹具机制 | `docs/initfix/01-safety-gate.md` |
@@ -111,3 +112,14 @@ InitFix：热更新（Redefine）后，为**新增字段**初始化存量实例�
 | 两阶段、基线指纹、构造器插桩、路线图（未实现） | `docs/initfix/04-target-design.md` |
 | JVMTI 堆遍历 | `docs/initfix/05-jvmti-heap.md` |
 | 为什么这么设计、历史缺陷 | `docs/initfix/06-decisions.md` |
+
+### 匿名类拓扑对齐与安全门
+| 修改内容 | 先读 |
+|:--|:--|
+| 核心不变量、改写范围契约、栈图处理 | `docs/topology/01-invariants-and-remapping.md` |
+| 属性优先准入、SwitchMap 评估、保留名域与挂起避让 | `docs/topology/02-admission-and-reserved-names.md` |
+| 层级交错流水线、Self Hash、调用链追溯、INV-1/INV-2 架构不变量 | `docs/topology/03-cascading-pipeline.md` |
+| Tier 1~4 置信梯队、Tier 3 拓扑相等过滤、宿主级原子拒绝 | `docs/topology/04-tiers-and-rejection.md` |
+| 典型场景端到端推演案例 | `docs/topology/05-walkthrough.md` |
+| JBR-21/DCEVM 能力与限制、事务乐观预登记、数量与超时闸门、开关配置 | `docs/topology/06-runtime-and-perf.md` |
+| 实例状态布局安全门（LayoutGate）、局部类编号漂移止血门（LocalClassGuard）、蜕变测试 | `docs/topology/07-layout-gate-and-risks.md` |

@@ -6,10 +6,10 @@ import org.objectweb.asm.tree.FieldNode;
 import java.util.*;
 
 /**
- * 实例状态布局安全门（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2 的精确变体）。
+ * 实例状态布局安全门（{@code docs/topology/07-layout-gate-and-risks.md} §1 的精确变体）。
  *
  * <p><b>设计文档与状态索引</b>：
- * 设计文档参见 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2 与 {@code docs/initfix/03-runtime-driver.md} §5；
+ * 设计文档参见 {@code docs/topology/07-layout-gate-and-risks.md} §1 与 {@code docs/initfix/03-runtime-driver.md} §5；
  * 实现状态参见 {@code docs/status.md} 与 {@code AGENTS.md}。</p>
  *
  * <p><b>守的是什么</b>：字段布局变化后，<b>已经存在的实例</b>不会获得新字段的初始化 ——
@@ -19,7 +19,7 @@ import java.util.*;
  * 重取构造器 / 字节码里直接 {@code new} / 直读字段三条路径都取到正确值。</p>
  *
  * <p><b>为什么必须是纯函数</b>：对齐器（配对前）与重定义层（配对后）都要用同一套判据，
- * 而 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §3.6 要求这两层互不调用。因此规则抽在这里，两侧各自调用，谁都不依赖谁。
+ * 而 {@code docs/topology/03-cascading-pipeline.md} §3 要求这两层互不调用。因此规则抽在这里，两侧各自调用，谁都不依赖谁。
  * 本类<b>不</b>接触字节码之外的任何状态：不查实例、不打日志、不读系统属性。</p>
  *
  * <p><b>为什么合成字段必须在这里挡住</b>：{@link ClassDiffUtil}
@@ -66,7 +66,7 @@ public final class LayoutGate {
 		 *
 		 * <p>与 {@link #check} 中"纯删除放行"不同：重定义层面对的是<b>用户显式编辑</b>，
 		 * 静默删掉字段会让用户以为无损（旧值随新布局消失）。因此这里保守地拒绝，
-		 * 交给用户重新热更一次或重启确认。见 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2 风险 1 的分级门表。</p>
+		 * 交给用户重新热更一次或重启确认。见 {@code docs/topology/07-layout-gate-and-risks.md} §1 的分级门表。</p>
 		 */
 		REMOVED_FIELD,
 		/**
@@ -207,7 +207,7 @@ public final class LayoutGate {
 	}
 
 	/**
-	 * 重定义层入口：从 {@link ClassDiffUtil.ClassDiff#changedFields} 判定（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2 风险 1）。
+	 * 重定义层入口：从 {@link ClassDiffUtil.ClassDiff#changedFields} 判定（{@code docs/topology/07-layout-gate-and-risks.md} §1）。
 	 *
 	 * <p><b>为什么需要第二个入口</b>：{@code changedFields} 已经被
 	 * {@code ClassDiffUtil.isInternalMarkerField} 过滤掉合成字段，因此本入口只覆盖

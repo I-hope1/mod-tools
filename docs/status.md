@@ -9,26 +9,34 @@
 
 ## 1. 匿名类拓扑对齐与安全门 (Anonymous Class Alignment & Safety Gates)
 
-设计规格文档：[`docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md`](ANONYMOUS_CLASS_TOPOLOGY_PLAN.md)
+设计规格文档：[`docs/topology/`](topology/) 系列文档
 
 | 模块 / 机制 | 状态 | 落地位置 / 验收证据 | 说明 |
 |:--|:-:|:--|:--|
 | javac 8/11/17/21 编译支持 | ✅ | `AnonClassReproTest` | `hstestJunit` 经多 JDK 现编夹具验证通过（javac 25 亦已额外覆盖验证） |
-| ECJ 编译器支持 | ⬜ | 暂无 ECJ 真实夹具 | 见 `docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md` §7.2 未决问题 1 |
-| 类身份与实例状态保真不变量 (§1.2) | ✅ | `AnonClassAligner` | 彻底移除历史 Tier 5（按物理名盲配）；未匹配旧类保留为孤儿，未匹配新类分配安全新名 |
-| `renameMap` 与字节码改写 (§1.3) | ✅ | `AnonClassAligner.remapClass` | 使用 ASM `ClassWriter(0)` + `SimpleRemapper`，不重算栈帧避免死锁 |
+| ECJ 编译器支持 | ⬜ | 暂无 ECJ 真实夹具 | 见 `docs/topology/07-layout-gate-and-risks.md` §4 |
+| 类身份与实例状态保真不变量 | ✅ | `AnonClassAligner` | 彻底移除历史 Tier 5（按物理名盲配）；未匹配旧类保留为孤儿，未匹配新类分配安全新名 |
+| `renameMap` 与字节码改写 | ✅ | `AnonClassAligner.remapClass` | 使用 ASM `ClassWriter(0)` + `SimpleRemapper`，不重算栈帧避免死锁 |
+| 全局保留名域与挂起避让 | ✅ | `takenTargetNames` / `reserved` | 覆盖第 1/2/4 类保留名（`pendingAlignedClasses` 快照接入）；未加载挂起类编号抬高为已知无害代价 |
 | Tier 1: 内容哈希 + 宿主方法精确匹配 | ✅ | `AnonClassHasher` + `AnonClassAligner` | 双方哈希完全一致且同宿主方法，置信度最高 |
+| Tier 1.5: 内容相似度 | ⬜ | 路线图规划 | 规划计算指令哈希交集率与字符串 Jaccard；用于根治拓扑无信息同构候选平局 |
 | Tier 2: 全局唯一内容哈希匹配 | ✅ | `AnonClassAligner` | 仅全类唯一孤本采纳，严禁跨方法 minDiff |
-| Tier 3: 结构签名 + 拓扑相等过滤 | ✅ | `AnonClassAligner.topologyEqual` | 在双向唯一之后引入拓扑签名过滤，消除方法体变动导致的误配 |
+| Tier 3: 结构签名 + 拓扑相等过滤 | ✅ | `AnonClassAligner.topologyEqual` | 在双向唯一之后引入拓扑签名过滤，彻底消除前插+改体场景下 minDiff 带来的错配 |
 | Tier 4: 松散结构 + 状态布局门包装 | ✅ | `AnonClassAligner` + `LayoutGate` | 同宿主方法与基类/接口；禁止 minDiff；包装布局门防存活实例零值污染 |
-| Tier 5: 物理类名盲配 | ❌ 已废除 | `AnonClassAligner` | 为守卫 §1.2 核心不变量已彻底移除，前 4 层未匹配直接判为新类/孤儿 |
-| 宿主组原子拒绝机制 (§4.3) | ✅ | `AlignmentRejectedException` / `HotSwapAgent.rejectHostGroup` | strict 歧义、超限、超时或关闭时，宿主与派生类整组移出本轮重定义 |
-| 性能安全闸门 (§6.3) | ✅ | `MAX_ANON_PER_HOST = 128`, `ALIGN_TIMEOUT_MS = 2000` | 数量超限或超时直接触发宿主组原子拒绝 |
-| 特性控制开关 (§6.4) | ✅ | `HotSwapAgent.ANON_ALIGN`, `ANON_STRICT`, `ANON_DEBUG` | 支持 `nipx.agent.*` 首选名及 `nipx.anonAlign.*` 兼容别名 |
-| 匿名类合成捕获字段布局门 (§7.2 风险 1) | ✅ | `LayoutGate.check` / `ANON_LAYOUT_GATE` | 阻断捕获字段增/改导致存活实例读取零值；默认模式 `reject` |
-| 具名类与用户显式字段布局门 (§7.2 风险 1) | ✅ | `HotSwapAgent.applyRedefineLayoutGate` / `LAYOUT_GATE` | 阻断用户字段删除、类型变更、静态性变更；默认模式 `reject` |
-| 同名局部类编号漂移止血门 (§7.2 风险 2) | ✅ | `LocalClassGuard` / `LOCAL_CLASS_GUARD` | 识别同名局部类计数 ≥ 2 并将宿主整族移出本轮；默认模式 `reject` |
-| 同名局部类完整拓扑对齐 (§7.2 风险 2) | ⬜ | 未实现 | 规划中；当前由止血门安全拦截 |
+| Tier 5: 物理类名盲配 | ❌ 已废除 | `AnonClassAligner` | 为守卫核心不变量已彻底移除，前 4 层未匹配直接判为新类/孤儿 |
+| `access$` 访问器保名不改名 | ✅ | `MethodFingerprinter.isSelfSynthetic` | 排除 `access$` 归一化以维持跨类调用稳定并防止 Lambda 撞哈希 |
+| 嵌套匿名类构造器描述符定向屏蔽 | ✅ | `MethodFingerprinter.maskDescriptor` | 定向屏蔽外层父名序号，使嵌套匿名类在父类位移时 100% 恢复 Tier 1 精确匹配 |
+| INV-1 自描述指纹与 INV-2 禁止互相递归 | ✅ | `AnonClassReproTest` Scenario 25 | 常量池扫描与内容变异架构守卫，防止雪崩污染 |
+| 宿主级原子拒绝机制 | ✅ | `AlignmentRejectedException` / `HotSwapAgent.rejectHostGroup` | strict 歧义、超限、超时或关闭时，宿主与派生类整组移出本轮重定义并输出 `[HOTSWAP-REJECT]` |
+| 多轮基线 `sourceOrder` 稳定排序 | ⬜ | 未实现 | 当前使用物理名序号仲裁；因 Tier 3 拓扑过滤落地，触发面已极度收窄 |
+| 性能安全闸门 | ✅ | `MAX_ANON_PER_HOST = 128`, `ALIGN_TIMEOUT_MS = 2000` | 数量超限或超时直接触发宿主组原子拒绝 |
+| 特性控制开关 | ✅ | `HotSwapAgent.ANON_ALIGN`, `ANON_STRICT`, `ANON_DEBUG` | 支持 `nipx.agent.*` 首选名及 `nipx.anonAlign.*` 兼容别名 |
+| 事务生命周期与乐观预登记 | ✅ | `AlignmentTransaction.preRegister` | 重定义前预先登记 pending 注入项，消除类加载重入读取磁盘错位产物竞态 |
+| 匿名类合成捕获字段布局门 | ✅ | `LayoutGate.check` / `ANON_LAYOUT_GATE` | 阻断捕获字段增/改导致存活实例读取零值；默认模式 `reject` |
+| 具名类与用户显式字段布局门 | ✅ | `HotSwapAgent.applyRedefineLayoutGate` / `LAYOUT_GATE` | 阻断用户字段删除、类型变更、静态性变更；默认模式 `reject` |
+| 同名局部类编号漂移止血门 | ✅ | `LocalClassGuard` / `LOCAL_CLASS_GUARD` | 识别同名局部类计数 ≥ 2 并将宿主整族移出本轮；默认模式 `reject` |
+| 同名局部类完整拓扑对齐 | ⬜ | 未实现 | 规划中；当前由止血门安全拦截 |
+| 蜕变测试准则 (Metamorphic Suite) | ✅ | `AnonClassReproTest` Scenario 19/20/21 | 验证标记置换不变性、幂等性、尾部追加不变性与故障注入零静默错配 |
 
 ---
 

@@ -13,7 +13,7 @@ import java.util.function.*;
  * 主要用于热重载系统的智能更新决策
  *
  * <p><b>设计文档与状态索引</b>：
- * 设计文档参见 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} 与 {@code docs/initfix/03-runtime-driver.md} §5；
+ * 设计文档参见 {@code docs/topology/07-layout-gate-and-risks.md} §1 与 {@code docs/initfix/03-runtime-driver.md} §5；
  * 实现状态参见 {@code docs/status.md} 与 {@code AGENTS.md}。</p>
  * <pre>
  * 核心功能：

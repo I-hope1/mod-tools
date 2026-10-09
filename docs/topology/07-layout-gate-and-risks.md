@@ -1,0 +1,68 @@
+# 布局安全门、局部类防御与风险清单
+
+> **实现状态与审计**：本规范定义客观的架构与设计规格。当前实现状态、验收证据与详细审计参见 [docs/status.md](../status.md) 与 [AGENTS.md](../../AGENTS.md)。
+
+---
+
+## 1. 实例状态布局安全门（`LayoutGate`）
+
+### 1.1 核心问题：存活实例字段布局不一致
+在增强类重定义下，若类的字段布局（字段数量、类型、修饰符）发生变动：
+* 已经存在的存活实例无法获得新字段的初始化空间与赋值，新代码在读取新字段时将读取到类型零值（引用为 `null`，数值为 `0`）；
+* 同名字段若改变类型或静态性，存活实例的旧值会被丢弃并置零值。
+* 匿名类的合成捕获字段（`val$*` / `this$0`）被 `ClassDiffUtil` 过滤，无法通过 InitFix 补丁覆盖。
+
+### 1.2 双入口协同防护机制
+系统通过两道布局安全门形成互补防御：
+
+1. **匿名类对齐器门（Tier 4 配对前）**：
+   - 接入点：`AnonClassAligner.matchHierarchical`；
+   - 判决函数：`LayoutGate.check(oldFields, newFields)`；
+   - 职责：专门拦截匿名类**合成捕获字段**（`val$*`, `this$0`）的新增、类型变更或静态性变更；
+   - 存活实例感知：仅当该类存在存活实例时触发拒绝（无存活实例时新实例会执行新构造器，安全放行）。
+   - 开关控制：`nipx.agent.anon_layout_gate`（`reject` / `warn` / `off`，默认 `reject`）。
+2. **重定义层全局门（逐类重定义前）**：
+   - 接入点：`HotSwapAgent.applyRedefineLayoutGate`；
+   - 判决函数：`LayoutGate.checkRedefine(diff.changedFields)`；
+   - 职责：拦截**具名类及匿名类中用户声明的非合成字段**的删除、类型变更或静态性变更；
+   - 纯新增字段放行：由 InitFix 在重定义后为存活实例执行初始化补丁；
+   - 开关控制：`nipx.agent.layout_gate`（`reject` / `warn` / `off`，默认 `reject`）。
+
+---
+
+## 2. 同名局部类编号漂移与止血门（`LocalClassGuard`）
+
+### 2.1 局部类编号漂移风险机制
+* javac 对局部类的命名模式为 `宿主$<N><简单名>`（如 `Foo$1Helper`, `Foo$2Helper`）。
+* 局部类原名直通（不对齐）。若开发者在代码前部新增、删除或换序局部类，后续同名局部类的物理编号将整体位移。
+* JVM 重定义时将按照物理类名一一对应，导致老实例的方法实现被无关的新类替换，产生静默错配。
+* 局部类的捕获字段同样被 `ClassDiffUtil` 过滤，常规字段差分无法识别。
+
+### 2.2 止血门机制（`LocalClassGuard`）
+* **判据**：自身 `InnerClasses` 条目中 `outerName == null && innerName != null` 且字节码包含 `EnclosingMethod`。
+* **归并与碰撞检测**：按 `(EnclosingMethod.owner, innerName)` 归并；新旧任一侧同名计数 $\ge 2$ 即判定为潜在位移风险。
+* **熔断处置**：一旦命中，把该宿主及其 `host$...` 整族全部移出本轮重定义（复用宿主组原子拒绝通道），存活实例继续保持旧逻辑执行。
+* **开关控制**：`nipx.agent.local_class_guard`（`reject` / `warn` / `off`，默认 `reject`）。
+
+---
+
+## 3. 蜕变测试准则 (Metamorphic Testing Suite)
+
+为严格守卫拓扑对齐系统的确定性与安全性，确立四项蜕变测试准则：
+
+1. **语义标记置换不变性 (Semantic Tag Permutation Invariance)**：
+   为测试匿名类嵌入唯一的语义字符串（如 `"TAG_SAVE"`）。对新旧输入集合执行随机打乱，断言所有映射关系恒定，且目标语义标记 100% 精准对应。
+2. **幂等性测试 (Idempotence)**：
+   对同一份新编译产物连续执行两次对齐，断言第二次对齐的映射结果为恒等映射（无多余改名）。
+3. **尾部追加不变性 (Append Invariance)**：
+   在源码末尾追加全新的匿名类，断言之前所有已配对的一级与嵌套匿名类映射结果不受任何扰动。
+4. **故障注入拒绝率 (Failure Injection Reject Rate)**：
+   故意构造高危歧义场景（如两个完全同构且无结构差异的候选），断言系统 100% 触发 Reject & Rollback，无静默错配。
+
+---
+
+## 4. 编译器未决问题跟踪
+
+### ECJ 编译器特殊表现
+* **switch 表差异**：ECJ 不生成 `Foo$N` 形式的枚举 switch 映射类，而是生成宿主类内部的 `$SWITCH_TABLE$` 方法。因此 switch 类的对齐与排除对 ECJ 不适用。
+* **嵌套类 EnclosingMethod 表现**：ECJ 在多层嵌套匿名类下的 `EnclosingMethod` 属性结构与 javac 存在差异，需持续进行样本特征跟踪。

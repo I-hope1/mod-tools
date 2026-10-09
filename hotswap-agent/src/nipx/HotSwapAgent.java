@@ -28,7 +28,7 @@ import static nipx.MountManager.*;
  * HotSwap Agent 核心协调器。
  *
  * <p><b>设计文档与状态索引</b>：
- * 设计文档参见 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} 与 {@code docs/initfix/}；
+ * 设计文档参见 {@code docs/topology/}（索引见 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md}）与 {@code docs/initfix/}；
  * 实现状态参见 {@code docs/status.md} 与 {@code AGENTS.md}。</p>
  *
  * <p>基于 Java Instrumentation（DCEVM / JBR-21+ 增强类重定义能力）的热代码重载核心调度器。
@@ -46,20 +46,20 @@ import static nipx.MountManager.*;
  *   <li><b>安全前置门（Defensive Gates）</b>：
  *       <ul>
  *         <li><b>继承体系守卫</b>：父类或接口发生变动（{@code diff.hierarchyChanged}）一律拒绝重定义，提示重启；</li>
- *         <li><b>局部类编号漂移门</b>（{@link LocalClassGuard}）：检测宿主内同名局部类编号位移（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2 风险 2），
+ *         <li><b>局部类编号漂移门</b>（{@link LocalClassGuard}）：检测宿主内同名局部类编号位移（{@code docs/topology/07-layout-gate-and-risks.md} §2），
  *             按 {@link #LOCAL_CLASS_GUARD} 模式（默认 {@code reject}）原子移出宿主组；</li>
- *         <li><b>重定义层布局安全门</b>（{@link LayoutGate}）：检测具名类或用户声明字段的删除/改类型（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2 风险 1），
+ *         <li><b>重定义层布局安全门</b>（{@link LayoutGate}）：检测具名类或用户声明字段的删除/改类型（{@code docs/topology/07-layout-gate-and-risks.md} §1），
  *             按 {@link #LAYOUT_GATE} 模式（默认 {@code reject}）原子移出宿主组。</li>
  *       </ul>
  *   </li>
  *   <li><b>匿名类拓扑对齐（Anonymous Class Cascading Alignment）</b>：
- *       由 {@link AnonClassAligner} 按四级置信度体系（Tier 1~4，参考 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md}）
+ *       由 {@link AnonClassAligner} 按四级置信度体系（Tier 1~4，参考 {@code docs/topology/04-tiers-and-rejection.md}）
  *       解决重新编译引起的 {@code Foo$N} 编号漂移问题：
  *       <ul>
  *         <li>匹配到的历史类：通过 {@link org.objectweb.asm.commons.ClassRemapper} 一致性重命名为旧类名；</li>
  *         <li>未匹配的新类：分配未占用的安全新编号，预登记至 {@link AnnotationTransformer#pendingAlignedClasses}
  *             待首次加载时拦截；</li>
- *         <li>未匹配的旧类：作为孤儿旧类（{@code orphanOldClasses}）在 JVM 中保留不动以维持存活实例方法调用（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §1.2 核心不变量）；</li>
+ *         <li>未匹配的旧类：作为孤儿旧类（{@code orphanOldClasses}）在 JVM 中保留不动以维持存活实例方法调用（{@code docs/topology/01-invariants-and-remapping.md} §2 核心不变量）；</li>
  *         <li>歧义或超时：抛出异常并将宿主组整体移出本轮重定义（{@link #rejectHostGroup}）。</li>
  *       </ul>
  *   </li>
@@ -110,24 +110,24 @@ public class HotSwapAgent {
 	public static boolean      HOTSWAP_PLUS;
 	public static boolean      UI_HOOK;
 	/**
-	 * 匿名类对齐总开关（docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md §6.4）。默认开启。
+	 * 匿名类对齐总开关（{@code docs/topology/06-runtime-and-perf.md} §4）。默认开启。
 	 *
 	 * <p><b>关闭语义</b>：不是"按类名照旧重定义"（那正是编号位移篡夺场景本身），而是把含有匿名类的
 	 * 宿主组整体移出本批重定义（见 {@link #rejectHostGroup}）。</p>
 	 */
 	public static boolean      ANON_ALIGN         = boolProp("nipx.agent.anon_align", "nipx.anonAlign.enabled", true);
-	/** 严格模式（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §6.4）：Tier 4 歧义 / 嵌套深度超限时按 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §4.3 拒绝整个宿主组。 */
+	/** 严格模式（{@code docs/topology/06-runtime-and-perf.md} §4）：Tier 4 歧义 / 嵌套深度超限时按 {@code docs/topology/04-tiers-and-rejection.md} §4 拒绝整个宿主组。 */
 	public static boolean      ANON_STRICT        = boolProp("nipx.agent.anon_strict", "nipx.anonAlign.strict", false);
-	/** 匿名类对齐诊断日志（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §6.4）：打印层级决策链。 */
+	/** 匿名类对齐诊断日志（{@code docs/topology/06-runtime-and-perf.md} §4）：打印层级决策链。 */
 	public static boolean      ANON_DEBUG         = boolProp("nipx.agent.anon_debug", "nipx.anonAlign.debug", false);
 
 	/**
-	 * 实例状态布局门模式（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2 的精确变体）：{@code reject} / {@code warn} / {@code off}。
+	 * 实例状态布局门模式（{@code docs/topology/07-layout-gate-and-risks.md} §1 的精确变体）：{@code reject} / {@code warn} / {@code off}。
 	 *
 	 * <p>门守的是"字段布局变化后，<b>已存在的实例</b>读新字段得零值"。三种模式：</p>
 	 * <ul>
 	 *   <li>{@code reject}（默认）—— 布局不兼容<b>且有存活实例</b>时拒绝配对；
-	 *       新类分配未占用编号，旧类成为孤儿并保留，存活实例继续跑旧逻辑（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §1.2）。</li>
+	 *       新类分配未占用编号，旧类成为孤儿并保留，存活实例继续跑旧逻辑（{@code docs/topology/01-invariants-and-remapping.md} §2）。</li>
 	 *   <li>{@code warn} —— 照旧在 Tier 4 配对并原地重定义，只打强告警。
 	 *       给"我就想原地更新、界面马上会重建"的场景用。计数器照记，
 	 *       这样用户能看到"本来会被拒绝的有几次"。</li>
@@ -140,7 +140,7 @@ public class HotSwapAgent {
 	public static String ANON_LAYOUT_GATE = strProp("nipx.agent.anon_layout_gate", "reject");
 
 	/**
-	 * 实例状态布局门（重定义层，全体类，非仅匿名类）模式：{@code reject} / {@code warn} / {@code off}（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2 风险 1）。
+	 * 实例状态布局门（重定义层，全体类，非仅匿名类）模式：{@code reject} / {@code warn} / {@code off}（{@code docs/topology/07-layout-gate-and-risks.md} §1）。
 	 *
 	 * <p>与 {@link #ANON_LAYOUT_GATE} 的分工：后者在<b>对齐器</b>里挡"匿名类合成捕获字段变化"
 	 * （Tier 4 配对前）；本开关在<b>重定义层</b>挡"具名类 / 匿名类用户声明字段的删/改类型/改静态性"，
@@ -148,7 +148,7 @@ public class HotSwapAgent {
 	 *
 	 * <ul>
 	 *   <li>{@code reject}（默认）—— 字段被删除 / 改类型 / 改静态性时，把该宿主及其匿名类
-	 *       整组移出本轮重定义（复用 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §4.3 的宿主组拒绝通道），存活实例继续跑旧逻辑；</li>
+	 *       整组移出本轮重定义（复用 {@code docs/topology/04-tiers-and-rejection.md} §4 的宿主组拒绝通道），存活实例继续跑旧逻辑；</li>
 	 *   <li>{@code warn} —— 照旧重定义，只打强告警（给"界面马上会重建"的场景用）；</li>
 	 *   <li>{@code off} —— 完全恢复旧行为：不做任何布局检查。</li>
 	 * </ul>
@@ -158,7 +158,7 @@ public class HotSwapAgent {
 	public static String LAYOUT_GATE = strProp("nipx.agent.layout_gate", "reject");
 
 	/**
-	 * 同名局部类编号漂移止血门（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2 风险 2）模式：{@code reject} / {@code warn} / {@code off}。
+	 * 同名局部类编号漂移止血门（{@code docs/topology/07-layout-gate-and-risks.md} §2）模式：{@code reject} / {@code warn} / {@code off}。
 	 *
 	 * <p>局部类原名直通（{@code isAnonymousClassName} 拒绝准入），重定义按类名一一对应。同一宿主内
 	 * 同简单名的局部类（{@code Foo$1Helper}、{@code Foo$2Helper}）在前插/删除/换序后物理编号整体
@@ -166,7 +166,7 @@ public class HotSwapAgent {
 	 *
 	 * <ul>
 	 *   <li>{@code reject}（默认）—— 本批里某宿主出现"同名局部类"，且**新旧任一侧**同名计数 ≥2 时，
-	 *       把该宿主及其 {@code host$...} 整族移出本轮重定义（复用 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §4.3 宿主组拒绝通道）；</li>
+	 *       把该宿主及其 {@code host$...} 整族移出本轮重定义（复用 {@code docs/topology/04-tiers-and-rejection.md} §4 宿主组拒绝通道）；</li>
 	 *   <li>{@code warn} —— 照旧重定义，只打强告警（观测用）；</li>
 	 *   <li>{@code off} —— 完全恢复旧行为：不做任何局部类检查。</li>
 	 * </ul>
@@ -369,7 +369,7 @@ public class HotSwapAgent {
 	/**
 	 * 读取布尔开关：优先 {@code primary}，缺省时回退到 {@code alias}。
 	 *
-	 * <p>{@code alias} 存在的唯一理由是兼容 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §6.4 里
+	 * <p>{@code alias} 存在的唯一理由是兼容 {@code docs/topology/06-runtime-and-perf.md} §4 里
 	 * 已经对外公布的 {@code nipx.anonAlign.*} 拼写 —— 对一个"止血开关"而言，
 	 * "按文档写下的名字被静默忽略"远比"同一个开关多认一个名字"危险。</p>
 	 *
@@ -582,7 +582,7 @@ public class HotSwapAgent {
 				 // 破坏对齐结果的可确定性。
 				 Set.copyOf(AnnotationTransformer.pendingAlignedClasses.keySet()));
 			} catch (Throwable t) {
-				// docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md §4.3：以「宿主类 + 其下属全部匿名类」为原子单元整体拒绝。
+				// docs/topology/04-tiers-and-rejection.md §4：以「宿主类 + 其下属全部匿名类」为原子单元整体拒绝。
 				//
 				// 这里**必须** continue 而不能让异常冒泡：冒泡会让整个 processChanges 中断，
 				// 结果是"本轮所有类的热更静默失效"（异常最终只留在 ScheduledFuture 里，无人观测）；
@@ -624,16 +624,16 @@ public class HotSwapAgent {
 			transactions.put(hostName, tx);
 		}
 
-		// ---- 同名局部类编号漂移止血门（docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md §7.2 风险 2）----
+		// ---- 同名局部类编号漂移止血门（docs/topology/07-layout-gate-and-risks.md §2）----
 		//
 		// 位置：宿主匿名对齐之后、实例布局门之前。局部类不在匿名对齐视野内（名字含简单名，被准入闸门
 		// 拒绝），故单开一道门。命中即把宿主及其 `host$...` 整族移出本批，复用同一宿主组拒绝通道。
 		applyLocalClassGuard(newBatchBytes, classToPath, transactions);
 
-		// ---- 实例状态布局安全门（docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md §7.2 风险 1，全体类，非仅匿名类）----
+		// ---- 实例状态布局安全门（docs/topology/07-layout-gate-and-risks.md §1，全体类，非仅匿名类）----
 		//
 		// 位置：宿主对齐之后、逐类 redefine 之前。这样具名类与匿名类一起被覆盖，
-		// 且被拒的宿主组可以干净地复用 docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md §4.3 的"宿主 + 下属匿名类整组移出本批"通道
+		// 且被拒的宿主组可以干净地复用 docs/topology/04-tiers-and-rejection.md §4 的"宿主 + 下属匿名类整组移出本批"通道
 		// （`rejectHostGroup` / `dropHostGroup`）。
 		//
 		// 分工：对齐器的 Tier 4 门只挡匿名类的**合成捕获字段**（ClassDiff 会过滤掉它们，
@@ -869,7 +869,7 @@ public class HotSwapAgent {
 
 
 	/**
-	 * 布局门用：某个类是否还有存活实例（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2 的精确变体）。
+	 * 布局门用：某个类是否还有存活实例（{@code docs/topology/07-layout-gate-and-risks.md} §1 的精确变体）。
 	 *
 	 * <p><b>判定规则（三条都很关键，别简化）</b>：</p>
 	 * <ol>
@@ -1181,14 +1181,14 @@ public class HotSwapAgent {
 	}
 
 	/**
-	 * {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §4.3 宿主级拒绝：把「宿主类 + 其下属全部匿名类」整体移出本批重定义。
+	 * {@code docs/topology/04-tiers-and-rejection.md} §4 宿主级拒绝：把「宿主类 + 其下属全部匿名类」整体移出本批重定义。
 	 *
 	 * <p><b>为什么必须连新侧匿名类的原始类名一起移除</b>：一旦不做对齐，新编译产物的 {@code Foo$2}
 	 * 与 JVM 中已加载的旧 {@code Foo$2} 同名但语义不同，把它送进 redefinition 就是把老实例的方法表
 	 * 交给无关的新类 —— 正是本模块存在的理由。同理，宿主本身也必须一起移除，否则它的新字节码会
 	 * 引用到没有被对齐过的 {@code Foo$N}。</p>
 	 *
-	 * <p>因此拒绝的语义是"这一组本轮完全不动"，与 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §4.3
+	 * <p>因此拒绝的语义是"这一组本轮完全不动"，与 {@code docs/topology/04-tiers-and-rejection.md} §4
 	 * 的"以宿主 + 其下属全部匿名类为原子单元整体拒绝回滚"一致。</p>
 	 * @param t 触发拒绝的异常；{@link AnonClassAligner.AlignmentRejectedException} 视为**预期**拒绝
 	 *          （打 {@code [HOTSWAP-REJECT]} 告警），其它异常视为对齐器缺陷（打 error + 堆栈）
@@ -1252,7 +1252,7 @@ public class HotSwapAgent {
 	 new java.util.concurrent.atomic.AtomicLong();
 
 	/**
-	 * 同名局部类编号漂移止血（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2 风险 2）的接线。
+	 * 同名局部类编号漂移止血（{@code docs/topology/07-layout-gate-and-risks.md} §2）的接线。
 	 *
 	 * <p>判决是纯函数 {@link LocalClassGuard#decide}；这里只负责"解析批次与已加载旧侧字节、执行动作、
 	 * 回滚事务"。</p>
@@ -1350,7 +1350,7 @@ public class HotSwapAgent {
 	 new java.util.concurrent.atomic.AtomicLong();
 
 	/**
-	 * 实例状态布局安全门（重定义层入口，{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2 风险 1，全体类）。
+	 * 实例状态布局安全门（重定义层入口，{@code docs/topology/07-layout-gate-and-risks.md} §1，全体类）。
 	 *
 	 * <p>判据直接用现成的 {@code ClassDiff.changedFields}：纯新增放行（InitFix 初始化存活实例），
 	 * 删除 / 同名改类型 / 改静态性则把该宿主及其匿名类整组移出本轮重定义。与对齐器 Tier 4 门互补 ——

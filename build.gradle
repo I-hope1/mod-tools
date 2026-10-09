@@ -773,6 +773,40 @@ tasks.register("verifyHstestTestCount") {
 }
 tasks.named("check") { dependsOn tasks.named("verifyHstestTestCount") }
 
+// 状态标记守卫：docs/initfix/、docs/topology/ 与源码严禁重新混入易腐状态标记（唯一真相源为 docs/status.md）。
+tasks.register("verifyDocStatusMarkers") {
+	group = "verification"
+	description = "检查设计规格文档与源码中严禁混入易腐状态标记"
+	doLast {
+		def checkDirs = [
+			file("docs/initfix"),
+			file("docs/topology"),
+			file("hotswap-agent/src")
+		]
+		def pattern = ~/[✅❌⬜🔶🟣]|\[(已实现|未实现|部分实现|已偏离)/
+		def violations = []
+		checkDirs.each { dir ->
+			if (dir.exists()) {
+				dir.eachFileRecurse { f ->
+					if (f.isFile() && (f.name.endsWith(".md") || f.name.endsWith(".java"))) {
+						f.eachLine("UTF-8") { line, lineNum ->
+							if (line =~ pattern) {
+								violations << "${rootDir.toPath().relativize(f.toPath())}:${lineNum}: ${line.trim()}"
+							}
+						}
+					}
+				}
+			}
+		}
+		if (!violations.isEmpty()) {
+			throw new GradleException("发现违规混入的实现状态标记（规则：实现状态唯一真相源为 docs/status.md，各设计规范与源码 Javadoc 严禁混入易腐标记）：\n"
+				+ violations.join("\n"))
+		}
+		logger.lifecycle("verifyDocStatusMarkers: 全部规范文档与源码均无违规状态标记")
+	}
+}
+tasks.named("check") { dependsOn tasks.named("verifyDocStatusMarkers") }
+
 // 幽灵桩熔断的栈探测判据（先红后绿）：透明帧必须穿透动态代理 / CellPropertyRef handler /
 // 方法句柄帧，否则被 CellPropertyRef 代理包过的回调在 UpdateRef 发起时不熔断（60FPS 空转）。
 tasks.register("hstestGhostProbe", JavaExec) {

@@ -4,13 +4,13 @@
 
 ## 1. 判决分层
 
-| 层级 | 含义                      | 状态 | 行为                                                                                                               |
-|:-----|:--------------------------|:----:|:-------------------------------------------------------------------------------------------------------------------|
-| T0   | 零值等价                  |  ✅  | 显式 `= null/0/false` 或仅声明。按位比较，排除 `-0.0f`/`-0.0d` 和 `NaN`。标 `NOTHING_TO_PATCH`，零开销放行，不告警 |
-| T1   | 编译期常量                |  🔶  | 静态 `ConstantValue` 走专用通道；字面量切片仍走常规直线提取                                                        |
-| T2   | 纯计算切片                |  🔶  | 经 `AliasInterpreter` 逆向切片，并通过效应检查                                                                     |
-| T3   | 复杂或不安全              |  ✅  | 含分支、环境依赖、可变源字段。拒绝生成代码，输出诊断                                                               |
-| T4   | 显式逃生口 `@HotswapInit` |  ⬜  | 伴生类直接调用该静态方法，免效应检查                                                                               |
+| 层级 | 含义                      | 行为                                                                                                               |
+|:-----|:--------------------------|:-------------------------------------------------------------------------------------------------------------------|
+| T0   | 零值等价                  | 显式 `= null/0/false` 或仅声明。按位比较，排除 `-0.0f`/`-0.0d` 和 `NaN`。标 `NOTHING_TO_PATCH`，零开销放行，不告警 |
+| T1   | 编译期常量                | 静态 `ConstantValue` 走专用通道；字面量切片仍走常规直线提取                                                        |
+| T2   | 纯计算切片                | 经 `AliasInterpreter` 逆向切片，并通过效应检查                                                                     |
+| T3   | 复杂或不安全              | 含分支、环境依赖、可变源字段。拒绝生成代码，输出诊断                                                               |
+| T4   | 显式逃生口 `@HotswapInit` | 伴生类直接调用该静态方法，免效应检查                                                                               |
 
 ### 拒绝必须对用户可见
 
@@ -52,7 +52,7 @@
 - Java 里 `((CharSequence) BUF).toString()` 和 `.hashCode()`：javac 发的是 `invokeinterface java/lang/CharSequence.*`，owner 不是 `Object`，规则看不到它。用例 `CaseJCsOwner` 固化了当前行为（ACCEPTED），将来补上完整掩码时该断言翻转不算回归。注意 kotlinc 对同形态发 `Object.toString`，所以 Kotlin 侧反而被规则覆盖。
 - 已确认但未覆盖的 Kotlin 写法：`reversed()`、`replaceRange`、`removeRange` 同样展开出 `Object.toString`，仍被拒绝（`replaceRange`/`removeRange` 还会用到局部变量槽）。这只是 javap 抽样结果，**不是对标准库的穷举**。
 
-### 2.2 目标：8 位效应掩码（⬜ 未实现）
+### 2.2 目标设计：8 位效应掩码
 
 聚合规则：按位或。准入掩码 `ALLOWED_MASK = PURE | READS_FINAL | ALLOC_PURE`。
 
@@ -71,7 +71,7 @@
 - 接收者敏感：目标为 `String`、基本包装类、`UUID`、`BigDecimal` 等不可变类，赋 `PURE`/`READS_FINAL`；`final List<String>` 的 `size()` 读可变堆状态，标 `READS_MUTABLE` 并拦截。
 - 局部逃逸豁免：切片内 `NEW` 的实例必须从未逃逸（未赋给外部字段、未传给非纯调用），其链式调用赋 `ALLOC_PURE`，不标 `MUTATES_HEAP`。
 
-## 3. 参数回溯不可变证明（✅）
+## 3. 参数回溯不可变证明
 
 在 `<init>` 中扫描到 `this.sourceField = param;` 时，要把后续 `ALOAD n` 重写为 `ALOAD 0; GETFIELD this.sourceField`，必须满足以下之一：
 
@@ -83,11 +83,11 @@
 - 任一 Nest 成员读不到，按"无法证明"拒绝。
 - 拒绝原因带真实根因进入 `PatchReport`，例如 `private but written again at oracle/CaseC.setTag(...)`。
 
-## 4. 多根构造器共识（✅）
+## 4. 多根构造器共识
 
 多根构造器场景下，所有根构造器都包含目标字段赋值切片，且**参数替换后的最终指令指纹 100% 一致**，才放行。覆盖不全或指纹不一致一律 `REJECTED`。
 
-## 5. `ClassHierarchyOracle` 契约（✅）
+## 5. `ClassHierarchyOracle` 契约
 
 - 能力：层级/接口查询、类与成员修饰符、`resolveMember`（含实际声明类）、Nest 成员读取。
 - 全程不触发类加载。类名用 JVM internal form。

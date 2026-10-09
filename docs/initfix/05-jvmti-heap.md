@@ -1,6 +1,6 @@
 # 05 JVMTI 多态堆实例检索
 
-适用：修改 `LibTool.getInstances` 或相关 Native 代码时阅读。状态：✅（仅 Native 底座）。
+适用：修改 `LibTool.getInstances` 或相关 Native 代码时阅读。实现状态参见 `docs/status.md` 与 `AGENTS.md`。
 实现以代码为准，本文只记录必须保持的约束，不复制源码。
 
 ## 实现位置

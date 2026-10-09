@@ -26,8 +26,9 @@ prepare -> tx.preRegister() -> inst.redefineClasses() -> tx.commit()
 * **乐观预登记（Pre-Registration）**：在执行 `redefineClasses` 之前对所有事务执行 `preRegister()`，消除"宿主重定义成功到事务提交之间并发线程首次加载未加载类时读到磁盘错位产物"的竞态。
 * **降级与一致性校验**：当批量重定义失败时，自动切换至单类降级重定义，并按事务组校验一致性（宿主与下属全部匿名类均成功才 `commit`，否则 `rollback(true)`）。
 
-### 2.2 并发与执行调度
-Agent 依赖单线程文件监听与防抖窗口调度热重载请求，核心集合对关键路径进行局部同步保护。
+### 2.2 并发互斥与短路优化
+* **全局独占锁（`HOTSWAP_LOCK`）**：热更入口与事务执行覆盖全局锁，杜绝并发热更重入与内部状态竞争。
+* **字节码摘要短路**：在差分比对阶段，新旧字节码完全相同时直接短路跳过；在重命名改写阶段，若 `renameMap` 全为恒等映射则直接返回原字节码，避免不必要的解析与写回开销。
 
 ---
 
@@ -46,10 +47,13 @@ Agent 依赖单线程文件监听与防抖窗口调度热重载请求，核心�
 
 ## 4. 系统特性开关配置
 
-系统支持通过 JVM 系统属性控制对齐行为，首选属性名遵循 `nipx.agent.*` 规范，同时兼容 `nipx.anonAlign.*` 历史别名：
+系统支持通过 JVM 系统属性控制对齐与安全门行为，首选属性名遵循 `nipx.agent.*` 规范，同时兼容 `nipx.anonAlign.*` 历史别名：
 
-| 首选属性名               | 兼容别名                 | 默认值  | 语义与行为                                                        |
-|:-------------------------|:-------------------------|:--------|:------------------------------------------------------------------|
-| `nipx.agent.anon_align`  | `nipx.anonAlign.enabled` | `true`  | 对齐总开关。为 `false` 时含匿名类的宿主整体拒绝，杜绝编号位移篡夺 |
-| `nipx.agent.anon_strict` | `nipx.anonAlign.strict`  | `false` | 严格模式开关。开启后遇 Tier 4 歧义或 `depth > 4` 直接拒绝宿主组   |
-| `nipx.agent.anon_debug`  | `nipx.anonAlign.debug`   | `false` | 诊断日志开关。打印完整的层级决策链与详细匹配计数                  |
+| 首选属性名                    | 兼容别名                 | 默认值   | 语义与行为                                                        |
+|:------------------------------|:-------------------------|:---------|:------------------------------------------------------------------|
+| `nipx.agent.anon_align`       | `nipx.anonAlign.enabled` | `true`   | 对齐总开关。为 `false` 时含匿名类的宿主整体拒绝，杜绝编号位移篡夺 |
+| `nipx.agent.anon_strict`      | `nipx.anonAlign.strict`  | `false`  | 严格模式开关。开启后遇 Tier 4 歧义或 `depth > 4` 直接拒绝宿主组   |
+| `nipx.agent.anon_debug`       | `nipx.anonAlign.debug`   | `false`  | 诊断日志开关。打印完整的层级决策链与详细匹配计数                  |
+| `nipx.agent.anon_layout_gate` | -                        | `reject` | 匿名类捕获字段布局门模式：`reject`（有存活实例拒绝）/ `warn` / `off` |
+| `nipx.agent.layout_gate`      | -                        | `reject` | 重定义层显式字段布局门模式：`reject`（删/改类型拒绝）/ `warn` / `off` |
+| `nipx.agent.local_class_guard`| -                        | `reject` | 同名局部类编号漂移止血门模式：`reject`（同名 >= 2 拒绝）/ `warn` / `off` |

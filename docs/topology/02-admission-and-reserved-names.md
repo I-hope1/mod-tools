@@ -27,9 +27,10 @@
    - 最后使用类名模式 `宿主$<纯数字>($<纯数字>)*` 作为准入闸门。
 2. **`EnclosingMethod` 容错**：
    - 未强制要求存在 `EnclosingMethod`：当 `cn.outerMethod == null` 时，通过 `resolveHostMethodForAnon` 反向追溯补救。原因在于 javac 8 的嵌套 lambda 会将 `EnclosingMethod` 记录为虚拟的 `lambda$null$0`，若强校验 `EnclosingMethod` 会漏掉真实匿名类。
-3. **关于 SwitchMap 类的安全性分析**：
+3. **关于 SwitchMap 类的安全性分析与有意偏离**：
    - javac 生成的枚举 Switch 映射表类（`Foo$N`）满足纯数字命名模式，会被纳入对齐分析。
-   - 在真实实测中，由于 SwitchMap 类没有 `NEW` 实例化点且 `outerMethod` 保持为 `null`，与普通匿名类 scope 不一致，因此在 Tier 4（要求 `outerMethod` 相等）下不会发生误配。字面上的"排除 + 原名直通"反而会打破槽位占用保护，因此当前维持纳入对齐流程。
+   - **架构决策**：参见决策记录 [D-ANON-3](08-decisions.md#d-anon-3)。原规划的"排除 + 原名直通"有意不实现，因直通会重新打开槽位篡夺漏洞。
+   - **偶然安全与已知残余**：在实测中，由于 SwitchMap 类没有 `NEW` 实例化点且 `outerMethod` 保持为 `null`，旧匿名类的宿主方法则被回退解析为 `<init>`，两侧 scope 偶然不一致，因此在 Tier 4（要求 `outerMethod` 相等）下不会发生误配。若未来出现宿主方法同样无法反向追溯的旧匿名类（两侧均退化为 `null`），则存在残余配对风险。当前记录为已知残余。
 
 ---
 

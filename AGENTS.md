@@ -123,3 +123,4 @@ InitFix：热更新（Redefine）后，为**新增字段**初始化存量实例�
 | 典型场景端到端推演案例 | `docs/topology/05-walkthrough.md` |
 | JBR-21/DCEVM 能力与限制、事务乐观预登记、数量与超时闸门、开关配置 | `docs/topology/06-runtime-and-perf.md` |
 | 实例状态布局安全门（LayoutGate）、局部类编号漂移止血门（LocalClassGuard）、蜕变测试 | `docs/topology/07-layout-gate-and-risks.md` |
+| 架构决策记录、偏离原因、JBR 8 组真机数据 | `docs/topology/08-decisions.md` |

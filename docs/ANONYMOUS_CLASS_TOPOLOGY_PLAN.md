@@ -18,6 +18,7 @@
 | §5 推演案例       | [`docs/topology/05-walkthrough.md`](topology/05-walkthrough.md)                                   | 场景 1（外层插入新类导致整体位移）与场景 2（父匿名类新增子匿名类）机械推演                                                |
 | §6 运行时与性能   | [`docs/topology/06-runtime-and-perf.md`](topology/06-runtime-and-perf.md)                         | JBR-21/DCEVM 增强能力实测、事务生命周期与乐观预登记、数量硬上限与超时安全闸门、特性控制开关                               |
 | §7 布局门与风险   | [`docs/topology/07-layout-gate-and-risks.md`](topology/07-layout-gate-and-risks.md)               | 实例状态布局安全门（`LayoutGate`）、同名局部类编号漂移与止血门（`LocalClassGuard`）、蜕变测试套件准则、ECJ 编译器差异跟踪 |
+| §8 架构决策记录   | [`docs/topology/08-decisions.md`](topology/08-decisions.md)                                       | D-ANON 系列架构决策与偏离说明（保内容哈希、不引入 `#ANON_COARSE`、SwitchMap 偶然安全、捕获字段计入指纹等）、JBR 8 组真机数据 |
 
 ---
 

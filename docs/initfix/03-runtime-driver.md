@@ -1,6 +1,6 @@
 # 03 伴生类、补丁驱动与写入协议
 
-适用：修改补丁发射、`applyPatch`、`HotswapBridge`、`@HotswapReinit` 时阅读。状态：全部 ✅。
+适用：修改补丁发射、`applyPatch`、`HotswapBridge`、`@HotswapReinit` 时阅读。实现状态参见 `docs/status.md` 与 `AGENTS.md`。
 
 ## 1. 伴生类（Patch Emitter）
 

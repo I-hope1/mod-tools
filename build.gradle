@@ -786,7 +786,7 @@ tasks.register("hstestGhostProbe", JavaExec) {
 }
 tasks.named("check") { dependsOn tasks.named("hstestGhostProbe") }
 
-// InitFix 差分 Oracle（docs/INIT_FIX.md §8 P0-5）。
+// InitFix 差分 Oracle（参考 docs/initfix/ 系列文档与 AGENTS.md）。
 //
 // 与 SemAssert 不同，它**不需要**任何外部 javac：夹具用 javax.tools 在内存里编译，
 // 因此可以作为 check 的常驻门槛。但必须依赖 hotswap-agent 的 jar 重建 ——

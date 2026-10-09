@@ -42,7 +42,9 @@ InitFix：热更新（Redefine）后，为**新增字段**初始化存量实例�
 **数据结构与兼容**
 - 以 `Class` 为键的内部表用弱引用，值里不得反向持有 `Class`。不要换成 `java.lang.ClassValue`。
 - 本模块保留 Android/ART 路径。引用 ART 低版本不存在的新 API 必须用反射探测，不得直接写进静态字段类型。
-- 锁序：台账写入必须在 `PENDING` 锁之外，不得在 `removeIf` 判定式里写台账。
+**状态管理规则**
+- 状态信息唯一真相源：详细状态见 `docs/status.md`，高层高价值概括见本文件第 5 节。
+- **严禁在 Javadoc、代码注释以及各 `docs/` 设计文档中重新混入实现状态信息**（如 `✅`、`[已实现]` 等易腐标记）。设计文档与 Javadoc 仅负责定义客观的设计规格、原理与交互契约；直接重复处一律转为链接。
 
 ## 4. 代码地图
 
@@ -58,40 +60,31 @@ InitFix：热更新（Redefine）后，为**新增字段**初始化存量实例�
 | 注解 | `nipx.annotation.HotswapReinit` |
 | 合成字段过滤 | `ClassDiffUtil.isInternalMarkerField` |
 | 堆实例检索（Native） | `LibTool.getInstances` |
+| 匿名类与局部类安全门 | `AnonClassAligner`、`LayoutGate`、`LocalClassGuard` |
 | `Object.toString` 例外 | `InitFix.allowedStringCoercion`、`isInertProducer`、`isIntermediateObjectToString`（`effectReason` 在白名单之后、黑名单之前调用） |
 | 测试夹具（Java） | `scratch/hstest/src/InitFixOracle.java`（内存 `javac`） |
 | 测试夹具（Kotlin） | `scratch/hstest/ktfix/v1/`、`v2/` 下的 `.kt`，由 `ktfixV1`/`ktfixV2` source set 编译 |
 
-## 5. 实现状态（截至 `881d93f0` 及其后的测试提交）
+## 5. 实现状态概要（详细参见 `docs/status.md`）
 
-状态以本表为唯一来源。`✅` 已实现，`🔶` 部分，`⬜` 未实现。
+详细逐项状态表、落地位置与验收证据参见 [`docs/status.md`](docs/status.md)。本表仅提供核心机制的高价值概括：
 
-| 条目 | 状态 | 备注 |
+| 机制 / 领域 | 状态 | 关键说明 |
 |:--|:-:|:--|
-| 五条不变量 | ✅ | |
-| `ClassHierarchyOracle` | ✅ | |
-| `FieldLedger` | ✅ | 六种情形记账 |
-| T0 零值等价 | ✅ | |
-| T1 编译期常量 | 🔶 | 静态 `ConstantValue` 有专用通道 |
-| T2 纯计算切片 | 🔶 | |
-| T3 拒绝 | ✅ | |
-| T4 `@HotswapInit` | ⬜ | |
-| 效应掩码 | 🔶 | 仅 bit 3/6 与 bit 4/5 子集；另有 Kotlin `trim` 家族的 `Object.toString` 窄例外 |
-| 参数回溯不可变证明 | ✅ | |
-| 多根构造器共识 | ✅ | |
-| 每字段独立静态方法 + `PatchDriver` | ✅ | |
-| 条件 CAS / 合成字段过滤 | ✅ | |
-| `@HotswapReinit` 字段级覆写 | ✅ | |
-| JVMTI 堆检索 | ✅ | 仅 Native 底座 |
-| 失败策略矩阵 | 🔶 | "放弃提交阶段 C"依赖两阶段 |
-| 跨类批次拓扑排序 | ⬜ | 类内拓扑已实现 |
-| `PatchPlan` 基线指纹 | ⬜ | |
-| 两阶段 Schema-First | ⬜ | 当前是单阶段 |
-| 构造器尾部插桩 | ⬜ | |
-| Kotlin `object` 单例形态 | ✅ | 已用真实 kotlinc 产物验证（属性为静态字段、初始化在 `<clinit>`） |
-| Java 单例形态（enum / Holder） | ✅ | 无需专门识别，走普通实例/静态路径 |
-| Kotlin `trim`/`trimStart`/`trimEnd` | ✅ | 已用真实 kotlinc 产物验证 |
-| 其它 Kotlin 行为（`?.`、`?:`、`let`、`apply`、主构造属性回溯、父类构造器委托） | ⚠ | **仅经手写 Java 仿真验证，未用 kotlinc 真实产物验证**；不要据此推断 Kotlin 真实字节码的行为 |
+| 五条核心不变量 | ✅ | 全面守护，零破坏 |
+| 匿名类拓扑对齐 (Tier 1~4) | ✅ | 彻底废除 Tier 5；未匹配旧类保留为孤儿，未匹配新类分配安全新名 |
+| 实例布局门与局部类止血门 | ✅ | `LayoutGate` 阻断字段变化；`LocalClassGuard` 阻断局部类位移 |
+| InitFix 离线元数据 (`ClassHierarchyOracle`) | ✅ | 全程不触发类加载 |
+| InitFix 待补台账 (`FieldLedger`) | ✅ | 六种异常与超时场景全覆盖 |
+| T0 零值等价 / T3 显式拒绝 | ✅ | 零值零开销放行；危险切片安全门拒绝并在 `transform` 发 warn |
+| T1 常量 / T2 纯计算切片 / 效应掩码 | 🔶 | 静态 `ConstantValue` 走专用通道；P0 效应黑白名单 + Kotlin `trim` 窄例外 |
+| 参数回溯不可变证明 / 多根构造器共识 | ✅ | 条件 A（final）与条件 B（NestView 单写证明）；全根构造器指纹 100% 一致 |
+| 伴生补丁类 / 逐实例驱动与失败配额 | ✅ | 独立静态方法隔离；按实例隔离；单字段失败配额封顶 8 次 |
+| 条件 CAS 写入与跳过报告 | ✅ | 默认条件 CAS；float/double 走 raw bits；跳过计数汇总报告 |
+| `@HotswapReinit` 存量覆写 | ✅ | 豁免 T0 与后续加工检查；不豁免切片安全门 |
+| Native JVMTI 堆遍历 (`LibTool`) | ✅ | C++ 底座；Tag 隔离与全局互斥；`InstanceTracker` 字节码回退 |
+| 两阶段重定义 / 构造器插桩 / 跨类拓扑 | ⬜ | 路线图设计（见 `docs/initfix/04-target-design.md`） |
+| 真实 kotlinc 产物验证 | 🔶 | `object` 单例与 `trim` 家族已验证；其它 Kotlin 行为仅经仿真验证 |
 
 ## 6. 测试要求
 

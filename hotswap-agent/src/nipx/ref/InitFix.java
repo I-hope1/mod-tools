@@ -21,117 +21,96 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static nipx.HotSwapAgent.log;
 
 /**
- * Hotswap 时初始化修复器。
+ * Hotswap 时初始化修复器（InitFix）。
  *
- * <h2>策略</h2>
- * <p>新增字段的初始化表达式如果依赖构造器参数、局部变量、含分支/内联，存量实例不会被初始化。
- * 本类从字节码里反向切片出赋值表达式，生成一个 hidden nestmate class 承载补丁，
- * 在 redefine 之后调用。补丁体是纯直线代码，{@code COMPUTE_MAXS} 足够。</p>
- * <p>整体策略是"宁可拒绝，不可误改"：分支、try/catch 相交、控制依赖、局部变量依赖、
- * 多根构造器不一致、循环依赖，都会拒绝。误补会静默污染对象状态，漏补只是字段保持默认值。</p>
+ * <p>为热更新（Redefine）后<b>新增声明的字段</b>（存量实例 + 静态环境）以及标有
+ * {@link nipx.annotation.HotswapReinit} 的已有字段补全初始化值的核心系统。
+ * 设计文档参见 {@code docs/initfix/} 目录系列文档；实现状态参见 {@code docs/status.md} 与 {@code AGENTS.md}。</p>
  *
- * <h2>字段写入</h2>
- * <p>所有目标字段的 {@code PUTFIELD}/{@code PUTSTATIC}（final 与非 final 统一）都改写为
- * {@code invokedynamic}，由 {@link HotswapBridge} 在链接期算好 Unsafe offset 后写入：
- * {@link HotswapBridge#KIND_CONDITIONAL} 条件 CAS —— 仅当字段当前等于该类型默认值才写，
- * 这样不会覆盖 redefine 之后其他线程赋的新值（代价是字段已是默认值以外时跳过，保守方向）；
- * {@link HotswapBridge#KIND_FORCE} 无条件 volatile 写（{@code @HotswapReinit(OVERWRITE)}）。
- * 两者都经 Unsafe，因此 final 字段也适用（补丁是 nestmate，不能直接 {@code putfield} final）。
- * CAS/volatile 本身即带可见性语义，无需额外 fence。</p>
- *
- * <h2>存量重置扩展（§1.1）</h2>
- * <p>默认作用域只覆盖<b>本次新增字段</b>。字段标了 {@code @HotswapReinit} 时按
- * {@link nipx.annotation.HotswapReinit.Mode} 处理：</p>
- * <ul>
- *   <li>候选集从"新增字段"扩展为"新增字段 ∪ 带注解的已有字段"（含静态字段）；</li>
- *   <li>{@code OVERWRITE}（默认）→ {@link HotswapBridge#KIND_FORCE} 无条件覆写；
- *       {@code CONDITIONAL} → 维持条件 CAS；</li>
- *   <li>豁免 §4.1 T0 零值过滤（否则"把已有字段重置成 0/null"会判 NOTHING_TO_PATCH）
- *       与"构造器里读过 / 别处写过该字段"的后续加工检查 —— 已有字段本来就会被各处
- *       读写，那些门按定义不可能满足；</li>
- *   <li>切片本身的安全门<b>不</b>豁免：分支、局部变量、§4.2 效应判定照旧。
- *       覆写只决定"要不要写"，不能让一个读脏的值变正确。</li>
- * </ul>
- * <p>注解按<b>描述符字符串</b>匹配，不加载注解类（§2.1 同一原则）。</p>
- *
- * <h2>提取流程</h2>
+ * <h2>五条核心不变量（任何改动均不得破坏）</h2>
  * <ol>
- *   <li><b>T0 零值等价（§4.1）</b>：先判定字段是否"存量本来就是默认值"——显式
- *       {@code = null}/{@code = 0}/{@code = false}、仅声明未赋值、{@code ConstantValue}
- *       按位为零。命中者标记 {@link FieldStatus#NOTHING_TO_PATCH}，零开销放行、不告警、
- *       不生成补丁（浮点按位判定，{@code -0.0f}/{@code NaN} 不算零值）。</li>
- *   <li><b>提取</b>：对每个 {@code <init>}/{@code <clinit>} 里的目标 PUTFIELD/PUTSTATIC，
- *       用 {@link AliasInterpreter} 做反向数据依赖切片，再检查区间内不得有表达式树外的
- *       指令。{@link #checkSafe} 判定控制依赖、try/catch 相交、局部变量依赖、
- *       INVOKESPECIAL/indy handle 的可用性、protected 跨包访问是否可桥接，
- *       以及 §4.2 的<b>最小效应防御</b>（非确定性/环境依赖/IO/日志输出黑名单 +
- *       集合无参构造与 Logger 的白名单）。被拒的真实原因会透传进
- *       {@link PatchReport}，不再是笼统的"no safe initialization expression"。</li>
- *   <li><b>单字段判定</b>：{@link #fingerprintMismatchReason} 校验多构造器下表达式一致；
- *       根构造器覆盖完整性；§4.4 允许"多根构造器 + 参数回溯"在指纹完全一致时放行。</li>
- *   <li><b>闭包迭代</b>：后续加工检查 + 依赖闭包，反复移除不合格字段直到不动点。</li>
- *   <li><b>拓扑排序</b>：{@link #topoSortFields} 按依赖排序，成环则整组拒绝。</li>
- *   <li><b>生成</b>：protected 桥接、私有调用改写、字段写入改写、<b>每字段一个独立静态直线
- *       方法</b>（§5.1）、hidden class 装配。
- *       <p>之所以做成"每字段一个方法"而不是把所有切片串进一个方法：方法边界就是异常边界。
- *       串成一个方法时，其中一个切片抛异常（例如它调的辅助方法炸了）会让<b>其后所有字段</b>
- *       都被跳过；而每字段一个方法后，宿主 {@link PatchPlan 驱动}就能逐字段 try/catch，
- *       失败隔离且能记账。反过来，若想在单方法内做隔离就得写 try/catch → 异常表 →
- *       StackMapTable → 伴生类必须 {@code COMPUTE_FRAMES}，正是 §5.1 要避免的
- *       "类加载期帧计算死锁"。每个方法的体仍是纯直线代码，{@code COMPUTE_MAXS} 足够。</p></li>
+ *   <li><b>未初始化守卫</b>：{@code UNSAFE.shouldBeInitialized(clazz) == true} 时直接跳过修补。</li>
+ *   <li><b>PENDING 弱键</b>：{@code synchronizedMap(WeakHashMap<Class<?>, PendingPatch>)}。
+ *       {@code PendingPatch} 不得持有 {@code Class<?>} 强引用；保留 5 分钟 TTL 清扫（{@link #PENDING_TTL_NANOS}）。</li>
+ *   <li><b>PatchReport 解耦</b>：只存类名字符串和不可变枚举，不得持有 {@code Class} 或 {@code ClassLoader}。</li>
+ *   <li><b>LinkageError 熔断</b>：补丁抛 {@link LinkageError} 立即中止当前类。
+ *       唯一例外：{@link BootstrapMethodError} 且 {@code getCause()} <b>不是</b> {@link LinkageError}，
+ *       视为单字段链接失败，仅隔离该字段。判定保持窄。</li>
+ *   <li><b>afterRedefineFailed</b>：Redefine 失败时立即注销并弹出暂存补丁，未补字段记入台账。</li>
  * </ol>
  *
- * <h2>构造器参数回溯</h2>
- * <p>Java 里 {@code x = s.get(0)}（{@code s} 是构造器参数）在字节码里是 {@code ALOAD n}
- * 直接读取，不是 {@code GETFIELD}。若 {@code <init>} 里有 {@code ALOAD 0; XLOAD n; PUTFIELD this.f}，
- * 就把提取片段里的加载指令替换为 {@code ALOAD 0; GETFIELD this.f}。</p>
- * <p>安全条件（任一不满足即弃用该映射）：</p>
+ * <h2>判决分层与安全门（{@code docs/initfix/01-safety-gate.md}）</h2>
+ * <p>整体策略是"宁可拒绝，不可误改"：分支、try/catch 相交、控制依赖、局部变量依赖、
+ * 多根构造器不一致、循环依赖均予拒绝。误补会静默污染对象状态，漏补只是字段保持默认值。</p>
  * <ul>
- *   <li><b>pattern 无条件执行</b>：复用 {@link #checkControlDependency}。</li>
- *   <li><b>参数类型与字段描述符一致</b>：避免替换后栈类型不匹配 VerifyError。</li>
- *   <li><b>源字段不可变（§4.3 条件 A/B）</b>：{@code f} 带 {@code ACC_FINAL}，或者
- *       {@code f} 是 {@code private} 且全 Nest 范围内除本次 pattern 外不存在第二处
- *       {@code PUTFIELD}（{@link NestView} 只读字节码做证明，不触发类加载）。
- *       补丁在 redefine 之后执行，读到的是字段<b>当前</b>值，所以这条证明是改写等价性的前提。</li>
- *   <li><b>槽位单赋值</b>：pattern 前后都不得被 xSTORE 覆盖或 IINC 自增（long/double 占 2 槽）。</li>
- *   <li><b>字段不被二次写入</b>：pattern 之后同一字段不得再被 PUTFIELD。</li>
+ *   <li><b>T0 零值等价</b>（{@code docs/initfix/01-safety-gate.md} §1）：显式 {@code = null}/{@code = 0}/{@code = false}、仅声明未赋值、{@code ConstantValue}
+ *       按位为零。标记 {@link FieldStatus#NOTHING_TO_PATCH}，零开销放行、不告警、不生成补丁
+ *       （浮点按位比较，{@code -0.0f}/{@code NaN} 不算零值）。</li>
+ *   <li><b>T1 编译期常量</b>（{@code docs/initfix/01-safety-gate.md} §1）：静态 {@code ConstantValue} 走专用通道。</li>
+ *   <li><b>T2 纯计算切片</b>（{@code docs/initfix/01-safety-gate.md} §1）：经 {@link AliasInterpreter} 逆向数据流切片，并通过效应安全门。</li>
+ *   <li><b>T3 复杂或不安全</b>（{@code docs/initfix/01-safety-gate.md} §1）：含分支、环境依赖、可变源字段，拒绝生成代码并输出诊断。</li>
+ *   <li><b>T4 显式逃生口 {@code @HotswapInit}</b>（{@code docs/initfix/04-target-design.md} §3 与 {@code docs/initfix/01-safety-gate.md} §1）：伴生类直接调用该静态方法。</li>
  * </ul>
  *
- * <h2>已知限制</h2>
+ * <h2>效应检查与例外（{@code docs/initfix/01-safety-gate.md} §2）</h2>
  * <ul>
- *   <li><b>参数委托给父类构造器</b>：{@code Sub(samples) : Base(samples)} 里 PUTFIELD 在父类，
- *       子类看不到。</li>
- *   <li><b>Kotlin 防御式写法与 inline 函数</b>：{@code ?.}/{@code ?:}/{@code sumOf}
- *       展开为跳转与局部临时变量，被 checkSafe 拒绝。</li>
- *   <li><b>运行期状态变迁</b>：GETFIELD 读到的是当前值，不是构造时的值。源字段侧由 §4.3
- *       条件 A/B 证明兜住；但依赖链更深处的字段（见下一条）仍然只是"当前值"。</li>
- *   <li><b>间接依赖</b>：依赖检查只看提取片段里的直接 GETFIELD/GETSTATIC。
- *       若 {@code a = compute()} 而 {@code compute()} 读了被拒绝的新增字段 b，
- *       a 会静默拿到 b 的默认值。</li>
- *   <li><b>this 逃逸</b>：{@code names = new ArrayList<>(); init();} 中 init 可能通过
- *       this 访问 names 并加工，静态上看不出来。</li>
- *   <li><b>跨实例字段覆写检测</b>：{@link #scanParamFields} 的"private 单写"证明覆盖全 Nest，
- *       但不区分 receiver（{@code Outer.this.f} 与 {@code this.f} 一视同仁），
- *       且 Nest 成员字节码读不全时一律按"无法证明"拒绝。</li>
- *   <li><b>static final 的 JIT 常量折叠</b>：redefine 到补丁执行之间，若新方法恰好被
- *       JIT 编译，static final 的默认值可能被常量折叠。</li>
- *   <li><b>逐实例补丁非原子</b>：循环里抛异常的实例处于部分初始化状态，日志能看到，
- *       但没有标记。</li>
+ *   <li><b>黑名单拦截</b>：非确定性（时间、随机数、UUID）、反射与动态调用、进程与类加载、
+ *       IO/系统调用、日志输出；{@code ThreadLocal}（执行线程敏感）；外部复用 builder 变异。</li>
+ *   <li><b>白名单放行</b>：基础集合无参构造、{@code Logger} 纯工厂与查询、{@code Objects.requireNonNull}、
+ *       Kotlin {@code Intrinsics}、不可变集合工厂。</li>
+ *   <li><b>窄例外（Kotlin trim 家族）</b>：允许 kotlinc 展开形态中的 {@code Object.toString}
+ *       （仅限来源直接为 {@code StringsKt.trim/trimStart/trimEnd} 的三条纯字符串/CharSequence 闭包），
+ *       其余 {@code Object.toString}/{@code hashCode} 维持黑名单拦截（fail-closed）。</li>
  * </ul>
  *
- * <p>实例快照：由框架在 {@link #transform(Class, byte[], ClassDiff)} 里做一次，
- * 可在 redefine 前通过 {@link #beforeRedefine(Class)} 覆盖。快照窗口只是被缩小、
- * 没有消失。暂存键直接用 {@code Class<?>}，弱引用持有。</p>
- *
- * <h2>报告</h2>
- * <p>{@link #buildPatch} 对每个 {@code addedInstanceFields}/{@code addedStaticFields} 里的
- * 字段都生成一条 {@link FieldDecision}：</p>
+ * <h2>参数回溯不可变证明（{@code docs/initfix/01-safety-gate.md} §3）</h2>
+ * <p>Java 中构造器参数直接赋值（{@code this.f = param}）在切片提取时，将 {@code ALOAD n} 重写为
+ * {@code ALOAD 0; GETFIELD this.f}。重写前提是源字段可证明不可变：</p>
  * <ul>
- *   <li>{@link FieldStatus#ACCEPTED}：已生成补丁代码；</li>
- *   <li>{@link FieldStatus#NOTHING_TO_PATCH}：§4.1 T0 零值等价，本来就不需要补丁；</li>
- *   <li>{@link FieldStatus#REJECTED}：{@link FieldDecision#reason()} 给出<b>提取期记录的真实原因</b>
- *       （含被拒构造器参数槽位的根因），而不是笼统的
- *       {@code "no safe initialization expression found in ..."}。</li>
+ *   <li><b>条件 A</b>：源字段具有 {@code ACC_FINAL}（含 Kotlin {@code val}）。</li>
+ *   <li><b>条件 B</b>：非 final 时必须为 {@code private}，且通过 {@link NestView} 证明全 Nest 范围内
+ *       除本次构造器 pattern 外<b>不存在第二处针对该字段的 {@code PUTFIELD}</b>。</li>
+ * </ul>
+ *
+ * <h2>依赖闭包、成环检测与台账（{@code docs/initfix/02-closure-and-ledger.md}）</h2>
+ * <ul>
+ *   <li><b>成环检测（Tarjan SCC）</b>：在闭包不动点计算内部反复执行，只拒绝环成员，并触发依赖连带拒绝传播。</li>
+ *   <li><b>出口后置闭合校验</b>：最终放行集合对 {@code depInstance ∪ depStatic} 依赖闭合，作为主防线。</li>
+ *   <li><b>待补台账 {@code FieldLedger}</b>：覆盖六种情形（分析期被拒、运行期异常、依赖跳过、Redefine 失败、
+ *       规划期异常、TTL 超时清扫），保证未成功修补字段下一轮重新纳入候选，永不遗忘。</li>
+ * </ul>
+ *
+ * <h2>伴生类、驱动与写入协议（{@code docs/initfix/03-runtime-driver.md}）</h2>
+ * <ul>
+ *   <li><b>伴生类</b>：每个放行字段生成独立静态直线方法（实例 {@code init$F}，静态 {@code initStatic$F}），
+ *       宿主 hidden nestmate 承载，隔离异常与加载死锁。</li>
+ *   <li><b>逐实例驱动</b>：依赖失败按实例隔离；单字段每轮实例失败配额封顶为 8 次（{@link #MAX_INSTANCE_FAILURES_PER_FIELD}）。</li>
+ *   <li><b>写入桥（{@link HotswapBridge}）</b>：默认使用条件 CAS（{@link HotswapBridge#KIND_CONDITIONAL}），
+ *       float/double 统一走 raw bits CAS；跳过计数通过 {@code filterReturnValue} 汇总汇报；
+ *       {@link nipx.annotation.HotswapReinit.Mode#OVERWRITE} 走强制无条件写（{@link HotswapBridge#KIND_FORCE}）。</li>
+ *   <li><b>合成标记字段过滤</b>：由 {@link ClassDiffUtil} 对称过滤 {@code ACC_SYNTHETIC} 与 {@code $nipx$} 前缀字段。</li>
+ * </ul>
+ *
+ * <h2>堆实例检索（{@code docs/initfix/05-jvmti-heap.md}）</h2>
+ * <p>优先使用 {@link LibTool#getInstances(Class)} 进行 Native JVMTI 堆遍历，
+ * 无需字节码插桩即可完整覆盖目标类及其派生子类存活实例；不可用时降级至 {@link InstanceTracker}。</p>
+ *
+ * <h2>核心已知限制与路线图关联（Known Limitations & Roadmap）</h2>
+ * <ul>
+ *   <li><b>static final 的 JIT 常量折叠与读穿限制</b>：
+ *       JIT 编译可能已将旧的静态常量值内联折叠；同时重定义瞬时新方法体可能在补丁就位前读到默认零值（读穿 NPE）。
+ *       单纯内存写无法撤销 JIT 常量折叠。目标解法详见 {@code docs/initfix/04-target-design.md} §1「两阶段 Schema-First 重定义」
+ *       （Stage A 骨架先行，Stage B 补丁执行，Stage C 全量上线）。</li>
+ *   <li><b>实例快照窗口限制与逐实例补丁非原子</b>：
+ *       堆遍历快照到补丁生效之间存在微小时钟窗口，并发业务线程在此期间新建的对象可能漏补。
+ *       目标解法详见 {@code docs/initfix/04-target-design.md} §4「构造器尾部插桩」
+ *       （Stage A 构造器尾部注入切片，物理封死新建对象缝隙）。</li>
+ *   <li><b>跨类批次拓扑依赖限制</b>：
+ *       当前拓扑排序局限于单个宿主类内部（已实现类内拓扑）。若类 X 的新增字段切片直接读取类 Y 的新增字段，
+ *       可能因跨类加载顺序非确定性读到未就绪值。目标解法详见 {@code docs/initfix/04-target-design.md} §5「跨类批次拓扑排序」。</li>
+ *   <li><b>复杂控制流与不可切片表达式</b>：
+ *       含分支（if/switch）、循环、try-catch、局部变量依赖、Kotlin {@code ?.} / {@code ?:} / {@code let} / {@code apply} 等展开形态会被安全门坚决拒绝，记入待补台账。
+ *       目标逃生口设计详见 {@code docs/initfix/04-target-design.md} §3 与 {@code docs/initfix/01-safety-gate.md} §1「T4 显式逃生口 @HotswapInit」。</li>
  * </ul>
  */
 public class InitFix {
@@ -159,7 +138,7 @@ public class InitFix {
 	}
 
 	/**
-	 * 单字段在<b>一次热更</b>内允许失败几次后熔断（§5.2 逐实例驱动的代价控制）。
+	 * 单字段在<b>一次热更</b>内允许失败几次后熔断（{@code docs/initfix/03-runtime-driver.md} §2 逐实例驱动的代价控制）。
 	 *
 	 * <p>按实例隔离"依赖跳过"之后，确定性失败（切片本身必然抛异常）会让<b>每个实例
 	 * 都各自失败一遍</b>，日志与耗时放大成 N 倍。这个配额把同一字段的失败次数封顶，
@@ -169,7 +148,7 @@ public class InitFix {
 
 	/**
 	 * 详细失败日志的全局配额：逐实例驱动下同一轮可能有成千上万个实例各自失败，
-	 * 逐个打栈会淹没日志（{@code docs/INIT_FIX.md} §5.2 的 {@code handleFieldException}）。
+	 * 逐个打栈会淹没日志（{@code docs/initfix/03-runtime-driver.md} §2 的 {@code handleFieldException}）。
 	 */
 	private static final AtomicInteger DETAILED_FAILURE_LOGS = new AtomicInteger();
 
@@ -195,7 +174,7 @@ public class InitFix {
 	 Collections.synchronizedMap(new WeakHashMap<>());
 
 	/**
-	 * 待补字段台账 {@code FieldLedger}（{@code docs/INIT_FIX.md} §3.4）：
+	 * 待补字段台账 {@code FieldLedger}（{@code docs/initfix/02-closure-and-ledger.md} §2）：
 	 * {@code Class -> (字段名 -> 未补原因)}。
 	 *
 	 * <p>解决的问题：redefine 一旦成功，类结构就<b>不可逆</b> —— 宿主类已在物理内存里
@@ -289,7 +268,7 @@ public class InitFix {
 	}
 
 	/**
-	 * 单个字段的补丁任务（{@code docs/INIT_FIX.md} §5.2）。
+	 * 单个字段的补丁任务（{@code docs/initfix/03-runtime-driver.md} §2）。
 	 * @param methodName   伴生类里承载该字段的独立静态方法名
 	 * @param fieldName    字段名（报告/失败台账的键）
 	 * @param isStatic     静态字段（方法无参，整个补丁只调用一次）
@@ -304,8 +283,8 @@ public class InitFix {
 	}
 
 	/**
-	 * 一次热更的补丁计划：按拓扑序排列的逐字段任务（§5.1 每字段独立静态方法 +
-	 * §5.2 宿主驱动调度）。
+	 * 一次热更的补丁计划：按拓扑序排列的逐字段任务（{@code docs/initfix/03-runtime-driver.md} §1 每字段独立静态方法 +
+	 * {@code docs/initfix/03-runtime-driver.md} §2 宿主驱动调度）。
 	 */
 	public record PatchPlan(List<FieldPatchTask> instanceTasks, List<FieldPatchTask> staticTasks) {
 		public static final PatchPlan EMPTY = new PatchPlan(List.of(), List.of());
@@ -379,7 +358,7 @@ public class InitFix {
 		/** 已生成补丁代码。 */
 		ACCEPTED,
 		/**
-		 * T0 零值等价（{@code docs/INIT_FIX.md} §4.1）：存量实例与静态环境本来就是该类型的
+		 * T0 零值等价（{@code docs/initfix/01-safety-gate.md} §1）：存量实例与静态环境本来就是该类型的
 		 * 默认值，零开销放行，不生成补丁，也不告警。
 		 */
 		NOTHING_TO_PATCH,
@@ -391,7 +370,7 @@ public class InitFix {
 	 * 单个字段的放行决策。
 	 * @param status   放行状态
 	 * @param reason   被拒时的原因（{@link FieldStatus#REJECTED} 才有意义）
-	 * @param warnings 已放行但带已知风险的说明（例如 §1.1 注解豁免了"构造器里用过该字段"
+	 * @param warnings 已放行但带已知风险的说明（例如 {@code docs/initfix/03-runtime-driver.md} §4 注解豁免了"构造器里用过该字段"
 	 *                 这条门时，构造器里的那部分用法不会被补丁重放）。空表示无风险。
 	 */
 	public record FieldDecision(FieldStatus status, String reason, List<String> warnings) {
@@ -481,7 +460,7 @@ public class InitFix {
 		} catch (Throwable e) {
 			HotSwapAgent.error("Field init patch generation failed for " + className
 			                   + ": " + e.getMessage(), e);
-			// §3.4：buildPatch 抛异常意味着没生成任何补丁，但 redefine 会照常推进，
+			// docs/initfix/02-closure-and-ledger.md §2：buildPatch 抛异常意味着没生成任何补丁，但 redefine 会照常推进，
 			// 这些新增字段从此不再出现在 Diff 里。必须在这里记账，否则永久遗忘。
 			// 已有的台账条目原样保留（ledgerPut 会覆盖原因，这里跳过以免丢掉上一轮的结论）。
 			Map<String, String> existing = ledgerSnapshot(host);
@@ -514,7 +493,7 @@ public class InitFix {
 		//
 		// 为什么不在 removeIf 的判定式里直接写台账：那会在持有 PENDING 锁的同时
 		// 去拿 LEDGER 锁，两把锁的获取顺序就取决于调用路径，属于无谓的死锁面。
-		// 清单元素只持有 <b>弱引用</b> 的宿主键（照 §1.2 不变量 2，不新增强引用），
+		// 清单元素只持有 <b>弱引用</b> 的宿主键（照 AGENTS.md 不变量 2，不新增强引用），
 		// 弱引用在锁外可能已被清除，写台账前逐个 get() 复核。
 		List<StalePatch> stale = new ArrayList<>();
 		synchronized (PENDING) {
@@ -527,7 +506,7 @@ public class InitFix {
 					    + ", age=" + TimeUnit.NANOSECONDS.toSeconds(age) + "s");
 					// 字段名从补丁计划取（与 afterRedefineFailed 同一来源）：
 					// 此刻还没补上任何一个字段，它们必须记入台账，否则
-					// redefine 推进后这些字段再也不会出现在 Diff 里 —— §3.4 的遗忘场景。
+					// redefine 推进后这些字段再也不会出现在 Diff 里 —— docs/initfix/02-closure-and-ledger.md §2 的遗忘场景。
 					List<String> fields = new ArrayList<>();
 					for (FieldPatchTask task : e.getValue().plan().allTasks()) {
 						fields.add(task.fieldName());
@@ -593,11 +572,11 @@ public class InitFix {
 			    + " independent root constructors");
 		}
 
-		// 宿主 Nest 视图：§4.3 的"全 Nest 单写证明"与 §4.1 T0 的"无写入"判定都基于它。
+		// 宿主 Nest 视图：docs/initfix/01-safety-gate.md §3 的"全 Nest 单写证明"与 §1 T0 的"无写入"判定都基于它。
 		// 全程只读字节码，不调用 Class.forName，避免在 transform 线程上触发类加载死锁。
 		NestView nest = NestView.of(host, newClass);
 
-		// ==================== §1.1 存量重置扩展：候选集 ====================
+		// ==================== docs/initfix/03-runtime-driver.md §4 存量重置扩展：候选集 ====================
 		// 默认只处理新增字段；标了 @HotswapReinit 的已有字段按显式声明进入候选集。
 		Map<String, ReinitField> reinitFields         = scanReinitFields(newClass);
 		Set<String>              targetInstanceFields = new LinkedHashSet<>(addedInstanceFields);
@@ -617,7 +596,7 @@ public class InitFix {
 			    + ": instance=" + targetInstanceFields + ", static=" + targetStaticFields);
 		}
 
-		// §3.4 台账并集：候选字段集合 = 本轮 Diff 新增字段 ∪ 台账内未决字段（∪ 注解字段）。
+		// docs/initfix/02-closure-and-ledger.md §2 台账并集：候选字段集合 = 本轮 Diff 新增字段 ∪ 台账内未决字段（∪ 注解字段）。
 		// 这些字段的写入语句仍在构造函数/<clinit> 里，所以仍走同一套提取与安全门；
 		// 之所以必须显式并回来，是因为它们已经"存在"于旧字节码，永远不会再出现在 Diff 里。
 		int retried = 0;
@@ -702,14 +681,14 @@ public class InitFix {
 		List<MethodNode> staticScanMethods = new ArrayList<>(initMethods);
 		if (clinitMethod != null) staticScanMethods.add(clinitMethod);
 
-		// ==================== 阶段 0.5：T0 零值等价过滤（§4.1） ====================
+		// ==================== 阶段 0.5：T0 零值等价过滤（docs/initfix/01-safety-gate.md §1） ====================
 		// 显式 = null / = 0 / = false、仅声明未赋值、以及 static ConstantValue 按位为零的字段，
 		// 存量实例与静态环境本来就是默认值：零开销放行，不生成补丁（也不会生成恒等 CAS 写）。
 		// 浮点按位判定，-0.0f / -0.0d / NaN 的位模式非零，不算零值等价。
 		Set<String> zeroInstanceFields = new LinkedHashSet<>();
 		for (String f : targetInstanceFields) {
 			if (selfAssignedFields.contains(f)) continue;
-			if (reinitFields.containsKey(f)) continue;   // §1.1：显式重置请求不受 T0 影响
+			if (reinitFields.containsKey(f)) continue;   // docs/initfix/03-runtime-driver.md §4：显式重置请求不受 T0 影响
 			if (isZeroEquivalentField(nest, newClass, fieldNodes.get(f), false, instanceExtracts)) {
 				zeroInstanceFields.add(f);
 			}
@@ -761,10 +740,10 @@ public class InitFix {
 				refuseReason = "field is only initialized in " + fromRootCount
 				               + " of " + rootCtorCount + " root constructors";
 			} else {
-				// §4.4 构造器共识放宽：多根构造器 + 参数回溯并非绝对禁止。
+				// docs/initfix/01-safety-gate.md §4 构造器共识放宽：多根构造器 + 参数回溯并非绝对禁止。
 				// 上面的分支已保证所有根构造器都覆盖了该字段，只要参数替换完成后的
 				// 指令指纹 100% 一致，各构造路径的初始语义就是同构的，可以安全放行。
-				// （源字段的不可变性由 §4.3 的证明在 scanParamFields 阶段保证。）
+				// （源字段的不可变性由 docs/initfix/01-safety-gate.md §3 的证明在 scanParamFields 阶段保证。）
 				refuseReason = fingerprintMismatchReason(extracts);
 			}
 
@@ -874,7 +853,7 @@ public class InitFix {
 				}
 			}
 
-			// §3.5 成环检测：并入同一固定点，而不是等闭包收敛后再做一次。
+			// docs/initfix/02-closure-and-ledger.md §1 成环检测：并入同一固定点，而不是等闭包收敛后再做一次。
 			//
 			// 环成员被拒会改变接受集合，而依赖这些成员的字段可能早已通过 depReason
 			// （跨组尤其明显：实例字段读静态字段时，静态侧成环被拒，实例侧早已放行）。
@@ -917,7 +896,7 @@ public class InitFix {
 		// ==================== 阶段 2.6：出口后置闭合校验（主防线） ====================
 		// 不依赖前面的顺序是否正确：最终放行的集合必须对依赖闭合 ——
 		// 每个放行字段读到的"本轮受补字段"都必须在放行集合内（T0 零值字段除外）。
-		// 它同时覆盖 §3.5（成环后依赖方不重判）与 §5.2（静态依赖边缺失）以及将来
+		// 它同时覆盖 docs/initfix/02-closure-and-ledger.md §1（成环后依赖方不重判）与 docs/initfix/03-runtime-driver.md §2（静态依赖边缺失）以及将来
 		// 同类的漏网。违反即整类拒绝并打 error，宁可少补也不静默写入过期值。
 		String closureViolation = closureViolation(
 		 acceptedInstance, acceptedStatic, instanceExtracts, staticExtracts,
@@ -964,9 +943,9 @@ public class InitFix {
 			orderedStatic = List.of();
 		}
 
-		// ==================== 阶段 3：逐字段发射（§5.1 每字段独立静态方法） ====================
+		// ==================== 阶段 3：逐字段发射（docs/initfix/03-runtime-driver.md §1 每字段独立静态方法） ====================
 		// 每个放行字段单独一个静态直线方法：一行抛异常只影响该字段，不会像"单方法承载全部
-		// 字段"那样跳过其后所有字段（§5.2 的驱动依赖这一点做失败隔离）。
+		// 字段"那样跳过其后所有字段（docs/initfix/03-runtime-driver.md §2 的驱动依赖这一点做失败隔离）。
 		String      hostInternal      = Type.getInternalName(host);
 		Set<String> conditionalFields = new HashSet<>(targetInstanceFields);
 		conditionalFields.addAll(targetStaticFields);
@@ -1000,7 +979,7 @@ public class InitFix {
 			// 依赖闭包必须同时统计实例侧与<b>静态侧</b>的读取。
 			// 只传 acceptedInstance 会把切片里的 GETSTATIC 整个漏掉：静态字段补失败后，
 			// 依赖它的实例任务不会被跳过，照常执行并读到未补的静态字段默认值 ——
-			// 静默写入过期值，违反 §3.2"切片不能依赖未补上的值"的核心原则。
+			// 静默写入过期值，违反 docs/initfix/02-closure-and-ledger.md §1"切片不能依赖未补上的值"的核心原则。
 			// （静态任务先于实例任务执行，其失败已落入共享的 failedFields，
 			//  因此这里只要把边记全，跳过与记账就会自动发生。）
 			Set<String> instanceDeps = new LinkedHashSet<>(
@@ -1073,7 +1052,7 @@ public class InitFix {
 		return name;
 	}
 
-	/** 该字段切片读取的、同样在本轮受补的其它字段（§5.2 的依赖失败传播用）。 */
+	/** 该字段切片读取的、同样在本轮受补的其它字段（docs/initfix/03-runtime-driver.md §2 的依赖失败传播用）。 */
 	private static Set<String> dependencyOf(
 	 String fieldName, Map<String, List<FieldExtract>> extracts,
 	 String className, Set<String> acceptedFields) {
@@ -1251,7 +1230,7 @@ public class InitFix {
 	}
 
 	/**
-	 * 出口后置闭合校验（§3.5 的主防线）。
+	 * 出口后置闭合校验（{@code docs/initfix/02-closure-and-ledger.md} §1 的主防线）。
 	 *
 	 * <p>断言：最终放行的每个字段，其切片读到的<b>本轮受补</b>字段也必须已放行。
 	 * 它不依赖前置阶段的顺序是否正确，因此对"成环后依赖方不重判"（跨组漏网）、
@@ -1315,12 +1294,12 @@ public class InitFix {
 		return true;
 	}
 
-	// ==================== §1.1 存量重置扩展：注解扫描 ====================
+	// ==================== docs/initfix/03-runtime-driver.md §4 存量重置扩展：注解扫描 ====================
 
 	/**
 	 * 扫描带 {@code @HotswapReinit} 的字段，解析其写入协议。
 	 *
-	 * <p>只做<b>描述符字符串匹配</b>，不加载注解类 —— 与 §2.1 的离线层级接口同一原则：
+	 * <p>只做<b>描述符字符串匹配</b>，不加载注解类 —— 与 {@code docs/initfix/01-safety-gate.md} §5 的离线层级接口同一原则：
 	 * 在 transform 线程上 {@code Class.forName} 注解类型可能触发类加载死锁。
 	 * 元素缺省时按注解声明取默认值 {@code OVERWRITE}。</p>
 	 */
@@ -1583,12 +1562,12 @@ public class InitFix {
 		return null;
 	}
 
-	// ==================== §1.1 注解豁免的告警 ====================
+	// ==================== docs/initfix/03-runtime-driver.md §4 注解豁免的告警 ====================
 
 	/**
 	 * {@code @HotswapReinit} 豁免了"构造器里用过该字段"这条门时，把风险显式喊出来。
 	 *
-	 * <p>豁免本身是用户显式声明的（§1.1），但代价必须可见：</p>
+	 * <p>豁免本身是用户显式声明的（{@code docs/initfix/03-runtime-driver.md} §4），但代价必须可见：</p>
 	 * <ul>
 	 *   <li>补丁只重建<b>字段初始化式</b>，构造器里对它的其它用法（例如
 	 *       {@code sb.get().append("aass")}）<b>不会</b>重放 —— 存量实例与正常构造的
@@ -1760,12 +1739,12 @@ public class InitFix {
 		return null;
 	}
 
-	// ==================== 宿主 Nest 视图（§4.3 / §4.1 的字节码底座） ====================
+	// ==================== 宿主 Nest 视图（docs/initfix/01-safety-gate.md §3 / §1 的字节码底座） ====================
 
 	/**
 	 * 宿主的 Nest 视图：完整成员清单与紧凑的 Nest 字段写入索引。
 	 *
-	 * <p>用于两件事：{@code docs/INIT_FIX.md} §4.3 的"全 Nest 单写证明"，以及 §4.1 T0
+	 * <p>用于两件事：{@code docs/initfix/01-safety-gate.md} §3 的"全 Nest 单写证明"，以及 {@code docs/initfix/01-safety-gate.md} §1 T0
 	 * 的"该字段在任何地方都没被写过"判定。</p>
 	 *
 	 * <p><b>只读字节码，绝不 {@code Class.forName}</b>：优先取
@@ -1831,7 +1810,7 @@ public class InitFix {
 		}
 	}
 
-	// ==================== T0 零值等价（§4.1） ====================
+	// ==================== T0 零值等价（docs/initfix/01-safety-gate.md §1） ====================
 
 	/**
 	 * T0 判定：该新增字段是否"零值等价"——存量实例与静态环境本来就已经是默认值。
@@ -1845,7 +1824,7 @@ public class InitFix {
 	 * </ol>
 	 *
 	 * <p>浮点按位判定：{@code -0.0f} / {@code -0.0d} / {@code NaN} 的位模式非零，
-	 * 因此<b>不</b>算零值等价（§4.1 明确排除）。第 3 条要求"切片数与写指令数相等"，
+	 * 因此<b>不</b>算零值等价（{@code docs/initfix/01-safety-gate.md} §1 明确排除）。第 3 条要求"切片数与写指令数相等"，
 	 * 避免出现"只看得到零值那次写、看不到另一次危险写"的静默误判。</p>
 	 */
 	private static boolean isZeroEquivalentField(
@@ -1936,9 +1915,9 @@ public class InitFix {
 		return false;
 	}
 
-	// ==================== P0 最小效应防御（§4.2 的完整 8 位掩码属于 P2） ====================
+	// ==================== P0 最小效应防御（docs/initfix/01-safety-gate.md §2 的完整 8 位掩码属于 P2） ====================
 
-	/** 基础集合的无参构造：{@code ALLOC_PURE}，永不拦截（§8 P0-2 要求"严防误杀"）。 */
+	/** 基础集合的无参构造：{@code ALLOC_PURE}，永不拦截（docs/initfix/01-safety-gate.md §2.1 要求"严防误杀"）。 */
 	private static final Set<String> PURE_NOARG_CTOR_OWNERS = Set.of(
 	 "java/util/ArrayList", "java/util/LinkedList", "java/util/Vector", "java/util/Stack",
 	 "java/util/HashMap", "java/util/LinkedHashMap", "java/util/TreeMap", "java/util/Hashtable",
@@ -1979,7 +1958,7 @@ public class InitFix {
 
 	/**
 	 * ThreadLocal 家族里依赖"执行线程"的方法：{@code get}/{@code initialValue}/{@code childValue}
-	 * 读的是<b>当前线程</b>的副本（§4.2 bit 4 {@code READS_MUTABLE}），{@code set}/{@code remove}
+	 * 读的是<b>当前线程</b>的副本（{@code docs/initfix/01-safety-gate.md} §2 bit 4 {@code READS_MUTABLE}），{@code set}/{@code remove}
 	 * 变异堆状态（bit 5 {@code MUTATES_HEAP}）。
 	 *
 	 * <p>补丁永远在热更线程上执行，而实例是在应用线程上构造的 —— 两者不是同一条线程，
@@ -1996,7 +1975,7 @@ public class InitFix {
 
 	/**
 	 * builder 的变异方法。这些方法本身必须放行（{@code new StringBuilder().append(..)}
-	 * 是 §4.2 明确要求豁免的 {@code ALLOC_PURE}），所以判定落在<b>接收者</b>上，
+	 * 是 {@code docs/initfix/01-safety-gate.md} §2 明确要求豁免的 {@code ALLOC_PURE}），所以判定落在<b>接收者</b>上，
 	 * 见 {@link #builderMutatorReason}。
 	 */
 	private static final Set<String> BUILDER_MUTATORS = Set.of(
@@ -2053,7 +2032,7 @@ public class InitFix {
 		return null;
 	}
 
-	/** §4.2 bit 3 的典型例子：同名重载里依赖默认 Locale / 默认 Charset 的那几个。 */
+	/** {@code docs/initfix/01-safety-gate.md} §2 bit 3 的典型例子：同名重载里依赖默认 Locale / 默认 Charset 的那几个。 */
 	private static boolean isImpureOverload(MethodInsnNode m) {
 		if (!"java/lang/String".equals(m.owner)) return false;
 		String name = m.name, desc = m.desc;
@@ -2182,7 +2161,7 @@ public class InitFix {
 	}
 
 	/**
-	 * §4.2「接收者敏感的堆读取判定」+「局部逃逸豁免严格边界」的最小落地。
+	 * {@code docs/initfix/01-safety-gate.md} §2「接收者敏感的堆读取判定」+「局部逃逸豁免严格边界」的最小落地。
 	 *
 	 * <p>两种形态在指令层面只差<b>接收者从哪来</b>：</p>
 	 * <ul>
@@ -2190,7 +2169,7 @@ public class InitFix {
 	 *       {@code NEW} 出来的对象，从未逃逸 → {@code ALLOC_PURE}，<b>放行</b>；</li>
 	 *   <li>{@code this.key = BUF.append(name).toString()}（{@code BUF} 是可复用缓存字段）：
 	 *       接收者来自字段/参数 → 读到的是别人留下的内容，且会把外部堆状态改脏
-	 *       （§4.2 bit 4 + bit 5）。更隐蔽的是 {@code setLength(0)} 这类重置语句通常写在
+	 *       （{@code docs/initfix/01-safety-gate.md} §2 bit 4 + bit 5）。更隐蔽的是 {@code setLength(0)} 这类重置语句通常写在
 	 *       <b>切片之外</b>，提取时看不见，于是补丁重放会得到 {@code "abcabc"} 这种累积值。
 	 *       实测确认过这条路径，<b>拒绝</b>。</li>
 	 * </ul>
@@ -2334,7 +2313,7 @@ public class InitFix {
 	 * 扫描 {@code <init>} 里 {@code ALOAD 0; XLOAD n; PUTFIELD this.f} 形态的
 	 * "参数持久化到字段"模式，建立 {@code slot -> field} 回溯映射。
 	 *
-	 * <p><b>§4.3 源字段不可变证明</b>：映射成立后，切片段里的 {@code ALOAD n} 会被改写为
+	 * <p><b>{@code docs/initfix/01-safety-gate.md} §3 源字段不可变证明</b>：映射成立后，切片段里的 {@code ALOAD n} 会被改写为
 	 * {@code ALOAD 0; GETFIELD this.f}。补丁在 redefine 之后才执行，读到的是字段
 	 * <b>当前</b>值而非构造时的值，所以只有当 {@code f} 在构造完成后不可能再变时改写才等价：</p>
 	 * <ol>
@@ -2393,7 +2372,7 @@ public class InitFix {
 				continue;
 			}
 
-			// §4.3：源字段必须可证明不可变
+			// docs/initfix/01-safety-gate.md §3：源字段必须可证明不可变
 			FieldNode source = null;
 			for (FieldNode fn : hostClass.fields) {
 				if (fn.name.equals(fc.name) && fn.desc.equals(fc.desc)) {
@@ -2493,7 +2472,7 @@ public class InitFix {
 	}
 
 	/**
-	 * §4.3 源字段不可变证明。
+	 * {@code docs/initfix/01-safety-gate.md} §3 源字段不可变证明。
 	 * @param pattern 本次触发映射的 {@code PUTFIELD}（Nest 扫描时按对象身份排除）
 	 * @return null 表示可证明构造后不再变化；否则返回拒绝原因
 	 */
@@ -2761,7 +2740,7 @@ public class InitFix {
 		if (clazz == null) return;
 		PendingPatch dropped = PENDING.remove(clazz);
 		if (dropped != null) {
-			// §3.4 的核心场景：redefine 失败，但补丁计划已经生成、类结构随时可能推进；
+			// docs/initfix/02-closure-and-ledger.md §2 的核心场景：redefine 失败，但补丁计划已经生成、类结构随时可能推进；
 			// 这些字段一个都没补，必须记账，否则它们再也不会出现在 Diff 里。
 			for (FieldPatchTask task : dropped.plan().allTasks()) {
 				ledgerPut(clazz, task.fieldName(), "redefine failed; patch never applied");
@@ -2773,13 +2752,13 @@ public class InitFix {
 	}
 
 	/**
-	 * 宿主侧补丁驱动器（{@code docs/INIT_FIX.md} §5.2）。
+	 * 宿主侧补丁驱动器（{@code docs/initfix/03-runtime-driver.md} §2）。
 	 *
 	 * <p>逐字段调度：每个字段一个独立的静态直线方法，失败只影响该字段与其下游，
 	 * 不会像"单方法承载全部字段"那样由一行异常跳过其后所有字段。依赖字段失败的
-	 * 字段会被显式跳过并记账（{@code FieldLedger} 的雏形，见 P1-③）。</p>
+	 * 字段会被显式跳过并记账（{@code FieldLedger} 记入失败原因）。</p>
 	 *
-	 * <p>{@code LinkageError} 仍然上抛熔断（§1.2 不变量 4）：它意味着类元数据假设已被
+	 * <p>{@code LinkageError} 仍然上抛熔断（AGENTS.md 不变量 4）：它意味着类元数据假设已被
 	 * JVM 打破，继续修补没有意义。</p>
 	 */
 	private static void applyPatch(Class<?> host, PendingPatch patch) throws Throwable {
@@ -2883,7 +2862,7 @@ public class InitFix {
 		}
 
 		if (!failedFields.isEmpty() || !skippedFields.isEmpty()) {
-			// §3.4 待补台账：本轮没补上的字段记入，下一轮候选集自动并回来。
+			// docs/initfix/02-closure-and-ledger.md §2 待补台账：本轮没补上的字段记入，下一轮候选集自动并回来。
 			// 先写 failed，再写 skipped —— 熔断字段同时属于两者（它确实失败过，
 			// 又被"放弃"），而 skipped 的原因更具体（"达到失败上限后放弃"），
 			// 因此必须后写、覆盖掉笼统的 runtime failure。
@@ -2958,7 +2937,7 @@ public class InitFix {
 	}
 
 	/**
-	 * 逐实例驱动的失败预算（§5.2 的代价控制）。
+	 * 逐实例驱动的失败预算（{@code docs/initfix/03-runtime-driver.md} §2 的代价控制）。
 	 *
 	 * <p>按实例隔离"依赖跳过"之后，确定性失败（切片本身必然抛异常）会让每个实例
 	 * 都各自失败一遍，日志与耗时放大成 N 倍。这里给每个字段一个本轮的失败配额，
@@ -2999,7 +2978,7 @@ public class InitFix {
 		InstanceFailureBudget budget = new InstanceFailureBudget();
 
 		for (Object target : targets) {
-			// §5.2：依赖跳过必须<b>按实例</b>隔离。
+			// docs/initfix/03-runtime-driver.md §2：依赖跳过必须<b>按实例</b>隔离。
 			// 旧实现让所有实例共享 failed/skipped：某个实例的 X 失败后，
 			// 其余实例的依赖字段 Y 全被跳过 —— 尽管它们的 X 是成功的，
 			// 同一轮内状态因此是分裂的。这里每个 target 一份局部集合。
@@ -3088,7 +3067,7 @@ public class InitFix {
 			try {
 				if (target == null) { mh.invokeExact(); } else mh.invokeExact(target);
 			} catch (LinkageError le) {
-				// §1.2 熔断只针对"JVM 元数据假设已被打破"的系统性故障。
+				// AGENTS.md 不变量 4 熔断只针对"JVM 元数据假设已被打破"的系统性故障。
 				// indy bootstrap 失败（BootstrapMethodError 包装了我们自己的解析失败）
 				// 是<b>单字段</b>的链接问题，不该中止整轮 —— 那与"每字段一个方法、
 				// 失败隔离"的设计目标直接冲突。
@@ -3102,7 +3081,7 @@ public class InitFix {
 
 	/**
 	 * 判断一个 {@code LinkageError} 是否是<b>可隔离的单字段链接失败</b>，
-	 * 而不是"JVM 元数据假设已被打破"的系统性故障（后者必须熔断，§1.2 不变量 4）。
+	 * 而不是"JVM 元数据假设已被打破"的系统性故障（后者必须熔断，AGENTS.md 不变量 4）。
 	 *
 	 * <p>为什么需要区分：{@code HotswapBridge.bootstrap} 把任何 {@code Throwable} 都包成
 	 * {@code BootstrapMethodError}（{@code LinkageError} 的子类）。因此某个字段的
@@ -3149,7 +3128,7 @@ public class InitFix {
 		out.addAll(c);
 		return out;
 	}
-	// (union 由 §3.4 的 FieldLedger 使用；P1-③ 落地前保留为工具方法)
+	// (union 由 docs/initfix/02-closure-and-ledger.md §2 的 FieldLedger 使用；P1-③ 落地前保留为工具方法)
 
 	private static List<Object> collectInstancesForPatch(PendingPatch patch) {
 		List<WeakReference<Object>> snapshot = patch.instanceSnapshot();
@@ -3585,7 +3564,7 @@ public class InitFix {
 					// 构造器参数，克隆阶段会替换为 ALOAD 0; GETFIELD
 				} else if (isLoadOfParam(v) && rejectedParamSlots != null
 				           && rejectedParamSlots.containsKey(v.var)) {
-					// 该槽位本来是"参数->字段"模式的候选，但被 §4.3 不可变证明或
+					// 该槽位本来是"参数->字段"模式的候选，但被 docs/initfix/01-safety-gate.md §3 不可变证明或
 					// 单赋值检查拒掉了：把真实原因透传出去，而不是笼统的"局部变量"。
 					return "constructor parameter slot " + v.var
 					       + " cannot be back-tracked: " + rejectedParamSlots.get(v.var);
@@ -3597,11 +3576,11 @@ public class InitFix {
 				return "depends on local variables";
 			}
 
-			// §4.2 的最小效应防御（P0 版）：明确非确定性 / 环境依赖 / IO 的调用直接拒绝。
+			// docs/initfix/01-safety-gate.md §2 的最小效应防御（P0 版）：明确非确定性 / 环境依赖 / IO 的调用直接拒绝。
 			String effect = effectReason(n, insns, frames, collected);
 			if (effect != null) return effect;
 
-			// §4.2 局部逃逸豁免的接收者敏感判定：可复用 builder 的接收者必须来自本切片。
+			// docs/initfix/01-safety-gate.md §2 局部逃逸豁免的接收者敏感判定：可复用 builder 的接收者必须来自本切片。
 			if (n instanceof MethodInsnNode mm) {
 				String builderReason = builderMutatorReason(mm, insns, frames);
 				if (builderReason != null) return builderReason;

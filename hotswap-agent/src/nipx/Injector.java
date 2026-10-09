@@ -9,6 +9,16 @@ import java.util.*;
 
 import static nipx.HotSwapAgent.*;
 
+/**
+ * UI 组件字节码增强注入器。
+ *
+ * <p>配合 {@link LambdaRef} 使用，在指定类的回调注册方法（如 {@code Element.update(Runnable)}、
+ * {@code addListener(EventListener)} 等）入口处，利用 ASM {@link AdviceAdapter} 动态织入拦截指令，
+ * 将原始 Lambda 参数替换为经过 {@link UpdateRef} 包装的保护代理对象，实现针对高频调用的局部熔断。</p>
+ *
+ * @see LambdaRef
+ * @see UpdateRef
+ */
 public class Injector {
 	static final String CL_ELEMENT = "arc/scene/Element";
 	public static void redefineOneClass(Class<?> theClass, byte[] bytes) {

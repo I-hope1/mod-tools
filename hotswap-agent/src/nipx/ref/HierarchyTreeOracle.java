@@ -15,7 +15,16 @@ import java.io.InputStream;
 import java.lang.ref.WeakReference;
 import java.util.*;
 
-/** ClassHierarchyOracle backed exclusively by bytecode metadata and the agent cache. */
+/**
+ * 基于纯字节码元数据与 Agent 缓存实现的 {@link ClassHierarchyOracle}。
+ *
+ * <p>底层依赖 {@link AnnotationTransformer.HierarchyTree} 维护的轻量继承图（仅保留 {@code superName}、
+ * {@code interfaces} 与 {@code access}），并优先从 {@link HotSwapAgent#bytecodeCache}
+ * 与 ClassLoader 资源流中读取字节码。在整个查询过程中绝不触发类加载。</p>
+ *
+ * <p>单次分析实例中通过局部 Map 缓存解析的 {@link ClassNode}，并在 Nest 成员证明中
+ * 采用流式 ASM Visitor 提取 {@code PUTFIELD}/{@code PUTSTATIC} 指令，实现高效的不可变性证明。</p>
+ */
 public final class HierarchyTreeOracle implements ClassHierarchyOracle {
 	private final WeakReference<ClassLoader> loader;
 	private final ClassNode                  preferredClass;

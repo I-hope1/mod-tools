@@ -14,6 +14,10 @@ import java.util.concurrent.atomic.LongAdder;
 /**
  * 补丁类引用的两个 bridge 的合并实现，统一走 {@code invokedynamic} + 单一 bootstrap。
  *
+ * <p><b>设计文档与状态索引</b>：
+ * 设计文档参见 {@code docs/initfix/03-runtime-driver.md} §1、§2 与 §4；
+ * 实现状态参见 {@code docs/status.md} 与 {@code AGENTS.md}。</p>
+ *
  * <p><b>用途一（{@link #KIND_PROTECTED}）</b>：宿主访问跨包 {@code protected} 成员时，
  * hidden class 不是宿主子类，直接调用会因 JVMS §5.4.4 receiver check 抛
  * {@code IllegalAccessError}。用宿主特权 Lookup 在此解析出 {@link MethodHandle}，
@@ -42,7 +46,7 @@ import java.util.concurrent.atomic.LongAdder;
  *       <b>没有</b>（实测 1.8.0_332：absent；25.0.2：present）。若按名字探测，
  *       同一补丁在 JDK 9+ 是条件 CAS、在 JDK 8 退化成 {@code putFloatVolatile}
  *       无条件写 —— 会覆盖其他线程已写入的值，与本节"保守方向"相反。
- *       统一走 raw bits 后两条 JDK 语义一致，且与 §4.1 T0 的<b>按位判零</b>口径对齐：
+ *       统一走 raw bits 后两条 JDK 语义一致，且与 {@code docs/initfix/01-safety-gate.md} §1 T0 的<b>按位判零</b>口径对齐：
  *       {@code -0.0f} 位模式非零，被视为"已有值"而跳过。</li>
  * </ul>
  *
@@ -67,10 +71,10 @@ public final class HotswapBridge {
 	public static final int KIND_CONDITIONAL = 1;
 
 	/**
-	 * 强制写（{@code @HotswapReinit(mode = OVERWRITE)}，{@code docs/INIT_FIX.md} §1.1）：
+	 * 强制写（{@code @HotswapReinit(mode = OVERWRITE)}，参考 {@code docs/initfix/03-runtime-driver.md} §3 与 §4）：
 	 * owner 是宿主类。
 	 * <p>与 {@link #KIND_CONDITIONAL} 的唯一差别是<b>不比较旧值</b>：无条件 volatile 写。
-	 * 之所以必须经 Unsafe 而不是 {@code putfield}：{@code final} 字段只允许在声明类的
+	 * 之操作必须经 Unsafe 而不是 {@code putfield}：{@code final} 字段只允许在声明类的
 	 * 构造器里被赋值，而补丁是宿主的一个 hidden nestmate class，直接 {@code putfield}
 	 * 会在链接期抛 {@code IllegalAccessError}。</p>
 	 */
@@ -291,7 +295,7 @@ public final class HotswapBridge {
 	 * 从 JDK 8 起就有），语义一致。</p>
 	 *
 	 * <p><b>按位判零</b>：expected 取 {@code floatToRawIntBits(0.0f) == 0} / {@code doubleToRawLongBits(0.0d) == 0L}，
-	 * 与 §4.1 T0 的判零口径一致。于是 {@code -0.0f}（位模式 {@code 0x80000000}）与
+	 * 与 {@code docs/initfix/01-safety-gate.md} §1 T0 的判零口径一致。于是 {@code -0.0f}（位模式 {@code 0x80000000}）与
 	 * 各类 NaN 都被视为"字段已有值"，条件 CAS 失败、补丁跳过 —— 这正是保守方向所需。</p>
 	 *
 	 * <p>句柄组合：{@code casInt(Object,long,int,int)boolean}

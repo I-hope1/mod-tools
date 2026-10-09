@@ -10,6 +10,17 @@ import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.reflect.*;
 import java.security.ProtectionDomain;
 
+/**
+ * 底层特权反射与方法句柄基础设施工具类。
+ *
+ * <p>提供不受 JVM 模块系统（JPMS）与访问权限限制的特权能力：</p>
+ * <ul>
+ *   <li>{@link #IMPL_LOOKUP}：绕过权限校验的全特权 {@link java.lang.invoke.MethodHandles.Lookup}；</li>
+ *   <li>{@link #UNSAFE}：{@link sun.misc.Unsafe} 实例；</li>
+ *   <li>跨 JDK 版本的类定义桥接（{@link #defineClass}）：自动适配 JDK 8 至 JDK 21+ 的
+ *       {@code ClassLoader.defineClass} 与 {@code Unsafe.defineClass}。</li>
+ * </ul>
+ */
 public class Reflect {
 	public static final Lookup IMPL_LOOKUP;
 	public static final Unsafe UNSAFE = getUnsafe0();

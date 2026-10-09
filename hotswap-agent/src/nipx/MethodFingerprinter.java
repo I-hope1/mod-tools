@@ -6,9 +6,14 @@ import org.objectweb.asm.*;
 import java.util.*;
 
 /**
- * 方法指纹生成器。
+ * 方法逻辑指令指纹生成器。
  *
- * <p>用于为 Java 方法生成唯一的哈希指纹，主要用于热重载时的方法匹配。</p>
+ * <p><b>设计文档与状态索引</b>：
+ * 设计文档参见 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §3.1；
+ * 实现状态参见 {@code docs/status.md} 与 {@code AGENTS.md}。</p>
+ *
+ * <p>参考 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §3.1。为 Java 方法指令流生成与调试元数据无关的
+ * 64 位 CRC64 哈希指纹，用于热重载时的方法匹配、Lambda 对齐与匿名类结构识别。</p>
  *
  * <p>工作原理：</p>
  * <ol>

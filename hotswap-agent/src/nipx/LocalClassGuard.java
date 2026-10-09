@@ -11,7 +11,11 @@ import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * §7.2 风险 2 止血：同名局部类编号漂移的**纯函数**检测。
+ * 同名局部类编号漂移防御门（参考 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2 风险 2）。
+ *
+ * <p><b>设计文档与状态索引</b>：
+ * 设计文档参见 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2；
+ * 实现状态参见 {@code docs/status.md} 与 {@code AGENTS.md}。</p>
  *
  * <p>局部类当前原名直通（{@code isAnonymousClassName} 因名字含简单名而拒绝准入），重定义按类名
  * 一一对应。同一宿主内两个同简单名的局部类（ {@code Foo$1Helper}、{@code Foo$2Helper}）在之前

@@ -4,7 +4,15 @@ import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.VarHandle;
 import java.net.URL;
 
-/** 运行时解除 JAR Package 密封（sealed）限制工具类 */
+/**
+ * 运行时解除 JAR Package 密封（sealed）限制工具类。
+ *
+ * <p>当目标 JAR 包的 {@code MANIFEST.MF} 声明了 {@code Sealed: true} 时，JVM 会限制该包下的所有类
+ * 必须自同一个来源加载；后续若从外部目录注入同包名的新类或热更重定义，会抛出 {@link SecurityException}（sealing violation）。</p>
+ *
+ * <p>本类在特权 {@link java.lang.invoke.MethodHandles.Lookup} 支持下，使用 {@link VarHandle}
+ * 将 {@link Package} 内部的 {@code sealBase} 字段置为 {@code null}，消除密封限制。</p>
+ */
 public class PackageUnsealer {
 	private static final VarHandle VERSION_INFO_VH;
 	private static final VarHandle SEAL_BASE_VH;

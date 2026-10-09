@@ -14,6 +14,24 @@ import java.util.stream.Stream;
 
 import static nipx.HotSwapAgent.*;
 
+/**
+ * 类加载路径动态挂载与 ClassLoader 解析管理器。
+ *
+ * <p>负责在运行时动态扩展类加载器路径，支持将监控目录与外部 JAR 包无缝挂载到系统应用加载器
+ * （如 {@code BuiltinClassLoader} 或 {@link java.net.URLClassLoader}）的 {@code URLClassPath} 中。</p>
+ *
+ * <h2>主要职责</h2>
+ * <ul>
+ *   <li><b>动态 UCP 挂载</b>：通过内部句柄直接操作 {@code URLClassPath} 的内部路径集合与未打开 URL 队列，
+ *       使新加入的目录/JAR 能够被宿主加载器直接检索。</li>
+ *   <li><b>ClassLoader 智能推断与映射</b>：维护包名与监控根目录到 ClassLoader 的弱引用索引，
+ *       为新读取的 {@code .class} 文件定位其归属的加载器。</li>
+ *   <li><b>独立隔离加载器</b>：支持为未匹配到宿主加载器的路径创建轻量隔离 {@link java.net.URLClassLoader}。</li>
+ * </ul>
+ *
+ * @see HotSwapAgent
+ * @see PackageUnsealer
+ */
 public class MountManager {
 	//region Caches
 	/** 一个目录 对应一个 ClassLoader */

@@ -17,11 +17,45 @@ import static nipx.HotSwapAgent.*;
 import static org.objectweb.asm.Opcodes.*;
 
 /**
- * <p>用于注解，注入代码
- * <p>同时也用于获取bytecode，存入缓存
- * @see Tracker
- * @see Profile
- * @see OnReload
+ * 核心类文件转换器（ClassFileTransformer）。
+ *
+ * <p><b>设计文档与状态索引</b>：
+ * 设计文档参见 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} 与 {@code docs/initfix/}；
+ * 实现状态参见 {@code docs/status.md} 与 {@code AGENTS.md}。</p>
+ *
+ * <p>挂载在 {@link java.lang.instrument.Instrumentation} 上的字节码转换器，
+ * 负责在类初次加载及热更新（Redefine / Retransform）期间编织字节码：</p>
+ *
+ * <h2>核心职责</h2>
+ * <ol>
+ *   <li><b>初次加载拦截与匿名类对齐保护</b>：
+ *       当新类被类加载器初次加载时（{@code classBeingRedefined == null}），检查
+ *       {@link #pendingAlignedClasses}（由 {@link AnonClassAligner} 预登记）。
+ *       若命中则优先返回对齐重命名后的字节码，防止类加载器从磁盘读取未对齐的原始编号产物。</li>
+ *   <li><b>离线继承树维护（{@link HierarchyTree}）</b>：
+ *       流式解析已加载类的父类、接口与修饰符信息存入轻量继承图，为 {@link nipx.ref.ClassHierarchyOracle}
+ *       提供全局离线元数据查询能力，避免触发死锁或非预期的类加载。</li>
+ *   <li><b>运行时活跃字节码缓存</b>：
+ *       将经过管线处理后的最终字节码同步至 {@link HotSwapAgent#bytecodeCache}，
+ *       为后续热更提供可信的基线字节码（避免反复读取磁盘原始编译产物导致编号漂移）。</li>
+ *   <li><b>注解驱动的代码注入</b>：
+ *       <ul>
+ *         <li>{@link Tracker}：在构造器（{@code <init>}）出口处注入 {@link InstanceTracker#register(Object)}；</li>
+ *         <li>{@link Profile}：在被标记方法入口/出口处注入性能探测探针代码。</li>
+ *       </ul>
+ *   </li>
+ *   <li><b>Lambda 静态化增强（{@code HOTSWAP_PLUS}）</b>：
+ *       通过 {@link #forceStaticLambdas} 将非捕获/捕获 Lambda 合成方法转化为静态方法以维持签名稳定，
+ *       并注入 {@code $nipx$lambdasForced} 标记字段（该字段由 {@link ClassDiffUtil} 对称过滤）。</li>
+ *   <li><b>InitFix 字段初始化补丁准备</b>：
+ *       在类被重定义前（{@code classBeingRedefined != null}），由 {@link HotSwapAgent#processChanges}
+ *       触发差分并调用 {@link nipx.ref.InitFix#transform}，分析新增字段、反向切片初值表达式并装配伴生补丁类。</li>
+ * </ol>
+ *
+ * @see AnonClassAligner
+ * @see nipx.ref.InitFix
+ * @see InstanceTracker
+ * @see HotSwapAgent
  */
 public class AnnotationTransformer implements ClassFileTransformer {
 

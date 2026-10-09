@@ -11,6 +11,10 @@ import java.util.function.*;
  * 类差异分析工具
  * 用于检测类文件的变更，支持字段、方法的增删改检测
  * 主要用于热重载系统的智能更新决策
+ *
+ * <p><b>设计文档与状态索引</b>：
+ * 设计文档参见 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} 与 {@code docs/initfix/03-runtime-driver.md} §5；
+ * 实现状态参见 {@code docs/status.md} 与 {@code AGENTS.md}。</p>
  * <pre>
  * 核心功能：
  * 1. 比较两个版本的类字节码差异
@@ -18,6 +22,7 @@ import java.util.function.*;
  * 3. 检测字段的增删变化
  * 4. 检测方法的增删改变化
  * 5. 提供详细的变更日志输出
+ * </pre>
  */
 public final class ClassDiffUtil {
 
@@ -268,7 +273,7 @@ public final class ClassDiffUtil {
 	}
 
 	/**
-	 * 内部合成标记字段过滤（{@code docs/INIT_FIX.md} §5.3）。
+	 * 内部合成标记字段过滤（参考 {@code docs/initfix/03-runtime-driver.md} §5）。
 	 *
 	 * <p>热更管线自己往类里塞的字段不是业务变更，必须从 Diff 里剔除，否则会被
 	 * {@code InitFix} 当成"新增字段"去做字段初始化补丁：</p>

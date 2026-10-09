@@ -23,7 +23,21 @@ import java.util.*;
 import static nipx.AnnotationTransformer.*;
 import static nipx.HotSwapAgent.*;
 
-/** @see UpdateRef */
+/**
+ * Arc / Mindustry UI 组件 Lambda 熔断重定义引导器。
+ *
+ * <p>在热更新环境下，UI 组件持有的大量事件监听器、定时更新回调（如每帧 {@code Element.update(Runnable)}）
+ * 与数据提供器闭包可能因方法签名改动或方法删除而在执行时抛出 {@link LinkageError}（如 {@link NoSuchMethodError}）。
+ * 若未经拦截，将引发 60FPS 崩溃日志刷屏死循环或导致 UI 元素被粗暴销毁。</p>
+ *
+ * <p>本类负责向目标 UI 组件（如 {@link arc.scene.Element}、{@link arc.scene.ui.layout.Cell}、
+ * {@link arc.Events} 以及各类控件子类）批量注入包装代理拦截点，将传入的函数式接口透明包装为
+ * {@link UpdateRef} 代理，实现精准局部熔断与优雅降级。</p>
+ *
+ * @see UpdateRef
+ * @see Injector
+ * @see CellPropertyRef
+ */
 public class LambdaRef {
 
 	private static volatile boolean initialized = false;

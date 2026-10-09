@@ -11,10 +11,29 @@ import java.util.*;
 import java.util.function.Function;
 
 /**
- * 轻量级匿名内部类内容结构哈希器。
+ * 轻量级匿名内部类内容结构哈希器 (Anonymous Class Content Hasher)。
  *
- * <p>为匿名类的内容计算与类名序号无关的结构指纹，
- * 折叠进方法指纹中以消除过度归一化导致的哈希碰撞与语义错位。</p>
+ * <p><b>设计文档与状态索引</b>：
+ * 设计文档参见 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §3.1；
+ * 实现状态参见 {@code docs/status.md} 与 {@code AGENTS.md}。</p>
+ *
+ * <p>参考 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §3.1。为匿名内部类计算与其物理类名序号无关的内容结构指纹（Self Hash），
+ * 作为 {@link AnonClassAligner} Tier 1（同宿主方法精确匹配）与 Tier 2（全局唯一匹配）的置信度基石。</p>
+ *
+ * <h2>计算范围与算法</h2>
+ * <ol>
+ *   <li><b>类结构</b>：接口清单（排序后累积）、父类名（{@code superName}）、类访问标志。</li>
+ *   <li><b>字段表</b>：所有<b>非合成字段</b>（过滤 {@code ACC_SYNTHETIC}，即排除 {@code this$0} 与 {@code val$*}
+ *       捕获槽位，使得外部捕获字段位移不破坏内容哈希）的名称、描述符与访问修饰符。</li>
+ *   <li><b>方法表</b>：所有<b>非合成方法</b>（过滤 {@code ACC_SYNTHETIC} 桥接方法），通过 {@link MethodFingerprinter}
+ *       计算指令级 CRC64 指纹，并将匿名类引用归一化为相对 ID。</li>
+ * </ol>
+ *
+ * <h2>多层嵌套已知边界（Cascading Nesting Boundary）</h2>
+ * <p>在嵌套匿名类（如 {@code Foo$1$1}）中，其构造器 {@code <init>} 的参数描述符嵌入了外层匿名类的物理名
+ * （如 {@code (LFoo$1;)V}）。若外层类编号发生位移（变成 {@code Foo$2}），子类的构造器描述符必然改变，
+ * 导致子类的 Self Hash 随之变化。此时 Tier 1/2 会自动失效并平滑回退至 Tier 3（结构签名匹配），
+ * 最终仍能正确完成层级拓扑对齐。</p>
  */
 public final class AnonClassHasher {
 	/**

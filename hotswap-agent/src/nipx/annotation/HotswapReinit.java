@@ -3,7 +3,7 @@ package nipx.annotation;
 import java.lang.annotation.*;
 
 /**
- * 存量重置扩展（Opt-in Scope Extension，{@code docs/INIT_FIX.md} §1.1）。
+ * 存量重置扩展（Opt-in Scope Extension，参考 {@code docs/initfix/03-runtime-driver.md} §4 与 {@code docs/initfix/01-safety-gate.md}）。
  *
  * <p>热更补丁的默认作用域是<b>只处理本次新增声明的字段</b>：已有字段即使改了初值，
  * 存量实例也不会被重置。给字段标上本注解，等于显式声明"这个字段允许覆写存量状态"，
@@ -18,15 +18,15 @@ import java.lang.annotation.*;
  * }
  * }</pre>
  * <p>若 {@code import static nipx.annotation.HotswapReinit.Mode.OVERWRITE;}，
- * 也可以写成文档里的简写 {@code @HotswapReinit(mode = OVERWRITE)}。</p>
+ * 也可以写成简写 {@code @HotswapReinit(mode = OVERWRITE)}。</p>
  *
  * <h2>契约（实现对齐 {@code InitFix}）</h2>
  * <ul>
  *   <li><b>值的来源不变</b>：仍然从新字节码里该字段的 {@code PUTFIELD}/{@code PUTSTATIC}
  *       切片提取。所以"改初值 → 覆盖存量"成立，但也意味着切片本身必须能被安全提取。</li>
- *   <li><b>被豁免的门</b>（§8 P2 口径，中等）：
+ *   <li><b>被豁免的门</b>（见 {@code docs/initfix/03-runtime-driver.md} §4）：
  *       <ul>
- *         <li>{@code §4.1 T0}：不再因"零值等价"被判 {@code NOTHING_TO_PATCH}
+ *         <li>{@code T0 零值等价}（{@code docs/initfix/01-safety-gate.md} §1）：不再因"零值等价"被判 {@code NOTHING_TO_PATCH}
  *             —— 否则"把已有字段重置成 0/null"会被当成无需补丁；</li>
  *         <li>条件 CAS：{@link Mode#OVERWRITE} 走无条件写（
  *             {@code HotswapBridge.KIND_FORCE}），不再"仅当字段是类型默认值时才写"；</li>
@@ -39,7 +39,7 @@ import java.lang.annotation.*;
  *       </ul>
  *   </li>
  *   <li><b>不被豁免的门</b>：切片本身的安全门照旧（直线无分支、无局部变量依赖，以及
- *       §4.2 效应判定）。理由：这些门决定"补丁算出来的值是不是构造器会算的值"，
+ *       {@code docs/initfix/01-safety-gate.md} §2 效应判定）。理由：这些门决定"补丁算出来的值是不是构造器会算的值"，
  *       覆写语义只决定"要不要写"，不能让一个读脏的值变正确。</li>
  *   <li><b>按线程的状态仍然无解</b>：{@code ThreadLocal.get()} 之类的读照样拒绝，
  *       构造器里对缓存的写入也不会重放（补丁在热更线程上执行）。要按实例、按正确线程

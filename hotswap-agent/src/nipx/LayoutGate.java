@@ -8,6 +8,10 @@ import java.util.*;
 /**
  * 实例状态布局安全门（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2 的精确变体）。
  *
+ * <p><b>设计文档与状态索引</b>：
+ * 设计文档参见 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2 与 {@code docs/initfix/03-runtime-driver.md} §5；
+ * 实现状态参见 {@code docs/status.md} 与 {@code AGENTS.md}。</p>
+ *
  * <p><b>守的是什么</b>：字段布局变化后，<b>已经存在的实例</b>不会获得新字段的初始化 ——
  * 它的布局在创建时就定下了。新方法体去读这个字段就会读到零值。
  * 新建实例不受影响（会走新构造器），这一点有真机对照实验支撑，见
@@ -15,18 +19,24 @@ import java.util.*;
  * 重取构造器 / 字节码里直接 {@code new} / 直读字段三条路径都取到正确值。</p>
  *
  * <p><b>为什么必须是纯函数</b>：对齐器（配对前）与重定义层（配对后）都要用同一套判据，
- * 而 §3.6 要求这两层互不调用。因此规则抽在这里，两侧各自调用，谁都不依赖谁。
+ * 而 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §3.6 要求这两层互不调用。因此规则抽在这里，两侧各自调用，谁都不依赖谁。
  * 本类<b>不</b>接触字节码之外的任何状态：不查实例、不打日志、不读系统属性。</p>
  *
- * <p><b>为什么合成字段必须在这里挡住</b>：{@code ClassDiffUtil.isInternalMarkerField}
- * 会对称过滤 {@code ACC_SYNTHETIC} 字段，所以 {@code InitFix} 永远看不到 {@code val$*}、
+ * <p><b>为什么合成字段必须在这里挡住</b>：{@link ClassDiffUtil}
+ * 会对称过滤 {@code ACC_SYNTHETIC} 字段，所以 {@link nipx.ref.InitFix} 永远看不到 {@code val$*}、
  * {@code this$0} —— 它们不可能被字段初始化补丁覆盖。详见
- * {@code docs/INIT_FIX.md} §5.3。</p>
+ * {@code docs/initfix/03-runtime-driver.md} §5。</p>
  *
- * <p><b>已知覆盖缺口</b>：局部类（{@code Foo$1Local}）不进对齐器 ——
- * {@link AnonClassAligner#isAnonymousClassName} 要求 {@code $} 后的后缀只含数字与 {@code $}，
- * 而局部类名带字母，判定为 false。因此本门在 Tier 4 只覆盖匿名类。
- * 局部类需要在重定义层另行接入（本项目实测有 5 个局部类）。</p>
+ * <p><b>分工与局部类防护</b>：
+ * <ul>
+ *   <li><b>匿名类合成字段</b>：由本门作为谓词包装在 {@link AnonClassAligner}（Tier 4 配对前）接入
+ *       （受 {@link HotSwapAgent#ANON_LAYOUT_GATE} 控制）；</li>
+ *   <li><b>具名类/用户显式字段</b>：在重定义层由 {@link HotSwapAgent} 接入 {@link #checkRedefine}
+ *       （受 {@link HotSwapAgent#LAYOUT_GATE} 控制）；</li>
+ *   <li><b>局部类（{@code Foo$1Local}）</b>：局部类不进匿名类对齐器，其编号漂移已由独立的
+ *       {@link LocalClassGuard}（受 {@link HotSwapAgent#LOCAL_CLASS_GUARD} 控制）进行防御。</li>
+ * </ul>
+ * </p>
  *
  * <p><b>已知限制 ①（竞态窗口）</b>：判定"有无存活实例"与真正 {@code redefineClasses} 之间，
  * 应用线程可能新建一个实例 —— 它会拿到旧布局，重定义后就是零值。
@@ -56,7 +66,7 @@ public final class LayoutGate {
 		 *
 		 * <p>与 {@link #check} 中"纯删除放行"不同：重定义层面对的是<b>用户显式编辑</b>，
 		 * 静默删掉字段会让用户以为无损（旧值随新布局消失）。因此这里保守地拒绝，
-		 * 交给用户重新热更一次或重启确认。见 §7.2 风险 1 的分级门表。</p>
+		 * 交给用户重新热更一次或重启确认。见 {@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2 风险 1 的分级门表。</p>
 		 */
 		REMOVED_FIELD,
 		/**
@@ -197,7 +207,7 @@ public final class LayoutGate {
 	}
 
 	/**
-	 * 重定义层入口：从 {@link ClassDiffUtil.ClassDiff#changedFields} 判定（§7.2 风险 1）。
+	 * 重定义层入口：从 {@link ClassDiffUtil.ClassDiff#changedFields} 判定（{@code docs/ANONYMOUS_CLASS_TOPOLOGY_PLAN.md} §7.2 风险 1）。
 	 *
 	 * <p><b>为什么需要第二个入口</b>：{@code changedFields} 已经被
 	 * {@code ClassDiffUtil.isInternalMarkerField} 过滤掉合成字段，因此本入口只覆盖

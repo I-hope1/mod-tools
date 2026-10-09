@@ -45,7 +45,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * InitFix 差分 Oracle（{@code docs/INIT_FIX.md} §8 P0-5）。
+ * InitFix 差分 Oracle（参考 {@code docs/initfix/} 系列文档与 {@code AGENTS.md}）。
  *
  * <h2>为什么是"差分"</h2>
  * <p>每个场景编译**同一类的两个版本**（v1 旧 / v2 新），对两者做 {@link ClassDiffUtil#diff}，

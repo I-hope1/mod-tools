@@ -695,10 +695,11 @@ tasks.register("hstestJunit", Test) {
 	// 三个真实 javac 由 Gradle toolchain 解析后以系统属性交给测试，不再硬编码 F:/... 默认值。
 	// 测试侧会校验 javac -version，防止 toolchain 解析到别的 JDK 而让 "javac 8" 场景悄悄用 21 编。
 	//
-	// CI 守卫：四个 JDK 都必须能被 toolchain 解析。缺任何一个默认**直接失败**（并列出缺失项），
-	// 避免"某个 JDK 悄悄跑不到却在 CI 里全绿"。无全部 JDK 的环境可传
+	// CI 守卫：五个 JDK（8/11/17/21/25）都必须能被 toolchain 解析。缺任何一个默认**直接失败**
+	// （并列出缺失项），避免"某个 JDK 悄悄跑不到却在 CI 里全绿"。无全部 JDK 的环境可传
 	// -Dhstest.requireJdks=false 继续（相关测试会因缺少 hstest.javacN 而硬失败）。
-	def requiredJdkMajors = [8, 11, 17, 21]
+	// 25 是**新 javac 编本工具链自己**的产物矩阵维度：命名/字段形态随 javac 版本变化，25 也要覆盖。
+	def requiredJdkMajors = [8, 11, 17, 21, 25]
 	doFirst {
 		def missing = []
 		requiredJdkMajors.each { v ->
@@ -741,7 +742,7 @@ tasks.register("hstestJunit", Test) {
 }
 // 回归下限：hstestJunit 的测试方法总数不得低于基线（防止删一个 @Test、或整类被注释而静默变少）。
 // Gradle 的 failOnNoDiscoveredTests 只拦"一个都没发现"；这里钉住总量，上调基线须有意识地改此行。
-def hstestMinTests = 105
+def hstestMinTests = 108
 tasks.register("verifyHstestTestCount") {
 	group = "verification"
 	description = "断言 hstestJunit 测试数不低于基线 ${hstestMinTests}"
@@ -749,17 +750,25 @@ tasks.register("verifyHstestTestCount") {
 	doLast {
 		def dir = layout.buildDirectory.dir("test-results/hstestJunit").get().asFile
 		int total = 0
+		int skipped = 0
 		dir.listFiles()?.each { f ->
 			if (f.name.startsWith("TEST-") && f.name.endsWith(".xml")) {
-				def m = f.getText("UTF-8") =~ /<testsuite[^>]*\btests="(\d+)"/
-				if (m.find()) total += (m.group(1) as int)
+				def text = f.getText("UTF-8")
+				def mt = text =~ /<testsuite[^>]*\btests="(\d+)"/
+				if (mt.find()) total += (mt.group(1) as int)
+				def ms = text =~ /<testsuite[^>]*\bskipped="(\d+)"/
+				if (ms.find()) skipped += (ms.group(1) as int)
 			}
+		}
+		if (skipped > 0) {
+			throw new GradleException("hstestJunit 有 " + skipped + " 个 skipped 测试：约定是缺 JDK 就硬失败、"
+				+ "不跳过（检查是否混入了 assumeTrue / Assumptions）。")
 		}
 		if (total < hstestMinTests) {
 			throw new GradleException("hstestJunit 测试数 " + total + " < 基线 " + hstestMinTests
 				+ "：有测试被删除或禁用？确认后用新值更新 build.gradle 的 hstestMinTests。")
 		}
-		logger.lifecycle("hstestJunit 测试数 = " + total + " (>= " + hstestMinTests + ")")
+		logger.lifecycle("hstestJunit 测试数 = " + total + ", skipped = " + skipped + " (>= " + hstestMinTests + ")")
 	}
 }
 tasks.named("check") { dependsOn tasks.named("verifyHstestTestCount") }

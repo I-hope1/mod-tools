@@ -49,11 +49,12 @@ class AnonClassReproJUnitTest {
 
 	/**
 	 * 硬失败：按 {@code javac -version} 校验还不够，这里再编译一个平凡类，断言产物的 class 文件
-	 * major 与"请求的 JDK"一致（21→65、8→52、11→55、17→61）。toolchain 解析到别的 JDK 时
+	 * major 与"请求的 JDK"一致（25→69、21→65、17→61、11→55、8→52）。toolchain 解析到别的 JDK 时
 	 * 直接让整个类失败，绝不跳过。
 	 */
 	@BeforeAll
 	static void assertEffectiveJavacMajors() throws Exception {
+		assertJavacMajor(25, 69);
 		assertJavacMajor(21, 65);
 		assertJavacMajor(17, 61);
 		assertJavacMajor(11, 55);
@@ -98,6 +99,10 @@ class AnonClassReproJUnitTest {
 		// 快照后再置默认：参数化测试会在方法体内改成参数值，@AfterEach 用快照还原，
 		// 否则 Random 顺序下参数化场景会把 21 单版本场景带到别的 JDK 夹具目录。
 		AnonClassReproTest.FIXTURE_JDK_MAJOR = 21;
+		// 软超时在测试里放大到"实际不超时"：CI runner（2 核、任务并行）比本机慢，生产默认 2000ms
+		// 会让对齐在 CPU 争用下偶发走拒绝通道，表现为随机红且看起来像对齐缺陷。测试验证的是对齐
+		// 逻辑，不是机器速度；只有专测超时的 Scenario 21 自己把 ALIGN_TIMEOUT_MS 调小。
+		AnonClassAligner.ALIGN_TIMEOUT_MS = Long.MAX_VALUE;
 		AnnotationTransformer.pendingAlignedClasses.clear();
 		HotSwapAgent.bytecodeCache.clear();
 	}
@@ -238,7 +243,7 @@ class AnonClassReproJUnitTest {
 	 * javac 21（只参数化受 JDK 生成策略影响的场景，以控时）。
 	 */
 	@ParameterizedTest(name = "jdk{0}")
-	@ValueSource(ints = { 8, 11, 17, 21 })
+	@ValueSource(ints = { 8, 11, 17, 21, 25 })
 	void s19_cascadingTreeAndMetamorphicSuite(int jdk) throws Exception {
 		AnonClassReproTest.FIXTURE_JDK_MAJOR = jdk;
 		AnonClassReproTest.testScenario19_CascadingTreeAndMetamorphicSuite(javac(jdk), base.toFile()); expect(11);
@@ -253,7 +258,7 @@ class AnonClassReproJUnitTest {
 	}
 
 	@ParameterizedTest(name = "jdk{0}")
-	@ValueSource(ints = { 8, 11, 17, 21 })
+	@ValueSource(ints = { 8, 11, 17, 21, 25 })
 	void s22_nestedContentHashAvailability(int jdk) throws Exception {
 		AnonClassReproTest.FIXTURE_JDK_MAJOR = jdk;
 		AnonClassReproTest.testScenario22_NestedContentHashAvailability(javac(jdk), base.toFile()); expect(12);
@@ -272,7 +277,7 @@ class AnonClassReproJUnitTest {
 	}
 
 	@ParameterizedTest(name = "jdk{0}")
-	@ValueSource(ints = { 8, 11, 17, 21 })
+	@ValueSource(ints = { 8, 11, 17, 21, 25 })
 	void s26_tier3TopologyFilter(int jdk) throws Exception {
 		AnonClassReproTest.FIXTURE_JDK_MAJOR = jdk;
 		AnonClassReproTest.testScenario26_Tier3TopologyFilter(javac(jdk), base.toFile()); expect(19, 1);

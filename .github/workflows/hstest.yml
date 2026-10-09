@@ -50,9 +50,14 @@ jobs:
       - name: Run hstest JUnit
         run: |
           chmod +x gradlew
+          # 显式把 runner JDK 钉成 25：不要依赖两个 setup-java 的安装顺序（否则 Gradle 可能跑在 21 上，
+          # 而 hotswap-agent 的 25 产物会被拒绝）。JAVA_HOME_25_X64 由 setup-java 导出。
+          export JAVA_HOME="$JAVA_HOME_25_X64"
+          echo "runner JAVA_HOME=$JAVA_HOME"
+          java -version
           ./gradlew check \
             -Dhstest.requireJdks=true \
-            -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_8_X64,JAVA_HOME_11_X64,JAVA_HOME_17_X64,JAVA_HOME_21_X64 \
+            -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_8_X64,JAVA_HOME_11_X64,JAVA_HOME_17_X64,JAVA_HOME_21_X64,JAVA_HOME_25_X64 \
             -Dorg.gradle.java.installations.auto-detect=false \
             -Dorg.gradle.java.installations.auto-download=false
 

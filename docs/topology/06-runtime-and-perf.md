@@ -48,8 +48,8 @@ Agent 依赖单线程文件监听与防抖窗口调度热重载请求，核心�
 
 系统支持通过 JVM 系统属性控制对齐行为，首选属性名遵循 `nipx.agent.*` 规范，同时兼容 `nipx.anonAlign.*` 历史别名：
 
-| 首选属性名 | 兼容别名 | 默认值 | 语义与行为 |
-|:---|:---|:---|:---|
-| `nipx.agent.anon_align` | `nipx.anonAlign.enabled` | `true` | 对齐总开关。为 `false` 时含匿名类的宿主整体拒绝，杜绝编号位移篡夺 |
-| `nipx.agent.anon_strict` | `nipx.anonAlign.strict` | `false` | 严格模式开关。开启后遇 Tier 4 歧义或 `depth > 4` 直接拒绝宿主组 |
-| `nipx.agent.anon_debug` | `nipx.anonAlign.debug` | `false` | 诊断日志开关。打印完整的层级决策链与详细匹配计数 |
+| 首选属性名               | 兼容别名                 | 默认值  | 语义与行为                                                        |
+|:-------------------------|:-------------------------|:--------|:------------------------------------------------------------------|
+| `nipx.agent.anon_align`  | `nipx.anonAlign.enabled` | `true`  | 对齐总开关。为 `false` 时含匿名类的宿主整体拒绝，杜绝编号位移篡夺 |
+| `nipx.agent.anon_strict` | `nipx.anonAlign.strict`  | `false` | 严格模式开关。开启后遇 Tier 4 歧义或 `depth > 4` 直接拒绝宿主组   |
+| `nipx.agent.anon_debug`  | `nipx.anonAlign.debug`   | `false` | 诊断日志开关。打印完整的层级决策链与详细匹配计数                  |

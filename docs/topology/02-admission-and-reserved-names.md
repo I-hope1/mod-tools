@@ -8,15 +8,15 @@
 
 判定一个类是否为不稳定匿名类，以 ClassNode 的字节码属性为第一准则，类名模式为辅助：
 
-| 分类 | 字节码判定准则 | 处理动作 | 级联树定位 |
-|:---|:---|:---|:---|
-| **标准匿名类** | `InnerClasses` 属性中 `innerName == null`，且包含 `EnclosingMethod` | **准入** | 提取其宿主类与父级前缀，加入拓扑树 |
-| **多层嵌套匿名类** | `innerName == null`，其 `EnclosingMethod` 指向另一个匿名类 | **准入** | 逻辑父为该外层匿名类 |
-| **具名内部类** | `innerName != null` 且不为纯数字 | **排除** | 不对齐，父前缀路径完全冻结 |
-| **具名局部类** | `innerName != null` 且 `outer_class == null` | **排除（不对齐）**，另有止血门 | 原名直通；同名局部类漂移由 `LocalClassGuard` 止血（见 [07-layout-gate-and-risks.md](07-layout-gate-and-risks.md) §2） |
-| **javac 枚举 Switch 映射表** | `ACC_SYNTHETIC` + 仅含 `$SwitchMap$` 字段 | **排除（保留）** | 识别为编译器缓存，保持原名直通（见下文设计分析） |
-| **Kotlin When 映射类** | 类名含 `$WhenMappings` | **排除** | 保持原名直通 |
-| **枚举常量体** | 带有 `ACC_ENUM` 且基类为直接封闭枚举 | **排除** | 声明顺序与常量严格绑定，不可重命名 |
+| 分类                         | 字节码判定准则                                                      | 处理动作                       | 级联树定位                                                                                                            |
+|:-----------------------------|:--------------------------------------------------------------------|:-------------------------------|:----------------------------------------------------------------------------------------------------------------------|
+| **标准匿名类**               | `InnerClasses` 属性中 `innerName == null`，且包含 `EnclosingMethod` | **准入**                       | 提取其宿主类与父级前缀，加入拓扑树                                                                                    |
+| **多层嵌套匿名类**           | `innerName == null`，其 `EnclosingMethod` 指向另一个匿名类          | **准入**                       | 逻辑父为该外层匿名类                                                                                                  |
+| **具名内部类**               | `innerName != null` 且不为纯数字                                    | **排除**                       | 不对齐，父前缀路径完全冻结                                                                                            |
+| **具名局部类**               | `innerName != null` 且 `outer_class == null`                        | **排除（不对齐）**，另有止血门 | 原名直通；同名局部类漂移由 `LocalClassGuard` 止血（见 [07-layout-gate-and-risks.md](07-layout-gate-and-risks.md) §2） |
+| **javac 枚举 Switch 映射表** | `ACC_SYNTHETIC` + 仅含 `$SwitchMap$` 字段                           | **排除（保留）**               | 识别为编译器缓存，保持原名直通（见下文设计分析）                                                                      |
+| **Kotlin When 映射类**       | 类名含 `$WhenMappings`                                              | **排除**                       | 保持原名直通                                                                                                          |
+| **枚举常量体**               | 带有 `ACC_ENUM` 且基类为直接封闭枚举                                | **排除**                       | 声明顺序与常量严格绑定，不可重命名                                                                                    |
 
 ### 设计分析与实现决策
 落地位置位于 `AnonClassAligner.isAnonymousClass` 与 `isAnonymousClassName`。

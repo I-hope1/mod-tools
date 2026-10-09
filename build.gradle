@@ -739,7 +739,30 @@ tasks.register("hstestJunit", Test) {
 		showStandardStreams = false
 	}
 }
-tasks.named("check") { dependsOn tasks.named("hstestJunit") }
+// 回归下限：hstestJunit 的测试方法总数不得低于基线（防止删一个 @Test、或整类被注释而静默变少）。
+// Gradle 的 failOnNoDiscoveredTests 只拦"一个都没发现"；这里钉住总量，上调基线须有意识地改此行。
+def hstestMinTests = 105
+tasks.register("verifyHstestTestCount") {
+	group = "verification"
+	description = "断言 hstestJunit 测试数不低于基线 ${hstestMinTests}"
+	dependsOn tasks.named("hstestJunit")
+	doLast {
+		def dir = layout.buildDirectory.dir("test-results/hstestJunit").get().asFile
+		int total = 0
+		dir.listFiles()?.each { f ->
+			if (f.name.startsWith("TEST-") && f.name.endsWith(".xml")) {
+				def m = f.getText("UTF-8") =~ /<testsuite[^>]*\btests="(\d+)"/
+				if (m.find()) total += (m.group(1) as int)
+			}
+		}
+		if (total < hstestMinTests) {
+			throw new GradleException("hstestJunit 测试数 " + total + " < 基线 " + hstestMinTests
+				+ "：有测试被删除或禁用？确认后用新值更新 build.gradle 的 hstestMinTests。")
+		}
+		logger.lifecycle("hstestJunit 测试数 = " + total + " (>= " + hstestMinTests + ")")
+	}
+}
+tasks.named("check") { dependsOn tasks.named("verifyHstestTestCount") }
 
 // 幽灵桩熔断的栈探测判据（先红后绿）：透明帧必须穿透动态代理 / CellPropertyRef handler /
 // 方法句柄帧，否则被 CellPropertyRef 代理包过的回调在 UpdateRef 发起时不熔断（60FPS 空转）。
@@ -787,7 +810,7 @@ tasks.named("check") { dependsOn tasks.named("hstestInitFixOracle") }
 // hstestRun（suite.sh / main 程序 + expected-count 基线）已下线：
 // 剩余入口全部迁到 JUnit（hstestJunit），夹具由各测试用 hstest.javacN 现编到 @TempDir。
 // 原 main 程序保留在源码树里作为可手工运行的探针，但不再参与 check。
-tasks.named("check") { dependsOn tasks.named("hstestJunit") }
+// （check 对 hstestJunit 的依赖见上方 verifyHstestTestCount。）
 
 // 打印 hstest 运行 classpath，供手工实验复用（唯一可信来源，避免手拼）
 tasks.register("hstestCp") {

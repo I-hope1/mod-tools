@@ -2,16 +2,19 @@
 
 *适用：Android Debug 构建 · Java 8 / Kotlin · 状态：设计草案，待 PoC 验证*
 
-本文汇总前几轮评审的结论。与上一版 RFC 相比，最大的变化来自一个新确认的事实：**ART 自 Android 11 起提供结构化类重定义，可以直接新增方法和字段。** 这改变了方案的主次。
+本文汇总前几轮评审的结论。与上一版 RFC 相比，最大的变化来自一个新确认的事实： **ART 自 Android 11
+起提供结构化类重定义，可以直接新增方法和字段。** 这改变了方案的主次。
 
 ---
 
 ## 1. 摘要
 
 1. 目标是在 debug 构建上，让开发者改完源码后秒级生效，不重启进程。
-2. ART 在 Android 11（API 30）引入了 JVMTI 扩展 Structural Class Redefinition，允许给已加载类新增方法和字段，不再局限于改方法体。因此**上一版的主体机制（`$extras` 槽、`Host$Patch` 伴生类、名字重整、super 跳板、覆写拒绝）只在 API 28、29 上才有必要**。
-3. 方案分两层：**Tier S（API 30+）** 用结构化重定义，**Tier C（API 28–29）** 用上一版的兼容机制。建议第一阶段只做 Tier S，Tier C 视需求再做。
-4. 无论哪一层，真正难的部分都在**构建侧确定性**：保证新编译产物与设备上已加载的类形状一致，否则一切 Redefine 都会被拒绝。
+2. ART 在 Android 11（API 30）引入了 JVMTI 扩展 Structural Class Redefinition，允许给已加载类新增方法和字段，不再局限于改方法体。因此
+   **上一版的主体机制（`$extras` 槽、`Host$Patch` 伴生类、名字重整、super 跳板、覆写拒绝）只在 API 28、29 上才有必要**。
+3. 方案分两层： **Tier S（API 30+）** 用结构化重定义， **Tier C（API 28–29）** 用上一版的兼容机制。建议第一阶段只做 Tier S，Tier
+   C 视需求再做。
+4. 无论哪一层，真正难的部分都在 **构建侧确定性**：保证新编译产物与设备上已加载的类形状一致，否则一切 Redefine 都会被拒绝。
 5. “宁可拒绝，不可误改”是总原则，所有无法证明安全的变更都拒绝并明确提示原因。
 
 ## 2. 目标、非目标与前提
@@ -47,7 +50,8 @@
 | 可见性、重整、super 跳板   | 不需要                       | 需要                               |
 | 复杂度                     | 低                           | 高                                 |
 
-选择依据是设备能力探测：Agent 启动后用 `GetExtensionFunctions` 枚举扩展，找得到结构化重定义函数就走 Tier S，否则降级到 Tier C，再不行则只支持方法体修改。PoC 1 通过后不实现 Tier C；PoC 1 失败则 Tier C 成为唯一的结构变更路径（见第 17 节第 9 行）。
+选择依据是设备能力探测：Agent 启动后用 `GetExtensionFunctions` 枚举扩展，找得到结构化重定义函数就走 Tier S，否则降级到 Tier
+C，再不行则只支持方法体修改。PoC 1 通过后不实现 Tier C；PoC 1 失败则 Tier C 成为唯一的结构变更路径（见第 17 节第 9 行）。
 
 ## 4. 总体架构
 
@@ -67,7 +71,8 @@ Host（PC / Gradle）                              Target（App 进程 / ART）
 
 ## 5. 构建侧确定性（本方案的核心）
 
-Redefine 对形状极其敏感。形状里的很多元素并不是源码直接写出来的，而是编译器合成的，其编号会随源码改动漂移。漂移在 ART 眼里就是“删除旧方法或类加新增”，而删除不被允许。
+Redefine 对形状极其敏感。形状里的很多元素并不是源码直接写出来的，而是编译器合成的，其编号会随源码改动漂移。漂移在 ART
+眼里就是“删除旧方法或类加新增”，而删除不被允许。
 
 ### 5.1 基线清单（Baseline Manifest）
 
@@ -80,7 +85,8 @@ Redefine 对形状极其敏感。形状里的很多元素并不是源码直接�
 
 ### 5.2 规范化遍（Canonicalization Pass）
 
-在 javac / kotlinc 之后、D8 之前，对**基线和每次增量使用完全相同的 ASM 遍**。放在字节码层的好处是 Java 和 Kotlin 共用一套逻辑，不必分别写编译器插件。
+在 javac / kotlinc 之后、D8 之前，对 **基线和每次增量使用完全相同的 ASM 遍**。放在字节码层的好处是 Java 和 Kotlin
+共用一套逻辑，不必分别写编译器插件。
 
 | 对象                | 问题                                       | 处理                                                                                                  |
 |:--------------------|:-------------------------------------------|:------------------------------------------------------------------------------------------------------|
@@ -92,7 +98,8 @@ Redefine 对形状极其敏感。形状里的很多元素并不是源码直接�
 
 序号歧义规则：同一组（外层方法加类型）内，旧序列必须是新序列的前缀，即只允许在末尾追加，否则拒绝。第二阶段再引入基于方法体指纹的序列对齐，对齐结果出现并列时仍然拒绝。
 
-D8 的脱糖产物（合成 Lambda 类、桥接方法、接口 `$-CC`）也必须稳定。两条路：直接比较 D8 产物的形状并容忍确定性输出；或在 5.2 里把 `invokedynamic` Lambda 预脱糖成命名确定的内部类。先试前者，PoC 0 失败再采用后者。
+D8 的脱糖产物（合成 Lambda 类、桥接方法、接口 `$-CC`）也必须稳定。两条路：直接比较 D8 产物的形状并容忍确定性输出；或在 5.2 里把
+`invokedynamic` Lambda 预脱糖成命名确定的内部类。先试前者，PoC 0 失败再采用后者。
 
 ### 5.3 形状闸门（Shape Gate）
 
@@ -100,31 +107,40 @@ D8 的脱糖产物（合成 Lambda 类、桥接方法、接口 `$-CC`）也必�
 
 - **Tier S 允许**：方法体改变，新增方法，新增字段。
 - **一律拒绝**：删除或重命名、修饰符变化、父类或接口变化、任何无法归因的差异。
-- 台账是闸门的输入：开发者删除了第 1 轮新增的方法，类里依然存在该方法，必须走软删除，不能让它从形状里消失。台账为每个成员记录 live 或 tombstone 状态，重新加回已删除的成员按复活处理（见第 17 节第 4 行）。含 Compose 编译器合成物且命名不稳定的类一律拒绝（见第 17 节第 7 行）。
+- 台账是闸门的输入：开发者删除了第 1 轮新增的方法，类里依然存在该方法，必须走软删除，不能让它从形状里消失。台账为每个成员记录
+  live 或 tombstone 状态，重新加回已删除的成员按复活处理（见第 17 节第 4 行）。含 Compose 编译器合成物且命名不稳定的类一律拒绝（见第
+  17 节第 7 行）。
 
-矩阵是源码层分类，列不全编译器产物，**闸门是字节码层最后一道防线**，以它的结论为准。
+矩阵是源码层分类，列不全编译器产物， **闸门是字节码层最后一道防线**，以它的结论为准。
 
 ## 6. 设备侧流水线
 
 ### 6.1 握手
 
-每次更新前，Host 请求 `{sessionId, pid, ledgerHash}`。会话不一致、PID 变化或台账哈希不一致，说明进程已重启并回到基线，此时清空 Host 台账并提示冷启动或重新部署。
+每次更新前，Host 请求 `{sessionId, pid, ledgerHash}`。会话不一致、PID 变化或台账哈希不一致，说明进程已重启并回到基线，此时清空
+Host 台账并提示冷启动或重新部署。
 
 ### 6.2 单轮流程（Tier S）
 
-1. **休眠注入**：把仅含全新类的 dex 写入 `getCodeCacheDir()`，Android 14 且 targetSdk ≥ 34 时先 `setReadOnly()`，再通过反射把 Element 插入宿主 `PathClassLoader` 的 `dexElements` 首位。新类与宿主在同一加载器，包级访问正常。此时没有任何调用点引用它们。`dexElements` 反射受隐藏 API 限制，豁免方案见第 19 节，需在 28、30、34 上分别验证。
-2. **阶段 A（结构化重定义）**：调用前先对需要结构变更的类逐一预检（原型提交里是 is\_structurally\_modifiable\_class，发布版名称待核），任一类不通过则整轮拒绝并报告原因，因为其他类的新方法体可能依赖它的新成员，不能只放行一部分。通过后一次批量调用，新增方法和新增字段；方法体保持旧版，**构造器若需要初始化新字段，则随本阶段一并改写**，使窗口期内新建的实例已带初值。
+1. **休眠注入**：把仅含全新类的 dex 写入 `getCodeCacheDir()`，Android 14 且 targetSdk ≥ 34 时先 `setReadOnly()`，再通过反射把
+   Element 插入宿主 `PathClassLoader` 的 `dexElements` 首位。新类与宿主在同一加载器，包级访问正常。此时没有任何调用点引用它们。
+   `dexElements` 反射受隐藏 API 限制，豁免方案见第 19 节，需在 28、30、34 上分别验证。
+2. **阶段 A（结构化重定义）**：调用前先对需要结构变更的类逐一预检（原型提交里是
+   is\_structurally\_modifiable\_class，发布版名称待核），任一类不通过则整轮拒绝并报告原因，因为其他类的新方法体可能依赖它的新成员，不能只放行一部分。通过后一次批量调用，新增方法和新增字段；方法体保持旧版，
+   **构造器若需要初始化新字段，则随本阶段一并改写**，使窗口期内新建的实例已带初值。
 3. **存量实例初始化**：对已存在的实例，用 JVMTI 堆遍历加 JNI 写字段，按纯度白名单计算出的初值写入。仅当字段仍为默认值时写入。
 4. **阶段 B（方法体重定义）**：批量替换所有变更方法体，此时新代码才开始读新字段。
 5. **回执**：返回实际应用结果的状态哈希，Host 据此提交台账。
 
 分成 A、B 两阶段的原因是：新字段刚加入时没有人读它，可以在这个窗口里安全地给存量实例补初值；之后新逻辑上线，读到的就是正确的值。
 
-约束说明：新增字段初始为 0 或 null；方法和字段不可删除，属性不可改变。批量重定义在 ART 内部会挂起所有线程，**外层不要再包一层挂起**，避免类加载死锁。出错时是否整体回滚以 ART 实测为准，Host 不提交台账即可保证可重试。
+约束说明：新增字段初始为 0 或 null；方法和字段不可删除，属性不可改变。批量重定义在 ART 内部会挂起所有线程，
+**外层不要再包一层挂起**，避免类加载死锁。出错时是否整体回滚以 ART 实测为准，Host 不提交台账即可保证可重试。
 
 ### 6.3 初值纯度白名单
 
-初值在设备端计算，线程与时机都不同于构造期，所以不能只检查“有无分支”。白名单为：字面常量、`new` 空集合、基本类型运算、对其他常量的引用。其余一律拒绝，例如：
+初值在设备端计算，线程与时机都不同于构造期，所以不能只检查“有无分支”。白名单为：字面常量、`new`
+空集合、基本类型运算、对其他常量的引用。其余一律拒绝，例如：
 
 - `new Handler()`（绑定调用线程的 Looper）；
 - 时间、随机数、系统服务；
@@ -136,7 +152,8 @@ D8 的脱糖产物（合成 Lambda 类、桥接方法、接口 `$-CC`）也必�
 ## 7. Tier S 的各类变更
 
 - **新增方法**：直接新增，包括 public 虚方法和覆写方法（如新增 `onResume`）。上一版“覆写类一律拒绝”的限制在此层消失。
-- **删除方法**：不可真删，软删除。纯新增方法的方法体改为 `throw new NoSuchMethodError()`；覆写方法改为委托 `super.xxx()`；若父类没有具体实现（抽象方法或接口实现），则拒绝。
+- **删除方法**：不可真删，软删除。纯新增方法的方法体改为 `throw new NoSuchMethodError()`；覆写方法改为委托 `super.xxx()`
+  ；若父类没有具体实现（抽象方法或接口实现），则拒绝。
 - **新增字段**：见 6.2。字段类型修改视为“新字段加旧字段废弃”，旧值不迁移，需明确提示。
 - **构造器修改**：允许，但只影响之后新建的实例，需提示。
 - **编译期常量**：`static final` 常量被内联，修改后必须把所有使用方都加入重定义批次。
@@ -144,13 +161,17 @@ D8 的脱糖产物（合成 Lambda 类、桥接方法、接口 `$-CC`）也必�
 
 ## 8. Tier C（API 28–29 回退）
 
-PoC 1 通过时不排期，设计保留作参考，不进入路线图；PoC 1 失败时成为唯一路径，此时第 3 节的两层策略塌缩为一层，第 7 节与第 11 节矩阵的 Tier S 列失效，需要重写。机制沿用上一版并吸收评审意见。
+PoC 1 通过时不排期，设计保留作参考，不进入路线图；PoC 1 失败时成为唯一路径，此时第 3 节的两层策略塌缩为一层，第 7 节与第 11
+节矩阵的 Tier S 列失效，需要重写。机制沿用上一版并吸收评审意见。
 
 **实例字段槽**
 
-- 基线给所有类（包括抽象类）注入 `public volatile transient synthetic Object[] $extras`，父子类各自持有，访问以声明类为 owner。
-- 并发结构：数组元素是不可替换的 **Cell**（`volatile Object v`，初值为哨兵）。扩容只复制 Cell 引用并以 CAS 发布新数组，所以任何线程写入 Cell 都不会落在被丢弃的容器里。
-- 惰性初始化：读到哨兵时，调用生成的静态初值方法，再 CAS 写入 Cell，失败者采用胜者的值；写入则直接覆盖，因此合法的 null 不会被“复活”。快路径不分配对象。
+- 基线给所有类（包括抽象类）注入 `public volatile transient synthetic Object[] $extras`，父子类各自持有，访问以声明类为
+  owner。
+- 并发结构：数组元素是不可替换的 **Cell**（`volatile Object v`，初值为哨兵）。扩容只复制 Cell 引用并以 CAS 发布新数组，所以任何线程写入
+  Cell 都不会落在被丢弃的容器里。
+- 惰性初始化：读到哨兵时，调用生成的静态初值方法，再 CAS 写入 Cell，失败者采用胜者的值；写入则直接覆盖，因此合法的 null
+  不会被“复活”。快路径不分配对象。
 - 用 `AtomicReferenceFieldUpdater`（每类缓存）而非 Unsafe 偏移量。
 - 槽位单调递增，永不复用，台账持久化。
 
@@ -162,7 +183,8 @@ PoC 1 通过时不排期，设计保留作参考，不进入路线图；PoC 1 �
 
 **访问控制**
 
-- 只对 private **方法**做名字重整（`$$nipx$name$Class`），private **字段**直接放宽为包级，不重整。序列化方法、`android:onClick` 引用的方法、`@Keep` 成员豁免。
+- 只对 private **方法**做名字重整（`$$nipx$name$Class`），private **字段**直接放宽为包级，不重整。序列化方法、
+  `android:onClick` 引用的方法、`@Keep` 成员豁免。
 - 继承自其他包父类的 protected 成员，Patch 类无法访问，静态审查检出后拒绝。
 - super 调用：基线按签名生成带类型的跳板，只覆盖 Host 已覆写的方法；新方法里首次出现的 `super.foo()` 若无跳板则拒绝。
 - 可选：给 Activity、Fragment、View 的常用生命周期方法在基线预埋转发覆写，把“新增 `onResume`”从拒绝变成支持。
@@ -170,7 +192,8 @@ PoC 1 通过时不排期，设计保留作参考，不进入路线图；PoC 1 �
 ## 9. Lambda 与匿名类
 
 - 命名见 5.2，修改方法体走普通重定义，旧实例随之执行新逻辑。
-- **新增捕获变量**：新增字段保存捕获值，并增加一个合成布尔字段标记“该实例是否由新构造器创建”。新方法体先检查标记，存量实例拿不到捕获值，走受控降级路径（记录并跳过，或抛受控异常）。第二轮再新增捕获时同样处理，不能只判 null。
+- **新增捕获变量**：新增字段保存捕获值，并增加一个合成布尔字段标记“该实例是否由新构造器创建”。新方法体先检查标记，存量实例拿不到捕获值，走受控降级路径（记录并跳过，或抛受控异常）。第二轮再新增捕获时同样处理，不能只判
+  null。
 - 结论：新增捕获只对热更后新创建的实例生效，需明确提示。
 - 外层方法描述符改变等同于新方法，Lambda 键按新方法重新建立。
 
@@ -242,7 +265,9 @@ PoC 0 和 PoC 1 失败会动到架构，其余失败只是局部修复。
 
 ## 15. 与官方方案的关系
 
-Android Studio 的 Apply Changes 同样依赖 JVMTI。官方文章显示，在 Android 11 的设备上，新增方法已于 Android Studio 4.1 支持，新增静态字段于 4.2 支持，且官方对新增字段做了初始值分析。因此**上一版文档里“Apply Changes 不支持新增方法和字段”的对比是错误的**，已在本文更正。对实例字段、覆写和删除的当前支持范围，需对照最新官方文档核实后再下结论。
+Android Studio 的 Apply Changes 同样依赖 JVMTI。官方文章显示，在 Android 11 的设备上，新增方法已于 Android Studio 4.1
+支持，新增静态字段于 4.2 支持，且官方对新增字段做了初始值分析。因此 **上一版文档里“Apply Changes
+不支持新增方法和字段”的对比是错误的**，已在本文更正。对实例字段、覆写和删除的当前支持范围，需对照最新官方文档核实后再下结论。
 
 本方案相对官方的增量价值，更可能在这几处，而不是 JVMTI 能力本身：
 
@@ -277,10 +302,12 @@ Android Studio 的 Apply Changes 同样依赖 JVMTI。官方文章显示，在 A
 | 9  | Tier C 应降级为“不实现”                                            | 部分采纳 | PoC 1 通过则不实现 Tier C，API 28、29 只支持方法体修改。PoC 1 失败则结论反转：Tier C 成为所有版本上新增字段和方法的唯一途径。评审自己的结论（PoC 1 失败就重写为仅 Tier C）与“不实现”互相矛盾。                                                                                                                                                                                                                                                                                                                                    |
 | 10 | 缺少失败模式章节                                                   | 采纳     | 见第 18 节。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
-我读到的[ 2019 年 AOSP 原型提交](https://android.googlesource.com/platform/art/+/4ac0e15%5E!)里，还有几条约束。它是发布版的前身，每条都要在目标版本核实：
+我读到的[ 2019 年 AOSP 原型提交](https://android.googlesource.com/platform/art/+/4ac0e15%5E!)
+里，还有几条约束。它是发布版的前身，每条都要在目标版本核实：
 
 - 只有 JNI ID 为 indices 模式、且应用可调试（或强制仅解释执行）时，才会暴露结构化重定义扩展。
-- 若类上有先于切换而发放出去的 `jfieldID` 或 `jmethodID`，该类会被拒绝结构化修改。应用启动后才挂载 agent 的路径受影响最大，已并入 PoC 1。
+- 若类上有先于切换而发放出去的 `jfieldID` 或 `jmethodID`，该类会被拒绝结构化修改。应用启动后才挂载 agent 的路径受影响最大，已并入
+  PoC 1。
 - ART 运行时根类和 `java.lang.Thread` 的子类不可结构化修改。
 - 结构化路径用一个新类对象替换旧类，旧类标记为 obsolete，随后让所有线程栈帧去优化并使全部 JIT 代码失效，预期有一次短暂停顿，耗时需实测。
 
@@ -304,13 +331,22 @@ Android Studio 的 Apply Changes 同样依赖 JVMTI。官方文章显示，在 A
 
 ## 19. 隐藏 API 豁免与 dex 注入
 
-dex 注入用 [LSPosed AndroidHiddenApiBypass](https://github.com/LSPosed/AndroidHiddenApiBypass) 做一次性、限定范围的豁免，并且只存在于 debug 构建。
+dex 注入用 [LSPosed AndroidHiddenApiBypass](https://github.com/LSPosed/AndroidHiddenApiBypass) 做一次性、限定范围的豁免，并且只存在于
+debug 构建。
 
-- **机制**：库提供 `HiddenApiBypass`（基于 `Unsafe`）与 `LSPass`（基于 `Property.of()`）两个变体，API 相同，切换只需替换类名。README 称前者是纯 Java，不依赖 Android 10+ 的 ART 内部结构；后者初始化更快，但可能被未来系统版本封堵。本方案选 `HiddenApiBypass`，这里要的是可靠性，不是速度。
-- **用法**：注入前调用一次 `HiddenApiBypass.addHiddenApiExemptions("Ldalvik/system")`，范围只含 `BaseDexClassLoader`、`DexPathList` 所在的包，不用空前缀全放开；随后用普通反射取 `pathList` 与 `dexElements`。库还提供不做全局豁免、按次访问的 `invoke`、`getInstanceFields` 等方法。
-- **只调用一次**：库的 [issue #100](https://github.com/LSPosed/AndroidHiddenApiBypass/issues/100) 记录了 ART 的一条警告：`setHiddenApiExemptions` 被多次调用时，未来版本可能变成空操作或抛异常（我只看到该 issue 的摘要，未读全文）。所以整个进程生命周期只调用一次，前缀一次列全。
-- **仅限 debug**：README 说明 Google Play 不允许应用使用隐藏 API，需要在 `build.gradle` 里关闭 `dependenciesInfo`。这里直接把它作为 debug 依赖，release 不打包。
-- **适用范围**：豁免是进程级的，但我没有确认 JNI 查找路径是否同样受益。README 以包为单位描述豁免范围，pathList、dexElements 的字段读取是否被覆盖，不预设结论，由 PoC 3 实测。
+- **机制**：库提供 `HiddenApiBypass`（基于 `Unsafe`）与 `LSPass`（基于 `Property.of()`）两个变体，API 相同，切换只需替换类名。README
+  称前者是纯 Java，不依赖 Android 10+ 的 ART 内部结构；后者初始化更快，但可能被未来系统版本封堵。本方案选 `HiddenApiBypass`
+  ，这里要的是可靠性，不是速度。
+- **用法**：注入前调用一次 `HiddenApiBypass.addHiddenApiExemptions("Ldalvik/system")`，范围只含 `BaseDexClassLoader`、
+  `DexPathList` 所在的包，不用空前缀全放开；随后用普通反射取 `pathList` 与 `dexElements`。库还提供不做全局豁免、按次访问的
+  `invoke`、`getInstanceFields` 等方法。
+- **只调用一次**：库的 [issue #100](https://github.com/LSPosed/AndroidHiddenApiBypass/issues/100) 记录了 ART 的一条警告：
+  `setHiddenApiExemptions` 被多次调用时，未来版本可能变成空操作或抛异常（我只看到该 issue
+  的摘要，未读全文）。所以整个进程生命周期只调用一次，前缀一次列全。
+- **仅限 debug**：README 说明 Google Play 不允许应用使用隐藏 API，需要在 `build.gradle` 里关闭 `dependenciesInfo`。这里直接把它作为
+  debug 依赖，release 不打包。
+- **适用范围**：豁免是进程级的，但我没有确认 JNI 查找路径是否同样受益。README 以包为单位描述豁免范围，pathList、dexElements
+  的字段读取是否被覆盖，不预设结论，由 PoC 3 实测。
 - **失败降级**：豁免或反射失败时，退到“不含新类”模式（见第 18 节）。
 - **顺带确认**：PoC 1 枚举 ART 的 JVMTI 扩展函数时，看是否有向类加载器追加 dex 的函数。这只是我的印象，没有核实；若存在，可取代反射注入，本方案不依赖它。
 
@@ -318,6 +354,8 @@ dex 注入用 [LSPosed AndroidHiddenApiBypass](https://github.com/LSPosed/Androi
 
 **参考**
 
-- Android Developers 博客：Structural Class Redefinition（medium.com/androiddevelopers/structural-class-redefinition-6fc0cbab9161）
-- Android Developers 博客：Structural Class Redefinition and Apply Changes（medium.com/androiddevelopers/structural-class-redefinition-and-apply-changes-30f96f1962e6）
+- Android Developers 博客：Structural Class
+  Redefinition（medium.com/androiddevelopers/structural-class-redefinition-6fc0cbab9161）
+- Android Developers 博客：Structural Class Redefinition and Apply
+  Changes（medium.com/androiddevelopers/structural-class-redefinition-and-apply-changes-30f96f1962e6）
 - AOSP `platform/art`：JVMTI 结构化重定义扩展及相关测试用例（android.googlesource.com/platform/art）

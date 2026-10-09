@@ -49,11 +49,11 @@ prepare -> tx.preRegister() -> inst.redefineClasses() -> tx.commit()
 
 系统支持通过 JVM 系统属性控制对齐与安全门行为，首选属性名遵循 `nipx.agent.*` 规范，同时兼容 `nipx.anonAlign.*` 历史别名：
 
-| 首选属性名                    | 兼容别名                 | 默认值   | 语义与行为                                                        |
-|:------------------------------|:-------------------------|:---------|:------------------------------------------------------------------|
-| `nipx.agent.anon_align`       | `nipx.anonAlign.enabled` | `true`   | 对齐总开关。为 `false` 时含匿名类的宿主整体拒绝，杜绝编号位移篡夺 |
-| `nipx.agent.anon_strict`      | `nipx.anonAlign.strict`  | `false`  | 严格模式开关。开启后遇 Tier 4 歧义或 `depth > 4` 直接拒绝宿主组   |
-| `nipx.agent.anon_debug`       | `nipx.anonAlign.debug`   | `false`  | 诊断日志开关。打印完整的层级决策链与详细匹配计数                  |
-| `nipx.agent.anon_layout_gate` | -                        | `reject` | 匿名类捕获字段布局门模式：`reject`（有存活实例拒绝）/ `warn` / `off` |
-| `nipx.agent.layout_gate`      | -                        | `reject` | 重定义层显式字段布局门模式：`reject`（删/改类型拒绝）/ `warn` / `off` |
-| `nipx.agent.local_class_guard`| -                        | `reject` | 同名局部类编号漂移止血门模式：`reject`（同名 >= 2 拒绝）/ `warn` / `off` |
+| 首选属性名                     | 兼容别名                 | 默认值   | 语义与行为                                                               |
+|:-------------------------------|:-------------------------|:---------|:-------------------------------------------------------------------------|
+| `nipx.agent.anon_align`        | `nipx.anonAlign.enabled` | `true`   | 对齐总开关。为 `false` 时含匿名类的宿主整体拒绝，杜绝编号位移篡夺        |
+| `nipx.agent.anon_strict`       | `nipx.anonAlign.strict`  | `false`  | 严格模式开关。开启后遇 Tier 4 歧义或 `depth > 4` 直接拒绝宿主组          |
+| `nipx.agent.anon_debug`        | `nipx.anonAlign.debug`   | `false`  | 诊断日志开关。打印完整的层级决策链与详细匹配计数                         |
+| `nipx.agent.anon_layout_gate`  | -                        | `reject` | 匿名类捕获字段布局门模式：`reject`（有存活实例拒绝）/ `warn` / `off`     |
+| `nipx.agent.layout_gate`       | -                        | `reject` | 重定义层显式字段布局门模式：`reject`（删/改类型拒绝）/ `warn` / `off`    |
+| `nipx.agent.local_class_guard` | -                        | `reject` | 同名局部类编号漂移止血门模式：`reject`（同名 >= 2 拒绝）/ `warn` / `off` |

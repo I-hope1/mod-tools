@@ -100,6 +100,8 @@ InitFix：热更新（Redefine）后，为**新增字段**初始化存量实例�
 - Kotlin 夹具的 v1/v2 输出目录**绝不能**进入任何 classpath（同名类会静默只命中其一，造成假绿）。
 - 迭代期间只跑 `hstestInitFixOracle`，收尾时才跑一次 `./gradlew check`。
 - 匿名类/对齐主题套件已从 `suite.sh`（`hstestRun`）迁到 JUnit：`./gradlew hstestJunit`（挂在 `check`）。入口用 `-Dhstest.javac8/11/17/21` 现编夹具，不再有 `expected-count.txt` 基线。
+- `hstestJunit` 的测试数下限由 `build.gradle` 的 `hstestMinTests` 守卫（`verifyHstestTestCount` 读 XML 断言）：删除/禁用测试会让 `check` 变红，上调基线要有意识地改这一行。
+- CI：`.github/workflows/hstest.yml`（`setup-java` 装 8/11/17/21 + `fromEnv`，关 auto-detect/auto-download，`hstest.requireJdks=true`）。首次 Linux 跑，Windows 假设（路径分隔符、GBK、`F:/` 默认值）可能暴露，按原因分类再处理。
 - 新增或放宽安全门：必须有负向阻断断言。
 - 修复缺陷：必须有先红后绿的回归断言。
 - 新增或放宽安全门例外：除正向、负向用例外，必须做**变异检查**——故意放宽一处实现，确认对应用例会变红，再撤销。

@@ -4,6 +4,7 @@ import nipx.util.*;
 import org.objectweb.asm.*;
 import org.objectweb.asm.commons.*;
 import org.objectweb.asm.tree.*;
+import org.objectweb.asm.tree.analysis.*;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -939,7 +940,15 @@ public class LambdaAligner {
 		return anyProgressed;
 	}
 
-	/** 候选是否满足宿主序列对齐条件。 */
+	/**
+	 * 候选是否满足宿主序列对齐条件。
+	 *
+	 * <p>包含消费者指令守卫（{@code ni.consumer.equals(oi.consumer)}）：
+	 * 这是一个<b>安全优先于召回率</b>（safety-over-recall）的权衡设计。其作用域严格限制在
+	 * {@link #alignByHostSequence}（锚点对齐）内部，避免在同一个锚点序列中发生消费者不匹配的错位配对；
+	 * 后续的 Step 1a、Pass A 以及 Step 2 等全局及保底对齐步骤<b>不受此守卫阻断</b>，即使消费者发生变更
+	 * （如从赋值给字段重构为入参传递），Lambda 仍然能通过后续阶段完成对齐。</p>
+	 */
 	private static boolean canPair(MatchContext ctx, SyntheticInfo ni, SyntheticInfo oi) {
 		if (ni.matched || !ni.renameable) return false;
 		if (hasUnmatchedChild(ctx, ni)) return false;
@@ -1311,18 +1320,14 @@ public class LambdaAligner {
 							break;
 						}
 					}
-					// 2b. 若无同名候选，按源码调用发现顺序（callOrder，无则回退 methodIndex）确定性决胜，消除编译器方法表物理顺序依赖
+					// 2b. 若无同名候选，按调用发现顺序（可达优先按 callOrder，不可达按 methodIndex）确定性决胜，消除编译器方法表物理顺序依赖
 					if (bestOld == null) {
 						for (int k : groupOrder(oldGroups)) {
 							List<SyntheticInfo> g = oldGroups.valueAt(k);
 							if (g == null || g == sameGroup) continue;
 							SyntheticInfo oi = firstFingerprintMatch(ctx, g, ni, false);
-							if (oi != null) {
-								int oiOrder = oi.callOrder >= 0 ? oi.callOrder : oi.methodIndex;
-								int bestOrder = bestOld != null ? (bestOld.callOrder >= 0 ? bestOld.callOrder : bestOld.methodIndex) : Integer.MAX_VALUE;
-								if (bestOld == null || oiOrder < bestOrder) {
-									bestOld = oi;
-								}
+							if (oi != null && isBetterCandidate(oi, bestOld)) {
+								bestOld = oi;
 							}
 						}
 					}
@@ -1335,6 +1340,23 @@ public class LambdaAligner {
 			}
 		}
 		return progressed;
+	}
+
+	/**
+	 * 候选旧方法择优判决（分层决胜）：
+	 * <ol>
+	 *   <li>可达性分层：从根方法可达的候选（{@code callOrder >= 0}）无条件优先于不可达候选（死代码 / 孤立方法）；</li>
+	 *   <li>若两者均可达：按 BFS 源码调用发现序（{@code callOrder}）小的胜出；</li>
+	 *   <li>若两者均不可达：按编译器字节码方法表下标（{@code methodIndex}）小的胜出。</li>
+	 * </ol>
+	 */
+	private static boolean isBetterCandidate(SyntheticInfo candidate, SyntheticInfo currentBest) {
+		if (currentBest == null) return true;
+		boolean candReachable = candidate.callOrder >= 0;
+		boolean bestReachable = currentBest.callOrder >= 0;
+		if (candReachable != bestReachable) return candReachable;
+		if (candReachable) return candidate.callOrder < currentBest.callOrder;
+		return candidate.methodIndex < currentBest.methodIndex;
 	}
 
 	/** 在 {@code group} 中查找同名且指纹相同的旧方法候选。 */
@@ -1357,7 +1379,7 @@ public class LambdaAligner {
 	}
 
 	/**
-	 * 在 {@code group} 中找第一个与 {@code ni} 指纹相同且未被匹配的旧方法。
+	 * 在 {@code group} 中找指纹相同且未被匹配的最优旧方法。
 	 * @param preferSameName 是否优先命中与 {@code ni} 同名的候选（同名意味着
 	 *                       "编译期序号都没变"，是更强的证据）
 	 * @return 命中的旧方法信息；没有则返回 {@code null}
@@ -1379,6 +1401,7 @@ public class LambdaAligner {
 				if (oi.name.equals(ni.name)) return oi;
 			}
 		}
+		SyntheticInfo best = null;
 		for (SyntheticInfo oi : group) {
 			if (oi.matched || oi.ghost) continue;
 			if (!oi.renameable) continue;                       // 与 ni 上的限制对称
@@ -1387,9 +1410,11 @@ public class LambdaAligner {
 			if (!isSignatureCompatible(owner, oi, ni)) continue;
 			if (!sameNestingLevel(ni, oi)) continue;
 			if (!calleesPairTo(ni, oi)) continue;
-			return oi;
+			if (isBetterCandidate(oi, best)) {
+				best = oi;
+			}
 		}
-		return null;
+		return best;
 	}
 
 	/** 顺序回退告警去重缓存：同一处错配只报一次。 */
@@ -1862,44 +1887,88 @@ public class LambdaAligner {
 	}
 
 	/**
-	 * 探测 Lambda 实例化（invokedynamic / method call）后在操作数栈上的消费指令。
+	 * 基于 ASM {@link Analyzer} 和 {@link SourceInterpreter} 进行反向数据流栈分析，
+	 * 精确提取方法内所有 Lambda 实例化指令（invokedynamic / method call）的操作数栈消费目标。
 	 *
-	 * <p>返回值形如：
+	 * <p>相较于单纯向后线性扫描，本方法具备完全的栈感知能力，能免疫中间指令及参数前置计算的干扰：
 	 * <ul>
-	 *   <li>{@code "CALL:com/example/Foo.bar(Ljava/lang/Runnable;)V"} —— 作为入参传入方法调用</li>
-	 *   <li>{@code "PUT:com/example/Foo.field:Ljava/lang/Runnable;"} —— 存入静态/实例字段</li>
-	 *   <li>{@code "STORE:1"} —— 存入局部变量</li>
-	 *   <li>{@code "RETURN"} —— 直接作为返回值返回</li>
+	 *   <li>{@code foo(() -> a, () -> b)}：两个 indy 均能准确识别为同一 {@code CALL:...foo} 的入参；</li>
+	 *   <li>{@code a(() -> x, 5)}：indy 之后的常量加载指令不会干扰消费者判定；</li>
+	 *   <li>{@code a(() -> x, bar())}：作为参数的嵌套调用 {@code bar()} 不会被误判为消费端；</li>
+	 *   <li>三元表达式 / 分支合并（多生产者）：返回空证据，严守 Fail-Closed 拒绝猜测；</li>
+	 *   <li>排除本地变量存储（{@code ASTORE}）作为特征，防止前插局部变量导致槽位位移误判。</li>
 	 * </ul>
-	 * 无法确定或跨分支时返回空字符串。</p>
+	 * </p>
 	 */
-	private static String findConsumer(AbstractInsnNode insn) {
-		for (AbstractInsnNode n = insn.getNext(); n != null; n = n.getNext()) {
-			if (n.getOpcode() < 0 || n.getOpcode() == Opcodes.NOP) continue;
-			if (n instanceof MethodInsnNode min) {
-				return "CALL:" + min.owner + "." + min.name + min.desc;
+	private static Map<AbstractInsnNode, String> findConsumers(String owner, MethodNode mn) {
+		Map<AbstractInsnNode, String> map = new HashMap<>();
+		if (mn.instructions == null || mn.instructions.size() == 0) return map;
+		Frame<SourceValue>[] frames;
+		try {
+			Analyzer<SourceValue> analyzer = new Analyzer<>(new SourceInterpreter());
+			frames = analyzer.analyze(owner, mn);
+		} catch (Throwable t) {
+			// 分析失败时保守降级，返回空映射
+			return map;
+		}
+		if (frames == null) return map;
+
+		AbstractInsnNode[] insns = mn.instructions.toArray();
+		for (int i = 0; i < insns.length; i++) {
+			AbstractInsnNode insn = insns[i];
+			Frame<SourceValue> frame = frames[i];
+			if (frame == null) continue;
+
+			String consumerTag = null;
+			int consumedCount = 0;
+
+			if (insn instanceof MethodInsnNode min) {
+				Type[] args = Type.getArgumentTypes(min.desc);
+				consumedCount = args.length + (min.getOpcode() == Opcodes.INVOKESTATIC ? 0 : 1);
+				consumerTag = "CALL:" + min.owner + "." + min.name + min.desc;
+			} else if (insn instanceof InvokeDynamicInsnNode indy) {
+				Type[] args = Type.getArgumentTypes(indy.desc);
+				consumedCount = args.length;
+				consumerTag = "INDY:" + indy.name + indy.desc;
+			} else if (insn instanceof FieldInsnNode fin) {
+				if (fin.getOpcode() == Opcodes.PUTFIELD) {
+					consumedCount = 2; // objectref + value
+					consumerTag = "PUT:" + fin.owner + "." + fin.name + fin.desc;
+				} else if (fin.getOpcode() == Opcodes.PUTSTATIC) {
+					consumedCount = 1; // value
+					consumerTag = "PUT:" + fin.owner + "." + fin.name + fin.desc;
+				}
+			} else if (insn.getOpcode() == Opcodes.ARETURN) {
+				consumedCount = 1;
+				consumerTag = "RETURN";
+			} else if (insn.getOpcode() == Opcodes.ATHROW) {
+				consumedCount = 1;
+				consumerTag = "THROW";
 			}
-			if (n instanceof InvokeDynamicInsnNode nextIndy) {
-				return "INDY:" + nextIndy.name + nextIndy.desc;
-			}
-			if (n instanceof FieldInsnNode fin && (fin.getOpcode() == Opcodes.PUTFIELD || fin.getOpcode() == Opcodes.PUTSTATIC)) {
-				return "PUT:" + fin.owner + "." + fin.name + fin.desc;
-			}
-			if (n instanceof VarInsnNode vin && vin.getOpcode() == Opcodes.ASTORE) {
-				return "STORE:" + vin.var;
-			}
-			if (n.getOpcode() == Opcodes.ARETURN) {
-				return "RETURN";
-			}
-			if (n.getOpcode() == Opcodes.ATHROW) {
-				return "THROW";
-			}
-			int op = n.getOpcode();
-			if (op == Opcodes.GOTO || op == Opcodes.RETURN || (op >= Opcodes.IRETURN && op <= Opcodes.DRETURN)) {
-				break;
+
+			if (consumerTag != null && consumedCount > 0) {
+				int stackSize = frame.getStackSize();
+				int startSlot = Math.max(0, stackSize - consumedCount);
+				for (int slot = startSlot; slot < stackSize; slot++) {
+					SourceValue val = frame.getStack(slot);
+					if (val == null || val.insns == null) continue;
+					if (val.insns.size() == 1) {
+						AbstractInsnNode producer = val.insns.iterator().next();
+						if (!map.containsKey(producer)) {
+							map.put(producer, consumerTag);
+						} else if (!consumerTag.equals(map.get(producer))) {
+							map.put(producer, ""); // 冲突歧义置空
+						}
+					} else {
+						// 多生产者（三元表达式/分支合并等）：标记歧义，拒绝猜测
+						for (AbstractInsnNode producer : val.insns) {
+							map.put(producer, "");
+						}
+					}
+				}
 			}
 		}
-		return "";
+		return map;
 	}
 
 	private static ClassNode scan(byte[] bytes, MatchContext ctx, boolean isOld,
@@ -2013,7 +2082,8 @@ public class LambdaAligner {
 			if (MethodFingerprinter.isExcluded(mn.name)) continue;
 			boolean isSynthetic    = (mn.access & Opcodes.ACC_SYNTHETIC) != 0;
 			boolean matchesPattern = MethodFingerprinter.isSyntheticName(mn.name);
-			if (!isSynthetic && !matchesPattern) {
+			// 确保普通业务方法以及构造函数/静态初始化块（<init>/<clinit>，字段初始化 Lambda 所在地）始终作为根起点
+			if (mn.name.startsWith("<") || (!isSynthetic && !matchesPattern)) {
 				roots.add(mn);
 			}
 		}
@@ -2039,19 +2109,18 @@ public class LambdaAligner {
 				hostKey = "M:" + mn.name + mn.desc;
 			}
 
+			Map<AbstractInsnNode, String> consumers = findConsumers(cn.name, mn);
 			List<SyntheticInfo> seq = null;
 			for (AbstractInsnNode n : mn.instructions) {
 				String callee = null;
-				String consumer = "";
 				if (n instanceof InvokeDynamicInsnNode i && i.bsmArgs != null && i.bsmArgs.length > 1
 				    && i.bsmArgs[1] instanceof Handle h && cn.name.equals(h.getOwner())) {
 					callee = h.getName();
-					consumer = findConsumer(i);
 				} else if (n instanceof MethodInsnNode m && cn.name.equals(m.owner)) {
 					callee = m.name;
-					consumer = findConsumer(m);
 				}
 				if (callee == null || !MethodFingerprinter.isSyntheticName(callee)) continue;
+				String consumer = consumers.getOrDefault(n, "");
 				SyntheticInfo target = nameIndex.get(callee);
 				if (target != null && target.renameable && !target.ghost) {
 					if (target.consumer == null && !consumer.isEmpty()) {
@@ -2088,31 +2157,26 @@ public class LambdaAligner {
 		for (MethodNode mn : leftovers) {
 			SyntheticInfo info = nameIndex.get(mn.name);
 			if (info == null || !info.renameable || info.ghost) continue;
-			if (info.callOrder < 0) {
-				info.callOrder = callCounter++;
-			}
+			// 孤立/死代码不分配正向 callOrder，保持 -1 以标记不可达
 			String hostKey = "L:" + info.hash + (info.consumer != null && !info.consumer.isEmpty() ? ":" + info.consumer : "");
+			Map<AbstractInsnNode, String> consumers = findConsumers(cn.name, mn);
 			List<SyntheticInfo> seq = null;
 			for (AbstractInsnNode n : mn.instructions) {
 				String callee = null;
-				String consumer = "";
 				if (n instanceof InvokeDynamicInsnNode i && i.bsmArgs != null && i.bsmArgs.length > 1
 				    && i.bsmArgs[1] instanceof Handle h && cn.name.equals(h.getOwner())) {
 					callee = h.getName();
-					consumer = findConsumer(i);
 				} else if (n instanceof MethodInsnNode m && cn.name.equals(m.owner)) {
 					callee = m.name;
-					consumer = findConsumer(m);
 				}
 				if (callee == null || !MethodFingerprinter.isSyntheticName(callee)) continue;
+				String consumer = consumers.getOrDefault(n, "");
 				SyntheticInfo target = nameIndex.get(callee);
 				if (target != null && target.renameable && !target.ghost) {
 					if (target.consumer == null && !consumer.isEmpty()) {
 						target.consumer = consumer;
 					}
-					if (target.callOrder < 0) {
-						target.callOrder = callCounter++;
-					}
+					// 孤立调用同样保持 callOrder 为 -1
 					if (seq == null) seq = hostSeq.computeIfAbsent(hostKey, k -> new ArrayList<>());
 					if (!seq.contains(target)) {
 						target.hostKey = hostKey;

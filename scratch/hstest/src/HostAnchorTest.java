@@ -376,7 +376,9 @@ public class HostAnchorTest {
 		List<String> alignedTargets = findIndyTargets(cnAligned, "build");
 		assertEquals(1, alignedTargets.size(), "aligned build() 应只包含 1 个 indy 调用");
 		String activeParent = alignedTargets.get(0);
-		assertEquals(oldP2, activeParent, "留存的语句 b(...) 正确配对到 oldP2");
+		// 独立因果判据：P2' 明确配对到 oldP2 是依靠消费者证据（CALL:...b 区别于 CALL:...a），
+		// 而非依赖任何编译器物理方法表顺序或遍历偏好。
+		assertEquals(oldP2, activeParent, "留存的语句 b(...) 基于消费者特征准确配对到 oldP2");
 		MethodNode ghostP1 = findMethod(cnAligned, oldP1);
 		assertNotNull(ghostP1, "已删除的语句 a(...) oldP1 应作为孤儿桩复活");
 	}
@@ -452,18 +454,28 @@ public class HostAnchorTest {
 		assertTrue(callsMethod(p2Node, "onOrphanInvoked"), "未留存的旧 P2 必须是幽灵熔断桩");
 		assertFalse(callsMethod(p2Node, "x1"), "旧 P2 绝不能残留业务逻辑");
 
-		// 人为反转方法表顺序，断言对齐结果完全不变（不依赖编译器物理方法表顺序）
-		ClassNode cnV1Rev = readClass(v1);
-		Collections.reverse(cnV1Rev.methods);
-		ClassNode cnV2Rev = readClass(v2);
-		Collections.reverse(cnV2Rev.methods);
+		// 人为反转方法表顺序（3 种非对称/对称组合），断言对齐结果完全不变（不依赖编译器物理方法表顺序）
+		// 组合 1：仅反转旧版 V1 方法表
+		ClassNode cnV1OnlyRev = readClass(v1);
+		Collections.reverse(cnV1OnlyRev.methods);
+		byte[] alignedRev1 = LambdaAligner.align(writeClass(cnV1OnlyRev), v2);
+		assertNotNull(alignedRev1);
+		assertEquals(oldP1, findIndyTargets(readClass(alignedRev1), "build").get(0),
+			"[仅反转旧版 V1] 留存项仍必须稳定对齐到 oldP1");
 
-		byte[] alignedRev = LambdaAligner.align(writeClass(cnV1Rev), writeClass(cnV2Rev));
-		assertNotNull(alignedRev);
-		ClassNode cnAlignedRev = readClass(alignedRev);
-		List<String> revAlignedTargets = findIndyTargets(cnAlignedRev, "build");
-		assertEquals(1, revAlignedTargets.size());
-		assertEquals(oldP1, revAlignedTargets.get(0), "方法表物理顺序反转后，留存项仍必须稳定对齐到 oldP1");
+		// 组合 2：仅反转新版 V2 方法表
+		ClassNode cnV2OnlyRev = readClass(v2);
+		Collections.reverse(cnV2OnlyRev.methods);
+		byte[] alignedRev2 = LambdaAligner.align(v1, writeClass(cnV2OnlyRev));
+		assertNotNull(alignedRev2);
+		assertEquals(oldP1, findIndyTargets(readClass(alignedRev2), "build").get(0),
+			"[仅反转新版 V2] 留存项仍必须稳定对齐到 oldP1");
+
+		// 组合 3：同时反转新旧两侧方法表
+		byte[] alignedRevBoth = LambdaAligner.align(writeClass(cnV1OnlyRev), writeClass(cnV2OnlyRev));
+		assertNotNull(alignedRevBoth);
+		assertEquals(oldP1, findIndyTargets(readClass(alignedRevBoth), "build").get(0),
+			"[同时反转两侧] 留存项仍必须稳定对齐到 oldP1");
 	}
 
 	@Test
@@ -540,15 +552,140 @@ public class HostAnchorTest {
 		assertEquals(1, alignedTargets.size());
 		assertEquals(oldP1, alignedTargets.get(0), "根据 BFS 源码序，留存的前序语句必须对齐到 oldP1");
 
-		// 人为反转方法表验证顺序无关性
-		ClassNode cnV1Rev = readClass(v1);
-		Collections.reverse(cnV1Rev.methods);
-		ClassNode cnV2Rev = readClass(v2);
-		Collections.reverse(cnV2Rev.methods);
-		byte[] alignedRev = LambdaAligner.align(writeClass(cnV1Rev), writeClass(cnV2Rev));
-		assertNotNull(alignedRev);
-		ClassNode cnAlignedRev = readClass(alignedRev);
-		assertEquals(oldP1, findIndyTargets(cnAlignedRev, "build").get(0), "即使编译器方法表倒序，BFS 调用流序仍保证对齐到 oldP1");
+		// 人为反转方法表验证顺序无关性（3 种非对称/对称组合）
+		ClassNode cnV1OnlyRev = readClass(v1);
+		Collections.reverse(cnV1OnlyRev.methods);
+		byte[] alignedRev1 = LambdaAligner.align(writeClass(cnV1OnlyRev), v2);
+		assertNotNull(alignedRev1);
+		assertEquals(oldP1, findIndyTargets(readClass(alignedRev1), "build").get(0),
+			"[仅反转旧版 V1] 留存的前序语句仍必须对齐到 oldP1");
+
+		ClassNode cnV2OnlyRev = readClass(v2);
+		Collections.reverse(cnV2OnlyRev.methods);
+		byte[] alignedRev2 = LambdaAligner.align(v1, writeClass(cnV2OnlyRev));
+		assertNotNull(alignedRev2);
+		assertEquals(oldP1, findIndyTargets(readClass(alignedRev2), "build").get(0),
+			"[仅反转新版 V2] 留存的前序语句仍必须对齐到 oldP1");
+
+		byte[] alignedRevBoth = LambdaAligner.align(writeClass(cnV1OnlyRev), writeClass(cnV2OnlyRev));
+		assertNotNull(alignedRevBoth);
+		assertEquals(oldP1, findIndyTargets(readClass(alignedRevBoth), "build").get(0),
+			"[同时反转两侧] 留存的前序语句仍必须对齐到 oldP1");
+	}
+
+	/**
+	 * 同构 Lambda 缩减（完全相同的父级方法体与相同的消费者调用）删除首条语句场景。
+	 *
+	 * <p><b>约定而非推导（Convention, not deduction）</b>：
+	 * 当开发者删除了前一条语句 {@code a(() -> x1(() -> leaf()))}，留存后一条语句时，
+	 * 由于两条语句无论从方法体、嵌套结构还是栈上消费者（均为 {@code CALL:...a}）均完全无异，
+	 * 字节码层面不存在任何区分二者的物理证据。
+	 * 此时系统遵循确定性的<b>前缀稳定对齐约定</b>（Prefix Convention，即按源码流序将留存的唯一实例
+	 * 对齐到首个旧候选 {@code oldP1}，并将 {@code oldP2} 退休为孤儿桩），同时触发警告留痕。</p>
+	 */
+	@Test
+	void identicalParentsAndConsumersMirrorDeleteFirstStatement(@TempDir Path tmp) throws Exception {
+		String javac = javac21();
+		Path src1Dir = Files.createDirectories(tmp.resolve("src1"));
+		Path src2Dir = Files.createDirectories(tmp.resolve("src2"));
+		Path outV1 = Files.createDirectories(tmp.resolve("v1"));
+		Path outV2 = Files.createDirectories(tmp.resolve("v2"));
+
+		// V1：两个语句的父级逻辑与消费者均完全相同
+		String v1Src = "package test;\n"
+			+ "public class HomomorphicDeleteFirstCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void x1(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void build() {\n"
+			+ "        a(() -> x1(() -> leaf()));\n" // P1 -> L1 (语句 1)
+			+ "        a(() -> x1(() -> leaf()));\n" // P2 -> L2 (语句 2，完全同构)
+			+ "    }\n"
+			+ "}\n";
+
+		// V2：删除前一条语句（保留后一条语句）
+		String v2Src = "package test;\n"
+			+ "public class HomomorphicDeleteFirstCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void x1(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void build() {\n"
+			+ "        a(() -> x1(() -> leaf()));\n" // P2' -> L2' (源码上对应语句 2)
+			+ "    }\n"
+			+ "}\n";
+
+		Path src1 = src1Dir.resolve("HomomorphicDeleteFirstCase.java");
+		Path src2 = src2Dir.resolve("HomomorphicDeleteFirstCase.java");
+		Files.writeString(src1, v1Src, StandardCharsets.UTF_8);
+		Files.writeString(src2, v2Src, StandardCharsets.UTF_8);
+
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.toString(), src1.toString());
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.toString(), src2.toString());
+
+		byte[] v1 = Files.readAllBytes(outV1.resolve("test/HomomorphicDeleteFirstCase.class"));
+		byte[] v2 = Files.readAllBytes(outV2.resolve("test/HomomorphicDeleteFirstCase.class"));
+
+		ClassNode cnV1 = readClass(v1);
+		List<String> oldTargets = findIndyTargets(cnV1, "build");
+		assertEquals(2, oldTargets.size());
+		String oldP1 = oldTargets.get(0);
+		String oldP2 = oldTargets.get(1);
+
+		HotSwapAgent.Logger oldLogger = HotSwapAgent.logger;
+		List<String> warnings = new ArrayList<>();
+		HotSwapAgent.logger = new HotSwapAgent.DefaultLogger() {
+			@Override
+			public void warn(String msg) {
+				warnings.add(msg);
+				super.warn(msg);
+			}
+		};
+		byte[] aligned;
+		try {
+			aligned = LambdaAligner.align(v1, v2);
+		} finally {
+			HotSwapAgent.logger = oldLogger;
+		}
+		assertNotNull(aligned);
+
+		// 1. 断言同构缩减告警必须被触发
+		boolean hasPruningWarn = warnings.stream().anyMatch(w -> w.contains("宿主序列存在多个同构 Lambda 候选且发生缩减"));
+		assertTrue(hasPruningWarn, "同构缩减场景下必须触发警告: " + warnings);
+
+		// 2. 断言当前前缀约定：留存项对齐到 oldP1，未对齐的 oldP2 降级为幽灵桩
+		ClassNode cnAligned = readClass(aligned);
+		List<String> alignedTargets = findIndyTargets(cnAligned, "build");
+		assertEquals(1, alignedTargets.size());
+		assertEquals(oldP1, alignedTargets.get(0), "根据前缀约定，留存项稳定对齐到首个旧候选 oldP1");
+
+		MethodNode p1Node = findMethod(cnAligned, oldP1);
+		assertNotNull(p1Node);
+		assertTrue(callsMethod(p1Node, "x1"));
+		assertFalse(callsMethod(p1Node, "onOrphanInvoked"));
+
+		MethodNode p2Node = findMethod(cnAligned, oldP2);
+		assertNotNull(p2Node);
+		assertTrue(callsMethod(p2Node, "onOrphanInvoked"));
+
+		// 3. 验证方法表物理顺序反转（3 种非对称/对称组合）下，前缀约定行为严格确定且不变
+		ClassNode cnV1OnlyRev = readClass(v1);
+		Collections.reverse(cnV1OnlyRev.methods);
+		byte[] alignedRev1 = LambdaAligner.align(writeClass(cnV1OnlyRev), v2);
+		assertNotNull(alignedRev1);
+		assertEquals(oldP1, findIndyTargets(readClass(alignedRev1), "build").get(0),
+			"[仅反转旧版 V1] 前缀约定仍稳定对齐到 oldP1");
+
+		ClassNode cnV2OnlyRev = readClass(v2);
+		Collections.reverse(cnV2OnlyRev.methods);
+		byte[] alignedRev2 = LambdaAligner.align(v1, writeClass(cnV2OnlyRev));
+		assertNotNull(alignedRev2);
+		assertEquals(oldP1, findIndyTargets(readClass(alignedRev2), "build").get(0),
+			"[仅反转新版 V2] 前缀约定仍稳定对齐到 oldP1");
+
+		byte[] alignedRevBoth = LambdaAligner.align(writeClass(cnV1OnlyRev), writeClass(cnV2OnlyRev));
+		assertNotNull(alignedRevBoth);
+		assertEquals(oldP1, findIndyTargets(readClass(alignedRevBoth), "build").get(0),
+			"[同时反转两侧] 前缀约定仍稳定对齐到 oldP1");
 	}
 
 	@Test

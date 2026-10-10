@@ -943,6 +943,9 @@ public class LambdaAligner {
 	private static boolean canPair(MatchContext ctx, SyntheticInfo ni, SyntheticInfo oi) {
 		if (ni.matched || !ni.renameable) return false;
 		if (hasUnmatchedChild(ctx, ni)) return false;
+		if (ni.consumer != null && oi.consumer != null && !ni.consumer.isEmpty() && !oi.consumer.isEmpty()) {
+			if (!ni.consumer.equals(oi.consumer)) return false;
+		}
 		return acceptCandidate(ctx, ni, oi);
 	}
 
@@ -1308,14 +1311,16 @@ public class LambdaAligner {
 							break;
 						}
 					}
-					// 2b. 若无同名候选，按方法在原类中的声明顺序（methodIndex）确定性决胜，消除组遍历顺序依赖并保持位置序
+					// 2b. 若无同名候选，按源码调用发现顺序（callOrder，无则回退 methodIndex）确定性决胜，消除编译器方法表物理顺序依赖
 					if (bestOld == null) {
 						for (int k : groupOrder(oldGroups)) {
 							List<SyntheticInfo> g = oldGroups.valueAt(k);
 							if (g == null || g == sameGroup) continue;
 							SyntheticInfo oi = firstFingerprintMatch(ctx, g, ni, false);
 							if (oi != null) {
-								if (bestOld == null || oi.methodIndex < bestOld.methodIndex) {
+								int oiOrder = oi.callOrder >= 0 ? oi.callOrder : oi.methodIndex;
+								int bestOrder = bestOld != null ? (bestOld.callOrder >= 0 ? bestOld.callOrder : bestOld.methodIndex) : Integer.MAX_VALUE;
+								if (bestOld == null || oiOrder < bestOrder) {
 									bestOld = oi;
 								}
 							}
@@ -1856,6 +1861,47 @@ public class LambdaAligner {
 		return MethodFingerprinter.isUnstableNestedSuffix(suffix);
 	}
 
+	/**
+	 * 探测 Lambda 实例化（invokedynamic / method call）后在操作数栈上的消费指令。
+	 *
+	 * <p>返回值形如：
+	 * <ul>
+	 *   <li>{@code "CALL:com/example/Foo.bar(Ljava/lang/Runnable;)V"} —— 作为入参传入方法调用</li>
+	 *   <li>{@code "PUT:com/example/Foo.field:Ljava/lang/Runnable;"} —— 存入静态/实例字段</li>
+	 *   <li>{@code "STORE:1"} —— 存入局部变量</li>
+	 *   <li>{@code "RETURN"} —— 直接作为返回值返回</li>
+	 * </ul>
+	 * 无法确定或跨分支时返回空字符串。</p>
+	 */
+	private static String findConsumer(AbstractInsnNode insn) {
+		for (AbstractInsnNode n = insn.getNext(); n != null; n = n.getNext()) {
+			if (n.getOpcode() < 0 || n.getOpcode() == Opcodes.NOP) continue;
+			if (n instanceof MethodInsnNode min) {
+				return "CALL:" + min.owner + "." + min.name + min.desc;
+			}
+			if (n instanceof InvokeDynamicInsnNode nextIndy) {
+				return "INDY:" + nextIndy.name + nextIndy.desc;
+			}
+			if (n instanceof FieldInsnNode fin && (fin.getOpcode() == Opcodes.PUTFIELD || fin.getOpcode() == Opcodes.PUTSTATIC)) {
+				return "PUT:" + fin.owner + "." + fin.name + fin.desc;
+			}
+			if (n instanceof VarInsnNode vin && vin.getOpcode() == Opcodes.ASTORE) {
+				return "STORE:" + vin.var;
+			}
+			if (n.getOpcode() == Opcodes.ARETURN) {
+				return "RETURN";
+			}
+			if (n.getOpcode() == Opcodes.ATHROW) {
+				return "THROW";
+			}
+			int op = n.getOpcode();
+			if (op == Opcodes.GOTO || op == Opcodes.RETURN || (op >= Opcodes.IRETURN && op <= Opcodes.DRETURN)) {
+				break;
+			}
+		}
+		return "";
+	}
+
 	private static ClassNode scan(byte[] bytes, MatchContext ctx, boolean isOld,
 	                              java.util.function.Function<String, byte[]> resolver) {
 		ClassNode cn = new ClassNode();
@@ -1954,19 +2000,41 @@ public class LambdaAligner {
 		}
 
 		// 收集按 indy / call 出现顺序的宿主调用序列（新旧各一份）。
-		// 普通方法以 "M:" + name + desc 为锚点；lambda 合成方法以 "L:" + info.hash 为锚点。
+		// 普通方法以 "M:" + name + desc 为锚点；
+		// lambda 合成方法以 "L:" + info.hash + (info.consumer != null ? ":" + info.consumer : "") 为锚点。
+		// 关键：采用从非合成根方法出发的广度优先（BFS）遍历，彻底摆脱 class 文件方法表物理顺序（cn.methods）对同 hash 候选遍历序的干扰。
 		Map<String, List<SyntheticInfo>> hostSeq   = isOld ? ctx.oldHostSeq : ctx.newHostSeq;
 		Map<String, SyntheticInfo>       nameIndex = isOld ? ctx.oldNameIndex : ctx.newNameIndex;
-		for (MethodNode mn : cn.methods) {
-			if (MethodFingerprinter.isExcluded(mn.name)) continue;
 
+		Map<String, MethodNode> methodNodes = new HashMap<>(cn.methods.size() * 2);
+		List<MethodNode> roots = new ArrayList<>();
+		for (MethodNode mn : cn.methods) {
+			methodNodes.put(mn.name + mn.desc, mn);
+			if (MethodFingerprinter.isExcluded(mn.name)) continue;
+			boolean isSynthetic    = (mn.access & Opcodes.ACC_SYNTHETIC) != 0;
+			boolean matchesPattern = MethodFingerprinter.isSyntheticName(mn.name);
+			if (!isSynthetic && !matchesPattern) {
+				roots.add(mn);
+			}
+		}
+		roots.sort(Comparator.comparing(m -> m.name + m.desc));
+
+		Queue<MethodNode> queue = new ArrayDeque<>(roots);
+		Set<String> enqueued = new HashSet<>(cn.methods.size() * 2);
+		for (MethodNode r : roots) {
+			enqueued.add(r.name + r.desc);
+		}
+
+		int callCounter = 0;
+		while (!queue.isEmpty()) {
+			MethodNode mn = queue.poll();
 			String hostKey;
 			boolean isSynthetic    = (mn.access & Opcodes.ACC_SYNTHETIC) != 0;
 			boolean matchesPattern = MethodFingerprinter.isSyntheticName(mn.name);
 			if (isSynthetic || matchesPattern) {
 				SyntheticInfo info = nameIndex.get(mn.name);
 				if (info == null || !info.renameable || info.ghost) continue;
-				hostKey = "L:" + info.hash;
+				hostKey = "L:" + info.hash + (info.consumer != null && !info.consumer.isEmpty() ? ":" + info.consumer : "");
 			} else {
 				hostKey = "M:" + mn.name + mn.desc;
 			}
@@ -1974,15 +2042,77 @@ public class LambdaAligner {
 			List<SyntheticInfo> seq = null;
 			for (AbstractInsnNode n : mn.instructions) {
 				String callee = null;
+				String consumer = "";
 				if (n instanceof InvokeDynamicInsnNode i && i.bsmArgs != null && i.bsmArgs.length > 1
 				    && i.bsmArgs[1] instanceof Handle h && cn.name.equals(h.getOwner())) {
 					callee = h.getName();
+					consumer = findConsumer(i);
 				} else if (n instanceof MethodInsnNode m && cn.name.equals(m.owner)) {
 					callee = m.name;
+					consumer = findConsumer(m);
 				}
 				if (callee == null || !MethodFingerprinter.isSyntheticName(callee)) continue;
 				SyntheticInfo target = nameIndex.get(callee);
 				if (target != null && target.renameable && !target.ghost) {
+					if (target.consumer == null && !consumer.isEmpty()) {
+						target.consumer = consumer;
+					}
+					if (target.callOrder < 0) {
+						target.callOrder = callCounter++;
+					}
+					if (seq == null) seq = hostSeq.computeIfAbsent(hostKey, k -> new ArrayList<>());
+					if (!seq.contains(target)) {
+						target.hostKey = hostKey;
+						target.hostOrdinal = seq.size();
+						seq.add(target);
+					}
+					if (enqueued.add(target.name + target.desc)) {
+						MethodNode targetMn = methodNodes.get(target.name + target.desc);
+						if (targetMn != null) {
+							queue.add(targetMn);
+						}
+					}
+				}
+			}
+		}
+
+		// 兜底：处理未从根方法触达的孤立合成方法（如未被调用的死代码）
+		List<MethodNode> leftovers = new ArrayList<>();
+		for (MethodNode mn : cn.methods) {
+			if (MethodFingerprinter.isExcluded(mn.name)) continue;
+			if (!enqueued.contains(mn.name + mn.desc)) {
+				leftovers.add(mn);
+			}
+		}
+		leftovers.sort(Comparator.comparing(m -> m.name + m.desc));
+		for (MethodNode mn : leftovers) {
+			SyntheticInfo info = nameIndex.get(mn.name);
+			if (info == null || !info.renameable || info.ghost) continue;
+			if (info.callOrder < 0) {
+				info.callOrder = callCounter++;
+			}
+			String hostKey = "L:" + info.hash + (info.consumer != null && !info.consumer.isEmpty() ? ":" + info.consumer : "");
+			List<SyntheticInfo> seq = null;
+			for (AbstractInsnNode n : mn.instructions) {
+				String callee = null;
+				String consumer = "";
+				if (n instanceof InvokeDynamicInsnNode i && i.bsmArgs != null && i.bsmArgs.length > 1
+				    && i.bsmArgs[1] instanceof Handle h && cn.name.equals(h.getOwner())) {
+					callee = h.getName();
+					consumer = findConsumer(i);
+				} else if (n instanceof MethodInsnNode m && cn.name.equals(m.owner)) {
+					callee = m.name;
+					consumer = findConsumer(m);
+				}
+				if (callee == null || !MethodFingerprinter.isSyntheticName(callee)) continue;
+				SyntheticInfo target = nameIndex.get(callee);
+				if (target != null && target.renameable && !target.ghost) {
+					if (target.consumer == null && !consumer.isEmpty()) {
+						target.consumer = consumer;
+					}
+					if (target.callOrder < 0) {
+						target.callOrder = callCounter++;
+					}
 					if (seq == null) seq = hostSeq.computeIfAbsent(hostKey, k -> new ArrayList<>());
 					if (!seq.contains(target)) {
 						target.hostKey = hostKey;
@@ -2919,6 +3049,10 @@ public class LambdaAligner {
 		int    hostOrdinal = -1;
 		/** 在 class 文件方法表中的下标，用于保持编译器位置序。 */
 		int    methodIndex = -1;
+		/** 实例化该 Lambda 后的消费指令（如 "CALL:pkg/Cls.method(Ljava/lang/Runnable;)V"）。 */
+		String consumer;
+		/** 从根方法出发的 BFS 发现序号（源码调用序）。 */
+		int    callOrder = -1;
 
 		SyntheticInfo(String name, String desc, int access, long hash, String logicalName, boolean renameable) {
 			this.name = name;

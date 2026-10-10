@@ -1,3 +1,4 @@
+import nipx.HotSwapAgent;
 import nipx.LambdaAligner;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -438,12 +439,116 @@ public class HostAnchorTest {
 		assertEquals(1, alignedTargets.size(), "aligned build() 应只包含 1 个 indy 调用");
 		String activeParent = alignedTargets.get(0);
 
-		// 检查镜像对齐：断言存活项与被幽灵化项
-		assertTrue(activeParent.equals(oldP1) || activeParent.equals(oldP2), "留存项必须属于旧候选集合");
-		String ghostParent = activeParent.equals(oldP1) ? oldP2 : oldP1;
-		MethodNode ghostNode = findMethod(cnAligned, ghostParent);
-		assertNotNull(ghostNode, "未被留存的项必须作为孤儿桩复活");
-		assertTrue(callsMethod(ghostNode, "onOrphanInvoked"), "未留存项必须是幽灵熔断桩");
+		// 检查镜像对齐：断言具体留存项必须是 oldP1，已删项 oldP2 必须是幽灵桩
+		assertEquals(oldP1, activeParent,
+			"留存的语句 1 父级必须配对到 oldP1 (" + oldP1 + ")，绝不能错配为已删除的 oldP2 (" + oldP2 + ")");
+		MethodNode p1Node = findMethod(cnAligned, oldP1);
+		assertNotNull(p1Node, "旧 P1 必须在产物中存活");
+		assertTrue(callsMethod(p1Node, "x1"), "旧 P1 必须真实执行 x1() 业务逻辑");
+		assertFalse(callsMethod(p1Node, "onOrphanInvoked"), "旧 P1 绝不能是幽灵桩");
+
+		MethodNode p2Node = findMethod(cnAligned, oldP2);
+		assertNotNull(p2Node, "未留存的旧 P2 必须作为孤儿桩复活");
+		assertTrue(callsMethod(p2Node, "onOrphanInvoked"), "未留存的旧 P2 必须是幽灵熔断桩");
+		assertFalse(callsMethod(p2Node, "x1"), "旧 P2 绝不能残留业务逻辑");
+
+		// 人为反转方法表顺序，断言对齐结果完全不变（不依赖编译器物理方法表顺序）
+		ClassNode cnV1Rev = readClass(v1);
+		Collections.reverse(cnV1Rev.methods);
+		ClassNode cnV2Rev = readClass(v2);
+		Collections.reverse(cnV2Rev.methods);
+
+		byte[] alignedRev = LambdaAligner.align(writeClass(cnV1Rev), writeClass(cnV2Rev));
+		assertNotNull(alignedRev);
+		ClassNode cnAlignedRev = readClass(alignedRev);
+		List<String> revAlignedTargets = findIndyTargets(cnAlignedRev, "build");
+		assertEquals(1, revAlignedTargets.size());
+		assertEquals(oldP1, revAlignedTargets.get(0), "方法表物理顺序反转后，留存项仍必须稳定对齐到 oldP1");
+	}
+
+	@Test
+	void identicalParentsAndConsumersMirrorDeleteLastStatement(@TempDir Path tmp) throws Exception {
+		String javac = javac21();
+		Path src1Dir = Files.createDirectories(tmp.resolve("src1"));
+		Path src2Dir = Files.createDirectories(tmp.resolve("src2"));
+		Path outV1 = Files.createDirectories(tmp.resolve("v1"));
+		Path outV2 = Files.createDirectories(tmp.resolve("v2"));
+
+		// V1：两个语句的父级逻辑与消费者均完全相同（均调用 a(() -> x1(() -> leaf()))）
+		String v1Src = "package test;\n"
+			+ "public class HomomorphicMirrorCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void x1(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void build() {\n"
+			+ "        a(() -> x1(() -> leaf()));\n" // P1 -> L1
+			+ "        a(() -> x1(() -> leaf()));\n" // P2 -> L2 (完全相同且同消费者 a)
+			+ "    }\n"
+			+ "}\n";
+
+		// V2：镜像操作 —— 删除后一条语句（保留前一条）
+		String v2Src = "package test;\n"
+			+ "public class HomomorphicMirrorCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void x1(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void build() {\n"
+			+ "        a(() -> x1(() -> leaf()));\n" // P1' -> L1'
+			+ "    }\n"
+			+ "}\n";
+
+		Path src1 = src1Dir.resolve("HomomorphicMirrorCase.java");
+		Path src2 = src2Dir.resolve("HomomorphicMirrorCase.java");
+		Files.writeString(src1, v1Src, StandardCharsets.UTF_8);
+		Files.writeString(src2, v2Src, StandardCharsets.UTF_8);
+
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.toString(), src1.toString());
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.toString(), src2.toString());
+
+		byte[] v1 = Files.readAllBytes(outV1.resolve("test/HomomorphicMirrorCase.class"));
+		byte[] v2 = Files.readAllBytes(outV2.resolve("test/HomomorphicMirrorCase.class"));
+
+		ClassNode cnV1 = readClass(v1);
+		List<String> oldTargets = findIndyTargets(cnV1, "build");
+		assertEquals(2, oldTargets.size());
+		String oldP1 = oldTargets.get(0);
+		String oldP2 = oldTargets.get(1);
+
+		HotSwapAgent.Logger oldLogger = HotSwapAgent.logger;
+		List<String> warnings = new ArrayList<>();
+		HotSwapAgent.logger = new HotSwapAgent.DefaultLogger() {
+			@Override
+			public void warn(String msg) {
+				warnings.add(msg);
+				super.warn(msg);
+			}
+		};
+		byte[] aligned;
+		try {
+			aligned = LambdaAligner.align(v1, v2);
+		} finally {
+			HotSwapAgent.logger = oldLogger;
+		}
+		assertNotNull(aligned);
+
+		// 断言同构缩减告警在镜像场景下也必须被触发
+		boolean hasPruningWarn = warnings.stream().anyMatch(w -> w.contains("宿主序列存在多个同构 Lambda 候选且发生缩减"));
+		assertTrue(hasPruningWarn, "镜像场景下多个完全同构（同体且同消费者）Lambda 候选缩减时，必须触发警告: " + warnings);
+
+		ClassNode cnAligned = readClass(aligned);
+		List<String> alignedTargets = findIndyTargets(cnAligned, "build");
+		assertEquals(1, alignedTargets.size());
+		assertEquals(oldP1, alignedTargets.get(0), "根据 BFS 源码序，留存的前序语句必须对齐到 oldP1");
+
+		// 人为反转方法表验证顺序无关性
+		ClassNode cnV1Rev = readClass(v1);
+		Collections.reverse(cnV1Rev.methods);
+		ClassNode cnV2Rev = readClass(v2);
+		Collections.reverse(cnV2Rev.methods);
+		byte[] alignedRev = LambdaAligner.align(writeClass(cnV1Rev), writeClass(cnV2Rev));
+		assertNotNull(alignedRev);
+		ClassNode cnAlignedRev = readClass(alignedRev);
+		assertEquals(oldP1, findIndyTargets(cnAlignedRev, "build").get(0), "即使编译器方法表倒序，BFS 调用流序仍保证对齐到 oldP1");
 	}
 
 	@Test
@@ -620,6 +725,12 @@ public class HostAnchorTest {
 		ClassNode cn = new ClassNode();
 		cr.accept(cn, 0);
 		return cn;
+	}
+
+	private static byte[] writeClass(ClassNode cn) {
+		org.objectweb.asm.ClassWriter cw = new org.objectweb.asm.ClassWriter(org.objectweb.asm.ClassWriter.COMPUTE_MAXS);
+		cn.accept(cw);
+		return cw.toByteArray();
 	}
 
 	private static List<String> findIndyTargets(ClassNode cn, String methodName) {

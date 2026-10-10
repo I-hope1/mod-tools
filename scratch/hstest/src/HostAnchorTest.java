@@ -111,22 +111,22 @@ public class HostAnchorTest {
 		assertEquals(1, alignedBuildIndyTargets.size(), "aligned build() 应只包含 1 个 indy 调用");
 
 		String actualParentInBuild = alignedBuildIndyTargets.get(0);
-		assertEquals(oldP2, actualParentInBuild,
-			"留存的语句 2 父级必须配对到 oldP2 (" + oldP2 + ")，绝不能被篡夺为已删除的 oldP1 (" + oldP1 + ")");
+		// 独立字节码判据（按 V1 旧名字在产物中查方法体，绝不依赖 build() 的重写指针或 ctx 统计指标）：
+		// 1. 旧 P2 名字在产物中存活，且其方法体内真实执行 x2() 业务调用，且绝不是幽灵桩
+		MethodNode p2NodeInAligned = findMethod(cnAligned, oldP2);
+		assertNotNull(p2NodeInAligned, "旧 P2 名字必须在产物中存活");
+		assertTrue(callsMethod(p2NodeInAligned, "x2"), "旧 P2 名字对应的方法体必须真实调用 x2()");
+		assertFalse(callsMethod(p2NodeInAligned, "onOrphanInvoked"), "旧 P2 绝不能是幽灵桩");
 
-		// 验证已删除的 oldP1 必须被复活为孤儿空壳方法
-		MethodNode resurrectedP1 = findMethod(cnAligned, oldP1);
-		assertNotNull(resurrectedP1, "已删除的 oldP1 必须在产物中作为孤儿桩复活，避免老 CallSite 崩溃");
+		// 2. 旧 P1 名字在产物中被降级为幽灵桩，调用 onOrphanInvoked，绝不执行业务逻辑 x1() 或 x2()
+		MethodNode p1NodeInAligned = findMethod(cnAligned, oldP1);
+		assertNotNull(p1NodeInAligned, "旧 P1 名字必须在产物中作为幽灵桩存在");
+		assertTrue(callsMethod(p1NodeInAligned, "onOrphanInvoked"), "旧 P1 必须真实调用 onOrphanInvoked 熔断桩");
+		assertFalse(callsMethod(p1NodeInAligned, "x1"), "旧 P1 绝不能继续执行业务调用 x1()");
+		assertFalse(callsMethod(p1NodeInAligned, "x2"), "旧 P1 绝不能被篡夺去执行 x2()");
 
-		// 独立字节码判据（不依赖 ctx 内部统计指标）：
-		// 1. 留存的 actualParentInBuild 真实调用的是 x2()，绝不能调用已删的 x1()
-		MethodNode actualParentNode = findMethod(cnAligned, actualParentInBuild);
-		assertNotNull(actualParentNode, "产物中必须存在 actualParentInBuild 方法");
-		assertTrue(callsMethod(actualParentNode, "x2"), "留存父级方法体中必须真实调用 x2()");
-		assertFalse(callsMethod(actualParentNode, "x1"), "留存父级方法体中绝不能调用 x1()");
-
-		// 2. 孤儿桩 resurrectedP1 绝不能执行 x2() 业务逻辑
-		assertFalse(callsMethod(resurrectedP1, "x2"), "孤儿桩方法体中绝不能残留 x2() 业务调用");
+		// 3. build() 方法的 indy 调用必须指向 oldP2
+		assertEquals(oldP2, actualParentInBuild, "build() 的调用点必须重写为 oldP2");
 	}
 
 	@Test
@@ -378,6 +378,72 @@ public class HostAnchorTest {
 		assertEquals(oldP2, activeParent, "留存的语句 b(...) 正确配对到 oldP2");
 		MethodNode ghostP1 = findMethod(cnAligned, oldP1);
 		assertNotNull(ghostP1, "已删除的语句 a(...) oldP1 应作为孤儿桩复活");
+	}
+
+	@Test
+	void identicalParentsMirrorDeleteLastStatement(@TempDir Path tmp) throws Exception {
+		String javac = javac21();
+		Path src1Dir = Files.createDirectories(tmp.resolve("src1"));
+		Path src2Dir = Files.createDirectories(tmp.resolve("src2"));
+		Path outV1 = Files.createDirectories(tmp.resolve("v1"));
+		Path outV2 = Files.createDirectories(tmp.resolve("v2"));
+
+		// V1：两个语句的父级逻辑也完全相同（均调用 x1(() -> leaf())）
+		String v1Src = "package test;\n"
+			+ "public class MirrorCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void b(Runnable r) { r.run(); }\n"
+			+ "    static void x1(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void build() {\n"
+			+ "        a(() -> x1(() -> leaf()));\n" // P1 -> L1
+			+ "        b(() -> x1(() -> leaf()));\n" // P2 -> L2 (与 P1 完全相同)
+			+ "    }\n"
+			+ "}\n";
+
+		// V2：镜像操作 —— 删除语句 2（保留语句 1）
+		String v2Src = "package test;\n"
+			+ "public class MirrorCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void b(Runnable r) { r.run(); }\n"
+			+ "    static void x1(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void build() {\n"
+			+ "        a(() -> x1(() -> leaf()));\n" // P1' -> L1'
+			+ "    }\n"
+			+ "}\n";
+
+		Path src1 = src1Dir.resolve("MirrorCase.java");
+		Path src2 = src2Dir.resolve("MirrorCase.java");
+		Files.writeString(src1, v1Src, StandardCharsets.UTF_8);
+		Files.writeString(src2, v2Src, StandardCharsets.UTF_8);
+
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.toString(), src1.toString());
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.toString(), src2.toString());
+
+		byte[] v1 = Files.readAllBytes(outV1.resolve("test/MirrorCase.class"));
+		byte[] v2 = Files.readAllBytes(outV2.resolve("test/MirrorCase.class"));
+
+		ClassNode cnV1 = readClass(v1);
+		List<String> oldTargets = findIndyTargets(cnV1, "build");
+		assertEquals(2, oldTargets.size());
+		String oldP1 = oldTargets.get(0);
+		String oldP2 = oldTargets.get(1);
+
+		byte[] aligned = LambdaAligner.align(v1, v2);
+		assertNotNull(aligned);
+
+		ClassNode cnAligned = readClass(aligned);
+		List<String> alignedTargets = findIndyTargets(cnAligned, "build");
+		assertEquals(1, alignedTargets.size(), "aligned build() 应只包含 1 个 indy 调用");
+		String activeParent = alignedTargets.get(0);
+
+		// 检查镜像对齐：断言存活项与被幽灵化项
+		assertTrue(activeParent.equals(oldP1) || activeParent.equals(oldP2), "留存项必须属于旧候选集合");
+		String ghostParent = activeParent.equals(oldP1) ? oldP2 : oldP1;
+		MethodNode ghostNode = findMethod(cnAligned, ghostParent);
+		assertNotNull(ghostNode, "未被留存的项必须作为孤儿桩复活");
+		assertTrue(callsMethod(ghostNode, "onOrphanInvoked"), "未留存项必须是幽灵熔断桩");
 	}
 
 	@Test

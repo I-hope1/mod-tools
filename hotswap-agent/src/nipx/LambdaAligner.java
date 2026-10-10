@@ -49,12 +49,10 @@ import java.util.function.Supplier;
  * 返回原始 {@code newBytes}（降级为“不崩溃”）。这意味着热更成功但老 CallSite
  * 可能因名字未对齐而失效——这是与“不崩溃”的设计目标一致的取舍。</p>
  *
- * <p><b>已知限制：幽灵方法指纹退化。</b> 幽灵方法（空壳）的字节码与原始方法体
- * 不同，其指纹在下一轮对齐中已不是原始指纹。若开发者在 V2 删除了某个 lambda，
- * V3 又把它加回来，V3 的新方法会因指纹失配而走 Step 2 顺序回退——通常仍能
- * 保住名字，但若同组内有其它新增方法，可能被次优先级抢占，引发不必要的重命名。
- * 修复需要给幽灵方法打标记（自定义 attribute 或特殊 access 位），代价与收益
- * 暂不匹配，暂列为已知限制。</p>
+ * <p><b>已知限制：幽灵方法不参与复活认领（单向退休）。</b>
+ * 幽灵方法（空壳）在扫描阶段被识别为 {@code ghost} 并被所有匹配阶段硬性排除，仅保留其名字在避障集以防止新方法重名冲突。
+ * 若开发者在 V2 删除了某个 Lambda，V3 又把它加回来，V3 的新方法不会也无法认领回旧幽灵方法的名字，而是会分配全新的 fresh name。
+ * 这保证了历史陈旧空壳不会与新 Lambda 发生多对多误配，但意味着“撤销删除”无法自动恢复历史旧 CallSite 的活跃调用（老 CallSite 继续命中熔断桩）。</p>
  *
  * <p><b>已知限制：改变嵌套拓扑的编辑会丢失身份。</b>
  * {@link #sameNestingLevel} 在 Step 1/2 全程是<b>硬否决</b>：形状不等的候选永远不配对。
@@ -989,6 +987,9 @@ public class LambdaAligner {
 			if (!hasUnmatchedOld) continue;
 
 			int n = ns.size(), m = os.size();
+			if (n < m) {
+				checkAndWarnHomomorphicPruning(ctx, e.getKey(), ns, os);
+			}
 			int[][] dp = new int[n + 1][m + 1];
 			for (int i = n - 1; i >= 0; i--) {
 				for (int j = m - 1; j >= 0; j--) {
@@ -1475,6 +1476,27 @@ public class LambdaAligner {
 		                  + "：旧 " + oi.name + oi.desc + " <- 新 " + newName + newDesc
 		                  + "。同组内存在多个同形且包含匿名类的 lambda（同指纹），若发生新增、删除或重排可能导致方法语义错位。"
 		                  + "建议将匿名类提取为具名内部类或独立方法以确保语义稳定。");
+	}
+
+	/** 宿主序列存在多个同构候选且发生数量缩减时的告警。 */
+	private static void checkAndWarnHomomorphicPruning(MatchContext ctx, String hostKey,
+	                                                  List<SyntheticInfo> ns, List<SyntheticInfo> os) {
+		Map<Long, Integer> hashCounts = new HashMap<>();
+		for (SyntheticInfo oi : os) {
+			if (oi.renameable && !oi.ghost) {
+				hashCounts.merge(oi.hash, 1, Integer::sum);
+			}
+		}
+		for (Map.Entry<Long, Integer> entry : hashCounts.entrySet()) {
+			if (entry.getValue() > 1) {
+				String key = ctx.currentClass + "#" + hostKey + "#" + entry.getKey();
+				if (WARNED_REALIGNMENTS.add(key)) {
+					HotSwapAgent.warn("[LambdaAligner] 宿主序列存在多个同构 Lambda 候选且发生缩减 " + ctx.currentClass
+					                  + " (宿主: " + hostKey + ")：存量 CallSite 可能因同构裁剪被幽灵化。建议将关键业务回调提取为独立方法。");
+				}
+				break;
+			}
+		}
 	}
 	//endregion
 

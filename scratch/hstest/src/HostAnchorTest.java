@@ -117,6 +117,16 @@ public class HostAnchorTest {
 		// 验证已删除的 oldP1 必须被复活为孤儿空壳方法
 		MethodNode resurrectedP1 = findMethod(cnAligned, oldP1);
 		assertNotNull(resurrectedP1, "已删除的 oldP1 必须在产物中作为孤儿桩复活，避免老 CallSite 崩溃");
+
+		// 独立字节码判据（不依赖 ctx 内部统计指标）：
+		// 1. 留存的 actualParentInBuild 真实调用的是 x2()，绝不能调用已删的 x1()
+		MethodNode actualParentNode = findMethod(cnAligned, actualParentInBuild);
+		assertNotNull(actualParentNode, "产物中必须存在 actualParentInBuild 方法");
+		assertTrue(callsMethod(actualParentNode, "x2"), "留存父级方法体中必须真实调用 x2()");
+		assertFalse(callsMethod(actualParentNode, "x1"), "留存父级方法体中绝不能调用 x1()");
+
+		// 2. 孤儿桩 resurrectedP1 绝不能执行 x2() 业务逻辑
+		assertFalse(callsMethod(resurrectedP1, "x2"), "孤儿桩方法体中绝不能残留 x2() 业务调用");
 	}
 
 	@Test
@@ -238,6 +248,13 @@ public class HostAnchorTest {
 		assertNotNull(ghostL2, "已删除的 oldL2 应作为孤儿桩复活");
 	}
 
+	/**
+	 * Characterization test: 记录并守住当前父级方法体变更且子叶同哈希碰撞时的已知退化行为。
+	 *
+	 * <p>退化机制：新父级方法体改写后，其票据哈希改变导致无法与旧父级落入同一 L:hash 锚点桶，
+	 * 叶子退化走 Step 1a 同名贪婪匹配；父级随之在 Pass A 配对到旧父级并触发 warnPositionalMismatch，
+	 * 在 stats 中表现为 hashMismatchPairs > 0 且 anchorPairs == 0。</p>
+	 */
 	@Test
 	void parentEditedAndStatementDeletedDegradation(@TempDir Path tmp) throws Exception {
 		String javac = javac21();
@@ -355,11 +372,181 @@ public class HostAnchorTest {
 			"语义完全一致，无哈希异化: " + LambdaAligner.LAST_STATS);
 
 		ClassNode cnAligned = readClass(aligned);
-		// 验证未被配对的另一个旧父级被安全复活为孤儿桩
-		assertTrue(cnAligned.methods.stream().anyMatch(m -> m.name.equals(oldP1)),
-			"旧方法集合中应包含 oldP1");
-		assertTrue(cnAligned.methods.stream().anyMatch(m -> m.name.equals(oldP2)),
-			"旧方法集合中应包含 oldP2");
+		List<String> alignedTargets = findIndyTargets(cnAligned, "build");
+		assertEquals(1, alignedTargets.size(), "aligned build() 应只包含 1 个 indy 调用");
+		String activeParent = alignedTargets.get(0);
+		assertEquals(oldP2, activeParent, "留存的语句 b(...) 正确配对到 oldP2");
+		MethodNode ghostP1 = findMethod(cnAligned, oldP1);
+		assertNotNull(ghostP1, "已删除的语句 a(...) oldP1 应作为孤儿桩复活");
+	}
+
+	@Test
+	void multiRoundRedefinitionLifecycle(@TempDir Path tmp) throws Exception {
+		String javac = javac21();
+		Path srcDir = Files.createDirectories(tmp.resolve("src"));
+		Path outV1 = Files.createDirectories(tmp.resolve("v1"));
+		Path outV2 = Files.createDirectories(tmp.resolve("v2"));
+		Path outV3 = Files.createDirectories(tmp.resolve("v3"));
+		Path outV4 = Files.createDirectories(tmp.resolve("v4"));
+
+		String v1Src = "package test;\n"
+			+ "import java.util.List;\n"
+			+ "public class LifeCase {\n"
+			+ "    static void a() { System.out.println(\"A\"); }\n"
+			+ "    static void b() { System.out.println(\"B\"); }\n"
+			+ "    public void run(List<Runnable> list) {\n"
+			+ "        list.add(() -> a());\n" // L1
+			+ "        list.add(() -> b());\n" // L2
+			+ "    }\n"
+			+ "}\n";
+
+		// V2: 删除 L1
+		String v2Src = "package test;\n"
+			+ "import java.util.List;\n"
+			+ "public class LifeCase {\n"
+			+ "    static void a() { System.out.println(\"A\"); }\n"
+			+ "    static void b() { System.out.println(\"B\"); }\n"
+			+ "    public void run(List<Runnable> list) {\n"
+			+ "        list.add(() -> b());\n" // L2
+			+ "    }\n"
+			+ "}\n";
+
+		// V3: 重新加回 L1
+		String v3Src = "package test;\n"
+			+ "import java.util.List;\n"
+			+ "public class LifeCase {\n"
+			+ "    static void a() { System.out.println(\"A\"); }\n"
+			+ "    static void b() { System.out.println(\"B\"); }\n"
+			+ "    public void run(List<Runnable> list) {\n"
+			+ "        list.add(() -> a());\n" // L1 重新加回
+			+ "        list.add(() -> b());\n" // L2
+			+ "    }\n"
+			+ "}\n";
+
+		// V4: 修改 L2 方法体
+		String v4Src = "package test;\n"
+			+ "import java.util.List;\n"
+			+ "public class LifeCase {\n"
+			+ "    static void a() { System.out.println(\"A\"); }\n"
+			+ "    static void b_mod() { System.out.println(\"B_MOD\"); }\n"
+			+ "    public void run(List<Runnable> list) {\n"
+			+ "        list.add(() -> a());\n" // L1
+			+ "        list.add(() -> b_mod());\n" // L2 修改
+			+ "    }\n"
+			+ "}\n";
+
+		Path srcFile = srcDir.resolve("LifeCase.java");
+
+		Files.writeString(srcFile, v1Src, StandardCharsets.UTF_8);
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.toString(), srcFile.toString());
+		byte[] rawV1 = Files.readAllBytes(outV1.resolve("test/LifeCase.class"));
+
+		Files.writeString(srcFile, v2Src, StandardCharsets.UTF_8);
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.toString(), srcFile.toString());
+		byte[] rawV2 = Files.readAllBytes(outV2.resolve("test/LifeCase.class"));
+
+		Files.writeString(srcFile, v3Src, StandardCharsets.UTF_8);
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV3.toString(), srcFile.toString());
+		byte[] rawV3 = Files.readAllBytes(outV3.resolve("test/LifeCase.class"));
+
+		Files.writeString(srcFile, v4Src, StandardCharsets.UTF_8);
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV4.toString(), srcFile.toString());
+		byte[] rawV4 = Files.readAllBytes(outV4.resolve("test/LifeCase.class"));
+
+		// 轮次 1：V1 -> V2 (删除 L1)
+		byte[] alignedV2 = LambdaAligner.align(rawV1, rawV2);
+		ClassNode cnV2 = readClass(alignedV2);
+		ClassNode cnV1 = readClass(rawV1);
+		String oldL1 = findIndyTargets(cnV1, "run").get(0);
+		String oldL2 = findIndyTargets(cnV1, "run").get(1);
+		assertNotNull(findMethod(cnV2, oldL1), "V2 中已删除的 oldL1 必须复活为幽灵桩");
+		assertEquals(oldL2, findIndyTargets(cnV2, "run").get(0), "V2 中留存的 L2 必须保持 oldL2 名字");
+
+		// 轮次 2：V2 -> V3 (加回 L1，遵守调用约定传入上一轮实际生效的 alignedV2)
+		byte[] alignedV3 = LambdaAligner.align(alignedV2, rawV3);
+		ClassNode cnV3 = readClass(alignedV3);
+		List<String> v3Targets = findIndyTargets(cnV3, "run");
+		assertEquals(2, v3Targets.size());
+		// 断言：加回的 L1 不会认领幽灵桩 oldL1，而是避障分配 fresh name（或不同于 oldL1）
+		// 同时老幽灵桩 oldL1 依然存在于类中保护老 CallSite
+		assertNotNull(findMethod(cnV3, oldL1), "V3 中历史幽灵桩 oldL1 依然保留");
+		assertNotEquals(oldL1, v3Targets.get(0), "V3 加回的新 L1 不会认领旧幽灵桩名字");
+
+		// 轮次 3：V3 -> V4 (修改 L2，遵守调用约定传入上一轮实际生效的 alignedV3)
+		byte[] alignedV4 = LambdaAligner.align(alignedV3, rawV4);
+		ClassNode cnV4 = readClass(alignedV4);
+		assertNotNull(alignedV4);
+		// 断言：累积的幽灵桩不阻碍 L2 的改名与对齐
+		assertTrue(findMethod(cnV4, oldL1) != null, "V4 中历史幽灵桩依然受到保护");
+	}
+
+	@Test
+	void alignWithBytecodeResolvers(@TempDir Path tmp) throws Exception {
+		String javac = javac21();
+		Path src1Dir = Files.createDirectories(tmp.resolve("src1"));
+		Path src2Dir = Files.createDirectories(tmp.resolve("src2"));
+		Path outV1 = Files.createDirectories(tmp.resolve("v1"));
+		Path outV2 = Files.createDirectories(tmp.resolve("v2"));
+
+		String v1Src = "package test;\n"
+			+ "public class AnonHostCase {\n"
+			+ "    public Runnable makeRunnable() {\n"
+			+ "        return () -> {\n"
+			+ "            Runnable r = new Runnable() {\n"
+			+ "                public void run() { System.out.println(\"anon1\"); }\n"
+			+ "            };\n"
+			+ "            r.run();\n"
+			+ "        };\n"
+			+ "    }\n"
+			+ "}\n";
+
+		String v2Src = "package test;\n"
+			+ "public class AnonHostCase {\n"
+			+ "    public Runnable makeRunnable() {\n"
+			+ "        return () -> {\n"
+			+ "            Runnable r = new Runnable() {\n"
+			+ "                public void run() { System.out.println(\"anon1\"); }\n"
+			+ "            };\n"
+			+ "            r.run();\n"
+			+ "        };\n"
+			+ "    }\n"
+			+ "}\n";
+
+		Path src1 = src1Dir.resolve("AnonHostCase.java");
+		Path src2 = src2Dir.resolve("AnonHostCase.java");
+		Files.writeString(src1, v1Src, StandardCharsets.UTF_8);
+		Files.writeString(src2, v2Src, StandardCharsets.UTF_8);
+
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.toString(), src1.toString());
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.toString(), src2.toString());
+
+		byte[] hostV1 = Files.readAllBytes(outV1.resolve("test/AnonHostCase.class"));
+		byte[] hostV2 = Files.readAllBytes(outV2.resolve("test/AnonHostCase.class"));
+
+		Map<String, byte[]> v1Cache = new HashMap<>();
+		Files.walk(outV1).filter(p -> p.toString().endsWith(".class")).forEach(p -> {
+			try {
+				String rel = outV1.relativize(p).toString().replace('\\', '/').replace(".class", "");
+				v1Cache.put(rel, Files.readAllBytes(p));
+			} catch (Exception e) { throw new RuntimeException(e); }
+		});
+
+		Map<String, byte[]> v2Cache = new HashMap<>();
+		Files.walk(outV2).filter(p -> p.toString().endsWith(".class")).forEach(p -> {
+			try {
+				String rel = outV2.relativize(p).toString().replace('\\', '/').replace(".class", "");
+				v2Cache.put(rel, Files.readAllBytes(p));
+			} catch (Exception e) { throw new RuntimeException(e); }
+		});
+
+		byte[] aligned = LambdaAligner.align(hostV1, hostV2, v1Cache::get, v2Cache::get);
+		assertNotNull(aligned);
+		assertNotNull(LambdaAligner.LAST_OLD_ANON_HASHES);
+		assertNotNull(LambdaAligner.LAST_NEW_ANON_HASHES);
+		assertFalse(LambdaAligner.LAST_OLD_ANON_HASHES.isEmpty(), "4参数重载应成功解析并记录匿名类内容哈希");
+		assertEquals(LambdaAligner.LAST_OLD_ANON_HASHES.get("test/AnonHostCase$1"),
+		             LambdaAligner.LAST_NEW_ANON_HASHES.get("test/AnonHostCase$1"),
+		             "相同匿名类的真实内容哈希在新旧侧应完全一致");
 	}
 
 	private static ClassNode readClass(byte[] bytes) {
@@ -392,6 +579,16 @@ public class HostAnchorTest {
 			if (mn.name.equals(name)) return mn;
 		}
 		return null;
+	}
+
+	private static boolean callsMethod(MethodNode mn, String targetMethodName) {
+		if (mn == null || mn.instructions == null) return false;
+		for (AbstractInsnNode insn : mn.instructions) {
+			if (insn instanceof org.objectweb.asm.tree.MethodInsnNode minsn) {
+				if (minsn.name.equals(targetMethodName)) return true;
+			}
+		}
+		return false;
 	}
 
 	static String javac21() {

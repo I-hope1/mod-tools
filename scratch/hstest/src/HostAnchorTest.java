@@ -1,0 +1,294 @@
+import nipx.LambdaAligner;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.Handle;
+import org.objectweb.asm.tree.AbstractInsnNode;
+import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.InvokeDynamicInsnNode;
+import org.objectweb.asm.tree.MethodNode;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.*;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * 宿主调用序列锚点匹配（Host Sequence LCS Anchor）与嵌套 Lambda 叶子消歧回归测试。
+ *
+ * <p>回归目标：
+ * <ol>
+ *   <li><b>嵌套 Lambda 叶子哈希碰撞消歧</b>：当多个嵌套 Lambda 的叶子具有相同方法体/哈希，
+ *       但父级调用不同逻辑时，删除前序语句不会因 Step 1a 同名贪婪匹配导致新叶子误配给已删除的旧叶子，
+ *       进而避免父级通过 {@code calleesPairTo} 被迫逆向错配篡夺已删调用的 CallSite。</li>
+ *   <li><b>组遍历顺序确定性</b>：{@code TEST_REVERSE_GROUP_ORDER} 正反遍历下配对结果与产物字节码严格一致。</li>
+ *   <li><b>宿主方法内兄弟 Lambda LCS 对齐</b>：方法内多个兄弟 Lambda 增删时，按调用顺序 LCS 准确对齐留存项，
+ *       被删项平稳降级为孤儿复活桩。</li>
+ * </ol>
+ * </p>
+ */
+public class HostAnchorTest {
+
+	@BeforeEach
+	@AfterEach
+	void resetState() {
+		LambdaAligner.TEST_REVERSE_GROUP_ORDER = false;
+		LambdaAligner.LAST_STATS = null;
+		LambdaAligner.clearLoggedOrphans();
+	}
+
+	@Test
+	void nestedLambdaLeafDisambiguation(@TempDir Path tmp) throws Exception {
+		String javac = javac21();
+		Path src1Dir = Files.createDirectories(tmp.resolve("src1"));
+		Path src2Dir = Files.createDirectories(tmp.resolve("src2"));
+		Path outV1 = Files.createDirectories(tmp.resolve("v1"));
+		Path outV2 = Files.createDirectories(tmp.resolve("v2"));
+
+		String v1Src = "package test;\n"
+			+ "public class NestedCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void b(Runnable r) { r.run(); }\n"
+			+ "    static void x1(Runnable r) { r.run(); }\n"
+			+ "    static void x2(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void build() {\n"
+			+ "        a(() -> x1(() -> leaf()));\n" // P1 -> L1
+			+ "        b(() -> x2(() -> leaf()));\n" // P2 -> L2
+			+ "    }\n"
+			+ "}\n";
+
+		String v2Src = "package test;\n"
+			+ "public class NestedCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void b(Runnable r) { r.run(); }\n"
+			+ "    static void x1(Runnable r) { r.run(); }\n"
+			+ "    static void x2(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void build() {\n"
+			+ "        b(() -> x2(() -> leaf()));\n" // P2' -> L2'
+			+ "    }\n"
+			+ "}\n";
+
+		Path src1 = src1Dir.resolve("NestedCase.java");
+		Path src2 = src2Dir.resolve("NestedCase.java");
+		Files.writeString(src1, v1Src, StandardCharsets.UTF_8);
+		Files.writeString(src2, v2Src, StandardCharsets.UTF_8);
+
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.toString(), src1.toString());
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.toString(), src2.toString());
+
+		byte[] v1 = Files.readAllBytes(outV1.resolve("test/NestedCase.class"));
+		byte[] v2 = Files.readAllBytes(outV2.resolve("test/NestedCase.class"));
+
+		// 解析 V1 中的两个父 Lambda 方法名
+		ClassNode cnV1 = readClass(v1);
+		List<String> oldBuildIndyTargets = findIndyTargets(cnV1, "build");
+		assertEquals(2, oldBuildIndyTargets.size(), "V1 build() 应包含两个 indy 调用");
+		String oldP1 = oldBuildIndyTargets.get(0);
+		String oldP2 = oldBuildIndyTargets.get(1);
+		assertNotEquals(oldP1, oldP2, "两个旧父 Lambda 方法名不应相同");
+
+		// 执行对齐
+		byte[] aligned = LambdaAligner.align(v1, v2);
+		assertNotNull(aligned, "对齐产物非空");
+		assertNotNull(LambdaAligner.LAST_STATS, "LAST_STATS 已记录");
+		assertTrue(LambdaAligner.LAST_STATS.anchorPairs > 0,
+			"宿主锚点应至少产生 1 次配对: " + LambdaAligner.LAST_STATS);
+		assertEquals(0, LambdaAligner.LAST_STATS.hashMismatchPairs,
+			"不应存在票据哈希不匹配的错位配对: " + LambdaAligner.LAST_STATS);
+
+		// 解析对齐产物
+		ClassNode cnAligned = readClass(aligned);
+		List<String> alignedBuildIndyTargets = findIndyTargets(cnAligned, "build");
+		assertEquals(1, alignedBuildIndyTargets.size(), "aligned build() 应只包含 1 个 indy 调用");
+
+		String actualParentInBuild = alignedBuildIndyTargets.get(0);
+		assertEquals(oldP2, actualParentInBuild,
+			"留存的语句 2 父级必须配对到 oldP2 (" + oldP2 + ")，绝不能被篡夺为已删除的 oldP1 (" + oldP1 + ")");
+
+		// 验证已删除的 oldP1 必须被复活为孤儿空壳方法
+		MethodNode resurrectedP1 = findMethod(cnAligned, oldP1);
+		assertNotNull(resurrectedP1, "已删除的 oldP1 必须在产物中作为孤儿桩复活，避免老 CallSite 崩溃");
+	}
+
+	@Test
+	void groupOrderDeterminismWithNestedLambdas(@TempDir Path tmp) throws Exception {
+		String javac = javac21();
+		Path src1Dir = Files.createDirectories(tmp.resolve("src1"));
+		Path src2Dir = Files.createDirectories(tmp.resolve("src2"));
+		Path outV1 = Files.createDirectories(tmp.resolve("v1"));
+		Path outV2 = Files.createDirectories(tmp.resolve("v2"));
+
+		String v1Src = "package test;\n"
+			+ "public class OrderCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void b(Runnable r) { r.run(); }\n"
+			+ "    static void x1(Runnable r) { r.run(); }\n"
+			+ "    static void x2(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void build() {\n"
+			+ "        a(() -> x1(() -> leaf()));\n"
+			+ "        b(() -> x2(() -> leaf()));\n"
+			+ "    }\n"
+			+ "}\n";
+
+		String v2Src = "package test;\n"
+			+ "public class OrderCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void b(Runnable r) { r.run(); }\n"
+			+ "    static void x1(Runnable r) { r.run(); }\n"
+			+ "    static void x2(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void build() {\n"
+			+ "        b(() -> x2(() -> leaf()));\n"
+			+ "    }\n"
+			+ "}\n";
+
+		Path src1 = src1Dir.resolve("OrderCase.java");
+		Path src2 = src2Dir.resolve("OrderCase.java");
+		Files.writeString(src1, v1Src, StandardCharsets.UTF_8);
+		Files.writeString(src2, v2Src, StandardCharsets.UTF_8);
+
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.toString(), src1.toString());
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.toString(), src2.toString());
+
+		byte[] v1 = Files.readAllBytes(outV1.resolve("test/OrderCase.class"));
+		byte[] v2 = Files.readAllBytes(outV2.resolve("test/OrderCase.class"));
+
+		LambdaAligner.TEST_REVERSE_GROUP_ORDER = false;
+		byte[] alignedForward = LambdaAligner.align(v1, v2);
+
+		LambdaAligner.TEST_REVERSE_GROUP_ORDER = true;
+		byte[] alignedReverse = LambdaAligner.align(v1, v2);
+
+		assertArrayEquals(alignedForward, alignedReverse,
+			"组遍历顺序倒置(TEST_REVERSE_GROUP_ORDER)产物字节码必须完全一致");
+	}
+
+	@Test
+	void hostSequenceLcsDeletionDisambiguation(@TempDir Path tmp) throws Exception {
+		String javac = javac21();
+		Path src1Dir = Files.createDirectories(tmp.resolve("src1"));
+		Path src2Dir = Files.createDirectories(tmp.resolve("src2"));
+		Path outV1 = Files.createDirectories(tmp.resolve("v1"));
+		Path outV2 = Files.createDirectories(tmp.resolve("v2"));
+
+		String v1Src = "package test;\n"
+			+ "import java.util.List;\n"
+			+ "public class SiblingCase {\n"
+			+ "    static void step1() { System.out.println(\"1\"); }\n"
+			+ "    static void step2() { System.out.println(\"2\"); }\n"
+			+ "    static void step3() { System.out.println(\"3\"); }\n"
+			+ "    public void run(List<Runnable> list) {\n"
+			+ "        list.add(() -> step1());\n"
+			+ "        list.add(() -> step2());\n"
+			+ "        list.add(() -> step3());\n"
+			+ "    }\n"
+			+ "}\n";
+
+		String v2Src = "package test;\n"
+			+ "import java.util.List;\n"
+			+ "public class SiblingCase {\n"
+			+ "    static void step1() { System.out.println(\"1\"); }\n"
+			+ "    static void step2() { System.out.println(\"2\"); }\n"
+			+ "    static void step3() { System.out.println(\"3\"); }\n"
+			+ "    public void run(List<Runnable> list) {\n"
+			+ "        list.add(() -> step1());\n"
+			+ "        list.add(() -> step3());\n"
+			+ "    }\n"
+			+ "}\n";
+
+		Path src1 = src1Dir.resolve("SiblingCase.java");
+		Path src2 = src2Dir.resolve("SiblingCase.java");
+		Files.writeString(src1, v1Src, StandardCharsets.UTF_8);
+		Files.writeString(src2, v2Src, StandardCharsets.UTF_8);
+
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.toString(), src1.toString());
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.toString(), src2.toString());
+
+		byte[] v1 = Files.readAllBytes(outV1.resolve("test/SiblingCase.class"));
+		byte[] v2 = Files.readAllBytes(outV2.resolve("test/SiblingCase.class"));
+
+		ClassNode cnV1 = readClass(v1);
+		List<String> oldTargets = findIndyTargets(cnV1, "run");
+		assertEquals(3, oldTargets.size(), "V1 run() 应有 3 个 indy 调用");
+		String oldL1 = oldTargets.get(0);
+		String oldL2 = oldTargets.get(1);
+		String oldL3 = oldTargets.get(2);
+
+		byte[] aligned = LambdaAligner.align(v1, v2);
+		assertNotNull(aligned);
+
+		ClassNode cnAligned = readClass(aligned);
+		List<String> alignedTargets = findIndyTargets(cnAligned, "run");
+		assertEquals(2, alignedTargets.size(), "aligned run() 应有 2 个 indy 调用");
+
+		assertEquals(oldL1, alignedTargets.get(0), "第 1 个调用应配对到 oldL1");
+		assertEquals(oldL3, alignedTargets.get(1), "第 2 个调用应经 LCS 准确配对到 oldL3 (跳过已删的 oldL2)");
+
+		MethodNode ghostL2 = findMethod(cnAligned, oldL2);
+		assertNotNull(ghostL2, "已删除的 oldL2 应作为孤儿桩复活");
+	}
+
+	private static ClassNode readClass(byte[] bytes) {
+		ClassReader cr = new ClassReader(bytes);
+		ClassNode cn = new ClassNode();
+		cr.accept(cn, 0);
+		return cn;
+	}
+
+	private static List<String> findIndyTargets(ClassNode cn, String methodName) {
+		List<String> targets = new ArrayList<>();
+		for (MethodNode mn : cn.methods) {
+			if (mn.name.equals(methodName)) {
+				for (AbstractInsnNode insn : mn.instructions) {
+					if (insn instanceof InvokeDynamicInsnNode indy) {
+						if (indy.bsmArgs != null && indy.bsmArgs.length > 1
+						    && indy.bsmArgs[1] instanceof Handle h
+						    && cn.name.equals(h.getOwner())) {
+							targets.add(h.getName());
+						}
+					}
+				}
+			}
+		}
+		return targets;
+	}
+
+	private static MethodNode findMethod(ClassNode cn, String name) {
+		for (MethodNode mn : cn.methods) {
+			if (mn.name.equals(name)) return mn;
+		}
+		return null;
+	}
+
+	static String javac21() {
+		String j = System.getProperty("hstest.javac21");
+		if (j != null && new File(j).exists()) return j;
+		j = System.getenv("HSTEST_JAVAC21");
+		if (j != null && new File(j).exists()) return j;
+		j = "F:/files/java/jdks/openjdk-21.0.2/bin/javac.exe";
+		return new File(j).exists() ? j : "javac";
+	}
+
+	static void runCmd(String... cmd) throws Exception {
+		Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+		StringBuilder out = new StringBuilder();
+		try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+			String line;
+			while ((line = r.readLine()) != null) {
+				out.append(line).append('\n');
+			}
+		}
+		int rc = p.waitFor();
+		if (rc != 0) throw new RuntimeException("Command failed with exit " + rc + ": " + Arrays.toString(cmd) + "\nOutput:\n" + out);
+	}
+}

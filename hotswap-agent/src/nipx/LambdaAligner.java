@@ -99,22 +99,34 @@ public class LambdaAligner {
 	 * <p><b>警告：全进程共享静态变量，仅供单线程测试断言使用，生产业务逻辑严禁引用。</b></p>
 	 */
 	public static final class AlignmentStats {
-		/** 通过同组 Step 1a 或跨组指纹证据完成配对的数量。 */
+		/** 通过同组 Step 1a、跨组指纹或宿主序列锚点证据完成配对的数量。 */
 		public final int step1Pairs;
 		/** 通过 Step 2 A 趟（同上行深度 + 同 shape）完成配对的数量。 */
 		public final int passAPairs;
 		/** 通过 Step 2 B 趟（放宽条件兜底）完成配对的数量。 */
 		public final int passBPairs;
+		/** 通过宿主序列 LCS 锚点匹配完成配对的数量。 */
+		public final int anchorPairs;
+		/** 配对双方票据指纹不相等（hash 发生变更，换主人）的配对数量。 */
+		public final int hashMismatchPairs;
 
 		public AlignmentStats(int step1Pairs, int passAPairs, int passBPairs) {
+			this(step1Pairs, passAPairs, passBPairs, 0, 0);
+		}
+
+		public AlignmentStats(int step1Pairs, int passAPairs, int passBPairs, int anchorPairs, int hashMismatchPairs) {
 			this.step1Pairs = step1Pairs;
 			this.passAPairs = passAPairs;
 			this.passBPairs = passBPairs;
+			this.anchorPairs = anchorPairs;
+			this.hashMismatchPairs = hashMismatchPairs;
 		}
 
 		@Override
 		public String toString() {
-			return "Stats{step1=" + step1Pairs + ", passA=" + passAPairs + ", passB=" + passBPairs + "}";
+			return "Stats{step1=" + step1Pairs + ", passA=" + passAPairs + ", passB=" + passBPairs
+			       + (anchorPairs > 0 ? ", anchor=" + anchorPairs : "")
+			       + (hashMismatchPairs > 0 ? ", hashMismatch=" + hashMismatchPairs : "") + "}";
 		}
 	}
 
@@ -289,9 +301,18 @@ public class LambdaAligner {
 		final Map<String, Long>          oldAnonHashes = new HashMap<>(16);
 		final Map<String, Long>          newAnonHashes = new HashMap<>(16);
 
+		/**
+		 * 宿主调用序列：hostKey -> 按 indy 出现顺序的 lambda 目标列表（新旧各一份）。
+		 * hostKey 格式：普通方法为 "M:" + name + desc；lambda 合成方法为 "L:" + info.hash。
+		 */
+		final Map<String, List<SyntheticInfo>> oldHostSeq = new LinkedHashMap<>(64);
+		final Map<String, List<SyntheticInfo>> newHostSeq = new LinkedHashMap<>(64);
+
 		int step1Pairs;
 		int passAPairs;
 		int passBPairs;
+		int step1AnchorPairs;
+		int hashMismatchPairs;
 
 		/**
 		 * 重置上下文状态，为下一次匹配做准备。
@@ -314,9 +335,13 @@ public class LambdaAligner {
 			childIndex.clear();
 			oldNameIndex.clear();
 			newNameIndex.clear();
+			oldHostSeq.clear();
+			newHostSeq.clear();
 			step1Pairs = 0;
 			passAPairs = 0;
 			passBPairs = 0;
+			step1AnchorPairs = 0;
+			hashMismatchPairs = 0;
 		}
 	}
 	//endregion
@@ -478,7 +503,8 @@ public class LambdaAligner {
 			// 后置廉价校验：确保本地 indy 句柄引用的目标方法实际存在
 			validateIndyTargets(alignedCn, presentKeys);
 
-			LAST_STATS = new AlignmentStats(ctx.step1Pairs, ctx.passAPairs, ctx.passBPairs);
+			LAST_STATS = new AlignmentStats(ctx.step1Pairs, ctx.passAPairs, ctx.passBPairs,
+			                                ctx.step1AnchorPairs, ctx.hashMismatchPairs);
 			LAST_OLD_ANON_HASHES = new HashMap<>(ctx.oldAnonHashes);
 			LAST_NEW_ANON_HASHES = new HashMap<>(ctx.newAnonHashes);
 			// 传入 oldCn（已解析过一次）—— 避免 resurrectOrphanedLambdas 二次读 oldBytes
@@ -861,10 +887,14 @@ public class LambdaAligner {
 		LongObjectMap<List<SyntheticInfo>> newGroups     = ctx.newGroups;
 		boolean                            anyProgressed = false;
 
-		// 1. Step 1（同组同 hash）+ 跨组指纹（证据匹配，迭代至收敛）
+		// 1. Step 1（宿主序列锚点 + 同组同 hash + 跨组指纹，证据匹配，迭代至收敛）
 		boolean progressed;
 		do {
 			progressed = false;
+			// 1a. 宿主序列锚点匹配：按普通方法 (name+desc) 或 lambda 票据指纹 (hash) 做 LCS 对齐，
+			// 在叶子与多候选同 hash 桶内进行结构消歧，防止误配向上传导
+			progressed |= alignByHostSequence(ctx);
+
 			for (int idx : groupOrder(newGroups)) {
 				List<SyntheticInfo> newGroup = newGroups.valueAt(idx);
 				List<SyntheticInfo> oldGroup = oldGroups.get(newGroups.keyAt(idx));
@@ -902,6 +932,62 @@ public class LambdaAligner {
 		} while (step2Progressed);
 
 		return anyProgressed;
+	}
+
+	/** 候选是否满足宿主序列对齐条件。 */
+	private static boolean canPair(MatchContext ctx, SyntheticInfo ni, SyntheticInfo oi) {
+		if (ni.matched || !ni.renameable) return false;
+		if (hasUnmatchedChild(ctx, ni)) return false;
+		return acceptCandidate(ctx, ni, oi);
+	}
+
+	/**
+	 * 基于宿主调用序列（普通方法或 lambda 票据指纹）对候选 lambda 做 LCS 对齐。
+	 *
+	 * <p>比叶子自身指纹更稳的是“被谁引用、在引用者里排第几”：
+	 * <ul>
+	 *   <li>引用者是普通方法（如 {@code build()}）：{@code name + desc} 在新旧两侧不改名，是现成的稳定锚点；</li>
+	 *   <li>引用者是 lambda：用其票据指纹（{@code hash}，子名已被屏蔽故子被改名时不变）为锚点，
+	 *       无需等待父子配对结果，打破自底向上与自顶向下的循环等待。</li>
+	 * </ul>
+	 * 在每个锚点组内，对按 indy 顺序出现的 lambda 序列执行 LCS 最长公共子序列匹配，
+	 * 消除同 hash 桶内在增删元素后的同名/首选错位向上传导缺陷。</p>
+	 *
+	 * @return 本趟是否至少产生了新配对
+	 */
+	private static boolean alignByHostSequence(MatchContext ctx) {
+		boolean progressed = false;
+		for (Map.Entry<String, List<SyntheticInfo>> e : ctx.newHostSeq.entrySet()) {
+			List<SyntheticInfo> ns = e.getValue();
+			List<SyntheticInfo> os = ctx.oldHostSeq.get(e.getKey());
+			if (os == null || os.isEmpty()) continue;
+			int n = ns.size(), m = os.size();
+			int[][] dp = new int[n + 1][m + 1];
+			for (int i = n - 1; i >= 0; i--) {
+				for (int j = m - 1; j >= 0; j--) {
+					dp[i][j] = canPair(ctx, ns.get(i), os.get(j))
+					           ? dp[i + 1][j + 1] + 1
+					           : Math.max(dp[i + 1][j], dp[i][j + 1]);
+				}
+			}
+			for (int i = 0, j = 0; i < n && j < m; ) {
+				SyntheticInfo ni = ns.get(i);
+				SyntheticInfo oi = os.get(j);
+				if (canPair(ctx, ni, oi) && dp[i][j] == dp[i + 1][j + 1] + 1) {
+					pair(ctx, ni, oi, "STEP1_ANCHOR");
+					ctx.step1Pairs++;
+					ctx.step1AnchorPairs++;
+					progressed = true;
+					i++;
+					j++;
+				} else if (dp[i + 1][j] >= dp[i][j + 1]) {
+					i++;
+				} else {
+					j++;
+				}
+			}
+		}
+		return progressed;
 	}
 
 	/**
@@ -982,6 +1068,9 @@ public class LambdaAligner {
 		ni.matched = true;
 		oi.matched = true;
 		ctx.usedOldNames.add(oi.name);
+		if (ni.hash != oi.hash) {
+			ctx.hashMismatchPairs++;
+		}
 	}
 
 	/**
@@ -1181,13 +1270,27 @@ public class LambdaAligner {
 				}
 				// 第二优先级：全类范围内指纹相同
 				if (bestOld == null) {
+					// 2a. 先扫描全类是否恰好有同名同指纹候选（同名最高证据）
 					for (int k : groupOrder(oldGroups)) {
 						List<SyntheticInfo> g = oldGroups.valueAt(k);
 						if (g == null || g == sameGroup) continue;
-						SyntheticInfo oi = firstFingerprintMatch(ctx, g, ni, true);
+						SyntheticInfo oi = findSameNameFingerprintMatch(ctx, g, ni);
 						if (oi != null) {
 							bestOld = oi;
 							break;
+						}
+					}
+					// 2b. 若无同名候选，按名字字典序确定性决胜，消除组遍历顺序依赖
+					if (bestOld == null) {
+						for (int k : groupOrder(oldGroups)) {
+							List<SyntheticInfo> g = oldGroups.valueAt(k);
+							if (g == null || g == sameGroup) continue;
+							SyntheticInfo oi = firstFingerprintMatch(ctx, g, ni, false);
+							if (oi != null) {
+								if (bestOld == null || oi.name.compareTo(bestOld.name) < 0) {
+									bestOld = oi;
+								}
+							}
 						}
 					}
 				}
@@ -1199,6 +1302,25 @@ public class LambdaAligner {
 			}
 		}
 		return progressed;
+	}
+
+	/** 在 {@code group} 中查找同名且指纹相同的旧方法候选。 */
+	private static SyntheticInfo findSameNameFingerprintMatch(MatchContext ctx, List<SyntheticInfo> group,
+	                                                          SyntheticInfo ni) {
+		if (group == null) return null;
+		String owner = ctx.currentClass;
+		for (SyntheticInfo oi : group) {
+			if (oi.matched || oi.ghost) continue;
+			if (!oi.renameable) continue;
+			if (ctx.usedOldNames.contains(oi.name)) continue;
+			if (!oi.name.equals(ni.name)) continue;
+			if (!sameSemantics(ni, oi)) continue;
+			if (!isSignatureCompatible(owner, oi, ni)) continue;
+			if (!sameNestingLevel(ni, oi)) continue;
+			if (!calleesPairTo(ni, oi)) continue;
+			return oi;
+		}
+		return null;
 	}
 
 	/**
@@ -1776,6 +1898,46 @@ public class LambdaAligner {
 					List<SyntheticInfo> cis = new ArrayList<>(info.children.size());
 					for (String c : info.children) cis.add(ctx.childIndex.get(c));
 					info.childInfos = cis;
+				}
+			}
+		}
+
+		// 收集按 indy / call 出现顺序的宿主调用序列（新旧各一份）。
+		// 普通方法以 "M:" + name + desc 为锚点；lambda 合成方法以 "L:" + info.hash 为锚点。
+		Map<String, List<SyntheticInfo>> hostSeq   = isOld ? ctx.oldHostSeq : ctx.newHostSeq;
+		Map<String, SyntheticInfo>       nameIndex = isOld ? ctx.oldNameIndex : ctx.newNameIndex;
+		for (MethodNode mn : cn.methods) {
+			if (MethodFingerprinter.isExcluded(mn.name)) continue;
+
+			String hostKey;
+			boolean isSynthetic    = (mn.access & Opcodes.ACC_SYNTHETIC) != 0;
+			boolean matchesPattern = MethodFingerprinter.isSyntheticName(mn.name);
+			if (isSynthetic || matchesPattern) {
+				SyntheticInfo info = nameIndex.get(mn.name);
+				if (info == null || !info.renameable || info.ghost) continue;
+				hostKey = "L:" + info.hash;
+			} else {
+				hostKey = "M:" + mn.name + mn.desc;
+			}
+
+			List<SyntheticInfo> seq = null;
+			for (AbstractInsnNode n : mn.instructions) {
+				String callee = null;
+				if (n instanceof InvokeDynamicInsnNode i && i.bsmArgs != null && i.bsmArgs.length > 1
+				    && i.bsmArgs[1] instanceof Handle h && cn.name.equals(h.getOwner())) {
+					callee = h.getName();
+				} else if (n instanceof MethodInsnNode m && cn.name.equals(m.owner)) {
+					callee = m.name;
+				}
+				if (callee == null || !MethodFingerprinter.isSyntheticName(callee)) continue;
+				SyntheticInfo target = nameIndex.get(callee);
+				if (target != null && target.renameable && !target.ghost) {
+					if (seq == null) seq = hostSeq.computeIfAbsent(hostKey, k -> new ArrayList<>());
+					if (!seq.contains(target)) {
+						target.hostKey = hostKey;
+						target.hostOrdinal = seq.size();
+						seq.add(target);
+					}
 				}
 			}
 		}
@@ -2699,6 +2861,11 @@ public class LambdaAligner {
 
 		/** 指纹计算中是否对匿名类进行了归一化屏蔽（#ANON_relId#）。 */
 		boolean anonMasked = false;
+
+		/** 所在宿主方法的调用序列键（"M:name+desc" 或 "L:hash"）。 */
+		String hostKey;
+		/** 在该宿主方法中的出现序号（0-indexed）。 */
+		int    hostOrdinal = -1;
 
 		SyntheticInfo(String name, String desc, int access, long hash, String logicalName, boolean renameable) {
 			this.name = name;

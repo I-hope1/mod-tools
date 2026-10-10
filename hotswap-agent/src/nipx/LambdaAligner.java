@@ -71,6 +71,13 @@ import java.util.function.Supplier;
  * 错误地配对，从而引发业务语义的静默对调。
  * 对齐器在此类场景下会进行风险识别与告警，日常开发建议避免在同一类中编写仅通过匿名类实例区分且方法体同构的多个 Lambda。</p>
  *
+ * <p><b>已知限制：父级方法体变更下的嵌套 Lambda 叶子哈希碰撞残余。</b>
+ * 宿主调用序列锚点匹配（{@code alignByHostSequence}）依赖父级 Lambda 的票据哈希（{@code L:hash}）保持稳定。
+ * 若在同一次代码保存中既修改了父级 Lambda 的方法体（导致新旧父级票据哈希不同，无法落入同一宿主锚点桶进行 LCS 对齐），
+ * 同时存在前序语句删除引发的子叶子同名同哈希碰撞，叶子会退回到 Step 1a 的同名贪婪匹配，
+ * 进而父级可能经 Pass A 逆向配对到已删除的旧父级并触发 {@code warnPositionalMismatch}。
+ * 日常开发建议避免在单次保存中同时进行“外层逻辑重写”与“多层同构叶子增删”。</p>
+ *
  * <p><b>可见性假设：</b>注入的幽灵桩通过 {@code INVOKESTATIC} 调用
  * {@link #onOrphanInvoked(String)}，因此目标类的类加载器必须能看到 {@code nipx.LambdaAligner}。
  * 父委派正常时成立。</p>
@@ -961,6 +968,26 @@ public class LambdaAligner {
 			List<SyntheticInfo> ns = e.getValue();
 			List<SyntheticInfo> os = ctx.oldHostSeq.get(e.getKey());
 			if (os == null || os.isEmpty()) continue;
+
+			// 快速剪枝：若 ns 中已无未配对候选，或 os 中已无可用的未配对项，直接跳过本桶
+			boolean hasUnmatchedNew = false;
+			for (SyntheticInfo ni : ns) {
+				if (!ni.matched && ni.renameable) {
+					hasUnmatchedNew = true;
+					break;
+				}
+			}
+			if (!hasUnmatchedNew) continue;
+
+			boolean hasUnmatchedOld = false;
+			for (SyntheticInfo oi : os) {
+				if (!oi.matched && oi.renameable && !oi.ghost && !ctx.usedOldNames.contains(oi.name)) {
+					hasUnmatchedOld = true;
+					break;
+				}
+			}
+			if (!hasUnmatchedOld) continue;
+
 			int n = ns.size(), m = os.size();
 			int[][] dp = new int[n + 1][m + 1];
 			for (int i = n - 1; i >= 0; i--) {
@@ -1280,14 +1307,14 @@ public class LambdaAligner {
 							break;
 						}
 					}
-					// 2b. 若无同名候选，按名字字典序确定性决胜，消除组遍历顺序依赖
+					// 2b. 若无同名候选，按方法在原类中的声明顺序（methodIndex）确定性决胜，消除组遍历顺序依赖并保持位置序
 					if (bestOld == null) {
 						for (int k : groupOrder(oldGroups)) {
 							List<SyntheticInfo> g = oldGroups.valueAt(k);
 							if (g == null || g == sameGroup) continue;
 							SyntheticInfo oi = firstFingerprintMatch(ctx, g, ni, false);
 							if (oi != null) {
-								if (bestOld == null || oi.name.compareTo(bestOld.name) < 0) {
+								if (bestOld == null || oi.methodIndex < bestOld.methodIndex) {
 									bestOld = oi;
 								}
 							}
@@ -1834,7 +1861,8 @@ public class LambdaAligner {
 			}
 		}
 
-		for (MethodNode mn : cn.methods) {
+		for (int mIdx = 0; mIdx < cn.methods.size(); mIdx++) {
+			MethodNode mn = cn.methods.get(mIdx);
 			// —— 无条件登记到避障集：让 fresh name 不会撞到类中任何已有方法 ——
 			if (isOld) { ctx.oldNameDescSet.add(mn.name + mn.desc); } else ctx.existingNewNames.add(mn.name);
 
@@ -1872,6 +1900,7 @@ public class LambdaAligner {
 			boolean renameable = matchesPattern && !mn.name.startsWith("access$");
 			SyntheticInfo info = new SyntheticInfo(
 			 mn.name, mn.desc, mn.access, fp.getHash(), logicalName, renameable);
+			info.methodIndex = mIdx;
 			info.anonMasked = fp.hasMaskedAnon();
 			// 幽灵空壳（上一轮为兜住老 CallSite 而注入的空方法）标记为"不参与匹配"：
 			// 它必须留在 oldGroups 里供孤儿计算复现，但名字已经是"死名字"，
@@ -2866,6 +2895,8 @@ public class LambdaAligner {
 		String hostKey;
 		/** 在该宿主方法中的出现序号（0-indexed）。 */
 		int    hostOrdinal = -1;
+		/** 在 class 文件方法表中的下标，用于保持编译器位置序。 */
+		int    methodIndex = -1;
 
 		SyntheticInfo(String name, String desc, int access, long hash, String logicalName, boolean renameable) {
 			this.name = name;

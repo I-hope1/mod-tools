@@ -742,7 +742,7 @@ tasks.register("hstestJunit", Test) {
 }
 // 回归下限：hstestJunit 的测试方法总数不得低于基线（防止删一个 @Test、或整类被注释而静默变少）。
 // Gradle 的 failOnNoDiscoveredTests 只拦"一个都没发现"；这里钉住总量，上调基线须有意识地改此行。
-def hstestMinTests = 111
+def hstestMinTests = 113
 tasks.register("verifyHstestTestCount") {
 	group = "verification"
 	description = "断言 hstestJunit 测试数不低于基线 ${hstestMinTests}"

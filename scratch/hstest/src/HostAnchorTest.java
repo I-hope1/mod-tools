@@ -238,6 +238,130 @@ public class HostAnchorTest {
 		assertNotNull(ghostL2, "已删除的 oldL2 应作为孤儿桩复活");
 	}
 
+	@Test
+	void parentEditedAndStatementDeletedDegradation(@TempDir Path tmp) throws Exception {
+		String javac = javac21();
+		Path src1Dir = Files.createDirectories(tmp.resolve("src1"));
+		Path src2Dir = Files.createDirectories(tmp.resolve("src2"));
+		Path outV1 = Files.createDirectories(tmp.resolve("v1"));
+		Path outV2 = Files.createDirectories(tmp.resolve("v2"));
+
+		String v1Src = "package test;\n"
+			+ "public class ParentEditCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void b(Runnable r) { r.run(); }\n"
+			+ "    static void x1(Runnable r) { r.run(); }\n"
+			+ "    static void x2(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void build() {\n"
+			+ "        a(() -> x1(() -> leaf()));\n" // P1 -> L1
+			+ "        b(() -> x2(() -> leaf()));\n" // P2 -> L2
+			+ "    }\n"
+			+ "}\n";
+
+		// V2：删除语句 1，且修改语句 2 父级方法体（引入额外调用与参数，使票据哈希改变）
+		String v2Src = "package test;\n"
+			+ "public class ParentEditCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void b(Runnable r) { r.run(); }\n"
+			+ "    static void x1(Runnable r) { r.run(); }\n"
+			+ "    static void x2(Runnable r) { r.run(); }\n"
+			+ "    static void x2_mod(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void build() {\n"
+			+ "        b(() -> x2_mod(() -> leaf()));\n" // P2' -> L2' (P2' 哈希异化)
+			+ "    }\n"
+			+ "}\n";
+
+		Path src1 = src1Dir.resolve("ParentEditCase.java");
+		Path src2 = src2Dir.resolve("ParentEditCase.java");
+		Files.writeString(src1, v1Src, StandardCharsets.UTF_8);
+		Files.writeString(src2, v2Src, StandardCharsets.UTF_8);
+
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.toString(), src1.toString());
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.toString(), src2.toString());
+
+		byte[] v1 = Files.readAllBytes(outV1.resolve("test/ParentEditCase.class"));
+		byte[] v2 = Files.readAllBytes(outV2.resolve("test/ParentEditCase.class"));
+
+		byte[] aligned = LambdaAligner.align(v1, v2);
+		assertNotNull(aligned);
+		assertNotNull(LambdaAligner.LAST_STATS);
+
+		// 父级哈希改变导致无法通过 L:hash 锚点对齐；
+		// 叶子降级回 Step 1a 同名贪婪匹配（L2' 匹配 L1），父级随之落入 Pass A/B
+		assertEquals(0, LambdaAligner.LAST_STATS.anchorPairs,
+			"父级哈希异化导致锚点失配，anchorPairs 应为 0: " + LambdaAligner.LAST_STATS);
+		assertTrue(LambdaAligner.LAST_STATS.hashMismatchPairs > 0,
+			"退化路径应准确记录到哈希异化配对 (hashMismatchPairs > 0): " + LambdaAligner.LAST_STATS);
+	}
+
+	@Test
+	void identicalParentsWithLeafCollisionAndDeletedStatement(@TempDir Path tmp) throws Exception {
+		String javac = javac21();
+		Path src1Dir = Files.createDirectories(tmp.resolve("src1"));
+		Path src2Dir = Files.createDirectories(tmp.resolve("src2"));
+		Path outV1 = Files.createDirectories(tmp.resolve("v1"));
+		Path outV2 = Files.createDirectories(tmp.resolve("v2"));
+
+		// V1：两个语句的父级逻辑也完全相同（均调用 x1(() -> leaf())）
+		String v1Src = "package test;\n"
+			+ "public class IdenticalCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void b(Runnable r) { r.run(); }\n"
+			+ "    static void x1(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void build() {\n"
+			+ "        a(() -> x1(() -> leaf()));\n" // P1 -> L1
+			+ "        b(() -> x1(() -> leaf()));\n" // P2 -> L2 (与 P1 完全相同)
+			+ "    }\n"
+			+ "}\n";
+
+		// V2：删除语句 1
+		String v2Src = "package test;\n"
+			+ "public class IdenticalCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void b(Runnable r) { r.run(); }\n"
+			+ "    static void x1(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void build() {\n"
+			+ "        b(() -> x1(() -> leaf()));\n" // P2' -> L2'
+			+ "    }\n"
+			+ "}\n";
+
+		Path src1 = src1Dir.resolve("IdenticalCase.java");
+		Path src2 = src2Dir.resolve("IdenticalCase.java");
+		Files.writeString(src1, v1Src, StandardCharsets.UTF_8);
+		Files.writeString(src2, v2Src, StandardCharsets.UTF_8);
+
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.toString(), src1.toString());
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.toString(), src2.toString());
+
+		byte[] v1 = Files.readAllBytes(outV1.resolve("test/IdenticalCase.class"));
+		byte[] v2 = Files.readAllBytes(outV2.resolve("test/IdenticalCase.class"));
+
+		ClassNode cnV1 = readClass(v1);
+		List<String> oldTargets = findIndyTargets(cnV1, "build");
+		assertEquals(2, oldTargets.size());
+		String oldP1 = oldTargets.get(0);
+		String oldP2 = oldTargets.get(1);
+
+		byte[] aligned = LambdaAligner.align(v1, v2);
+		assertNotNull(aligned);
+		assertNotNull(LambdaAligner.LAST_STATS);
+
+		// 父子语义完全等价时，哈希完全匹配
+		assertEquals(0, LambdaAligner.LAST_STATS.hashMismatchPairs,
+			"语义完全一致，无哈希异化: " + LambdaAligner.LAST_STATS);
+
+		ClassNode cnAligned = readClass(aligned);
+		// 验证未被配对的另一个旧父级被安全复活为孤儿桩
+		assertTrue(cnAligned.methods.stream().anyMatch(m -> m.name.equals(oldP1)),
+			"旧方法集合中应包含 oldP1");
+		assertTrue(cnAligned.methods.stream().anyMatch(m -> m.name.equals(oldP2)),
+			"旧方法集合中应包含 oldP2");
+	}
+
 	private static ClassNode readClass(byte[] bytes) {
 		ClassReader cr = new ClassReader(bytes);
 		ClassNode cn = new ClassNode();

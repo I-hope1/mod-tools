@@ -1081,11 +1081,11 @@ public final class AnonClassAligner {
 			}
 
 			if (instantiators.isEmpty()) {
-				HotSwapAgent.warn("[ANON_ALIGN] Could not find instantiator method in host " + hostSlash + " for anonymous class " + anonSlash);
+				HotSwapAgent.log("[ANON_ALIGN] Could not find instantiator method in host " + hostSlash + " for anonymous class " + anonSlash);
 				return null;
 			}
 			if (instantiators.size() > 1) {
-				HotSwapAgent.warn("[ANON_ALIGN] Multiple instantiator methods found for " + anonSlash + ": " + instantiators.size() + " candidates. Picking first.");
+				HotSwapAgent.log("[ANON_ALIGN] Multiple instantiator methods found for " + anonSlash + ": " + instantiators.size() + " candidates. Picking first.");
 			}
 
 			MethodNode  current = instantiators.get(0);
@@ -1109,7 +1109,7 @@ public final class AnonClassAligner {
 				visited.add(caller.name + ":" + caller.desc);
 				current = caller;
 			}
-			HotSwapAgent.warn("[ANON_ALIGN] Failed to trace call chain to source method for " + anonSlash + " (bottom=" + instantiators.get(0).name + ")");
+			HotSwapAgent.log("[ANON_ALIGN] Failed to trace call chain to source method for " + anonSlash + " (bottom=" + instantiators.get(0).name + ")");
 		} catch (Throwable ignored) { }
 		return null;
 	}

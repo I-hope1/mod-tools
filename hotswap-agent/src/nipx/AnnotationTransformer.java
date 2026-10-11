@@ -154,8 +154,12 @@ public class AnnotationTransformer implements ClassFileTransformer {
 				if (DEBUG && modified) writeTo(className, bytes);
 
 				byte[] resultBytes = modified ? bytes : classfileBuffer;
-				if (classBeingRedefined == null && pending != null) {
-					bytecodeCache.put(dotClassName, resultBytes);
+				if (classBeingRedefined == null) {
+					if (pending != null) {
+						bytecodeCache.put(dotClassName, resultBytes);
+					} else {
+						bytecodeCache.putIfAbsent(dotClassName, resultBytes);
+					}
 				}
 				return modified ? bytes : null;
 			}
@@ -165,8 +169,12 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		}
 
 		byte[] resultBytes = modified ? bytes : classfileBuffer;
-		if (classBeingRedefined == null && pending != null) {
-			bytecodeCache.put(dotClassName, resultBytes);
+		if (classBeingRedefined == null) {
+			if (pending != null) {
+				bytecodeCache.put(dotClassName, resultBytes);
+			} else {
+				bytecodeCache.putIfAbsent(dotClassName, resultBytes);
+			}
 		}
 		return modified ? bytes : null;
 	}

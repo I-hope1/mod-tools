@@ -499,11 +499,21 @@ public class HotSwapAgent {
 			} catch (Throwable ignored) { }
 		}
 
-		// 收集需要对齐匿名类的所有宿主类
+		// 收集需要对齐匿名类的所有宿主类：仅当宿主自身或其内部类在磁盘上发生变化时才参与对齐
 		Set<String> hostClassesToAlign = new LinkedHashSet<>();
-		for (String cn : newBatchBytes.keySet()) {
-			String host = cn.replaceAll("\\$\\d+(\\$\\d+)*$", "");
-			hostClassesToAlign.add(host);
+		for (Map.Entry<String, byte[]> entry : newBatchBytes.entrySet()) {
+			String cn = entry.getKey();
+			long newHash = calculateHash(entry.getValue());
+			long cnKey = CRC64.hashString(cn);
+			boolean changedOnDisk;
+			synchronized (fileDiskHashes) {
+				long oldHash = fileDiskHashes.get(cnKey);
+				changedOnDisk = (oldHash == -1 || oldHash != newHash);
+			}
+			if (changedOnDisk) {
+				String host = cn.replaceAll("\\$\\d+(\\$\\d+)*$", "");
+				hostClassesToAlign.add(host);
+			}
 		}
 
 		// 记录所有对齐过程中产生的旧孤儿类（不得在本次重定义中被误更新）
@@ -1372,11 +1382,22 @@ public class HotSwapAgent {
 			if (isBlacklisted(className)) continue;
 			if (rejectedHosts.contains(hostNameOf(className))) continue;
 
+			byte[] newBytes = newBatchBytes.get(className);
+			if (newBytes == null) continue;
+
+			// 若该类在磁盘上的文件哈希未发生变化，说明本批未修改该类，跳过布局门检查
+			long newHash = calculateHash(newBytes);
+			long classNameKey = CRC64.hashString(className);
+			synchronized (fileDiskHashes) {
+				long oldDiskHash = fileDiskHashes.get(classNameKey);
+				if (oldDiskHash != -1 && oldDiskHash == newHash) {
+					continue;
+				}
+			}
+
 			Class<?> targetClass = loadedClassesMap.get(className);
 			if (targetClass == null) continue; // 未加载：无旧状态需要保护
 
-			byte[] newBytes = newBatchBytes.get(className);
-			if (newBytes == null) continue;
 			byte[] oldBytes = bytecodeCache.get(className);
 			if (oldBytes == null) {
 				oldBytes = fetchOriginalBytecode(targetClass);

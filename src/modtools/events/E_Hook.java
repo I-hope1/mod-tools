@@ -37,17 +37,19 @@ public enum E_Hook implements ISettings {
 	lambda_align,
 	@Switch(dependency = "hot_swap")
 	ui_hook,
-	@Switch
+	@Switch(dependency = "hot_swap")
 	cell_property_ref,
 
 	_1,
 	// ------------
+	@Switch(dependency = "hot_swap")
 	profile,
 	@Switch(dependency = "profile")
 	capture_locals,
 
 	_2,
 
+	@Switch(dependency = "hot_swap")
 	capture_exceptions,
 	@Switch(dependency = "capture_exceptions")
 	capture_all_exceptions,

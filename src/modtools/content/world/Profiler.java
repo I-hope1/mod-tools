@@ -62,6 +62,11 @@ public class Profiler extends Content {
 
 	public void build() {
 		if (OS.isAndroid) return;
+		if (!HotSwapManager.loaded()) {
+			IntUI.showException("Failed to load HotSwapAgent", new Throwable());
+			return;
+		}
+
 		ui.show();
 	}
 

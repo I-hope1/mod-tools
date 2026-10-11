@@ -8,6 +8,7 @@ import org.objectweb.asm.tree.analysis.*;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Supplier;
 
 /**
@@ -100,6 +101,51 @@ public class LambdaAligner {
 	public static volatile boolean TEST_REVERSE_GROUP_ORDER = false;
 
 	/**
+	 * 设计级变异测试开关（通过 -Dnipx.mutation=... 或测试代码动态注入）：
+	 * <ul>
+	 *   <li>"A": 屏蔽 alignByHostSequence</li>
+	 *   <li>"B": 去掉 canPair 中的消费者否决</li>
+	 *   <li>"D": 允许幽灵参与后续轮次匹配</li>
+	 *   <li>"1": hostKey 剔除消费者特征，仅保留哈希</li>
+	 *   <li>"4": findConsumers 恒返回空映射</li>
+	 *   <li>"C": 决胜键改回编译器方法表下标 methodIndex</li>
+	 * </ul>
+	 */
+	public static volatile String ACTIVE_MUTATION = System.getProperty("nipx.mutation", "");
+
+	public static boolean isMutationActive(String mutationKey) {
+		String m = ACTIVE_MUTATION;
+		return m != null && m.equalsIgnoreCase(mutationKey);
+	}
+
+	/** 测试用显式事件记录条目（用于按方法名精确归因，避免同轮搭便车误判）。 */
+	public static final class AlignmentEvent {
+		public final String kind;       // "POS_MISMATCH", "CONSUMER_MISMATCH", "ANON_COLLISION", "HOMOMORPHIC_PRUNING", "GHOST"
+		public final String oldName;
+		public final String newName;
+		public final String detail;
+
+		public AlignmentEvent(String kind, String oldName, String newName, String detail) {
+			this.kind = kind;
+			this.oldName = oldName;
+			this.newName = newName;
+			this.detail = detail;
+		}
+
+		public boolean involves(String name) {
+			if (name == null) return false;
+			return name.equals(oldName) || name.equals(newName);
+		}
+
+		@Override
+		public String toString() {
+			return "AlignmentEvent{" + kind + ", old=" + oldName + ", new=" + newName + ", " + detail + "}";
+		}
+	}
+
+	public static final List<AlignmentEvent> TEST_EVENTS = new CopyOnWriteArrayList<>();
+
+	/**
 	 * 最近一次 align 的配对来源统计（由证据驱动的指纹配对 vs A/B 趟降级配对）。
 	 *
 	 * <p><b>警告：全进程共享静态变量，仅供单线程测试断言使用，生产业务逻辑严禁引用。</b></p>
@@ -115,24 +161,53 @@ public class LambdaAligner {
 		public final int anchorPairs;
 		/** 配对双方票据指纹不相等（hash 发生变更，换主人）的配对数量。 */
 		public final int hashMismatchPairs;
+		/** 配对双方存在显式且不一致的消费者特征（消费者异化）的总配对数量。 */
+		public final int consumerMismatchPairs;
+		/** 触发 WARN 级别（换名或桶内存在同 hash 歧义）的消费者错配数量。 */
+		public final int consumerMismatchWarnPairs;
+		/** 降级为 DEBUG 级别（同名且桶内唯一）的消费者变更数量。 */
+		public final int consumerMismatchDebugPairs;
+		/** 触发同构缩减告警的数量。 */
+		public final int prunedPairs;
 
 		public AlignmentStats(int step1Pairs, int passAPairs, int passBPairs) {
-			this(step1Pairs, passAPairs, passBPairs, 0, 0);
+			this(step1Pairs, passAPairs, passBPairs, 0, 0, 0, 0, 0, 0);
 		}
 
 		public AlignmentStats(int step1Pairs, int passAPairs, int passBPairs, int anchorPairs, int hashMismatchPairs) {
+			this(step1Pairs, passAPairs, passBPairs, anchorPairs, hashMismatchPairs, 0, 0, 0, 0);
+		}
+
+		public AlignmentStats(int step1Pairs, int passAPairs, int passBPairs, int anchorPairs, int hashMismatchPairs, int consumerMismatchPairs) {
+			this(step1Pairs, passAPairs, passBPairs, anchorPairs, hashMismatchPairs, consumerMismatchPairs, consumerMismatchPairs, 0, 0);
+		}
+
+		public AlignmentStats(int step1Pairs, int passAPairs, int passBPairs, int anchorPairs, int hashMismatchPairs,
+		                      int consumerMismatchPairs, int consumerMismatchWarnPairs, int consumerMismatchDebugPairs) {
+			this(step1Pairs, passAPairs, passBPairs, anchorPairs, hashMismatchPairs, consumerMismatchPairs, consumerMismatchWarnPairs, consumerMismatchDebugPairs, 0);
+		}
+
+		public AlignmentStats(int step1Pairs, int passAPairs, int passBPairs, int anchorPairs, int hashMismatchPairs,
+		                      int consumerMismatchPairs, int consumerMismatchWarnPairs, int consumerMismatchDebugPairs, int prunedPairs) {
 			this.step1Pairs = step1Pairs;
 			this.passAPairs = passAPairs;
 			this.passBPairs = passBPairs;
 			this.anchorPairs = anchorPairs;
 			this.hashMismatchPairs = hashMismatchPairs;
+			this.consumerMismatchPairs = consumerMismatchPairs;
+			this.consumerMismatchWarnPairs = consumerMismatchWarnPairs;
+			this.consumerMismatchDebugPairs = consumerMismatchDebugPairs;
+			this.prunedPairs = prunedPairs;
 		}
 
 		@Override
 		public String toString() {
 			return "Stats{step1=" + step1Pairs + ", passA=" + passAPairs + ", passB=" + passBPairs
 			       + (anchorPairs > 0 ? ", anchor=" + anchorPairs : "")
-			       + (hashMismatchPairs > 0 ? ", hashMismatch=" + hashMismatchPairs : "") + "}";
+			       + (hashMismatchPairs > 0 ? ", hashMismatch=" + hashMismatchPairs : "")
+			       + (consumerMismatchPairs > 0 ? ", consumerMismatch=" + consumerMismatchPairs
+			          + " (warn=" + consumerMismatchWarnPairs + ", debug=" + consumerMismatchDebugPairs + ")" : "")
+			       + (prunedPairs > 0 ? ", pruned=" + prunedPairs : "") + "}";
 		}
 	}
 
@@ -319,6 +394,10 @@ public class LambdaAligner {
 		int passBPairs;
 		int step1AnchorPairs;
 		int hashMismatchPairs;
+		int consumerMismatchPairs;
+		int consumerMismatchWarnPairs;
+		int consumerMismatchDebugPairs;
+		int prunedPairs;
 
 		/**
 		 * 重置上下文状态，为下一次匹配做准备。
@@ -348,6 +427,10 @@ public class LambdaAligner {
 			passBPairs = 0;
 			step1AnchorPairs = 0;
 			hashMismatchPairs = 0;
+			consumerMismatchPairs = 0;
+			consumerMismatchWarnPairs = 0;
+			consumerMismatchDebugPairs = 0;
+			prunedPairs = 0;
 		}
 	}
 	//endregion
@@ -510,7 +593,8 @@ public class LambdaAligner {
 			validateIndyTargets(alignedCn, presentKeys);
 
 			LAST_STATS = new AlignmentStats(ctx.step1Pairs, ctx.passAPairs, ctx.passBPairs,
-			                                ctx.step1AnchorPairs, ctx.hashMismatchPairs);
+			                                ctx.step1AnchorPairs, ctx.hashMismatchPairs, ctx.consumerMismatchPairs,
+			                                ctx.consumerMismatchWarnPairs, ctx.consumerMismatchDebugPairs, ctx.prunedPairs);
 			LAST_OLD_ANON_HASHES = new HashMap<>(ctx.oldAnonHashes);
 			LAST_NEW_ANON_HASHES = new HashMap<>(ctx.newAnonHashes);
 			// 传入 oldCn（已解析过一次）—— 避免 resurrectOrphanedLambdas 二次读 oldBytes
@@ -952,7 +1036,7 @@ public class LambdaAligner {
 	private static boolean canPair(MatchContext ctx, SyntheticInfo ni, SyntheticInfo oi) {
 		if (ni.matched || !ni.renameable) return false;
 		if (hasUnmatchedChild(ctx, ni)) return false;
-		if (ni.consumer != null && oi.consumer != null && !ni.consumer.isEmpty() && !oi.consumer.isEmpty()) {
+		if (!isMutationActive("B") && ni.consumer != null && oi.consumer != null && !ni.consumer.isEmpty() && !oi.consumer.isEmpty()) {
 			if (!ni.consumer.equals(oi.consumer)) return false;
 		}
 		return acceptCandidate(ctx, ni, oi);
@@ -973,6 +1057,7 @@ public class LambdaAligner {
 	 * @return 本趟是否至少产生了新配对
 	 */
 	private static boolean alignByHostSequence(MatchContext ctx) {
+		if (isMutationActive("A")) return false;
 		boolean progressed = false;
 		for (Map.Entry<String, List<SyntheticInfo>> e : ctx.newHostSeq.entrySet()) {
 			List<SyntheticInfo> ns = e.getValue();
@@ -1078,7 +1163,7 @@ public class LambdaAligner {
 
 	/** 候选是否可接受：未匹配、非幽灵、指纹与签名一致、且处于同一嵌套层级。 */
 	private static boolean acceptCandidate(MatchContext ctx, SyntheticInfo ni, SyntheticInfo oi) {
-		if (oi.matched || oi.ghost) return false;
+		if (oi.matched || (!isMutationActive("D") && oi.ghost)) return false;
 		// 旧候选也必须可改名 —— 与 ni 上的限制对称。
 		// scan 把 access$ / Kotlin $annotations 这类设为非 renameable，用意是不让它们参与改名；
 		// 若这里不查，一个空体新 lambda 仍可能认领空体旧 $annotations 的名字。
@@ -1110,6 +1195,25 @@ public class LambdaAligner {
 		ctx.usedOldNames.add(oi.name);
 		if (ni.hash != oi.hash) {
 			ctx.hashMismatchPairs++;
+			TEST_EVENTS.add(new AlignmentEvent("HASH_MISMATCH", oi.name, ni.name, "hash " + oi.hash + "->" + ni.hash));
+		}
+		if (ni.consumer != null && oi.consumer != null && !ni.consumer.isEmpty() && !oi.consumer.isEmpty()
+		    && !ni.consumer.equals(oi.consumer)) {
+			ctx.consumerMismatchPairs++;
+			// 消费者信号分级（避免对辅助函数重命名的良性编辑产生告警噪音）：
+			// 1. 换名（ni.name != oi.name）：名字换了主人，高风险，必须升级为 WARN；
+			// 2. 同名但同组内存在多个同 hash 候选（多候选歧义）：升级为 WARN；
+			// 3. 同名且组内唯一同 hash 候选（良性消费端重构，如 log(...) -> trace(...)）：降级为 DEBUG 日志记录。
+			boolean nameChanged = !ni.name.equals(oi.name);
+			boolean multipleHashCandidates = hasMultipleHashCandidates(ctx, ni.hash);
+			if (nameChanged || multipleHashCandidates) {
+				ctx.consumerMismatchWarnPairs++;
+				warnConsumerMismatch(ctx.currentClass, oi, ni.name, ni.desc, oi.consumer, ni.consumer);
+			} else {
+				ctx.consumerMismatchDebugPairs++;
+				dbg(() -> "消费者特征变更（同名唯一良性重构）" + ctx.currentClass
+				          + ": " + oi.name + " [" + oi.consumer + "] -> [" + ni.consumer + "]");
+			}
 		}
 	}
 
@@ -1191,7 +1295,7 @@ public class LambdaAligner {
 			// 结果新方法内部对被改名的子的引用指向了别处。实测见 scratch/hstest/deep2/ 变体乙：
 			// 新的叶子占了旧 $2，而新外层内部引用的 $2 实际指向新的中层。
 			for (SyntheticInfo oi : oldGroup) {
-				if (oi.matched || oi.ghost) continue;
+				if (oi.matched || (!isMutationActive("D") && oi.ghost)) continue;
 				if (!oi.renameable) continue;   // 与 ni 上的限制对称
 				if (ctx.usedOldNames.contains(oi.name)) continue;
 				if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
@@ -1206,7 +1310,7 @@ public class LambdaAligner {
 			// 第二优先级：签名逻辑等价且子结构吻合的未匹配旧方法
 			if (bestOld == null) {
 				for (SyntheticInfo oi : oldGroup) {
-					if (oi.matched || oi.ghost) continue;
+					if (oi.matched || (!isMutationActive("D") && oi.ghost)) continue;
 					if (!oi.renameable) continue;   // 与 ni 上的限制对称
 					if (ctx.usedOldNames.contains(oi.name)) continue;
 					if (!isSignatureCompatible(ctx.currentClass, oi, ni)) continue;
@@ -1343,15 +1447,26 @@ public class LambdaAligner {
 	}
 
 	/**
-	 * 候选旧方法择优判决（分层决胜）：
+	 * 候选旧方法择优判决（分层决胜规范约定）：
+	 *
+	 * <p><b>定位与设计约定：</b>
+	 * 跨组或组内存在多个同指纹旧候选时的确定性决胜规则。当且仅当多个候选在语义指纹、签名与嵌套形状
+	 * 完全等价且无同名强证据时，由本方法提供确定性决胜。
+	 * 本决胜顺序属于对齐算法的<b>内部确定性规范约定（Convention）</b>，而非业务行为推导：
+	 * 目的在于彻底消除编译器生成方法表物理顺序（{@code cn.methods}）随机扰动对配对结果的偶发影响。
+	 * </p>
+	 *
 	 * <ol>
-	 *   <li>可达性分层：从根方法可达的候选（{@code callOrder >= 0}）无条件优先于不可达候选（死代码 / 孤立方法）；</li>
-	 *   <li>若两者均可达：按 BFS 源码调用发现序（{@code callOrder}）小的胜出；</li>
-	 *   <li>若两者均不可达：按编译器字节码方法表下标（{@code methodIndex}）小的胜出。</li>
+	 *   <li><b>可达性分层</b>：从根方法可达的候选（{@code callOrder >= 0}）无条件优先于不可达候选（死代码 / 孤立方法）；</li>
+	 *   <li><b>均可达决胜</b>：按 BFS 规范调用发现序（{@code callOrder}，根方法字母序 + 指令流序）小的胜出；</li>
+	 *   <li><b>均不可达兜底</b>：按编译器字节码方法表下标（{@code methodIndex}）小的稳定兜底胜出。</li>
 	 * </ol>
 	 */
 	private static boolean isBetterCandidate(SyntheticInfo candidate, SyntheticInfo currentBest) {
 		if (currentBest == null) return true;
+		if (isMutationActive("C")) {
+			return candidate.methodIndex < currentBest.methodIndex;
+		}
 		boolean candReachable = candidate.callOrder >= 0;
 		boolean bestReachable = currentBest.callOrder >= 0;
 		if (candReachable != bestReachable) return candReachable;
@@ -1448,7 +1563,13 @@ public class LambdaAligner {
 	 */
 	public static void clearLoggedWarnings() {
 		WARNED_REALIGNMENTS.clear();
+		TEST_EVENTS.clear();
 		clearLoggedOrphans();
+	}
+
+	/** 测试辅助：获取当前已触发的去重警告总数。 */
+	public static int getWarningCount() {
+		return WARNED_REALIGNMENTS.size();
 	}
 
 	/**
@@ -1476,12 +1597,46 @@ public class LambdaAligner {
 		String key = owner + "#" + newName + "<-" + oi.name;
 		if (!WARNED_REALIGNMENTS.add(key)) return;
 
+		TEST_EVENTS.add(new AlignmentEvent("POS_MISMATCH", oi.name, newName, owner + "#" + newName + newDesc + "<-" + oi.name + oi.desc));
 		HotSwapAgent.warn("[LambdaAligner] 顺序回退配对但方法体不一致 " + owner
 		                  + "：旧 " + oi.name + oi.desc + " <- 新 " + newName + newDesc
 		                  + "。同一逻辑组内存在多个同形 lambda 时，插入/删除会使其序号整体位移，"
 		                  + "此时旧名字会被交给一个语义不同的方法：老 CallSite **不会抛异常**，"
 		                  + "而是安静地执行新方法体（实测确认：deep2 变体乙里旧 $2 承载了 doB2 的语义）。"
 		                  + "建议把每个 lambda 放进独立的私有方法，让身份由结构而非位置决定。");
+	}
+
+	/**
+	 * 消费者特征异化告警：配对双方具有明确且不同的数据流消费者特征时留痕。
+	 *
+	 * <p>例如旧 Lambda 由 {@code a(...)} 消费，新 Lambda 由 {@code b2(...)} 消费，
+	 * 因上游锚点失效退化至 Step 1a 同名贪婪匹配。虽然方法体可能相同，但调用者上下文
+	 * 已发生显著异化，在此记录显式告警以消除静默错配盲区。</p>
+	 */
+	private static void warnConsumerMismatch(String owner, SyntheticInfo oi, String newName, String newDesc,
+	                                         String oldConsumer, String newConsumer) {
+		String key = owner + "#CONSUMER#" + newName + "<-" + oi.name;
+		if (!WARNED_REALIGNMENTS.add(key)) return;
+
+		TEST_EVENTS.add(new AlignmentEvent("CONSUMER_MISMATCH", oi.name, newName, oldConsumer + "->" + newConsumer));
+		HotSwapAgent.warn("[LambdaAligner] 消费者特征异化配对 " + owner
+		                  + "：旧 " + oi.name + oi.desc + " [" + oldConsumer + "] <- 新 "
+		                  + newName + newDesc + " [" + newConsumer + "]。"
+		                  + "配对双方调用者特征不一致，老 CallSite 可能绑至不同消费者上下文。");
+	}
+
+	private static boolean hasMultipleHashCandidates(MatchContext ctx, long hash) {
+		int count = 0;
+		for (int idx = ctx.oldGroups.nextEntry(-1); idx != -1; idx = ctx.oldGroups.nextEntry(idx)) {
+			List<SyntheticInfo> g = ctx.oldGroups.valueAt(idx);
+			if (g == null) continue;
+			for (SyntheticInfo oi : g) {
+				if (oi.hash == hash && oi.renameable && !oi.ghost) {
+					if (++count >= 2) return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	private static boolean hasMultipleAnonMaskedWithSameHash(List<SyntheticInfo> list, long hash) {
@@ -1513,6 +1668,7 @@ public class LambdaAligner {
 		String key = owner + "#ANON#" + newName + "<-" + oi.name;
 		if (!WARNED_REALIGNMENTS.add(key)) return;
 
+		TEST_EVENTS.add(new AlignmentEvent("ANON_COLLISION", oi.name, newName, owner + "#" + newName + newDesc + "<-" + oi.name + oi.desc));
 		HotSwapAgent.warn("[LambdaAligner] 匿名类归一化导致同组同指纹配对存在歧义 " + owner
 		                  + "：旧 " + oi.name + oi.desc + " <- 新 " + newName + newDesc
 		                  + "。同组内存在多个同形且包含匿名类的 lambda（同指纹），若发生新增、删除或重排可能导致方法语义错位。"
@@ -1530,8 +1686,10 @@ public class LambdaAligner {
 		}
 		for (Map.Entry<Long, Integer> entry : hashCounts.entrySet()) {
 			if (entry.getValue() > 1) {
+				ctx.prunedPairs++;
 				String key = ctx.currentClass + "#" + hostKey + "#" + entry.getKey();
 				if (WARNED_REALIGNMENTS.add(key)) {
+					TEST_EVENTS.add(new AlignmentEvent("HOMOMORPHIC_PRUNING", null, null, hostKey + "#hash=" + entry.getKey()));
 					HotSwapAgent.warn("[LambdaAligner] 宿主序列存在多个同构 Lambda 候选且发生缩减 " + ctx.currentClass
 					                  + " (宿主: " + hostKey + ")：存量 CallSite 可能因同构裁剪被幽灵化。建议将关键业务回调提取为独立方法。");
 				}
@@ -1912,17 +2070,18 @@ public class LambdaAligner {
 	 * </p>
 	 */
 	private static Map<AbstractInsnNode, String> findConsumers(String owner, MethodNode mn) {
+		if (isMutationActive("4")) return Collections.emptyMap();
 		Map<AbstractInsnNode, String> map = new HashMap<>();
 		if (mn.instructions == null || mn.instructions.size() == 0) return map;
 		Frame<SourceValue>[] frames;
 		try {
 			Analyzer<SourceValue> analyzer = new Analyzer<>(new SourceInterpreter());
 			frames = analyzer.analyze(owner, mn);
-		} catch (Throwable t) {
+		} catch (AnalyzerException | RuntimeException t) {
 			// 分析失败时保守降级，返回空映射
-			return map;
+			return Collections.emptyMap();
 		}
-		if (frames == null) return map;
+		if (frames == null) return Collections.emptyMap();
 
 		AbstractInsnNode[] insns = mn.instructions.toArray();
 		for (int i = 0; i < insns.length; i++) {
@@ -2081,8 +2240,10 @@ public class LambdaAligner {
 
 		// 收集按 indy / call 出现顺序的宿主调用序列（新旧各一份）。
 		// 普通方法以 "M:" + name + desc 为锚点；
-		// lambda 合成方法以 "L:" + info.hash + (info.consumer != null ? ":" + info.consumer : "") 为锚点。
+		// lambda 合成方法以 "L:" + info.hash + (info.consumer != null && !info.consumer.isEmpty() ? ":" + info.consumer : "") 为锚点。
 		// 关键：采用从非合成根方法出发的广度优先（BFS）遍历，彻底摆脱 class 文件方法表物理顺序（cn.methods）对同 hash 候选遍历序的干扰。
+		// 注意：跨宿主根方法（不同业务方法之间）的遍历顺序约定为根方法签名字母序（m.name + m.desc），
+		// 这是确定性的规范约定（Convention），而非源文件书写物理序。宿主方法内部的 Lambda 序列严格遵循指令流调用序。
 		Map<String, List<SyntheticInfo>> hostSeq   = isOld ? ctx.oldHostSeq : ctx.newHostSeq;
 		Map<String, SyntheticInfo>       nameIndex = isOld ? ctx.oldNameIndex : ctx.newNameIndex;
 
@@ -2098,6 +2259,7 @@ public class LambdaAligner {
 				roots.add(mn);
 			}
 		}
+		// 跨宿主根方法按规范签名升序排序，保证跨编译器/平台遍历顺序完全确定
 		roots.sort(Comparator.comparing(m -> m.name + m.desc));
 
 		Queue<MethodNode> queue = new ArrayDeque<>(roots);
@@ -2115,7 +2277,7 @@ public class LambdaAligner {
 			if (isSynthetic || matchesPattern) {
 				SyntheticInfo info = nameIndex.get(mn.name);
 				if (info == null || !info.renameable || info.ghost) continue;
-				hostKey = "L:" + info.hash + (info.consumer != null && !info.consumer.isEmpty() ? ":" + info.consumer : "");
+				hostKey = "L:" + info.hash + (!isMutationActive("1") && info.consumer != null && !info.consumer.isEmpty() ? ":" + info.consumer : "");
 			} else {
 				hostKey = "M:" + mn.name + mn.desc;
 			}
@@ -2169,7 +2331,7 @@ public class LambdaAligner {
 			SyntheticInfo info = nameIndex.get(mn.name);
 			if (info == null || !info.renameable || info.ghost) continue;
 			// 孤立/死代码不分配正向 callOrder，保持 -1 以标记不可达
-			String hostKey = "L:" + info.hash + (info.consumer != null && !info.consumer.isEmpty() ? ":" + info.consumer : "");
+			String hostKey = "L:" + info.hash + (!isMutationActive("1") && info.consumer != null && !info.consumer.isEmpty() ? ":" + info.consumer : "");
 			Map<AbstractInsnNode, String> consumers = findConsumers(cn.name, mn);
 			List<SyntheticInfo> seq = null;
 			for (AbstractInsnNode n : mn.instructions) {
@@ -2547,6 +2709,7 @@ public class LambdaAligner {
 					 access, mn.name, mn.desc, mn.signature,
 					 mn.exceptions == null ? null : mn.exceptions.toArray(new String[0]));
 					if (dummy != null) {
+						TEST_EVENTS.add(new AlignmentEvent("GHOST", mn.name, null, className + "#" + mn.name + mn.desc));
 						injectDummyBody(dummy, className, mn.name, mn.desc);
 					}
 				}

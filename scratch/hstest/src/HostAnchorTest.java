@@ -42,7 +42,7 @@ public class HostAnchorTest {
 	void resetState() {
 		LambdaAligner.TEST_REVERSE_GROUP_ORDER = false;
 		LambdaAligner.LAST_STATS = null;
-		LambdaAligner.clearLoggedOrphans();
+		LambdaAligner.clearLoggedWarnings();
 	}
 
 	@Test
@@ -1090,11 +1090,68 @@ public class HostAnchorTest {
 		// 记录退化指标：LCS 锚点因消费者异化放弃配对，退化走 Step 1a 同名贪婪
 		assertEquals(0, LambdaAligner.LAST_STATS.anchorPairs, "LCS 锚点必须放弃配对");
 		assertEquals(1, LambdaAligner.LAST_STATS.step1Pairs, "退化至 Step 1a 同名命中");
+		assertTrue(LambdaAligner.LAST_STATS.consumerMismatchPairs > 0,
+			"消费者异化但退化配对时，必须明确记录 consumerMismatchPairs 信号: " + LambdaAligner.LAST_STATS);
+		assertTrue(LambdaAligner.LAST_STATS.consumerMismatchWarnPairs > 0,
+			"因存在多候选歧义，消费者异化必须升级为 WARN: " + LambdaAligner.LAST_STATS);
 
 		ClassNode cnAligned = readClass(aligned);
 		String activeL = findIndyTargets(cnAligned, "build").get(0);
 		// 当前退化特征：由于新版 L2' 的名字为 $0，与 oldL1 同名同指纹，故被 Step 1a 贪婪配对到 oldL1
 		assertEquals(oldL1, activeL, "Characterization: 退化路径下配对到同名旧候选 oldL1");
+	}
+
+	/**
+	 * 验证良性消费端重构（如辅助方法改名 log -> trace）在同名且桶内唯一候选时降级为 DEBUG，不触发 WARN 噪音。
+	 */
+	@Test
+	void benignConsumerRenameDoesNotWarn(@TempDir Path tmp) throws Exception {
+		String javac = javac21();
+		Path src1Dir = Files.createDirectories(tmp.resolve("src1"));
+		Path src2Dir = Files.createDirectories(tmp.resolve("src2"));
+		Path outV1 = Files.createDirectories(tmp.resolve("v1"));
+		Path outV2 = Files.createDirectories(tmp.resolve("v2"));
+
+		String v1Src = "package test;\n"
+			+ "public class BenignCase {\n"
+			+ "    static void log(Runnable r) { r.run(); }\n"
+			+ "    static void trace(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void run() {\n"
+			+ "        log(() -> leaf());\n" // L1 ($0)
+			+ "    }\n"
+			+ "}\n";
+
+		// V2: 将调用者重命名为 trace(...)，方法内仅这一个 Lambda
+		String v2Src = "package test;\n"
+			+ "public class BenignCase {\n"
+			+ "    static void log(Runnable r) { r.run(); }\n"
+			+ "    static void trace(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void run() {\n"
+			+ "        trace(() -> leaf());\n" // L1' ($0, 唯一候选同名)
+			+ "    }\n"
+			+ "}\n";
+
+		Path src1 = src1Dir.resolve("BenignCase.java");
+		Path src2 = src2Dir.resolve("BenignCase.java");
+		Files.writeString(src1, v1Src, StandardCharsets.UTF_8);
+		Files.writeString(src2, v2Src, StandardCharsets.UTF_8);
+
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.toString(), src1.toString());
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.toString(), src2.toString());
+
+		byte[] v1 = Files.readAllBytes(outV1.resolve("test/BenignCase.class"));
+		byte[] v2 = Files.readAllBytes(outV2.resolve("test/BenignCase.class"));
+
+		byte[] aligned = LambdaAligner.align(v1, v2);
+		assertNotNull(aligned);
+		assertNotNull(LambdaAligner.LAST_STATS);
+
+		// 核心断言：良性编辑记录 consumerMismatchPairs 与 debugPairs，但 warnPairs 严格为 0
+		assertEquals(1, LambdaAligner.LAST_STATS.consumerMismatchPairs, "必须记录消费者变化");
+		assertEquals(1, LambdaAligner.LAST_STATS.consumerMismatchDebugPairs, "同名且桶内唯一必须降级为 DEBUG");
+		assertEquals(0, LambdaAligner.LAST_STATS.consumerMismatchWarnPairs, "良性重构绝不触发 WARN 噪音");
 	}
 
 	/**
@@ -1135,5 +1192,76 @@ public class HostAnchorTest {
 		ClassNode cnAligned = readClass(aligned);
 		List<String> targets = findIndyTargets(cnAligned, "run");
 		assertEquals(1, targets.size());
+	}
+
+	/**
+	 * 单一方法内 120 个复杂调用 Lambda 的端到端与数据流反向追踪分析性能基准断言。
+	 *
+	 * <p>验证当单个宿主方法包含 120+ Lambda（混合 CALL、PUT、RETURN、三元表达式等）时，
+	 * ASM 数据流分析与宿主序列 LCS 对齐在毫秒级内完成，绝无指数级回溯或栈溢出。</p>
+	 */
+	@Test
+	void stressBenchmark120Lambdas(@TempDir Path tmp) throws Exception {
+		String javac = javac21();
+		Path srcDir = Files.createDirectories(tmp.resolve("src"));
+		Path outV1 = Files.createDirectories(tmp.resolve("v1"));
+		Path outV2 = Files.createDirectories(tmp.resolve("v2"));
+
+		StringBuilder sb = new StringBuilder();
+		sb.append("package test;\n");
+		sb.append("public class StressCase {\n");
+		sb.append("    static void consume(int id, Runnable r) { if (r != null) r.run(); }\n");
+		sb.append("    public static Runnable sink;\n");
+		sb.append("    public void build() {\n");
+		for (int i = 0; i < 120; i++) {
+			if (i % 3 == 0) {
+				sb.append("        consume(").append(i).append(", () -> { int x = ").append(i).append("; });\n");
+			} else if (i % 3 == 1) {
+				sb.append("        sink = () -> { int x = ").append(i).append("; };\n");
+			} else {
+				sb.append("        consume(").append(i).append(", (true ? () -> { int x = ").append(i).append("; } : null));\n");
+			}
+		}
+		sb.append("    }\n");
+		sb.append("}\n");
+
+		Path srcFile = srcDir.resolve("StressCase.java");
+		Files.writeString(srcFile, sb.toString(), StandardCharsets.UTF_8);
+
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.toString(), srcFile.toString());
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.toString(), srcFile.toString());
+
+		byte[] v1 = Files.readAllBytes(outV1.resolve("test/StressCase.class"));
+		byte[] v2 = Files.readAllBytes(outV2.resolve("test/StressCase.class"));
+
+		// 1. 冷启动测量（首次调用，无 JIT 预热）
+		long coldT0 = System.nanoTime();
+		byte[] coldAligned = LambdaAligner.align(v1, v2);
+		long coldT1 = System.nanoTime();
+		assertNotNull(coldAligned);
+		double coldMs = (coldT1 - coldT0) / 1_000_000.0;
+
+		// 2. 预热 3 次
+		for (int i = 0; i < 3; i++) {
+			LambdaAligner.align(v1, v2);
+		}
+
+		// 3. 正式热态计时 5 次取平均值
+		long totalNanos = 0;
+		int runs = 5;
+		for (int i = 0; i < runs; i++) {
+			long t0 = System.nanoTime();
+			byte[] aligned = LambdaAligner.align(v1, v2);
+			long t1 = System.nanoTime();
+			assertNotNull(aligned);
+			totalNanos += (t1 - t0);
+		}
+		double avgMs = (totalNanos / (double) runs) / 1_000_000.0;
+		System.out.println("[Benchmark] 120 lambdas in build() cold-start: " + String.format(Locale.ROOT, "%.2f ms", coldMs)
+			+ ", warm-avg: " + String.format(Locale.ROOT, "%.2f ms", avgMs));
+
+		// 放宽数量级阈值作为防死锁与指数退化上限（冷态 < 3000ms，热态 < 1000ms），避免高负载 CI 偶发超时 Flaky
+		assertTrue(coldMs < 3000.0, "冷态对齐耗时应低于 3000ms: " + coldMs + "ms");
+		assertTrue(avgMs < 1000.0, "热态对齐耗时应低于 1000ms: " + avgMs + "ms");
 	}
 }

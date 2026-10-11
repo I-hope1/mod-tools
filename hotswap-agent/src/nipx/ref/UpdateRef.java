@@ -5,13 +5,18 @@ import arc.func.*;
 import arc.scene.Element;
 import arc.scene.event.*;
 import arc.scene.ui.*;
+import arc.scene.ui.TextField.TextFieldFilter;
+import arc.scene.ui.TextField.TextFieldListener;
 import arc.scene.ui.TextField.TextFieldValidator;
 import arc.scene.ui.layout.Cell;
 import arc.scene.utils.Disableable;
 import arc.struct.*;
 import nipx.HotSwapAgent;
+import nipx.Reflect;
+import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
+import java.util.Arrays;
 import java.util.Objects;
 
 /**
@@ -44,7 +49,7 @@ import java.util.Objects;
  * @see nipx.LambdaRef
  * @see nipx.Injector
  */
-@SuppressWarnings({"rawtypes", "unchecked", "unused"})
+@SuppressWarnings({"rawtypes", "unchecked", "unused", "removal", "deprecation"})
 public class UpdateRef {
 
 	/** 空操作常量，用于事件回调发生异常时的静默熔断，防止触发任何外部破坏性清理 */
@@ -55,8 +60,33 @@ public class UpdateRef {
 		throw new UnsupportedOperationException();
 	};
 
+	private static final Unsafe UNSAFE = Reflect.UNSAFE;
+	private static final long   ON_REMOVE_OFFSET;
+
+	static {
+		try {
+			ON_REMOVE_OFFSET = UNSAFE != null ? UNSAFE.objectFieldOffset(UpdateRef.class.getDeclaredField("onRemove")) : -1;
+		} catch (Throwable t) {
+			throw new ExceptionInInitializerError(t);
+		}
+	}
+
+	private boolean compareAndSetOnRemove(Runnable expect, Runnable update) {
+		if (UNSAFE != null) {
+			return UNSAFE.compareAndSwapObject(this, ON_REMOVE_OFFSET, expect, update);
+		}
+		synchronized (this) {
+			if (this.onRemove == expect) {
+				this.onRemove = update;
+				return true;
+			}
+			return false;
+		}
+	}
+
 	/**
-	 * 复合清理动作容器，通过 {@link #actions} 维护清理链并在追加时自动基于 {@link Object#equals} 去重。
+	 * 复合清理动作容器，维护清理链并在追加时自动基于 {@link Object#equals} 去重。
+	 * 底层使用线程安全的快照数组与 CAS 驱动，杜绝单线程集合的并发冲突。
 	 * <p>
 	 * <b>关于动作去重行为说明：</b><br>
 	 * 由于各类 {@code Wrapped*} 代理包装器（如 {@link WrappedRunnable}）以及具体动作 Record（如 {@code RemoveListenerAction}）
@@ -66,41 +96,101 @@ public class UpdateRef {
 	 * </p>
 	 */
 	public static class CompositeAction implements Runnable {
-		final            Seq<Runnable> actions = new Seq<>(2);
-		private volatile boolean       executed;
+		private static final Runnable[] EMPTY_ACTIONS = new Runnable[0];
+		private static final long       ACTIONS_OFFSET;
+		private static final long       EXECUTED_OFFSET;
 
-		public CompositeAction(Runnable first) {
-			if (first != null && first != NOOP && first != REMOVED) {
-				if (first instanceof CompositeAction ca) {
-					actions.addAll(ca.actions);
-				} else {
-					actions.add(first);
-				}
+		static {
+			try {
+				ACTIONS_OFFSET = UNSAFE != null ? UNSAFE.objectFieldOffset(CompositeAction.class.getDeclaredField("actions")) : -1;
+				EXECUTED_OFFSET = UNSAFE != null ? UNSAFE.objectFieldOffset(CompositeAction.class.getDeclaredField("executed")) : -1;
+			} catch (Throwable t) {
+				throw new ExceptionInInitializerError(t);
 			}
 		}
 
-		void add(Runnable r) {
-			if (r == null || r == NOOP || r == REMOVED) return;
+		volatile Runnable[] actions;
+		private volatile int executed;
+
+		private boolean compareAndSetActions(Runnable[] expect, Runnable[] update) {
+			if (UNSAFE != null) {
+				return UNSAFE.compareAndSwapObject(this, ACTIONS_OFFSET, expect, update);
+			}
+			synchronized (this) {
+				if (this.actions == expect) {
+					this.actions = update;
+					return true;
+				}
+				return false;
+			}
+		}
+
+		private boolean compareAndSetExecuted() {
+			if (UNSAFE != null) {
+				return UNSAFE.compareAndSwapInt(this, EXECUTED_OFFSET, 0, 1);
+			}
+			synchronized (this) {
+				if (this.executed == 0) {
+					this.executed = 1;
+					return true;
+				}
+				return false;
+			}
+		}
+
+		public CompositeAction(Runnable first) {
+			if (first == null || first == NOOP || first == REMOVED) {
+				this.actions = EMPTY_ACTIONS;
+			} else if (first instanceof CompositeAction ca) {
+				this.actions = ca.actions.clone();
+			} else {
+				this.actions = new Runnable[]{first};
+			}
+		}
+
+		public CompositeAction(Runnable a, Runnable b) {
+			this(a);
+			add(b);
+		}
+
+		boolean contains(Runnable r) {
+			if (r == null) return false;
+			Runnable[] curr = this.actions;
+			for (Runnable action : curr) {
+				if (Objects.equals(action, r)) return true;
+			}
+			return false;
+		}
+
+		public void add(Runnable r) {
+			if (r == null || r == NOOP || r == REMOVED || r == this) return;
 			if (r instanceof CompositeAction ca) {
-				for (int i = 0; i < ca.actions.size; i++) {
-					add(ca.actions.get(i));
+				Runnable[] caActions = ca.actions;
+				for (Runnable action : caActions) {
+					add(action);
 				}
 				return;
 			}
-			if (!actions.contains(r, false)) {
-				actions.add(r);
+			while (true) {
+				Runnable[] curr = this.actions;
+				for (Runnable action : curr) {
+					if (Objects.equals(action, r)) return;
+				}
+				Runnable[] next = Arrays.copyOf(curr, curr.length + 1);
+				next[curr.length] = r;
+				if (compareAndSetActions(curr, next)) {
+					return;
+				}
 			}
 		}
 
 		@Override
 		public void run() {
-			if (executed) return;
-			synchronized (this) {
-				if (executed) return;
-				executed = true;
-			}
-			for (int i = 0; i < actions.size; i++) {
-				executeRemove(actions.get(i));
+			if (executed != 0) return;
+			if (!compareAndSetExecuted()) return;
+			Runnable[] toRun = this.actions;
+			for (Runnable action : toRun) {
+				executeRemove(action);
 			}
 		}
 
@@ -108,14 +198,18 @@ public class UpdateRef {
 		public boolean equals(Object o) {
 			if (this == o) return true;
 			if (o instanceof CompositeAction ca) {
-				return Objects.equals(actions, ca.actions);
+				return Arrays.equals(this.actions, ca.actions);
 			}
 			return false;
 		}
 
 		@Override
 		public int hashCode() {
-			return actions.hashCode();
+			return Arrays.hashCode(this.actions);
+		}
+
+		public Runnable[] getActions() {
+			return actions.clone();
 		}
 	}
 
@@ -142,6 +236,8 @@ public class UpdateRef {
 		if (a == null || a == NOOP || a == REMOVED) return b;
 		if (b == null || b == NOOP || b == REMOVED) return a;
 		if (Objects.equals(a, b)) return a;
+		if (a instanceof CompositeAction ca && ca.contains(b)) return a;
+		if (b instanceof CompositeAction cb && cb.contains(a)) return b;
 		CompositeAction composite = new CompositeAction(a);
 		composite.add(b);
 		return composite;
@@ -198,28 +294,44 @@ public class UpdateRef {
 		if (onRemove == REMOVED) {
 			throw new IllegalArgumentException("Cannot manually set onRemove to REMOVED sentinel");
 		}
-		synchronized (this) {
-			if (this.onRemove != REMOVED && this.onRemove != NOOP) {
-				this.onRemove = onRemove;
+		while (true) {
+			Runnable current = this.onRemove;
+			if (current == REMOVED || current == NOOP) {
+				return;
+			}
+			if (compareAndSetOnRemove(current, onRemove)) {
+				return;
 			}
 		}
 	}
 
 	/**
 	 * 为当前包装引用追加合并新的清理动作。
-	 * 若当前已处于熔断状态（{@code onRemove == REMOVED}）或静音模式（{@code onRemove == NOOP}），则拒绝并返回 false。
+	 * 若当前处于静音模式（{@code onRemove == NOOP}），则拒绝并返回 false；
+	 * 若当前已处于熔断状态（{@code onRemove == REMOVED}），则将动作直接投递至延迟清理队列确保安全执行，并返回 false；
+	 * 正常状态下通过 CAS 无锁原子追加合并动作。
 	 * @param action 待追加的清理动作
 	 * @return 若成功追加返回 true；若已被拒绝（已熔断、静音模式或 action 无效）返回 false
 	 */
 	public boolean addOnRemove(Runnable action) {
 		if (action == null || action == NOOP || action == REMOVED) return false;
-		synchronized (this) {
-			if (this.onRemove != REMOVED && this.onRemove != NOOP) {
-				this.onRemove = combine(this.onRemove, action);
+		while (true) {
+			Runnable current = this.onRemove;
+			if (current == NOOP) {
+				return false;
+			}
+			if (current == REMOVED) {
+				deferRemoval(action);
+				return false;
+			}
+			Runnable next = combine(current, action);
+			if (current == next) {
+				return true;
+			}
+			if (compareAndSetOnRemove(current, next)) {
 				return true;
 			}
 		}
-		return false;
 	}
 
 	/**
@@ -504,6 +616,114 @@ public class UpdateRef {
 		@Override
 		public boolean valid(String text) {
 			return ref.runValidator(text, fallback);
+		}
+
+		@Override
+		public UpdateRef getUpdateRef() {
+			return ref;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			return WrappedRef.equals(this, o);
+		}
+
+		@Override
+		public int hashCode() {
+			return getOriginalHash();
+		}
+	}
+
+	public static class WrappedFilter implements TextFieldFilter, WrappedRef {
+		private final    UpdateRef       ref;
+		private volatile TextFieldFilter fallback;
+
+		public WrappedFilter(UpdateRef ref) {
+			this(ref, null);
+		}
+
+		public WrappedFilter(UpdateRef ref, TextFieldFilter fallback) {
+			this.ref = ref;
+			this.fallback = fallback;
+		}
+
+		public void setFallbackIfAbsent(TextFieldFilter fallback) {
+			if (this.fallback == null && fallback != null) {
+				this.fallback = fallback;
+			}
+		}
+
+		@Override
+		public boolean acceptChar(TextField textField, char c) {
+			return ref.runFilter(textField, c, fallback);
+		}
+
+		@Override
+		public UpdateRef getUpdateRef() {
+			return ref;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			return WrappedRef.equals(this, o);
+		}
+
+		@Override
+		public int hashCode() {
+			return getOriginalHash();
+		}
+	}
+
+	public static class WrappedTextFieldListener implements TextFieldListener, WrappedRef {
+		private final UpdateRef ref;
+
+		public WrappedTextFieldListener(UpdateRef ref) {
+			this.ref = ref;
+		}
+
+		@Override
+		public void keyTyped(TextField textField, char c) {
+			ref.runTextFieldListener(textField, c);
+		}
+
+		@Override
+		public UpdateRef getUpdateRef() {
+			return ref;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			return WrappedRef.equals(this, o);
+		}
+
+		@Override
+		public int hashCode() {
+			return getOriginalHash();
+		}
+	}
+
+	public static class WrappedFloatp implements Floatp, WrappedRef {
+		private final    UpdateRef ref;
+		private volatile Floatp    fallback;
+
+		public WrappedFloatp(UpdateRef ref) {
+			this(ref, null);
+		}
+
+		public WrappedFloatp(UpdateRef ref, Floatp fallback) {
+			this.ref = ref;
+			this.fallback = fallback;
+		}
+
+		public void setFallbackIfAbsent(Floatp fallback) {
+			if (this.fallback == null && fallback != null) {
+				this.fallback = fallback;
+			}
+		}
+
+		@Override
+		public float get() {
+			return ref.runFloatp(fallback);
 		}
 
 		@Override
@@ -862,6 +1082,109 @@ public class UpdateRef {
 	}
 
 	/**
+	 * 将文本框过滤器 {@link TextFieldFilter} 包装为具备热重载容错保护的代理。
+	 * @param element  宿主 Element
+	 * @param original 原始过滤器
+	 * @return 具备容错保护的代理过滤器
+	 */
+	public static TextFieldFilter wrap(Element element, TextFieldFilter original) {
+		return wrap(element, original, null);
+	}
+
+	/**
+	 * 将文本框过滤器 {@link TextFieldFilter} 包装为具备热重载容错保护的代理，并在异常时触发指定熔断动作。
+	 * @param element  宿主 Element
+	 * @param original 原始过滤器
+	 * @param onRemove 发生 LinkageError 时的清理动作
+	 * @return 具备容错保护的代理过滤器
+	 */
+	public static TextFieldFilter wrap(Element element, TextFieldFilter original, Runnable onRemove) {
+		if (original == null) return null;
+		if (original instanceof WrappedRef wr) {
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (onRemove != null && ref != null) ref.addOnRemove(onRemove);
+			return original;
+		}
+		return new WrappedFilter(new UpdateRef(original, onRemove));
+	}
+
+	/**
+	 * 将文本框按键监听器 {@link TextFieldListener} 包装为具备热重载容错保护的代理。
+	 * @param element  宿主 Element
+	 * @param original 原始监听器
+	 * @return 具备容错保护的代理监听器
+	 */
+	public static TextFieldListener wrap(Element element, TextFieldListener original) {
+		return wrap(element, original, null);
+	}
+
+	/**
+	 * 将文本框按键监听器 {@link TextFieldListener} 包装为具备热重载容错保护的代理，并在异常时触发指定熔断动作。
+	 * @param element  宿主 Element
+	 * @param original 原始监听器
+	 * @param onRemove 发生 LinkageError 时的清理动作
+	 * @return 具备容错保护的代理监听器
+	 */
+	public static TextFieldListener wrap(Element element, TextFieldListener original, Runnable onRemove) {
+		if (original == null) return null;
+		if (original instanceof WrappedRef wr) {
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (onRemove != null && ref != null) ref.addOnRemove(onRemove);
+			return original;
+		}
+		return new WrappedTextFieldListener(new UpdateRef(original, onRemove));
+	}
+
+	/**
+	 * 将浮点提供器 {@link Floatp} 包装为具备热重载容错保护的代理。
+	 * @param original 原始 Floatp
+	 * @return 具备容错保护的代理 Floatp
+	 */
+	public static Floatp wrap(Floatp original) {
+		return wrap(original, null);
+	}
+
+	/**
+	 * 将浮点提供器 {@link Floatp} 包装为具备热重载容错保护的代理，并在异常时触发指定熔断动作。
+	 * @param original 原始 Floatp
+	 * @param onRemove 发生 LinkageError 时的清理动作
+	 * @return 具备容错保护的代理 Floatp
+	 */
+	public static Floatp wrap(Floatp original, Runnable onRemove) {
+		if (original == null) return null;
+		if (original instanceof WrappedRef wr) {
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (onRemove != null && ref != null) ref.addOnRemove(onRemove);
+			return original;
+		}
+		return new WrappedFloatp(new UpdateRef(original, onRemove));
+	}
+
+	/**
+	 * 将浮点提供器 {@link Floatp} 包装为具备热重载容错保护的代理。
+	 * @param element  宿主 Element
+	 * @param original 原始 Floatp
+	 * @return 具备容错保护的代理 Floatp
+	 */
+	public static Floatp wrap(Element element, Floatp original) {
+		return wrap(element, original, null);
+	}
+
+	/**
+	 * 将浮点提供器 {@link Floatp} 包装为具备热重载容错保护的代理，并在异常时触发指定熔断动作。
+	 * @param element  宿主 Element
+	 * @param original 原始 Floatp
+	 * @param onRemove 发生 LinkageError 时的清理动作
+	 * @return 具备容错保护的代理 Floatp
+	 */
+	public static Floatp wrap(Element element, Floatp original, Runnable onRemove) {
+		return wrap(original, onRemove);
+	}
+
+	/**
 	 * 将原始单浮点消费回调 {@link Floatc} 包装为具备热重载容错保护的代理。
 	 * @param element  宿主 Element
 	 * @param original 原始 Floatc 实例
@@ -932,10 +1255,12 @@ public class UpdateRef {
 
 	private static final Field ELEMENT_UPDATE_FIELD;
 	private static final Field BUTTON_DISABLED_PROVIDER_FIELD;
+	private static final Field TEXTFIELD_LISTENER_FIELD;
 
 	static {
 		Field updateField   = null;
 		Field disabledField = null;
+		Field tfListenerField = null;
 		try {
 			updateField = Element.class.getDeclaredField("update");
 			updateField.setAccessible(true);
@@ -948,8 +1273,15 @@ public class UpdateRef {
 		} catch (Throwable t) {
 			HotSwapAgent.error("[UpdateRef] Failed to reflect Button.disabledProvider field: " + t.getMessage(), t);
 		}
+		try {
+			tfListenerField = TextField.class.getDeclaredField("listener");
+			tfListenerField.setAccessible(true);
+		} catch (Throwable t) {
+			HotSwapAgent.error("[UpdateRef] Failed to reflect TextField.listener field: " + t.getMessage(), t);
+		}
 		ELEMENT_UPDATE_FIELD = updateField;
 		BUTTON_DISABLED_PROVIDER_FIELD = disabledField;
+		TEXTFIELD_LISTENER_FIELD = tfListenerField;
 	}
 
 	public static Runnable getElementUpdate(Element element) {
@@ -965,6 +1297,15 @@ public class UpdateRef {
 		if (button == null || BUTTON_DISABLED_PROVIDER_FIELD == null) return null;
 		try {
 			return (Boolp) BUTTON_DISABLED_PROVIDER_FIELD.get(button);
+		} catch (Throwable ignored) {
+			return null;
+		}
+	}
+
+	public static TextFieldListener getTextFieldListener(TextField textField) {
+		if (textField == null || TEXTFIELD_LISTENER_FIELD == null) return null;
+		try {
+			return (TextFieldListener) TEXTFIELD_LISTENER_FIELD.get(textField);
 		} catch (Throwable ignored) {
 			return null;
 		}
@@ -1025,6 +1366,24 @@ public class UpdateRef {
 		public void run() {
 			if (element instanceof TextField tf && tf.getValidator() == target) {
 				tf.setValidator(null);
+			}
+		}
+	}
+
+	private record RemoveFilterAction(Element element, TextFieldFilter target) implements Runnable {
+		@Override
+		public void run() {
+			if (element instanceof TextField tf && tf.getFilter() == target) {
+				tf.setFilter(null);
+			}
+		}
+	}
+
+	private record RemoveTextFieldListenerAction(Element element, TextFieldListener target) implements Runnable {
+		@Override
+		public void run() {
+			if (element instanceof TextField tf && (TEXTFIELD_LISTENER_FIELD == null || getTextFieldListener(tf) == target)) {
+				tf.setTextFieldListener(null);
 			}
 		}
 	}
@@ -1196,6 +1555,55 @@ public class UpdateRef {
 		UpdateRef        ref     = new UpdateRef(original, null);
 		WrappedValidator wrapper = new WrappedValidator(ref, text -> true);
 		ref.addOnRemove(new RemoveValidatorAction(element, wrapper));
+		return wrapper;
+	}
+
+	/**
+	 * 包装 {@link TextField#setFilter(TextFieldFilter)} 输入过滤器。
+	 * 发生 {@link LinkageError} 时执行精准局部熔断：移除过滤器。
+	 * @param element  目标输入框元素
+	 * @param original 原始输入过滤器
+	 * @return 具备局部熔断保护的代理 TextFieldFilter
+	 */
+	public static TextFieldFilter wrapFilter(Element element, TextFieldFilter original) {
+		if (original == null) return null;
+		if (original instanceof WrappedRef wr) {
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (element != null && ref != null) {
+				ref.addOnRemove(new RemoveFilterAction(element, original));
+			}
+			if (original instanceof WrappedFilter wf) {
+				wf.setFallbackIfAbsent((tf, c) -> true);
+			}
+			return original;
+		}
+		UpdateRef     ref     = new UpdateRef(original, null);
+		WrappedFilter wrapper = new WrappedFilter(ref, (tf, c) -> true);
+		ref.addOnRemove(new RemoveFilterAction(element, wrapper));
+		return wrapper;
+	}
+
+	/**
+	 * 包装 {@link TextField#setTextFieldListener(TextFieldListener)} 按键监听器。
+	 * 发生 {@link LinkageError} 时执行精准局部熔断：清空按键监听器。
+	 * @param element  目标输入框元素
+	 * @param original 原始按键监听器
+	 * @return 具备局部熔断保护的代理 TextFieldListener
+	 */
+	public static TextFieldListener wrapTextFieldListener(Element element, TextFieldListener original) {
+		if (original == null) return null;
+		if (original instanceof WrappedRef wr) {
+			UpdateRef ref = wr.getUpdateRef();
+			if (ref != null && ref.isRemoved()) return original;
+			if (element != null && ref != null) {
+				ref.addOnRemove(new RemoveTextFieldListenerAction(element, original));
+			}
+			return original;
+		}
+		UpdateRef                ref     = new UpdateRef(original, null);
+		WrappedTextFieldListener wrapper = new WrappedTextFieldListener(ref);
+		ref.addOnRemove(new RemoveTextFieldListenerAction(element, wrapper));
 		return wrapper;
 	}
 
@@ -1465,8 +1873,8 @@ public class UpdateRef {
 				DEFERRED_REMOVALS.add(r);
 				hasDeferredRemovals = true;
 			}
+			tryScheduleDeferredFlushLocked();
 		}
-		tryScheduleDeferredFlush();
 	}
 
 	/**
@@ -1474,19 +1882,23 @@ public class UpdateRef {
 	 * 通过 {@link Core#app} 的 {@link Application#post} 方法向主线程安全点投递清理任务。
 	 * 采用 {@code flushScheduled} 标志位与 double-check 快速短路：
 	 * 1) 无暂存动作或已有投递任务在等待主线程执行时 100% 零锁竞争与零开销，杜绝重复投递导致的空转 post；
-	 * 2) 若投递发生异常，仅在首次失败时记录日志，并允许后续轮询或新动作继续尝试自愈，杜绝永久挂起停摆。
+	 * 2) 在锁内原子化判定状态与投递操作，杜绝缩减锁颗粒度导致的竞态丢失与状态不一致；
+	 * 3) 若投递发生异常，仅在首次失败时记录日志，并允许后续轮询或新动作继续尝试自愈，杜绝永久挂起停摆。
 	 */
 	public static void tryScheduleDeferredFlush() {
 		if (!hasDeferredRemovals || flushScheduled || Core.app == null) return;
 		synchronized (DEFERRED_REMOVALS) {
-			if (!hasDeferredRemovals || flushScheduled || DEFERRED_REMOVALS.isEmpty()) return;
-			flushScheduled = true;
+			tryScheduleDeferredFlushLocked();
 		}
+	}
+
+	private static void tryScheduleDeferredFlushLocked() {
+		if (!hasDeferredRemovals || flushScheduled || DEFERRED_REMOVALS.isEmpty() || Core.app == null) return;
 		try {
 			Core.app.post(UpdateRef::flushDeferredRemovals);
+			flushScheduled = true;
 			flushFailLogged = false;
 		} catch (Throwable t) {
-			flushScheduled = false;
 			if (!flushFailLogged) {
 				flushFailLogged = true;
 				HotSwapAgent.error("[UpdateRef] Core.app.post failed, will retry on next trigger: " + t.getMessage(), t);
@@ -1927,6 +2339,47 @@ public class UpdateRef {
 	}
 
 	/**
+	 * 执行被代理的 {@link TextFieldFilter}。捕获 {@link LinkageError} 并转入熔断处理，熔断后执行兜底逻辑。
+	 */
+	public boolean runFilter(TextField textField, char c, TextFieldFilter fallback) {
+		var f = (TextFieldFilter) this.fn;
+		if (checkFn(f)) return fallback != null && fallback.acceptChar(textField, c);
+		try {
+			return f.acceptChar(textField, c);
+		} catch (LinkageError e) {
+			onLinkageError(f, e);
+			return fallback != null && fallback.acceptChar(textField, c);
+		}
+	}
+
+	/**
+	 * 执行被代理的 {@link TextFieldListener}。捕获 {@link LinkageError} 并转入熔断处理。
+	 */
+	public void runTextFieldListener(TextField textField, char c) {
+		var f = (TextFieldListener) this.fn;
+		if (checkFn(f)) return;
+		try {
+			f.keyTyped(textField, c);
+		} catch (LinkageError e) {
+			onLinkageError(f, e);
+		}
+	}
+
+	/**
+	 * 执行被代理的 {@link Floatp}。捕获 {@link LinkageError} 并转入熔断处理，熔断后执行兜底逻辑（默认 0f）。
+	 */
+	public float runFloatp(Floatp fallback) {
+		var f = (Floatp) this.fn;
+		if (checkFn(f)) return fallback != null ? fallback.get() : 0f;
+		try {
+			return f.get();
+		} catch (LinkageError e) {
+			onLinkageError(f, e);
+			return fallback != null ? fallback.get() : 0f;
+		}
+	}
+
+	/**
 	 * 执行被代理的 {@link EventListener}。捕获 {@link LinkageError} 并转入熔断处理，熔断后返回 false。
 	 */
 	public boolean runEventListener(SceneEvent eventType) {
@@ -1975,15 +2428,17 @@ public class UpdateRef {
 	 * 在触发瞬间断开对清理闭包的引用，并按需向主线程队列投递执行任务。
 	 */
 	private void triggerRemove() {
-		if (this.onRemove == REMOVED) return;
-		Runnable r;
-		synchronized (this) {
-			if (this.onRemove == REMOVED) return;
-			r = this.onRemove;
-			this.onRemove = REMOVED;
-		}
-		if (r != null && r != NOOP) {
-			deferRemoval(r);
+		Runnable current = this.onRemove;
+		if (current == REMOVED) return;
+		while (true) {
+			current = this.onRemove;
+			if (current == REMOVED) return;
+			if (compareAndSetOnRemove(current, REMOVED)) {
+				if (current != null && current != NOOP) {
+					deferRemoval(current);
+				}
+				return;
+			}
 		}
 	}
 

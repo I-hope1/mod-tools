@@ -104,20 +104,33 @@ public class Injector {
 				// 只拦截对应的方法
 				if (!methodName.equals(name) || !methodDesc.equals(descriptor)) { return mv; }
 
+				boolean isStatic = (access & Opcodes.ACC_STATIC) != 0;
 				return new AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
 					@Override
 					protected void onMethodEnter() {
-						visitVarInsn(ALOAD, 0); // load this
-						// visitTypeInsn(CHECKCAST, dot2slash(CL_ELEMENT));
-						visitVarInsn(ALOAD, lambdaSlot); // load lambda
-						visitMethodInsn(
-						 INVOKESTATIC,
-						 AnnotationTransformer.internalName(UpdateRef.class),
-						 wrapMethodName,
-						 "(L" + CL_ELEMENT + ";L" + lambdaType + ";)L" + lambdaType + ";",
-						 false
-						);
-						visitVarInsn(ASTORE, lambdaSlot);
+						if (isStatic) {
+							visitVarInsn(ALOAD, lambdaSlot); // load lambda
+							visitMethodInsn(
+							 INVOKESTATIC,
+							 AnnotationTransformer.internalName(UpdateRef.class),
+							 wrapMethodName,
+							 "(L" + lambdaType + ";)L" + lambdaType + ";",
+							 false
+							);
+							visitVarInsn(ASTORE, lambdaSlot);
+						} else {
+							visitVarInsn(ALOAD, 0); // load this
+							// visitTypeInsn(CHECKCAST, dot2slash(CL_ELEMENT));
+							visitVarInsn(ALOAD, lambdaSlot); // load lambda
+							visitMethodInsn(
+							 INVOKESTATIC,
+							 AnnotationTransformer.internalName(UpdateRef.class),
+							 wrapMethodName,
+							 "(L" + CL_ELEMENT + ";L" + lambdaType + ";)L" + lambdaType + ";",
+							 false
+							);
+							visitVarInsn(ASTORE, lambdaSlot);
+						}
 					}
 				};
 			}

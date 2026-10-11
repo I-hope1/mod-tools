@@ -10,6 +10,8 @@ import arc.scene.event.EventListener;
 import arc.scene.ui.*;
 import arc.scene.ui.Dialog;
 import arc.scene.ui.Label;
+import arc.scene.ui.TextField.TextFieldFilter;
+import arc.scene.ui.TextField.TextFieldListener;
 import arc.scene.ui.TextField.TextFieldValidator;
 import arc.scene.ui.layout.*;
 import nipx.ref.UpdateRef;
@@ -75,6 +77,18 @@ public class LambdaRef {
 		Injector.redefineTask(Button.class, "setDisabled", "(" + boolpNative + ")V", boolpType, 1, "wrapButtonDisabled");
 		Injector.redefineTask(Label.class, "setText", provNative);
 		Injector.redefineTask(TextField.class, "setValidator", "(" + getDescriptor(TextFieldValidator.class) + ")V", internalName(TextFieldValidator.class), 1, "wrapValidator");
+		Injector.redefineTask(TextField.class, "setFilter", "(" + getDescriptor(TextFieldFilter.class) + ")V", internalName(TextFieldFilter.class), 1, "wrapFilter");
+		Injector.redefineTask(TextField.class, "setTextFieldListener", "(" + getDescriptor(TextFieldListener.class) + ")V", internalName(TextFieldListener.class), 1, "wrapTextFieldListener");
+
+		Injector.redefineTask(Collapser.class, "setCollapsed", "(" + boolpNative + ")L" + internalName(Collapser.class) + ";", boolpType, 1, "wrap");
+		Injector.redefineTask(Collapser.class, "setCollapsed", "(Z" + boolpNative + ")L" + internalName(Collapser.class) + ";", boolpType, 2, "wrap");
+
+		Injector.redefineTask(mindustry.ui.Bar.class, "set", "(" + provNative + "Larc/func/Floatp;Larc/graphics/Color;)V", internalName(Floatp.class), 2, "wrap");
+		Injector.redefineTask(mindustry.ui.Bar.class, "<init>", "(Ljava/lang/String;Larc/graphics/Color;Larc/func/Floatp;)V", internalName(Floatp.class), 3, "wrap");
+		Injector.redefineTask(mindustry.ui.Bar.class, "<init>", "(" + provNative + provNative + "Larc/func/Floatp;)V", internalName(Floatp.class), 3, "wrap");
+
+		Injector.redefineTask(arc.scene.actions.Actions.class, "run", "(" + runnableNative + ")Larc/scene/actions/RunnableAction;", runnableType, 1, "wrap");
+		Injector.redefineTask(arc.scene.actions.RunnableAction.class, "setRunnable", "(" + runnableNative + ")V", runnableType, 1, "wrap");
 
 		Injector.redefineTask(Dialog.class, "shown", "(" + runnableNative + ")V", runnableType, 1, "wrapSilent");
 		Injector.redefineTask(Dialog.class, "hidden", "(" + runnableNative + ")V", runnableType, 1, "wrapSilent");
@@ -113,6 +127,7 @@ public class LambdaRef {
 			var bytes = fetchCurrentBytecode(Events.class);
 			bytes = injectEvents(bytes);
 			Injector.redefineOneClass(Events.class, bytes);
+			bytecodeCache.put(Events.class.getName(), bytes);
 			HotSwapAgent.info("[LambdaRef] Successfully hooked arc.Events (on/run/remove)");
 		} catch (Throwable t) {
 			HotSwapAgent.error("[LambdaRef] Failed to hook arc.Events: " + t.getMessage(), t);

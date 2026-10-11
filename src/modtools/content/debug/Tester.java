@@ -46,7 +46,6 @@ import modtools.ui.*;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.buttons.FoldedImageButton;
 import modtools.ui.comp.completion.CompletionPopup;
-import nipx.profiler.LookupKey;
 import modtools.ui.comp.input.*;
 import modtools.ui.comp.input.area.TextAreaTab;
 import modtools.ui.comp.input.area.TextAreaTab.MyTextArea;
@@ -1008,7 +1007,7 @@ public class Tester extends Content {
 
 		private final Seq<String> complements = new Seq<>();
 		private final Seq<Object> keys        = new Seq<>();
-		private final LookupKey   lookupKey   = new LookupKey();
+		private final StringBuilder   lookupKey   = new StringBuilder();
 
 		private void complement0(String prefix, int originalCursor, boolean afterDot, int actualPrefixStart) {
 			if (completionPopup == null || syntax == null) return;
@@ -1080,8 +1079,7 @@ public class Tester extends Content {
 			completionPopup.show(complements, prefix, selectedSuggestion -> {
 				String text = area.getText();
 
-				// 参考 LookupKey 零分配切片拼接，避免多余的 substring 与中间临时 String 垃圾
-				lookupKey.reset();
+				lookupKey.setLength(0);
 				lookupKey.append(text, 0, actualPrefixStart);
 				lookupKey.append(selectedSuggestion);
 				lookupKey.append(text, originalCursor, text.length());

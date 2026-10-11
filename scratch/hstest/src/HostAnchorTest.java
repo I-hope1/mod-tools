@@ -926,4 +926,214 @@ public class HostAnchorTest {
 		int rc = p.waitFor();
 		if (rc != 0) throw new RuntimeException("Command failed with exit " + rc + ": " + Arrays.toString(cmd) + "\nOutput:\n" + out);
 	}
+
+	/**
+	 * 单层完全同体 Lambda 在同宿主方法内被不同消费者调用，删除首条语句场景。
+	 *
+	 * <p>本测试专杀设计级变异：<b>只保留 hostKey 桶键，但去掉 canPair 的消费者否决守卫</b>。
+	 * 在嵌套场景下，叶子分桶与 calleesPairTo 会掩盖该守卫的作用；但在单层（叶子即顶层）场景下，
+	 * 两者均处于宿主方法 "M:build()V" 的同一个 LCS 序列中。若没有 canPair 的消费者否决，
+	 * L2' 将错配给首个同体候选 oldL1。本测试断言其必须依靠消费者精确对齐到 oldL2。</p>
+	 */
+	@Test
+	void singleLevelIdenticalLambdasWithDifferentConsumersAndDeletedStatement(@TempDir Path tmp) throws Exception {
+		String javac = javac21();
+		Path src1Dir = Files.createDirectories(tmp.resolve("src1"));
+		Path src2Dir = Files.createDirectories(tmp.resolve("src2"));
+		Path outV1 = Files.createDirectories(tmp.resolve("v1"));
+		Path outV2 = Files.createDirectories(tmp.resolve("v2"));
+
+		String v1Src = "package test;\n"
+			+ "public class SingleLevelCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void b(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void build() {\n"
+			+ "        a(() -> leaf());\n" // L1 (consumer: CALL:...a)
+			+ "        b(() -> leaf());\n" // L2 (consumer: CALL:...b)
+			+ "    }\n"
+			+ "}\n";
+
+		String v2Src = "package test;\n"
+			+ "public class SingleLevelCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void b(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void build() {\n"
+			+ "        b(() -> leaf());\n" // L2' (consumer: CALL:...b)
+			+ "    }\n"
+			+ "}\n";
+
+		Path src1 = src1Dir.resolve("SingleLevelCase.java");
+		Path src2 = src2Dir.resolve("SingleLevelCase.java");
+		Files.writeString(src1, v1Src, StandardCharsets.UTF_8);
+		Files.writeString(src2, v2Src, StandardCharsets.UTF_8);
+
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.toString(), src1.toString());
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.toString(), src2.toString());
+
+		byte[] v1 = Files.readAllBytes(outV1.resolve("test/SingleLevelCase.class"));
+		byte[] v2 = Files.readAllBytes(outV2.resolve("test/SingleLevelCase.class"));
+
+		ClassNode cnV1 = readClass(v1);
+		List<String> oldTargets = findIndyTargets(cnV1, "build");
+		assertEquals(2, oldTargets.size());
+		String oldL1 = oldTargets.get(0);
+		String oldL2 = oldTargets.get(1);
+
+		byte[] aligned = LambdaAligner.align(v1, v2);
+		assertNotNull(aligned);
+
+		ClassNode cnAligned = readClass(aligned);
+		List<String> alignedTargets = findIndyTargets(cnAligned, "build");
+		assertEquals(1, alignedTargets.size());
+		String activeL = alignedTargets.get(0);
+
+		// 核心断言：单层同体 Lambda 必须经由 canPair 消费者守卫精准匹配到 oldL2，绝不能因首选贪婪错配给 oldL1
+		assertEquals(oldL2, activeL, "留存的语句 b(...) 在单层场景下必须经由消费者守卫准确对齐到 oldL2");
+		MethodNode ghostL1 = findMethod(cnAligned, oldL1);
+		assertNotNull(ghostL1, "已删除的语句 a(...) oldL1 必须复活为幽灵桩");
+		assertTrue(callsMethod(ghostL1, "onOrphanInvoked"), "oldL1 必须是孤儿桩");
+	}
+
+	/**
+	 * 择优决策候选分层决胜断言。
+	 *
+	 * <p>本测试专杀设计级变异：<b>决胜键混淆或回退回 methodIndex 物理位置序</b>。
+	 * 严格验证三条不变量：
+	 * 1. 可达候选（callOrder >= 0）无条件胜过不可达候选（callOrder = -1），即使不可达候选的 methodIndex 极小；
+	 * 2. 均可达时：小 callOrder 胜出，不受 methodIndex 大小干扰；
+	 * 3. 均不可达时：小 methodIndex 胜出。</p>
+	 */
+	@Test
+	void unreachableVersusReachableCandidateTieBreaking() {
+		// 1. 可达优先于不可达：候选可达（callOrder=2, methodIndex=10）对比当前最优不可达（callOrder=-1, methodIndex=0）
+		assertTrue(LambdaAligner.testIsBetterCandidate(2, 10, -1, 0),
+			"可达候选必须无条件优于不可达候选，即使不可达候选的 methodIndex 更小");
+		assertFalse(LambdaAligner.testIsBetterCandidate(-1, 0, 2, 10),
+			"不可达候选绝不能夺取可达候选的优先权");
+
+		// 2. 均可达：按 callOrder 决胜，忽略 methodIndex
+		assertTrue(LambdaAligner.testIsBetterCandidate(1, 99, 2, 0),
+			"两者均可达时，小 callOrder 胜出");
+		assertFalse(LambdaAligner.testIsBetterCandidate(2, 0, 1, 99),
+			"两者均可达时，大 callOrder 绝不能因小 methodIndex 胜出");
+
+		// 3. 均不可达：按 methodIndex 决胜
+		assertTrue(LambdaAligner.testIsBetterCandidate(-1, 1, -1, 5),
+			"两者均不可达时，小 methodIndex 胜出");
+		assertFalse(LambdaAligner.testIsBetterCandidate(-1, 5, -1, 1),
+			"两者均不可达时，大 methodIndex 不能胜出");
+	}
+
+	/**
+	 * Characterization test: 记录并守住当前消费者发生变更且前序语句被删除时的已知退化行为。
+	 *
+	 * <p>退化机制：当重构将语句 2 的消费者方法名改变（如 b() 改为 b2()），
+	 * 同时删除了前序语句 1 时，LCS 锚点对齐因消费者不一致而主动放弃配对（anchorPairs == 0）；
+	 * 随后对齐退化至 Step 1a 的同名贪婪阶段，留存项因编译序号整体位移（新版唯一 lambda 为 $0）
+	 * 而与旧版 $0（即已删除的语句 1）同名，从而被 Step 1a 配给旧语句 1。</p>
+	 */
+	@Test
+	void consumerEditedAndStatementDeletedDegradation(@TempDir Path tmp) throws Exception {
+		String javac = javac21();
+		Path src1Dir = Files.createDirectories(tmp.resolve("src1"));
+		Path src2Dir = Files.createDirectories(tmp.resolve("src2"));
+		Path outV1 = Files.createDirectories(tmp.resolve("v1"));
+		Path outV2 = Files.createDirectories(tmp.resolve("v2"));
+
+		String v1Src = "package test;\n"
+			+ "public class ConsumerEditCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void b(Runnable r) { r.run(); }\n"
+			+ "    static void b2(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void build() {\n"
+			+ "        a(() -> leaf());\n" // L1 ($0)
+			+ "        b(() -> leaf());\n" // L2 ($1)
+			+ "    }\n"
+			+ "}\n";
+
+		// V2：删除语句 1，且重构语句 2 的消费者为 b2(...)
+		String v2Src = "package test;\n"
+			+ "public class ConsumerEditCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void b(Runnable r) { r.run(); }\n"
+			+ "    static void b2(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void build() {\n"
+			+ "        b2(() -> leaf());\n" // L2' (新 $0, 消费者异化为 b2)
+			+ "    }\n"
+			+ "}\n";
+
+		Path src1 = src1Dir.resolve("ConsumerEditCase.java");
+		Path src2 = src2Dir.resolve("ConsumerEditCase.java");
+		Files.writeString(src1, v1Src, StandardCharsets.UTF_8);
+		Files.writeString(src2, v2Src, StandardCharsets.UTF_8);
+
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.toString(), src1.toString());
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.toString(), src2.toString());
+
+		byte[] v1 = Files.readAllBytes(outV1.resolve("test/ConsumerEditCase.class"));
+		byte[] v2 = Files.readAllBytes(outV2.resolve("test/ConsumerEditCase.class"));
+
+		ClassNode cnV1 = readClass(v1);
+		List<String> oldTargets = findIndyTargets(cnV1, "build");
+		assertEquals(2, oldTargets.size());
+		String oldL1 = oldTargets.get(0);
+		String oldL2 = oldTargets.get(1);
+
+		byte[] aligned = LambdaAligner.align(v1, v2);
+		assertNotNull(aligned);
+		assertNotNull(LambdaAligner.LAST_STATS);
+
+		// 记录退化指标：LCS 锚点因消费者异化放弃配对，退化走 Step 1a 同名贪婪
+		assertEquals(0, LambdaAligner.LAST_STATS.anchorPairs, "LCS 锚点必须放弃配对");
+		assertEquals(1, LambdaAligner.LAST_STATS.step1Pairs, "退化至 Step 1a 同名命中");
+
+		ClassNode cnAligned = readClass(aligned);
+		String activeL = findIndyTargets(cnAligned, "build").get(0);
+		// 当前退化特征：由于新版 L2' 的名字为 $0，与 oldL1 同名同指纹，故被 Step 1a 贪婪配对到 oldL1
+		assertEquals(oldL1, activeL, "Characterization: 退化路径下配对到同名旧候选 oldL1");
+	}
+
+	/**
+	 * 局部变量传递中转（ASTORE / ALOAD 链）的 Fail-Closed 安全性断言。
+	 *
+	 * <p>验证 Lambda 赋值给局部变量再作为参数传递时，数据流反向追踪严格返回空特征（Fail-Closed），
+	 * 绝不错误将 ALOAD 等中间指令误认为消费者；全流程对齐正常成功，不抛出任何异常。</p>
+	 */
+	@Test
+	void intermediateVariableConsumerIsNullAndSafe(@TempDir Path tmp) throws Exception {
+		String javac = javac21();
+		Path srcDir = Files.createDirectories(tmp.resolve("src"));
+		Path outV1 = Files.createDirectories(tmp.resolve("v1"));
+		Path outV2 = Files.createDirectories(tmp.resolve("v2"));
+
+		String src = "package test;\n"
+			+ "public class LocalVarCase {\n"
+			+ "    static void a(Runnable r) { r.run(); }\n"
+			+ "    static void leaf() { }\n"
+			+ "    public void run() {\n"
+			+ "        Runnable r = () -> leaf();\n"
+			+ "        a(r);\n"
+			+ "    }\n"
+			+ "}\n";
+
+		Path srcFile = srcDir.resolve("LocalVarCase.java");
+		Files.writeString(srcFile, src, StandardCharsets.UTF_8);
+
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV1.toString(), srcFile.toString());
+		runCmd(javac, "-nowarn", "-encoding", "UTF-8", "-d", outV2.toString(), srcFile.toString());
+
+		byte[] v1 = Files.readAllBytes(outV1.resolve("test/LocalVarCase.class"));
+		byte[] v2 = Files.readAllBytes(outV2.resolve("test/LocalVarCase.class"));
+
+		byte[] aligned = LambdaAligner.align(v1, v2);
+		assertNotNull(aligned);
+
+		ClassNode cnAligned = readClass(aligned);
+		List<String> targets = findIndyTargets(cnAligned, "run");
+		assertEquals(1, targets.size());
+	}
 }

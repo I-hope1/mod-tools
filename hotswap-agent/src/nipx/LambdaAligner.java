@@ -1359,6 +1359,17 @@ public class LambdaAligner {
 		return candidate.methodIndex < currentBest.methodIndex;
 	}
 
+	/** 测试辅助：供回归测试直接验证择优决策分层不变性。 */
+	public static boolean testIsBetterCandidate(int candCallOrder, int candMethodIndex, int bestCallOrder, int bestMethodIndex) {
+		SyntheticInfo c = new SyntheticInfo("", "", 0, 0, "", true);
+		c.callOrder = candCallOrder;
+		c.methodIndex = candMethodIndex;
+		SyntheticInfo b = new SyntheticInfo("", "", 0, 0, "", true);
+		b.callOrder = bestCallOrder;
+		b.methodIndex = bestMethodIndex;
+		return isBetterCandidate(c, b);
+	}
+
 	/** 在 {@code group} 中查找同名且指纹相同的旧方法候选。 */
 	private static SyntheticInfo findSameNameFingerprintMatch(MatchContext ctx, List<SyntheticInfo> group,
 	                                                          SyntheticInfo ni) {

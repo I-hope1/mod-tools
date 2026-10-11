@@ -9,6 +9,7 @@ import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import modtools.ui.comp.Window;
 import modtools.ui.gen.HopeIcons;
+import modtools.unsupported.HotSwapManager;
 import nipx.HotSwapAgent;
 import nipx.HotSwapAgent.Logger;
 import nipx.profiler.ProfilerData;
@@ -30,7 +31,7 @@ public class HotSwapDialog extends Window {
 	private final ScrollPane    logPane;
 
 	// 原始 Logger，用于窗口关闭时恢复
-	private final Logger originalLogger;
+	private final Object originalLogger;
 
 	private HotSwapDialog() {
 		super("HotSwap Control", 400, 300, true);
@@ -49,10 +50,10 @@ public class HotSwapDialog extends Window {
 
 			// 手动触发检测 (对应 processChanges)
 			IntUI.addTooltipListener(t.button(Icon.refresh, Styles.cleari, () -> {
-				log("[lightgray]Triggering manual hotswap...[]");
-				// 在后台执行，防止卡顿 UI
-				Threads.daemon(HotSwapAgent::triggerHotswap);
-			}).get(),
+				 log("[lightgray]Triggering manual hotswap...[]");
+				 // 在后台执行，防止卡顿 UI
+				 Threads.daemon(HotSwapAgent::triggerHotswap);
+			 }).get(),
 			 () -> "Check for changes & Hotswap");
 
 			// 强制全量重扫 (对应 transformLoaded)
@@ -112,7 +113,7 @@ public class HotSwapDialog extends Window {
 		}).growX().pad(2);
 
 		// 3. 窗口关闭时的资源回收 (否定之否定：恢复原状)
-		this.hidden(() -> HotSwapAgent.logger = originalLogger);
+		this.hidden(() -> HotSwapAgent.logger = (Logger) originalLogger);
 	}
 
 	/**
@@ -123,31 +124,31 @@ public class HotSwapDialog extends Window {
 		HotSwapAgent.logger = new Logger() {
 			@Override
 			public void log(String msg) {
-				originalLogger.log(msg); // 转发给原控制台
+				((Logger) originalLogger).log(msg); // 转发给原控制台
 				if (HotSwapAgent.DEBUG) appendUI("[lightgray]" + msg + "[]");
 			}
 
 			@Override
 			public void info(String msg) {
-				originalLogger.info(msg);
+				((Logger) originalLogger).info(msg);
 				appendUI("[white]" + msg + "[]");
 			}
 
 			@Override
 			public void warn(String msg) {
-				originalLogger.warn(msg);
+				((Logger) originalLogger).warn(msg);
 				appendUI("[yellow]" + msg + "[]");
 			}
 
 			@Override
 			public void error(String msg) {
-				originalLogger.error(msg);
+				((Logger) originalLogger).error(msg);
 				appendUI("[red]" + msg + "[]");
 			}
 
 			@Override
 			public void error(String msg, Throwable t) {
-				originalLogger.error(msg, t);
+				((Logger) originalLogger).error(msg, t);
 				appendUI("[red]" + msg + "\n" + Strings.getStackTrace(t) + "[]");
 			}
 		};
@@ -173,6 +174,11 @@ public class HotSwapDialog extends Window {
 
 	// 简单的辅助日志方法
 	private void log(String msg) {
-		HotSwapAgent.info(msg);
+		if (HotSwapManager.loaded()) {
+			appendUI("[lightgray]" + msg + "[]");
+			Log.info(msg);
+		} else {
+			HotSwapAgent.info(msg);
+		}
 	}
 }

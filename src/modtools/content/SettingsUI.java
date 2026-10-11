@@ -30,6 +30,7 @@ import modtools.ui.comp.*;
 import modtools.ui.comp.Window.DisWindow;
 import modtools.ui.comp.utils.ClearValueLabel;
 import modtools.ui.gen.HopeIcons;
+import modtools.unsupported.HotSwapManager;
 import modtools.utils.*;
 import modtools.utils.JSFunc.JColor;
 import modtools.utils.MySettings.Data;
@@ -141,7 +142,7 @@ public class SettingsUI extends Content {
 		addSectionInternal("Hook", Icon.refreshSmall, t -> {
 			t.button("HotSwapLog", () -> {
 				if (R_Hook.hot_swap) HotSwapDialog.staticShow();
-			}).growX().height(45).disabled(_ -> !R_Hook.hot_swap).row();
+			}).growX().height(45).disabled(_ -> !HotSwapManager.loaded()).row();
 
 			SettingsBuilder.build(t);
 			// watch的路径数组配置

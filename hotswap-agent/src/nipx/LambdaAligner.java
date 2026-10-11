@@ -56,6 +56,17 @@ import java.util.function.Supplier;
  * 若开发者在 V2 删除了某个 Lambda，V3 又把它加回来，V3 的新方法不会也无法认领回旧幽灵方法的名字，而是会分配全新的 fresh name。
  * 这保证了历史陈旧空壳不会与新 Lambda 发生多对多误配，但意味着“撤销删除”无法自动恢复历史旧 CallSite 的活跃调用（老 CallSite 继续命中熔断桩）。</p>
  *
+ * <p><b>已知限制：转发桩仍是 ghost（不参与复活认领）。</b>
+ * 当 Lambda 被改写为方法引用时（如 {@code () -> this.xxx()} 改为 {@code this::xxx}），
+ * 对齐器会生成带 {@code willForward = true} 的透明转发桩，旧 CallSite 可继续无缝执行目标方法。
+ * 但此转发桩在后续轮次中<b>仍然是 ghost</b>，不参与任何复活认领或新 Lambda 匹配（保持单向退休）。</p>
+ *
+ * <p><b>已知限制：方法引用透明转发只覆盖纯委托与标准适配。</b>
+ * 仅当旧 Lambda 为纯委托或仅包含标准适配（由 LambdaMetafactory 自动完成的装箱、拆箱、基本类型加宽、丢弃返回值、CHECKCAST 转换），
+ * 且新类中对应方法引用的 Handle 出现次数相较旧类产生净增（或上一轮已是转发桩且新类中仍存在该引用）时才触发转发。
+ * 目标方法查找与 Handle 门禁不绑定特定调用指令或 Handle tag（兼容 JDK 8 时代的 {@code INVOKESPECIAL}/{@code REF_invokeSpecial} 与 JDK 11+ JEP 181 时代的 {@code INVOKEVIRTUAL}/{@code REF_invokeVirtual} 私有调用）。
+ * 其他带有额外业务逻辑的转换或纯删除的回调仍然严格降级为空壳默认值（0 / null / false）。</p>
+ *
  * <p><b>已知限制：改变嵌套拓扑的编辑会丢失身份。</b>
  * {@link #sameNestingLevel} 在 Step 1/2 全程是<b>硬否决</b>：形状不等的候选永远不配对。
  * 因此<b>任何改变嵌套拓扑的编辑</b>——在现有 lambda 体内新增或删除一层内层 lambda——
@@ -303,6 +314,23 @@ public class LambdaAligner {
 	 */
 	public static void clearLoggedOrphans() {
 		LOGGED_ORPHANS.clear();
+		LOGGED_FORWARDS.clear();
+	}
+
+	public static int getLoggedOrphanCount() {
+		return LOGGED_ORPHANS.size();
+	}
+
+	public static int getLoggedForwardCount() {
+		return LOGGED_FORWARDS.size();
+	}
+
+	public static boolean isOrphanLogged(String location) {
+		return LOGGED_ORPHANS.contains(location);
+	}
+
+	public static boolean isForwardLogged(String location) {
+		return LOGGED_FORWARDS.contains(location);
 	}
 
 	//region 匹配上下文
@@ -588,6 +616,8 @@ public class LambdaAligner {
 
 			// 从 alignedCn 直接收集 presentKeys，避免 resurrectOrphanedLambdas 再读一遍
 			Set<String> presentKeys = collectMethodKeys(alignedCn);
+			Map<String, Integer> newMethodRefs = countHandleTargets(alignedCn);
+			Map<String, Integer> oldMethodRefs = countHandleTargets(oldCn);
 
 			// 后置廉价校验：确保本地 indy 句柄引用的目标方法实际存在
 			validateIndyTargets(alignedCn, presentKeys);
@@ -598,7 +628,7 @@ public class LambdaAligner {
 			LAST_OLD_ANON_HASHES = new HashMap<>(ctx.oldAnonHashes);
 			LAST_NEW_ANON_HASHES = new HashMap<>(ctx.newAnonHashes);
 			// 传入 oldCn（已解析过一次）—— 避免 resurrectOrphanedLambdas 二次读 oldBytes
-			return resurrectOrphanedLambdas(oldCn, alignedBytes, presentKeys, ctx);
+			return resurrectOrphanedLambdas(oldCn, alignedBytes, presentKeys, oldMethodRefs, newMethodRefs, ctx);
 		} catch (Exception | LinkageError | StackOverflowError e) {
 			LAST_STATS = null;
 			LAST_OLD_ANON_HASHES = null;
@@ -2644,8 +2674,155 @@ public class LambdaAligner {
 	 * @param ctx         当前匹配上下文
 	 * @return 注入幽灵方法后的最终字节码；若无孤儿则原样返回 {@code newBytes}
 	 */
+	/**
+	 * 统计类中所有通过 {@code invokedynamic} 引导参数直接引用的方法句柄目标出现频次。
+	 * 键格式形如：{@code "com/example/Foo.save()V"}（不含 Handle tag，兼容跨 JDK 版本与私有调用模式差异）。
+	 */
+	private static Map<String, Integer> countHandleTargets(ClassNode cn) {
+		Map<String, Integer> counts = new HashMap<>();
+		if (cn == null || cn.methods == null) return counts;
+		for (MethodNode mn : cn.methods) {
+			if (mn.instructions == null) continue;
+			for (AbstractInsnNode i : mn.instructions) {
+				if (i instanceof InvokeDynamicInsnNode indy && indy.bsmArgs != null) {
+					for (Object a : indy.bsmArgs) {
+						if (a instanceof Handle h) {
+							String key = h.getOwner() + "." + h.getName() + h.getDesc();
+							counts.put(key, counts.getOrDefault(key, 0) + 1);
+						}
+					}
+				}
+			}
+		}
+		return counts;
+	}
+
+	/** 纯委托调用信息：包含被调用的目标方法节点、转发所需的主体指令序列以及上一轮是否已是转发桩。 */
+	private record Delegate(MethodInsnNode target, List<AbstractInsnNode> body, boolean wasForwarding) {}
+
+	/** 包装类内部名集合（用于装箱/拆箱适配识别）。兼容 Java 8 编译。 */
+	private static final Set<String> WRAPPERS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+		"java/lang/Integer", "java/lang/Long", "java/lang/Short", "java/lang/Byte",
+		"java/lang/Character", "java/lang/Boolean", "java/lang/Float", "java/lang/Double")));
+
+	private static boolean isPrimitive(Type t) {
+		return t.getSort() >= Type.BOOLEAN && t.getSort() <= Type.DOUBLE;
+	}
+
+	private static boolean isBoxing(MethodInsnNode m) {
+		if (m.getOpcode() != Opcodes.INVOKESTATIC || !m.name.equals("valueOf")
+		    || !WRAPPERS.contains(m.owner)) return false;
+		Type[] args = Type.getArgumentTypes(m.desc);
+		Type ret = Type.getReturnType(m.desc);
+		return args.length == 1 && isPrimitive(args[0])
+		       && ret.getSort() == Type.OBJECT && m.owner.equals(ret.getInternalName());
+	}
+
+	private static boolean isUnboxing(MethodInsnNode m) {
+		return m.getOpcode() == Opcodes.INVOKEVIRTUAL && WRAPPERS.contains(m.owner)
+		       && m.name.endsWith("Value") && m.desc.startsWith("()")
+		       && isPrimitive(Type.getReturnType(m.desc));
+	}
+
+	private static boolean isWidening(int op) {
+		return op == Opcodes.I2L || op == Opcodes.I2F || op == Opcodes.I2D
+		       || op == Opcodes.L2F || op == Opcodes.L2D || op == Opcodes.F2D;
+	}
+
+	/**
+	 * 判定方法节点是否为严格的“纯委托或标准适配委托”实现。
+	 *
+	 * <p>支持由 LambdaMetafactory 自动完成的无分支标准适配：装箱、拆箱、基本类型加宽、丢弃返回值 (POP/POP2)、CHECKCAST。</p>
+	 * <p>若上一轮已为此方法注入过幽灵桩（前缀为 {@code LDC loc; ICONST_0/1; INVOKESTATIC onOrphanInvoked}），
+	 * 会自动跳过该固定前缀，并仅提取后续的委托主体指令，避免多轮热更时前缀重复调用或退化为空壳。</p>
+	 */
+	private static Delegate getPureDelegate(MethodNode mn) {
+		if (mn.instructions == null || mn.instructions.size() == 0) return null;
+		List<AbstractInsnNode> real = new ArrayList<>();
+		for (AbstractInsnNode i : mn.instructions) {
+			if (i.getOpcode() >= 0) real.add(i);
+		}
+
+		// 跳过上一轮转发桩的固定前缀：LDC loc; ICONST_0/1; INVOKESTATIC onOrphanInvoked
+		int start = 0;
+		boolean wasForwarding = false;
+		if (real.size() >= 3
+		    && real.get(0) instanceof LdcInsnNode
+		    && (real.get(1).getOpcode() == Opcodes.ICONST_0 || real.get(1).getOpcode() == Opcodes.ICONST_1)
+		    && real.get(2) instanceof MethodInsnNode p
+		    && p.owner.equals(Type.getInternalName(LambdaAligner.class))
+		    && p.name.equals("onOrphanInvoked")) {
+			start = 3;
+			wasForwarding = (real.get(1).getOpcode() == Opcodes.ICONST_1);
+		} else if (real.size() >= 2
+		           && real.get(0) instanceof LdcInsnNode
+		           && real.get(1) instanceof MethodInsnNode p
+		           && p.owner.equals(Type.getInternalName(LambdaAligner.class))
+		           && p.name.equals("onOrphanInvoked")) {
+			start = 2;
+		}
+		List<AbstractInsnNode> body = real.subList(start, real.size());
+
+		boolean voidRet = Type.getReturnType(mn.desc).getSort() == Type.VOID;
+		int expectSlot = 0;
+		int endSlot = Type.getArgumentsAndReturnSizes(mn.desc) >> 2;   // 参数槽总数（含 this 的 +1）
+		if ((mn.access & Opcodes.ACC_STATIC) != 0) endSlot -= 1;
+
+		MethodInsnNode core = null, onlyInvoke = null;
+		int invokes = 0;
+
+		for (AbstractInsnNode insn : body) {
+			int op = insn.getOpcode();
+			if (insn instanceof VarInsnNode v && op >= Opcodes.ILOAD && op <= Opcodes.ALOAD) {
+				if (v.var != expectSlot) return null;                    // 必须按槽位顺序加载
+				expectSlot += (op == Opcodes.LLOAD || op == Opcodes.DLOAD) ? 2 : 1;
+			} else if (op >= Opcodes.IRETURN && op <= Opcodes.RETURN) {
+				// ok
+			} else if (isWidening(op) || (insn instanceof TypeInsnNode && op == Opcodes.CHECKCAST)) {
+				// ok
+			} else if ((op == Opcodes.POP || op == Opcodes.POP2) && voidRet) {
+				// ok：Runnable r = this::a 丢弃返回值
+			} else if (insn instanceof MethodInsnNode m) {
+				invokes++;
+				onlyInvoke = m;
+				if (!isBoxing(m) && !isUnboxing(m)) {
+					if (core != null) return null;
+					core = m;
+				}
+			} else {
+				return null;
+			}
+		}
+		if (core == null && invokes == 1) core = onlyInvoke;             // 如 IntFunction<Integer> ← Integer::valueOf
+		if (core == null || expectSlot != endSlot) return null;          // 每个形参恰好加载一次
+		return new Delegate(core, body, wasForwarding);
+	}
+
+	/**
+	 * 将被删除的 lambda 以“空方法体或透明转发桩”的形式复活注入到新字节码中，
+	 * 防止被缓存的 {@code CallSite} 抛出 {@link NoSuchMethodError}。
+	 *
+	 * <p>复用调用方已经解析好的 {@code oldCn} 提取孤儿方法的签名头，
+	 * 避免再次读取 {@code oldBytes}。</p>
+	 *
+	 * <p>{@code oldCn} 是用 {@code SKIP_DEBUG | SKIP_FRAMES} 读入的，
+	 * 但注入空壳只用到 {@code access} / {@code name} / {@code desc} /
+	 * {@code signature} / {@code exceptions} 这些方法头字段——它们不受
+	 * {@code SKIP_*} 影响。方法体（Code 属性）由 {@link #injectDummyBody}
+	 * 重新生成，不会拷贝 {@code oldCn} 中的原始指令。</p>
+	 * @param oldCn         已解析的旧类节点（由 {@code align} 中的 {@code scan} 提供）
+	 * @param newBytes      经过重命名处理后的新版本字节码
+	 * @param presentKeys   新版本里实际存在的所有方法键（{@code name + desc}）
+	 * @param oldMethodRefs 旧版本中所有 indy 句柄引用的目标方法出现频次
+	 * @param newMethodRefs 新版本中所有 indy 句柄引用的目标方法出现频次
+	 * @param ctx           当前匹配上下文
+	 * @return 注入幽灵方法后的最终字节码；若无孤儿则原样返回 {@code newBytes}
+	 */
 	private static byte[] resurrectOrphanedLambdas(ClassNode oldCn, byte[] newBytes,
-	                                               Set<String> presentKeys, MatchContext ctx) {
+	                                               Set<String> presentKeys,
+	                                               Map<String, Integer> oldMethodRefs,
+	                                               Map<String, Integer> newMethodRefs,
+	                                               MatchContext ctx) {
 		// 1. 旧类里的合成方法键集合，差集就是孤儿
 		Set<String> orphanedKeys = new HashSet<>();
 		var         oldGroups    = ctx.oldGroups;
@@ -2661,19 +2838,6 @@ public class LambdaAligner {
 		if (orphanedKeys.isEmpty()) return newBytes;
 
 		// 2. 从已解析的 oldCn 中取遗弃方法的签名头（不再二次读 oldBytes）
-		//
-		// 判据必须是 {@code name + desc}，<b>不能只看名字</b>。同名不同描述符是幽灵的
-		// 正常工作形态：捕获列表变化时（旧 {@code lambda$build$0(I)V} → 新
-		// {@code lambda$build$0()V}）新方法保住了名字但描述符变了，旧 CallSite 要的正是
-		// 旧描述符，全局唯一能兜住它的就是这个幽灵。JVM 按"名字+描述符"解析，两者并存完全合法。
-		// 若按名字一刀切地不注入，这类场景会直接 NoSuchMethodError —— 在业务代码路径下就是崩溃，
-		// 违背"不崩溃"的设计目标。
-		//
-		// 真正需要跳过的只有一种：{@code name + desc} 与某个活方法完全相同。
-		// 但那已由 orphanedKeys 的定义排除 —— 它取自 {@code !presentKeys.contains(key)}，
-		// 而 presentKeys 就是本类的全部方法键。**因此这里不需要再查一次"是否与活方法重名"**：
-		// 曾有一份 liveKeys 分支做这件事，它解析的是与 presentKeys 同一份字节码、
-		// 结果恒为同一集合，那个判断永远为 false，还白多解析一遍（与"避免二次读取"相悖）。
 		List<MethodNode> toInject = new ArrayList<>();
 		for (MethodNode mn : oldCn.methods) {
 			String key = mn.name + mn.desc;
@@ -2684,7 +2848,6 @@ public class LambdaAligner {
 
 		// 可观测性：幽灵化是"静默"发生在对齐期的。把这行与
 		// warnPositionalMismatch 放在一起看，就能认出"删除 + 改体同时发生"这一形态
-		// （两者同时出现时，本类既有被幽灵化的名字、又有位置错配）。
 		StringBuilder ghosted = new StringBuilder();
 		for (MethodNode mn : toInject) {
 			if (ghosted.length() > 0) ghosted.append(", ");
@@ -2693,7 +2856,7 @@ public class LambdaAligner {
 		HotSwapAgent.info("[LambdaAligner] " + oldCn.name + " 幽灵化 " + toInject.size()
 		                  + " 个方法（老 CallSite 将走熔断/降级）：" + ghosted);
 
-		// 3. 以空壳形式追加到新类末尾
+		// 3. 以空壳或转发桩形式追加到新类末尾
 		ClassReader cr = new ClassReader(newBytes);
 		// 关键：不用 COMPUTE_FRAMES，避免 getCommonSuperClass 触发目标类加载
 		ClassWriter  cw        = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
@@ -2709,8 +2872,18 @@ public class LambdaAligner {
 					 access, mn.name, mn.desc, mn.signature,
 					 mn.exceptions == null ? null : mn.exceptions.toArray(new String[0]));
 					if (dummy != null) {
+						Delegate delegate = getPureDelegate(mn);
+						boolean canForward = false;
+						if (delegate != null) {
+							String targetKey = delegate.target.owner + "." + delegate.target.name + delegate.target.desc;
+							int newCount = newMethodRefs.getOrDefault(targetKey, 0);
+							int oldCount = oldMethodRefs.getOrDefault(targetKey, 0);
+							// 门禁判定：若上一轮已是转发桩，则只要新版本仍有该方法引用即继承转发；
+							// 若为首次退役为孤儿，则必须满足新版本对该方法引用的句柄数量净增（newCount > oldCount）。
+							canForward = delegate.wasForwarding ? (newCount > 0) : (newCount > oldCount);
+						}
 						TEST_EVENTS.add(new AlignmentEvent("GHOST", mn.name, null, className + "#" + mn.name + mn.desc));
-						injectDummyBody(dummy, className, mn.name, mn.desc);
+						injectDummyBody(dummy, className, mn.name, mn.desc, canForward ? delegate : null);
 					}
 				}
 				super.visitEnd();
@@ -2721,37 +2894,41 @@ public class LambdaAligner {
 	}
 
 	/**
-	 * 生成空壳 Lambda 方法体的指令流。
+	 * 生成空壳 Lambda 方法体或方法引用转发桩的指令流。
 	 * <p>
 	 * <b>关键设计（100% 线性无跳转分支，彻底杜绝 VerifyError）</b>：<br>
 	 * 字节码中完全不使用任何 {@code IFEQ} / {@code GOTO} 等分支跳转指令和 {@link Label}。
 	 * 所有的策略判定、UpdateRef 栈探测、异常抛出与日志去重均下沉到纯 Java 静态方法
-	 * {@link #onOrphanInvoked(String)} 中执行。<br>
+	 * {@link #onOrphanInvoked(String, boolean)} 中执行。<br>
 	 * <ul>
 	 *   <li>若为 UpdateRef 保护的调用：Java 静态方法直接抛出 {@link NoSuchMethodError} 展开栈中断执行；</li>
-	 *   <li>若为普通业务调用：Java 静态方法去重打印警告日志后正常返回，随后由生成的字节码 100% 线性返回类型默认值（0 / null / false）。</li>
+	 *   <li>若为普通业务调用：若命中方法引用委托则透明转发；若非委托则线性返回类型默认值（0 / null / false）。</li>
 	 * </ul>
 	 * 从而在各版本 JVM 下无需 StackMapTable 即可 100% 通过类验证。
 	 * </p>
 	 */
-	private static void injectDummyBody(MethodVisitor mv, String className, String name, String desc) {
+	private static void injectDummyBody(MethodVisitor mv, String className, String name, String desc, Delegate delegate) {
 		mv.visitCode();
-		Type returnType = Type.getReturnType(desc);
+		boolean willForward = delegate != null;
 
 		// 1. 调用纯 Java 静态方法：统一处理策略分发、UpdateRef 栈探测及日志去重。
 		//
-		// 传入的是**注入时就拼好的 location 常量**（单个 LDC），而不是类名/方法名/描述符三个。
-		// 这样运行时热路径上：
-		//   • 不分配任何 String（常量字符串的 hash 在 JVM 里已缓存）；
-		//   • 集合查找是 O(1) 哈希查找，而非线性扫描；
-		//   • 不需要 ThreadLocal 缓冲，也不需要 synchronized。
+		// 传入拼好的 location 常量与 willForward 标志（单个 LDC + ICONST）：
+		// 运行时热路径上不分配任何 String，集合查找是 O(1) 哈希查找。
 		mv.visitLdcInsn(locationOf(className, name, desc));
+		mv.visitInsn(willForward ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
 		mv.visitMethodInsn(Opcodes.INVOKESTATIC,
 		 Type.getInternalName(LambdaAligner.class),
-		 "onOrphanInvoked", "(Ljava/lang/String;)V", false);
+		 "onOrphanInvoked", "(Ljava/lang/String;Z)V", false);
 
-		// 2. 100% 线性无分支返回类型默认值（若上面抛出异常则直接展开调用栈，根本不会执行到此）
-		injectDefaultReturnValue(mv, returnType, desc);
+		// 2. 若可透明转发，则回放委托方法体指令流；否则 100% 线性无分支返回类型默认值
+		if (willForward) {
+			for (AbstractInsnNode insn : delegate.body) {
+				insn.accept(mv);
+			}
+		} else {
+			injectDefaultReturnValue(mv, Type.getReturnType(desc), desc);
+		}
 		mv.visitMaxs(0, 0);
 		mv.visitEnd();
 	}
@@ -2801,11 +2978,10 @@ public class LambdaAligner {
 
 	/**
 	 * 已打印过日志的 location（并发安全）。
-	 *
-	 * <p>用 {@code ConcurrentHashMap} 支撑：桩代码传来的 location 是**字符串常量**，
-	 * 其 hash 在 JVM 中已缓存，因此查找是 O(1)、**不分配**、且无需任何全局锁。</p>
 	 */
 	private static final Set<String> LOGGED_ORPHANS =
+	 Collections.newSetFromMap(new ConcurrentHashMap<>());
+	private static final Set<String> LOGGED_FORWARDS =
 	 Collections.newSetFromMap(new ConcurrentHashMap<>());
 
 	/** 日志去重。{@code add} 返回 true 表示本次是首次，才打印。 */
@@ -2816,41 +2992,39 @@ public class LambdaAligner {
 		}
 	}
 
+	private static void logForwardOnce(String location) {
+		if (LOGGED_FORWARDS.add(location)) {
+			HotSwapAgent.info("[LambdaAligner] orphaned lambda forwarded to method ref: " + location
+			                  + " (ghost, not reclaimed; subsequent invocations will be muted)");
+		}
+	}
+
 	/**
 	 * 当热重载中被删除/孤立的空壳 Lambda 方法被调用时由生成的字节码调用。
-	 * <p>
-	 * 所有的策略判定、UpdateRef 栈探测、异常抛出与日志去重均下沉到此 Java 方法中执行，
-	 * 从而保证 ASM 生成的字节码 100% 线性无跳转分支，彻底杜绝缺少 StackMapTable 引发的 {@link VerifyError}。
-	 * </p>
-	 *
-	 * <p><b>入参是注入期就拼好的 location 字符串常量</b>（见 {@link #locationOf}），
-	 * 而不是类名/方法名/描述符三段：这样运行时热路径上不分配任何 String
-	 * （常量字符串的 hash 已被 JVM 缓存），集合查找是 O(1)，且无需 ThreadLocal 或锁。</p>
-	 *
-	 * <p><b>可见性要求</b>：桩代码通过 {@code INVOKESTATIC} 调用本方法，因此目标类的
-	 * 类加载器必须能看到 {@code nipx.LambdaAligner}。父委派正常时成立。</p>
 	 * @param location 形如 {@code com.example.Foo#lambda$build$0()V} 的常量
 	 */
 	public static void onOrphanInvoked(String location) {
+		onOrphanInvoked(location, false);
+	}
+
+	/**
+	 * 当热重载中被删除/孤立的 Lambda 方法被调用时由生成的字节码调用。
+	 * @param location    形如 {@code com.example.Foo#lambda$build$0()V} 的常量
+	 * @param willForward 是否将继续执行转发到方法引用的逻辑
+	 */
+	public static void onOrphanInvoked(String location, boolean willForward) {
 		OrphanPolicy policy = orphanPolicy;
 
 		if (policy == OrphanPolicy.SMART_ADAPTIVE) {
-			// ⚠️ 这里**不做"非 UpdateRef"的负缓存**。
-			//
-			// 曾按 location 缓存"该调用点不是 UpdateRef 发起的"，以省下每次约 1µs 的栈探测。
-			// **该缓存不成立**：「是否由 UpdateRef 发起」是**调用上下文**的属性，
-			// 不是方法（location）的固有属性。同一个旧 CallSite 完全可能先被业务代码
-			// 直接调一次（如初始化期），之后才被注册进 UpdateRef 轮询：
-			// 首次判定为"否"后，后续由 UpdateRef 发起的调用会被短路成静默返回，
-			// **熔断永不触发** —— 恰好复现本机制要消灭的 60FPS 空转。
-			//
-			// 因此每次调用都必须真实探测。若将来要优化，正确方向是降低探测本身的成本，
-			// 而不是按 location 缓存一个上下文相关的判定。
 			if (isCalledByUpdateRef()) {
 				throw new NoSuchMethodError("Lambda removed by hot swap: " + location);
 			}
-			// 普通业务调用：去重后打印日志，随后返回默认值（由外部字节码线性返回）
-			logOrphanOnce(location);
+			// 普通业务调用：去重后打印日志
+			if (willForward) {
+				logForwardOnce(location);
+			} else {
+				logOrphanOnce(location);
+			}
 			return;
 		}
 
@@ -2863,8 +3037,11 @@ public class LambdaAligner {
 		}
 
 		if (policy == OrphanPolicy.LOG_AND_RETURN_DEFAULT) {
-			// 与 SMART_ADAPTIVE 同款：命中时零 String 分配（见 logOrphanOnce）。
-			logOrphanOnce(location);
+			if (willForward) {
+				logForwardOnce(location);
+			} else {
+				logOrphanOnce(location);
+			}
 			return;
 		}
 

@@ -788,7 +788,10 @@ public class IntUI {
 				lastShowTime = Time.millis();
 				Table container = this.container;
 				if (container.getChildren().isEmpty()) contents.get(container);
-				container.update(container::pack);
+				container.update(() -> {
+					container.pack();
+					container.keepInStage();
+				});
 				topGroup.addChild(container);
 				shown.add(this);
 

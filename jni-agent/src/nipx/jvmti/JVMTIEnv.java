@@ -463,6 +463,7 @@ public class JVMTIEnv {
 		try (Arena arena = Arena.ofConfined()) {
 			{
 				MemorySegment caps = arena.allocate(JVMTICAPS_SIZE, 8);
+				// jvmtiCapabilities 位定义 (first jint, offset 0):
 				caps.set(ValueLayout.JAVA_INT, 0, CAN_TAG_OBJECTS);
 				int rc = (int) MH_AddCapabilities.invokeExact(
 				 fp(IDX_AddCapabilities), jvmtiEnvPtr, caps);
@@ -473,9 +474,18 @@ public class JVMTIEnv {
 			{
 				MemorySegment caps = arena.allocate(JVMTICAPS_SIZE, 8);
 				// jvmtiCapabilities 位定义 (first jint, offset 0):
+				caps.set(ValueLayout.JAVA_INT, 0, CAN_GET_LINE_NUMBERS);
+				int rc = (int) MH_AddCapabilities.invokeExact(
+				 fp(IDX_AddCapabilities), jvmtiEnvPtr, caps);
+				if (rc != JVMTI_ERROR_NONE) {
+					System.err.println("[E] JVMTI: Failed to add CAN_GET_LINE_NUMBERS capability (rc=" + rc + ")");
+				}
+			}
+			{
+				MemorySegment caps = arena.allocate(JVMTICAPS_SIZE, 8);
+				// jvmtiCapabilities 位定义 (first jint, offset 0):
 				caps.set(ValueLayout.JAVA_INT, 0,
-				 CAN_ACCESS_LOCAL_VARIABLES | CAN_GENERATE_EXCEPTION_EVENTS | CAN_GET_LINE_NUMBERS);
-				// caps.set(ValueLayout.JAVA_INT, 0, CAN_SUSPEND);
+				 CAN_ACCESS_LOCAL_VARIABLES | CAN_GENERATE_EXCEPTION_EVENTS);
 
 				int rc = (int) MH_AddCapabilities.invokeExact(
 				 fp(IDX_AddCapabilities), jvmtiEnvPtr, caps);
@@ -547,9 +557,10 @@ public class JVMTIEnv {
 		}
 	}
 
-	static final ThreadLocal<MethodMeta[]> metasCache  = ThreadLocal.withInitial(() -> new MethodMeta[128]);
-	static final ThreadLocal<VarEntry[][]> tablesCache = ThreadLocal.withInitial(() -> new VarEntry[128][]);
-	static final ThreadLocal<long[]>       locsCache   = ThreadLocal.withInitial(() -> new long[128]);
+	static final int                       MAX_DEPTH   = 256;
+	static final ThreadLocal<MethodMeta[]> metasCache  = ThreadLocal.withInitial(() -> new MethodMeta[MAX_DEPTH]);
+	static final ThreadLocal<VarEntry[][]> tablesCache = ThreadLocal.withInitial(() -> new VarEntry[MAX_DEPTH][]);
+	static final ThreadLocal<long[]>       locsCache   = ThreadLocal.withInitial(() -> new long[MAX_DEPTH]);
 	/**
 	 * Captures local variables for every frame of the {@code targetThread} thread.
 	 *
@@ -557,7 +568,7 @@ public class JVMTIEnv {
 	 * inside this method so that depth values from {@code GetStackTrace} remain
 	 * valid.  Do <em>not</em> move those calls into sub-methods.
 	 * @param targetThread {@link MemorySegment#NULL} represents the current thread, other threads need to be paused manually
-	 * @param maxDepth     maximum number of frames to inspect (e.g. 32)
+	 * @param maxDepth     maximum number of frames to inspect (e.g. 32), maxDepth + skipFrames <= {@link #MAX_DEPTH}
 	 * @param skipFrames   frames to drop from the top of the trace.
 	 *                     Pass {@code 1} to hide this method itself;
 	 *                     pass {@code 2} when called through {@link StackCapture}.
@@ -570,7 +581,8 @@ public class JVMTIEnv {
 			// ------------------------------------------------------------------
 			// 1. GetStackTrace  (NULL thread → current thread)
 			// ------------------------------------------------------------------
-			int           total    = maxDepth + skipFrames;
+			int total = maxDepth + skipFrames;
+			if (total > MAX_DEPTH) total = MAX_DEPTH;
 			MemorySegment frameBuf = arena.allocate(FRAME_SIZE * total, 8);
 			MemorySegment cntOut   = arena.allocate(ValueLayout.JAVA_INT);
 
@@ -751,8 +763,8 @@ public class JVMTIEnv {
 	                             int maxDepth, int skipFrames, boolean captureThis,
 	                             FrameConsumer consumer) {
 		try (Arena arena = Arena.ofConfined()) {
-			JNIEnv        jniEnv   = null; // 仅在需要时创建
-			int           total    = maxDepth + skipFrames;
+			JNIEnv jniEnv = null; // 仅在需要时创建
+			int    total  = maxDepth + skipFrames;
 			MemorySegment frameBuf = arena.allocate(FRAME_SIZE * total, 8);
 			MemorySegment cntOut   = arena.allocate(ValueLayout.JAVA_INT);
 
@@ -817,8 +829,8 @@ public class JVMTIEnv {
 	                                     int maxDepth, int skipFrames, boolean captureThis,
 	                                     FrameConsumer consumer) {
 		try (Arena arena = Arena.ofConfined()) {
-			JNIEnv        jniEnv   = JNIEnv.getInstance(arena);
-			int           total    = maxDepth + skipFrames;
+			JNIEnv jniEnv = JNIEnv.getInstance(arena);
+			int    total  = maxDepth + skipFrames;
 			MemorySegment frameBuf = arena.allocate(FRAME_SIZE * total, 8);
 			MemorySegment cntOut   = arena.allocate(ValueLayout.JAVA_INT);
 

@@ -29,12 +29,12 @@ public class JVMTIEnv {
 
 	public static final int JVMTI_VERSION_1_2 = 0x30010200;
 
-	public static final int JVMTI_ERROR_NONE             = 0;
-	public static final int JVMTI_ERROR_THREAD_NOT_ALIVE = 10;
-	public static final int JVMTI_ERROR_OPAQUE_FRAME     = 31;
-	public static final int JVMTI_ERROR_INVALID_SLOT     = 35;
-	public static final int JVMTI_ERROR_ABSENT_INFO      = 101;
-	public static final int JNI_OK                       = 0;
+	public static final int JVMTI_ERROR_NONE              = 0;
+	public static final int JVMTI_ERROR_THREAD_NOT_ALIVE  = 15;
+	public static final int JVMTI_ERROR_OPAQUE_FRAME      = 32;
+	public static final int JVMTI_ERROR_INVALID_SLOT      = 35;
+	public static final int JVMTI_ERROR_ABSENT_INFOMATION = 101;
+	public static final int JNI_OK                        = 0;
 
 	/** @see <a href=https://pages.cs.wisc.edu/~starr/bots/EISBot-src/html/structjvmtiCapabilities.html>REF</a> */
 	public static final  int CAN_TAG_OBJECTS               = 1;
@@ -557,12 +557,13 @@ public class JVMTIEnv {
 	 * inside this method so that depth values from {@code GetStackTrace} remain
 	 * valid.  Do <em>not</em> move those calls into sub-methods.
 	 * @param targetThread {@link MemorySegment#NULL} represents the current thread, other threads need to be paused manually
-	 * @param maxDepth   maximum number of frames to inspect (e.g. 32)
-	 * @param skipFrames frames to drop from the top of the trace.
-	 *                   Pass {@code 1} to hide this method itself;
-	 *                   pass {@code 2} when called through {@link StackCapture}.
+	 * @param maxDepth     maximum number of frames to inspect (e.g. 32)
+	 * @param skipFrames   frames to drop from the top of the trace.
+	 *                     Pass {@code 1} to hide this method itself;
+	 *                     pass {@code 2} when called through {@link StackCapture}.
 	 * @return immutable list of {@link FrameLocals}, shallowest first
-	 * */
+	 *
+	 */
 	public List<FrameLocals> captureThreadLocals(MemorySegment targetThread, int maxDepth, int skipFrames) {
 		try (Arena arena = Arena.ofConfined()) {
 			JNIEnv jniEnv = JNIEnv.getInstance(arena);
@@ -646,7 +647,8 @@ public class JVMTIEnv {
 					int    hash  = -1;
 
 					try {
-						l:switch (kind) {
+						l:
+						switch (kind) {
 							// ---- object / array --------------------------------
 							case 'L', '[' -> {
 								MemorySegment out = arena.allocate(ValueLayout.ADDRESS);
@@ -986,7 +988,7 @@ public class JVMTIEnv {
 			int rc = (int) MH_GetLocalVariableTable.invokeExact(
 			 fpGetLocalVariableTable, jvmtiEnvPtr, methodId, cntOut, tabPtrOut);
 
-			if (rc == JVMTI_ERROR_ABSENT_INFO || rc == JVMTI_ERROR_OPAQUE_FRAME) {
+			if (rc == JVMTI_ERROR_ABSENT_INFOMATION || rc == JVMTI_ERROR_OPAQUE_FRAME) {
 				return VarEntry.EMPTY; // compiled without -g, or native frame
 			}
 			if (rc != JVMTI_ERROR_NONE) return VarEntry.EMPTY;

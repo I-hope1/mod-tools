@@ -178,7 +178,7 @@ public class KeyCodeSetter extends Content {
 
 			init();
 			shown(this::rebuild);
-			IntVars.resizeListeners.add(this::display);
+			IntVars.addResizeListener(this::display);
 		}
 		public void display() {
 			if (button != null) IntUI.positionTooltip(button, Align.topLeft, this, Align.bottomLeft);

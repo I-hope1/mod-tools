@@ -38,6 +38,7 @@ public class MySettings {
 		public Data(Fi fi) {
 			this.fi = fi;
 			loadFi(fi);
+			IntVars.addShutdownListener(task);
 		}
 
 		public Data child(String key) {

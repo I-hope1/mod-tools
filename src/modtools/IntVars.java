@@ -49,11 +49,11 @@ public class IntVars {
 	public static       ModMeta  meta;
 
 	/** mod的根目录 */
-	public static LoadedMod mod;
-	public static       Fi root          = new HFi(IntVars.class.getClassLoader());
+	public static       LoadedMod mod;
+	public static       Fi        root          = new HFi(IntVars.class.getClassLoader());
 	/** 如果不为empty，在进入是显示 */
-	public static final Fi libs          = root.child("libs");
-	public static       Fi dataDirectory = FileUtils.child(Vars.dataDirectory, modName.replace('-', '_'), "b0kkihope");
+	public static final Fi        libs          = root.child("libs");
+	public static       Fi        dataDirectory = FileUtils.child(Vars.dataDirectory, modName.replace('-', '_'), "b0kkihope");
 
 	public static final String         QQ         = "https://qm.qq.com/q/7rAZZaEMs&personal_qrcode_source=4";
 	public static       ModClassLoader mainLoader = (ModClassLoader) Vars.mods.mainLoader();
@@ -114,7 +114,7 @@ public class IntVars {
 		}).getNow(null);
 	}
 
-	public static final MySet<Runnable> resizeListeners = new MySet<>();
+	private static final CopyOnWriteArraySet<Runnable> resizeListeners = new CopyOnWriteArraySet<>();
 	/**
 	 * 添加窗口大小调整监听器
 	 * @param runnable 当窗口大小发生改变时要执行的任务
@@ -144,11 +144,35 @@ public class IntVars {
 	}
 
 	public static final Cons<ResizeEvent> resizeEventCons = _ -> {
-		for (var r : resizeListeners) r.run();
+		for (var r : resizeListeners) {
+			try {
+				r.run();
+			} catch (Throwable e) {
+				Log.err(e); // 仅打印
+			}
+		}
 	};
 
 	static {
 		Events.on(ResizeEvent.class, resizeEventCons);
+	}
+
+	private static final CopyOnWriteArraySet<Runnable> shutdownListeners = new CopyOnWriteArraySet<>();
+	public static void addShutdownListener(Runnable runnable) {
+		shutdownListeners.add(runnable);
+	}
+	private static final Runnable shutdownEvents = () -> {
+		for (Runnable r : shutdownListeners) {
+			try {
+				r.run();
+			} catch (Throwable e) {
+				Log.err(e); // 仅打印
+			}
+		}
+	};
+
+	static {
+		Runtime.getRuntime().addShutdownHook(new Thread(shutdownEvents, "ModTools-Shutdown-Hook"));
 	}
 
 	public static void load() {

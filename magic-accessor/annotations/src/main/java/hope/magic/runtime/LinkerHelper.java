@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 提供 Unsafe 字段偏移查找、trusted lookup MethodHandle 缓存、以及 MemberName 解析与 invokedynamic 引导方法支持。
  */
+@SuppressWarnings("removal")
 public class LinkerHelper {
 	public static final  boolean      IS_ANDROID              = isAndroid();
 	/**

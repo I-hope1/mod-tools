@@ -864,6 +864,7 @@ public class HotSwapAgent {
 
 		processAnnotations(definitions);
 		for (ClassDefinition def : definitions) {
+			if (!redefinedOk.contains(def.getDefinitionClass().getName())) continue;
 			try {
 				InitFix.afterRedefine(def.getDefinitionClass());
 			} catch (Throwable e) {
@@ -871,7 +872,7 @@ public class HotSwapAgent {
 				InitFix.afterRedefineFailed(def.getDefinitionClass());
 			}
 		}
-		processUIDispatch(definitions);
+		processUIDispatch(definitions, redefinedOk);
 
 		if (skippedCount > 0) info("Skipped " + skippedCount + " unchanged classes.");
 		if (injectedCount > 0) info("Injected " + injectedCount + " new classes.");
@@ -991,10 +992,11 @@ public class HotSwapAgent {
 	}
 
 
-	private static void processUIDispatch(List<ClassDefinition> definitions) {
+	private static void processUIDispatch(List<ClassDefinition> definitions, Set<String> redefinedOk) {
 		if (CellPropertyRef.isEnabled()) {
 			for (ClassDefinition definition : definitions) {
 				Class<?> clazz = definition.getDefinitionClass();
+				if (!redefinedOk.contains(clazz.getName())) continue;
 				CellPropertyRef.afterRedefine(AnnotationTransformer.internalName(clazz), definition.getDefinitionClassFile());
 			}
 		}

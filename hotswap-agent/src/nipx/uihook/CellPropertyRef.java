@@ -9,8 +9,11 @@ import arc.scene.ui.layout.Stack;
 import arc.struct.Seq;
 import arc.util.pooling.Pools;
 import mindustry.Vars;
+import nipx.AnnotationTransformer;
+import nipx.HotSwapAgent;
 import nipx.Injector;
 import nipx.LambdaAligner;
+import nipx.ref.ClassHierarchyOracle;
 import org.objectweb.asm.*;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.commons.AdviceAdapter;
@@ -37,7 +40,7 @@ public class CellPropertyRef {
 	public static final String CL_CELL  = "arc/scene/ui/layout/Cell";
 
 	//region 数据结构
-	public record PropertyCall(String method, String desc, Object[] args, int line) { }
+	public record PropertyCall(String owner, String method, String desc, Object[] args, int line) { }
 
 	public record CellIdentity(String hostClass, String hostMethod, String hostDesc,
 	                           int line, String creatorName) {
@@ -254,7 +257,7 @@ public class CellPropertyRef {
 		PropertyCall existing = chain.get(slot);
 		Object[]     merged   = mergeArgs(existing.args, sanitized);
 		if (!argsEqual(existing.args, merged)) {
-			chain.set(slot, new PropertyCall(method, desc, merged, existing.line));
+			chain.set(slot, new PropertyCall(existing.owner, method, desc, merged, existing.line));
 		}
 	}
 	//endregion
@@ -434,7 +437,7 @@ public class CellPropertyRef {
 			List<PropertyCall> list   = runtimeByKey.get(key);
 			PropertyCall       r      = (list != null && nth < list.size()) ? list.get(nth) : null;
 			Object[]           merged = r == null ? t.args : mergeArgs(t.args, r.args);
-			out.add(new PropertyCall(t.method, t.desc, merged, t.line));
+			out.add(new PropertyCall(t.owner, t.method, t.desc, merged, t.line));
 		}
 		return out;
 	}
@@ -651,7 +654,7 @@ public class CellPropertyRef {
 				List<PropertyCall> chain = chains.get(j);
 				if (chain.isEmpty()) continue;
 				PropertyCall creator = chain.get(0);
-				if (!isTableCellCreator(CL_TABLE, creator.method)) continue;
+				if (!isCreatorCall(creator)) continue;
 				try {
 					if (appendNewCell(slashName, mk, chain, idsAfter)) added++;
 				} catch (Throwable t) {
@@ -788,6 +791,7 @@ public class CellPropertyRef {
 	private static boolean appendNewCell(String slashName, String methodKey,
 	                                     List<PropertyCall> newChain, List<CellIdentity> existingIds) throws Throwable {
 		PropertyCall creator = newChain.get(0);
+		if (!isCreatorCall(creator)) return false;
 
 		if (!hasUsableArgs(creator)) {
 			if (DEBUG) log("[CellProperty] Skipping append with unknown creator args: " + creator.method);
@@ -838,7 +842,7 @@ public class CellPropertyRef {
 		if (targetTable == null) return false;
 
 		MethodType   type = MethodType.fromMethodDescriptorString(creator.desc, Vars.mods.mainLoader());
-		MethodHandle mh   = findTableMethod(creator.method, type);
+		MethodHandle mh   = findTableMethod(creator.owner, creator.method, type);
 		if (mh == null) return false;
 
 		Object[] converted = creator.args == null ? null : convertArgs(type, creator.args);
@@ -934,7 +938,7 @@ public class CellPropertyRef {
 	private static List<PropertyCall> applyChainUpdate(Cell<?> cell, List<PropertyCall> oldChain,
 	                                                   List<PropertyCall> newChain) {
 		if (oldChain == null || oldChain.isEmpty()) {
-			if (!newChain.isEmpty() && isTableCellCreator(CL_TABLE, newChain.get(0).method)) {
+			if (!newChain.isEmpty() && isCreatorCall(newChain.get(0))) {
 				updateChildElement(cell, newChain.get(0));
 			}
 			List<PropertyCall> props = newChain.subList(newChain.isEmpty() ? 0 : 1, newChain.size());
@@ -946,8 +950,9 @@ public class CellPropertyRef {
 		PropertyCall newCreator = newChain.get(0);
 
 		boolean elementUpdated = false;
-		if (isTableCellCreator(CL_TABLE, newCreator.method)) {
-			if (!oldCreator.method.equals(newCreator.method)
+		if (isCreatorCall(newCreator)) {
+			if (!Objects.equals(oldCreator.owner, newCreator.owner)
+			    || !oldCreator.method.equals(newCreator.method)
 			    || !argsEqual(oldCreator.args, newCreator.args)) {
 				updateChildElement(cell, newCreator);
 				elementUpdated = true;
@@ -1076,7 +1081,7 @@ public class CellPropertyRef {
 
 		try {
 			MethodType   type = MethodType.fromMethodDescriptorString(creator.desc, Vars.mods.mainLoader());
-			MethodHandle mh   = findTableMethod(creator.method, type);
+			MethodHandle mh   = findTableMethod(creator.owner, creator.method, type);
 			if (mh == null) return;
 
 			Table    dummyTable = new Table();
@@ -1093,8 +1098,24 @@ public class CellPropertyRef {
 		}
 	}
 
-	private static MethodHandle findTableMethod(String name, MethodType methodType) {
-		try { return lookup().findVirtual(Table.class, name, methodType); } catch (Throwable ignored) { return null; }
+	private static MethodHandle findTableMethod(String owner, String name, MethodType methodType) {
+		try {
+			Class<?> ownerClass = Table.class;
+			if (owner != null && !CL_TABLE.equals(owner)) {
+				try {
+					ownerClass = Class.forName(owner.replace('/', '.'), false, getTargetLoader());
+				} catch (Throwable ignored) {
+					ownerClass = Table.class;
+				}
+			}
+			return lookup().findVirtual(ownerClass, name, methodType);
+		} catch (Throwable ignored) {
+			try {
+				return lookup().findVirtual(Table.class, name, methodType);
+			} catch (Throwable ignored2) {
+				return null;
+			}
+		}
 	}
 
 	private static boolean callsEqual(List<PropertyCall> a, List<PropertyCall> b) {
@@ -1103,6 +1124,7 @@ public class CellPropertyRef {
 		if (a.size() != b.size()) return false;
 		for (int i = 0; i < a.size(); i++) {
 			PropertyCall ca = a.get(i), cb = b.get(i);
+			if (!Objects.equals(ca.owner, cb.owner)) return false;
 			if (!ca.method.equals(cb.method)) return false;
 			if (!ca.desc.equals(cb.desc)) return false;
 			if (!argsEqual(ca.args, cb.args)) return false;
@@ -1342,6 +1364,7 @@ public class CellPropertyRef {
 			ClassReader cr = new ClassReader(bytecode);
 			ClassNode   cn = new ClassNode();
 			cr.accept(cn, ClassReader.SKIP_FRAMES);
+			AnnotationTransformer.HierarchyTree.register(cn);
 			for (MethodNode mn : cn.methods) {
 				MethodExtraction ex = extractFromMethod(cn, mn);
 				if (ex.analyzed()) {
@@ -1354,17 +1377,52 @@ public class CellPropertyRef {
 		return result;
 	}
 
-	private static boolean isTableClass(ClassNode cn, String owner) {
-		if (CL_TABLE.equals(owner)) return true;
-		if (cn != null && owner.equals(cn.name)) {
-			if (cn.superName != null && (cn.superName.equals(CL_TABLE) || cn.superName.contains("Table"))) return true;
+	private static ClassLoader getTargetLoader() {
+		try {
+			if (Vars.mods != null && Vars.mods.mainLoader() != null) {
+				return Vars.mods.mainLoader();
+			}
+		} catch (Throwable ignored) { }
+		ClassLoader cl = Thread.currentThread().getContextClassLoader();
+		return cl != null ? cl : HotSwapAgent.class.getClassLoader();
+	}
+
+	private static ClassHierarchyOracle.HierarchyCheck checkTableClass(ClassNode cn, String owner) {
+		if (CL_TABLE.equals(owner)) return ClassHierarchyOracle.HierarchyCheck.YES;
+		if (owner == null) return ClassHierarchyOracle.HierarchyCheck.NO;
+		if (cn != null && cn.name.equals(owner)) {
+			AnnotationTransformer.HierarchyTree.register(cn);
 		}
-		return owner.endsWith("Table") || owner.contains("/Table");
+		return AnnotationTransformer.HierarchyTree.checkAssignableFrom(CL_TABLE, owner, getTargetLoader());
+	}
+
+	private static boolean isTableClass(ClassNode cn, String owner) {
+		ClassHierarchyOracle.HierarchyCheck check = checkTableClass(cn, owner);
+		if (check == ClassHierarchyOracle.HierarchyCheck.YES) return true;
+		if (check == ClassHierarchyOracle.HierarchyCheck.NO) return false;
+		// UNKNOWN: 退回精确匹配
+		return CL_TABLE.equals(owner);
+	}
+
+	private static ClassHierarchyOracle.HierarchyCheck checkCellClass(ClassNode cn, String owner) {
+		if (CL_CELL.equals(owner)) return ClassHierarchyOracle.HierarchyCheck.YES;
+		if (owner == null) return ClassHierarchyOracle.HierarchyCheck.NO;
+		if (cn != null && cn.name.equals(owner)) {
+			AnnotationTransformer.HierarchyTree.register(cn);
+		}
+		return AnnotationTransformer.HierarchyTree.checkAssignableFrom(CL_CELL, owner, getTargetLoader());
+	}
+
+	private static boolean isCellClass(ClassNode cn, String owner) {
+		ClassHierarchyOracle.HierarchyCheck check = checkCellClass(cn, owner);
+		if (check == ClassHierarchyOracle.HierarchyCheck.YES) return true;
+		if (check == ClassHierarchyOracle.HierarchyCheck.NO) return false;
+		// UNKNOWN: 退回精确匹配
+		return CL_CELL.equals(owner);
 	}
 
 	private static boolean isCellClass(String owner) {
-		if (CL_CELL.equals(owner)) return true;
-		return owner.endsWith("Cell") || owner.contains("/Cell");
+		return isCellClass(null, owner);
 	}
 
 	private static boolean isTableCellCreator(ClassNode cn, String owner, String name) {
@@ -1375,8 +1433,13 @@ public class CellPropertyRef {
 		return isTableCellCreator(null, owner, name);
 	}
 
+	private static boolean isCreatorCall(PropertyCall pc) {
+		if (pc == null) return false;
+		return isTableCellCreator(pc.owner, pc.method);
+	}
+
 	private static boolean isCellProperty(ClassNode cn, String owner, String name, String desc) {
-		if (isCellClass(owner) && CELL_PROPERTY_METHODS.contains(name)
+		if (isCellClass(cn, owner) && CELL_PROPERTY_METHODS.contains(name)
 		    && (desc.endsWith(")L" + CL_CELL + ";") || "()V".equals(desc) && "row".equals(name))) {
 			return true;
 		}
@@ -1422,7 +1485,7 @@ public class CellPropertyRef {
 			List<PropertyCall> chain = new ArrayList<>();
 			for (MethodInsnNode site : e.getValue()) {
 				Object[] args = extractArgsDataflow(cn, mn, frames, site);
-				chain.add(new PropertyCall(site.name, site.desc, args, lineOf(mn, site)));
+				chain.add(new PropertyCall(site.owner, site.name, site.desc, args, lineOf(mn, site)));
 			}
 			if (!chain.isEmpty()) chains.add(chain);
 		}

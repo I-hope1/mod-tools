@@ -508,6 +508,10 @@ public class CellPropertyRef {
 	private static void afterRedefinedImpl(String slashName, byte[] newBytecode) {
 		info("[CellProperty] Class redefined: " + slashName);
 
+		WHOLE_CLASS_HELPERS.remove(slashName);
+		HELPER_METHODS_BY_CLASS.remove(slashName);
+		SCANNED_HELPER_CLASSES.remove(slashName);
+
 		Map<String, List<List<PropertyCall>>> oldModel = chainCache.get(slashName);
 		if (oldModel == null) {
 			if (DEBUG) log("[CellProperty] No old model for " + slashName);
@@ -1505,6 +1509,11 @@ public class CellPropertyRef {
 	private static final Set<String> TABLE_CELL_CREATORS    = ConcurrentHashMap.newKeySet();
 	private static final Set<String> PURE_FUNCTIONS         = ConcurrentHashMap.newKeySet();
 
+	public static final String ANNOTATION_CELL_HELPER = "Lnipx/annotation/CellHelper;";
+	private static final Set<String> WHOLE_CLASS_HELPERS    = ConcurrentHashMap.newKeySet();
+	private static final Map<String, Set<String>> HELPER_METHODS_BY_CLASS = new ConcurrentHashMap<>();
+	private static final Set<String> SCANNED_HELPER_CLASSES = ConcurrentHashMap.newKeySet();
+
 	static {
 		CELL_PROPERTY_METHODS.addAll(Arrays.asList(
 		 "size", "width", "height",
@@ -1638,6 +1647,91 @@ public class CellPropertyRef {
 		} catch (Throwable t) {
 			if (DEBUG) log("[CellProperty] Failed to evaluate pure function " + owner + "." + name + ": " + t.getMessage());
 			return null;
+		}
+	}
+
+	private static byte[] fetchBytecode(String slashName) {
+		try {
+			Class<?> clazz = Class.forName(slashName.replace('/', '.'), false, getTargetLoader());
+			return fetchCurrentBytecode(clazz);
+		} catch (Throwable ignored) {
+			return null;
+		}
+	}
+
+	private static void scanHelpers(String slashName) {
+		if (slashName == null || !SCANNED_HELPER_CLASSES.add(slashName)) return;
+		try {
+			byte[] bytes = fetchBytecode(slashName);
+			if (bytes == null) return;
+			ClassReader cr = new ClassReader(bytes);
+			ClassVisitor cv = new ClassVisitor(ASM9) {
+				private boolean classIsHelper = false;
+
+				@Override
+				public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+					if (ANNOTATION_CELL_HELPER.equals(descriptor)) {
+						classIsHelper = true;
+						WHOLE_CLASS_HELPERS.add(slashName);
+					}
+					return super.visitAnnotation(descriptor, visible);
+				}
+
+				@Override
+				public MethodVisitor visitMethod(int access, String name, String descriptor,
+				                                 String signature, String[] exceptions) {
+					if (classIsHelper) {
+						HELPER_METHODS_BY_CLASS.computeIfAbsent(slashName, k -> ConcurrentHashMap.newKeySet()).add(name);
+						return null;
+					}
+					return new MethodVisitor(ASM9) {
+						@Override
+						public AnnotationVisitor visitAnnotation(String annDesc, boolean visible) {
+							if (ANNOTATION_CELL_HELPER.equals(annDesc)) {
+								HELPER_METHODS_BY_CLASS.computeIfAbsent(slashName, k -> ConcurrentHashMap.newKeySet()).add(name);
+							}
+							return super.visitAnnotation(annDesc, visible);
+						}
+					};
+				}
+			};
+			cr.accept(cv, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+		} catch (Throwable t) {
+			if (DEBUG) log("[CellProperty] Failed to scan helpers for " + slashName + ": " + t.getMessage());
+		}
+	}
+
+	public static boolean isHelper(String owner, String name, String desc) {
+		if (owner == null) return false;
+		String slashOwner = owner.replace('.', '/');
+		if (WHOLE_CLASS_HELPERS.contains(slashOwner)) return true;
+		Set<String> methods = HELPER_METHODS_BY_CLASS.get(slashOwner);
+		if (methods != null && (methods.contains(name) || (desc != null && methods.contains(name + desc)))) {
+			return true;
+		}
+		if (!SCANNED_HELPER_CLASSES.contains(slashOwner)) {
+			scanHelpers(slashOwner);
+			if (WHOLE_CLASS_HELPERS.contains(slashOwner)) return true;
+			methods = HELPER_METHODS_BY_CLASS.get(slashOwner);
+			return methods != null && (methods.contains(name) || (desc != null && methods.contains(name + desc)));
+		}
+		return false;
+	}
+
+	public static void registerHelper(String owner) {
+		if (owner != null && !owner.isEmpty()) {
+			WHOLE_CLASS_HELPERS.add(owner.replace('.', '/'));
+		}
+	}
+
+	public static void registerHelper(String owner, String name) {
+		registerHelper(owner, name, null);
+	}
+
+	public static void registerHelper(String owner, String name, String desc) {
+		if (owner != null && name != null) {
+			String key = (desc != null && !desc.isEmpty()) ? name + desc : name;
+			HELPER_METHODS_BY_CLASS.computeIfAbsent(owner.replace('.', '/'), k -> ConcurrentHashMap.newKeySet()).add(key);
 		}
 	}
 
@@ -2381,6 +2475,9 @@ public class CellPropertyRef {
 
 		chainCache.remove(hostSlashName);
 		templateCache.keySet().removeIf(id -> id.hostClass.equals(hostSlashName));
+		WHOLE_CLASS_HELPERS.remove(hostSlashName);
+		HELPER_METHODS_BY_CLASS.remove(hostSlashName);
+		SCANNED_HELPER_CLASSES.remove(hostSlashName);
 	}
 
 	public static void clearAll() {
@@ -2395,6 +2492,9 @@ public class CellPropertyRef {
 			chainCache.clear();
 			templateCache.clear();
 			unpatchedCells.clear();
+			WHOLE_CLASS_HELPERS.clear();
+			HELPER_METHODS_BY_CLASS.clear();
+			SCANNED_HELPER_CLASSES.clear();
 		}
 		info("[CellProperty] 🗑 Cleared all records");
 	}

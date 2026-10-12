@@ -619,4 +619,60 @@ class CellHelperTest {
 			arc.Core.app = oldApp;
 		}
 	}
+
+	@Test
+	void testManualHelperPersistenceAcrossClear() {
+		String manualHelper = "custom/manual/Helper";
+		CellPropertyRef.registerHelper(manualHelper);
+		assertTrue(CellPropertyRef.isHelper(manualHelper, "anyMethod", "()V"));
+
+		// clearClassRecords should NOT remove manual helpers
+		CellPropertyRef.clearClassRecords(manualHelper);
+		assertTrue(CellPropertyRef.isHelper(manualHelper, "anyMethod", "()V"));
+	}
+
+	@Test
+	void testSetupNewCellStateRetainsHelperMetadata() throws Exception {
+		Method m = CellPropertyRef.class.getDeclaredMethod("setupNewCellState",
+			String.class, String.class, List.class, int.class, arc.scene.ui.layout.Cell.class, PropertyCall.class, List.class);
+		m.setAccessible(true);
+
+		arc.scene.ui.layout.Table table = new arc.scene.ui.layout.Table();
+		arc.scene.ui.layout.Cell<?> cell = table.add(new arc.scene.Element());
+
+		PropertyCall creator = new PropertyCall("arc/scene/ui/layout/Table", "button", "()Larc/scene/ui/layout/Cell;",
+			new Object[0], 42, "MyHelper", "help", 15, 2);
+		List<PropertyCall> chain = List.of(creator);
+		List<CellIdentity> ids = new ArrayList<>();
+
+		m.invoke(null, "HostClass", "build:()V", chain, 0, cell, creator, ids);
+
+		assertEquals(1, ids.size());
+		CellIdentity createdId = ids.get(0);
+		assertEquals("MyHelper", createdId.helperClass());
+		assertEquals("help", createdId.helperMethod());
+		assertEquals(15, createdId.helperLine());
+		assertEquals(2, createdId.callOrdinal());
+
+		CellPropertyRef.removeCell(cell);
+	}
+
+	@Test
+	void testRemoveCellFromTableTransfersEndRow() throws Exception {
+		arc.scene.ui.layout.Table table = new arc.scene.ui.layout.Table();
+		arc.scene.ui.layout.Cell<?> c1 = table.add(new arc.scene.Element());
+		arc.scene.ui.layout.Cell<?> c2 = table.add(new arc.scene.Element());
+		nipx.uihook.ArcReflectionAdapter.setEndRow(c2, true);
+
+		Method removeM = CellPropertyRef.class.getDeclaredMethod("removeCellFromTable", arc.scene.ui.layout.Cell.class);
+		removeM.setAccessible(true);
+
+		// Core.app is null here in headless test - must not NPE and must transfer endRow to c1
+		removeM.invoke(null, c2);
+
+		assertTrue(nipx.uihook.ArcReflectionAdapter.isEndRow(c1));
+		assertFalse(table.getCells().contains(c2));
+
+		CellPropertyRef.removeCell(c1);
+	}
 }

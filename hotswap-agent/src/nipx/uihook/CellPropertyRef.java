@@ -132,22 +132,29 @@ public class CellPropertyRef {
 		}
 	}
 
-	public record LambdaInfo(String ownerClass, String methodName, String methodDesc, Object[] captures) {
+	public record LambdaInfo(String ownerClass, String methodName, String methodDesc, Object[] captures, int tag) {
+		public LambdaInfo(String ownerClass, String methodName, String methodDesc, Object[] captures) {
+			this(ownerClass, methodName, methodDesc, captures, H_INVOKESTATIC);
+		}
+
 		@Override
 		public boolean equals(Object o) {
 			if (this == o) return true;
 			if (!(o instanceof LambdaInfo that)) return false;
-			return ownerClass.equals(that.ownerClass)
+			return tag == that.tag
+			       && ownerClass.equals(that.ownerClass)
 			       && methodName.equals(that.methodName)
 			       && methodDesc.equals(that.methodDesc)
 			       && Arrays.equals(captures, that.captures);
 		}
+
 		@Override
 		public int hashCode() {
-			int result = Objects.hash(ownerClass, methodName, methodDesc);
+			int result = Objects.hash(ownerClass, methodName, methodDesc, tag);
 			result = 31 * result + Arrays.hashCode(captures);
 			return result;
 		}
+
 		@Override
 		public String toString() { return "Lambda[" + methodName + "]"; }
 	}
@@ -1210,20 +1217,24 @@ public class CellPropertyRef {
 			insertAfter = false;
 		}
 
-		Table targetTable = null;
+		Map<Table, List<Cell<?>>> anchorsByTable = new LinkedHashMap<>();
 		if (!anchors.isEmpty()) {
-			targetTable = anchors.get(0).getTable();
+			for (Cell<?> c : anchors) {
+				if (c != null && c.getTable() != null) {
+					anchorsByTable.computeIfAbsent(c.getTable(), k -> new ArrayList<>()).add(c);
+				}
+			}
 		} else {
 			for (CellIdentity id : existingIds) {
 				if (!methodKeyOf(id).equals(methodKey)) continue;
 				Cell<?> c = firstAliveCell(id);
 				if (c != null && c.getTable() != null) {
-					targetTable = c.getTable();
+					anchorsByTable.computeIfAbsent(c.getTable(), k -> new ArrayList<>());
 					break;
 				}
 			}
 		}
-		if (targetTable == null) return false;
+		if (anchorsByTable.isEmpty()) return false;
 
 		MethodType   type = MethodType.fromMethodDescriptorString(creator.desc, getTargetLoader());
 		MethodHandle mh   = findTableMethod(creator.owner, creator.method, type);
@@ -1245,76 +1256,83 @@ public class CellPropertyRef {
 			}
 		}
 
-		// Anchor-based insertion (Task 20):
-		// Freeze initial cells of targetTable to ensure stable iteration (Task 14)
-		Seq<Cell> initialCells = new Seq<>(targetTable.getCells());
-		List<Cell<?>> orderedAnchors = new ArrayList<>();
-		if (!anchors.isEmpty()) {
-			for (Cell<?> c : initialCells) {
-				if (anchors.contains(c)) orderedAnchors.add(c);
-			}
-		}
-
 		boolean anyInserted = false;
-		if (orderedAnchors.isEmpty()) {
-			ArcReflectionAdapter.clearImplicitEndRow(targetTable);
-			Cell<?> newCell = invoke(mh, targetTable, converted);
-			if (newCell == null) return false;
-			setupNewCellState(slashName, methodKey, newChain, newIdx, newCell, creator, existingIds);
-			anyInserted = true;
-		} else {
-			for (Cell<?> anchor : orderedAnchors) {
-				Seq<Cell> currentCells = targetTable.getCells();
-				int anchorIdx = currentCells.indexOf(anchor, true);
-				if (anchorIdx < 0) continue;
+		for (Entry<Table, List<Cell<?>>> entry : anchorsByTable.entrySet()) {
+			Table targetTable = entry.getKey();
+			List<Cell<?>> tableAnchors = entry.getValue();
 
-				if (insertAfter) {
-					if (anchorIdx + 1 < currentCells.size) {
-						Cell<?> next = currentCells.get(anchorIdx + 1);
-						if (isCellMatchingStation(next, slashName, methodKey, creator)) {
-							continue;
-						}
-					}
-					ArcReflectionAdapter.clearImplicitEndRow(targetTable);
-					Cell<?> newCell = invoke(mh, targetTable, converted);
-					if (newCell == null) continue;
-					setupNewCellState(slashName, methodKey, newChain, newIdx, newCell, creator, existingIds);
-
-					int curIdx = currentCells.indexOf(newCell, true);
-					if (curIdx != -1 && curIdx != anchorIdx + 1) {
-						currentCells.remove(newCell, true);
-						currentCells.insert(anchorIdx + 1, newCell);
-						moveChildElement(targetTable, newCell, anchorIdx + 1);
-					}
-					anyInserted = true;
-				} else {
-					if (anchorIdx > 0) {
-						Cell<?> prev = currentCells.get(anchorIdx - 1);
-						if (isCellMatchingStation(prev, slashName, methodKey, creator)) {
-							continue;
-						}
-					}
-					ArcReflectionAdapter.clearImplicitEndRow(targetTable);
-					Cell<?> newCell = invoke(mh, targetTable, converted);
-					if (newCell == null) continue;
-					setupNewCellState(slashName, methodKey, newChain, newIdx, newCell, creator, existingIds);
-
-					int curIdx = currentCells.indexOf(newCell, true);
-					if (curIdx != -1 && curIdx != anchorIdx) {
-						currentCells.remove(newCell, true);
-						currentCells.insert(anchorIdx, newCell);
-						moveChildElement(targetTable, newCell, anchorIdx);
-					}
-					anyInserted = true;
+			Seq<Cell> initialCells = new Seq<>(targetTable.getCells());
+			List<Cell<?>> orderedAnchors = new ArrayList<>();
+			if (!tableAnchors.isEmpty()) {
+				for (Cell<?> c : initialCells) {
+					if (tableAnchors.contains(c)) orderedAnchors.add(c);
 				}
 			}
+
+			boolean tableInserted = false;
+			if (orderedAnchors.isEmpty()) {
+				ArcReflectionAdapter.clearImplicitEndRow(targetTable);
+				Cell<?> newCell = invoke(mh, targetTable, converted);
+				if (newCell != null) {
+					setupNewCellState(slashName, methodKey, newChain, newIdx, newCell, creator, existingIds);
+					tableInserted = true;
+				}
+			} else {
+				for (Cell<?> anchor : orderedAnchors) {
+					Seq<Cell> currentCells = targetTable.getCells();
+					int anchorIdx = currentCells.indexOf(anchor, true);
+					if (anchorIdx < 0) continue;
+
+					if (insertAfter) {
+						if (anchorIdx + 1 < currentCells.size) {
+							Cell<?> next = currentCells.get(anchorIdx + 1);
+							if (isCellMatchingStation(next, slashName, methodKey, creator)) {
+								continue;
+							}
+						}
+						ArcReflectionAdapter.clearImplicitEndRow(targetTable);
+						Cell<?> newCell = invoke(mh, targetTable, converted);
+						if (newCell == null) continue;
+						setupNewCellState(slashName, methodKey, newChain, newIdx, newCell, creator, existingIds);
+
+						int curIdx = currentCells.indexOf(newCell, true);
+						if (curIdx != -1 && curIdx != anchorIdx + 1) {
+							currentCells.remove(newCell, true);
+							currentCells.insert(anchorIdx + 1, newCell);
+							moveChildElement(targetTable, newCell, anchorIdx + 1);
+						}
+						tableInserted = true;
+					} else {
+						if (anchorIdx > 0) {
+							Cell<?> prev = currentCells.get(anchorIdx - 1);
+							if (isCellMatchingStation(prev, slashName, methodKey, creator)) {
+								continue;
+							}
+						}
+						ArcReflectionAdapter.clearImplicitEndRow(targetTable);
+						Cell<?> newCell = invoke(mh, targetTable, converted);
+						if (newCell == null) continue;
+						setupNewCellState(slashName, methodKey, newChain, newIdx, newCell, creator, existingIds);
+
+						int curIdx = currentCells.indexOf(newCell, true);
+						if (curIdx != -1 && curIdx != anchorIdx) {
+							currentCells.remove(newCell, true);
+							currentCells.insert(anchorIdx, newCell);
+							moveChildElement(targetTable, newCell, anchorIdx);
+						}
+						tableInserted = true;
+					}
+				}
+			}
+
+			if (tableInserted) {
+				repairTableGrid(targetTable);
+				targetTable.invalidate();
+				if (Core.app != null) Core.app.post(targetTable::invalidateHierarchy);
+				anyInserted = true;
+			}
 		}
 
-		if (anyInserted) {
-			repairTableGrid(targetTable);
-			targetTable.invalidate();
-			if (Core.app != null) Core.app.post(targetTable::invalidateHierarchy);
-		}
 		return anyInserted;
 	}
 
@@ -1324,7 +1342,9 @@ public class CellPropertyRef {
 	                                      List<CellIdentity> existingIds) {
 		CellIdentity newId = new CellIdentity(slashName,
 			methodNameFromKey(methodKey), methodDescFromKey(methodKey),
-			creator.line, creator.method);
+			creator.line, creator.method,
+			creator.helperClass, creator.helperMethod, creator.helperLine,
+			creator.callOrdinal);
 
 		Geometry16 snap = null;
 		try {
@@ -1378,8 +1398,7 @@ public class CellPropertyRef {
 			if (st == null || st == IGNORED_STATE) return false;
 			return st.id.hostClass.equals(slashName)
 			       && methodKeyOf(st.id).equals(methodKey)
-			       && st.id.line == creator.line
-			       && Objects.equals(st.id.creatorName, creator.method);
+			       && matchesIdentity(st.id, creator);
 		}
 	}
 
@@ -1922,14 +1941,38 @@ public class CellPropertyRef {
 				 Class<?> owner = loadClass(li.ownerClass().replace('/', '.'));
 				 MethodType type = MethodType.fromMethodDescriptorString(
 					li.methodDesc(), owner.getClassLoader());
-				 boolean      isStatic;
-				 MethodHandle handle;
-				 try {
-					 handle = lookup().findStatic(owner, li.methodName(), type);
-					 isStatic = true;
-				 } catch (Throwable e) {
-					 handle = lookup().findSpecial(owner, li.methodName(), type, owner);
-					 isStatic = false;
+				 boolean      isStatic = false;
+				 MethodHandle handle   = null;
+				 switch (li.tag()) {
+					 case H_INVOKESTATIC -> {
+						 try { handle = lookup().findStatic(owner, li.methodName(), type); isStatic = true; } catch (Throwable ignored) {}
+					 }
+					 case H_NEWINVOKESPECIAL -> {
+						 try { handle = lookup().findConstructor(owner, type); isStatic = true; } catch (Throwable ignored) {}
+					 }
+					 case H_INVOKEVIRTUAL, H_INVOKEINTERFACE -> {
+						 try { handle = lookup().findVirtual(owner, li.methodName(), type); isStatic = false; } catch (Throwable ignored) {}
+					 }
+					 case H_INVOKESPECIAL -> {
+						 try { handle = lookup().findSpecial(owner, li.methodName(), type, owner); isStatic = false; }
+						 catch (Throwable ignored) {
+							 try { handle = lookup().findVirtual(owner, li.methodName(), type); isStatic = false; } catch (Throwable ignored2) {}
+						 }
+					 }
+					 default -> {}
+				 }
+				 if (handle == null) {
+					 try { handle = lookup().findStatic(owner, li.methodName(), type); isStatic = true; }
+					 catch (Throwable ignored) {
+						 try { handle = lookup().findVirtual(owner, li.methodName(), type); isStatic = false; }
+						 catch (Throwable ignored2) {
+							 try { handle = lookup().findSpecial(owner, li.methodName(), type, owner); isStatic = false; }
+							 catch (Throwable ignored3) {
+								 try { handle = lookup().findConstructor(owner, type); isStatic = true; }
+								 catch (Throwable ignored4) {}
+							 }
+						 }
+					 }
 				 }
 				 if (handle == null) return defaultValue(method.getReturnType());
 
@@ -1976,11 +2019,23 @@ public class CellPropertyRef {
 		Table table = cell.getTable();
 		if (table != null) {
 			try {
+				boolean endRow = ArcReflectionAdapter.isEndRow(cell);
+				int idx = table.getCells().indexOf(cell, true);
+				if (endRow && idx > 0) {
+					Cell<?> prev = table.getCells().get(idx - 1);
+					ArcReflectionAdapter.setEndRow(prev, true);
+				}
+
 				BindCell bind = BindCell.of(cell);
 				bind.remove();
 				Pools.free(bind);
 				table.getCells().remove(cell, true);
-				Core.app.post(table::invalidateHierarchy);
+
+				ArcReflectionAdapter.repairTableGrid(table);
+				table.invalidate();
+				if (Core.app != null) {
+					Core.app.post(table::invalidateHierarchy);
+				}
 			} catch (Throwable t) {
 				error("[CellProperty] Failed to remove cell " + cell, t);
 			}
@@ -2004,6 +2059,8 @@ public class CellPropertyRef {
 	private static final Set<String> PURE_FUNCTIONS         = ConcurrentHashMap.newKeySet();
 
 	public static final String ANNOTATION_CELL_HELPER = "Lnipx/annotation/CellHelper;";
+	private static final Set<String> MANUAL_WHOLE_CLASS_HELPERS = ConcurrentHashMap.newKeySet();
+	private static final Map<String, Set<String>> MANUAL_HELPER_METHODS_BY_CLASS = new ConcurrentHashMap<>();
 	private static final Set<String> WHOLE_CLASS_HELPERS    = ConcurrentHashMap.newKeySet();
 	private static final Map<String, Set<String>> HELPER_METHODS_BY_CLASS = new ConcurrentHashMap<>();
 	private static final Set<String> SCANNED_HELPER_CLASSES = ConcurrentHashMap.newKeySet();
@@ -2202,10 +2259,15 @@ public class CellPropertyRef {
 	public static boolean isHelper(String owner, String name, String desc) {
 		if (owner == null) return false;
 		String slashOwner = owner.replace('.', '/');
-		if (WHOLE_CLASS_HELPERS.contains(slashOwner)) return true;
+		if (MANUAL_WHOLE_CLASS_HELPERS.contains(slashOwner) || WHOLE_CLASS_HELPERS.contains(slashOwner)) return true;
 		int dollar = slashOwner.indexOf('$');
-		if (dollar > 0 && WHOLE_CLASS_HELPERS.contains(slashOwner.substring(0, dollar))) return true;
+		if (dollar > 0 && (MANUAL_WHOLE_CLASS_HELPERS.contains(slashOwner.substring(0, dollar))
+		                   || WHOLE_CLASS_HELPERS.contains(slashOwner.substring(0, dollar)))) return true;
 
+		Set<String> manualMethods = MANUAL_HELPER_METHODS_BY_CLASS.get(slashOwner);
+		if (manualMethods != null && (manualMethods.contains(name) || (desc != null && manualMethods.contains(name + desc)))) {
+			return true;
+		}
 		Set<String> methods = HELPER_METHODS_BY_CLASS.get(slashOwner);
 		if (methods != null && (methods.contains(name) || (desc != null && methods.contains(name + desc)))) {
 			return true;
@@ -2215,8 +2277,13 @@ public class CellPropertyRef {
 			if (dollar > 0 && !SCANNED_HELPER_CLASSES.contains(slashOwner.substring(0, dollar))) {
 				scanHelpers(slashOwner.substring(0, dollar));
 			}
-			if (WHOLE_CLASS_HELPERS.contains(slashOwner)) return true;
-			if (dollar > 0 && WHOLE_CLASS_HELPERS.contains(slashOwner.substring(0, dollar))) return true;
+			if (MANUAL_WHOLE_CLASS_HELPERS.contains(slashOwner) || WHOLE_CLASS_HELPERS.contains(slashOwner)) return true;
+			if (dollar > 0 && (MANUAL_WHOLE_CLASS_HELPERS.contains(slashOwner.substring(0, dollar))
+			                   || WHOLE_CLASS_HELPERS.contains(slashOwner.substring(0, dollar)))) return true;
+			manualMethods = MANUAL_HELPER_METHODS_BY_CLASS.get(slashOwner);
+			if (manualMethods != null && (manualMethods.contains(name) || (desc != null && manualMethods.contains(name + desc)))) {
+				return true;
+			}
 			methods = HELPER_METHODS_BY_CLASS.get(slashOwner);
 			return methods != null && (methods.contains(name) || (desc != null && methods.contains(name + desc)));
 		}
@@ -2225,7 +2292,7 @@ public class CellPropertyRef {
 
 	public static void registerHelper(String owner) {
 		if (owner != null && !owner.isEmpty()) {
-			WHOLE_CLASS_HELPERS.add(owner.replace('.', '/'));
+			MANUAL_WHOLE_CLASS_HELPERS.add(owner.replace('.', '/'));
 		}
 	}
 
@@ -2236,7 +2303,7 @@ public class CellPropertyRef {
 	public static void registerHelper(String owner, String name, String desc) {
 		if (owner != null && name != null) {
 			String key = (desc != null && !desc.isEmpty()) ? name + desc : name;
-			HELPER_METHODS_BY_CLASS.computeIfAbsent(owner.replace('.', '/'), k -> ConcurrentHashMap.newKeySet()).add(key);
+			MANUAL_HELPER_METHODS_BY_CLASS.computeIfAbsent(owner.replace('.', '/'), k -> ConcurrentHashMap.newKeySet()).add(key);
 		}
 	}
 
@@ -2514,6 +2581,18 @@ public class CellPropertyRef {
 					Object[] args = extractArgsDataflow(cn, mn, frames, outerCall, paramBindings);
 					lastInlined.add(new PropertyCall(outerCall.owner, outerCall.name, outerCall.desc, args,
 					                                 lineOf(mn, outerCall)));
+				}
+			}
+
+			if (helperOwner != null) {
+				for (List<PropertyCall> inlined : inlinedChains) {
+					for (int i = 0; i < inlined.size(); i++) {
+						PropertyCall pc = inlined.get(i);
+						inlined.set(i, new PropertyCall(
+							pc.owner, pc.method, pc.desc, pc.args, callerLine,
+							pc.helperClass, pc.helperMethod, pc.helperLine, pc.callOrdinal
+						));
+					}
 				}
 			}
 
@@ -2928,7 +3007,7 @@ public class CellPropertyRef {
 					}
 				}
 			}
-			return new LambdaInfo(handle.getOwner(), handle.getName(), handle.getDesc(), captures);
+			return new LambdaInfo(handle.getOwner(), handle.getName(), handle.getDesc(), captures, handle.getTag());
 		}
 
 		return null;
@@ -3044,7 +3123,7 @@ public class CellPropertyRef {
 		if (v instanceof LambdaInfo li) {
 			Object[] caps    = li.captures();
 			Object[] newCaps = caps == null ? null : sanitizeArgs(caps);
-			return new LambdaInfo(li.ownerClass(), li.methodName(), li.methodDesc(), newCaps);
+			return new LambdaInfo(li.ownerClass(), li.methodName(), li.methodDesc(), newCaps, li.tag());
 		}
 		return null;
 	}

@@ -4,8 +4,13 @@ import nipx.annotation.CellHelper;
 import nipx.uihook.CellPropertyRef;
 import nipx.uihook.CellPropertyRef.CellIdentity;
 import nipx.uihook.CellPropertyRef.PropertyCall;
+import nipx.uihook.CellPropertyRef.ThisPlaceholder;
 import org.junit.jupiter.api.Test;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
 
@@ -517,5 +522,101 @@ class CellHelperTest {
 		assertEquals(0, count[0]);
 
 		CellPropertyRef.unregisterElementCallback(elem, null);
+	}
+
+	public static String sampleFiveArgStatic(String a, String b, String c, String d, String e) {
+		return a + b + c + d + e;
+	}
+
+	public String sampleFiveArgInstance(String a, String b, String c, String d, String e) {
+		return a + b + c + d + e;
+	}
+
+	@Test
+	void testAsSpreaderArgumentArrayType() throws Throwable {
+		Method invStatic = CellPropertyRef.class.getDeclaredMethod("invoke", MethodHandle.class, Object[].class);
+		invStatic.setAccessible(true);
+		MethodHandle mhStatic = MethodHandles.lookup().findStatic(CellHelperTest.class, "sampleFiveArgStatic",
+			MethodType.methodType(String.class, String.class, String.class, String.class, String.class, String.class));
+		String resStatic = (String) invStatic.invoke(null, mhStatic, new Object[]{"1", "2", "3", "4", "5"});
+		assertEquals("12345", resStatic);
+
+		Method invInst = CellPropertyRef.class.getDeclaredMethod("invoke", MethodHandle.class, Object.class, Object[].class);
+		invInst.setAccessible(true);
+		MethodHandle mhInst = MethodHandles.lookup().findVirtual(CellHelperTest.class, "sampleFiveArgInstance",
+			MethodType.methodType(String.class, String.class, String.class, String.class, String.class, String.class));
+		String resInst = (String) invInst.invoke(null, mhInst, this, new Object[]{"1", "2", "3", "4", "5"});
+		assertEquals("12345", resInst);
+	}
+
+	@Test
+	void testMakeDummyProxyPrimitiveDefaultReturns() throws Exception {
+		Method m = CellPropertyRef.class.getDeclaredMethod("makeDummyProxy", Class.class);
+		m.setAccessible(true);
+
+		arc.func.Boolp boolProxy = (arc.func.Boolp) m.invoke(null, arc.func.Boolp.class);
+		assertNotNull(boolProxy);
+		assertFalse(boolProxy.get());
+
+		arc.func.Floatp floatProxy = (arc.func.Floatp) m.invoke(null, arc.func.Floatp.class);
+		assertNotNull(floatProxy);
+		assertEquals(0.0f, floatProxy.get());
+
+		arc.func.Intp intProxy = (arc.func.Intp) m.invoke(null, arc.func.Intp.class);
+		assertNotNull(intProxy);
+		assertEquals(0, intProxy.get());
+	}
+
+	@Test
+	void testResolveThisPlaceholderPrecedenceAndSafety() throws Exception {
+		Method m = CellPropertyRef.class.getDeclaredMethod("resolveThisPlaceholder",
+			ThisPlaceholder.class, Class.class, arc.scene.ui.layout.Cell.class, arc.scene.ui.layout.Table.class);
+		m.setAccessible(true);
+
+		arc.scene.ui.layout.Table parent = new arc.scene.ui.layout.Table();
+		arc.scene.ui.layout.Table child = new arc.scene.ui.layout.Table();
+		parent.addChild(child);
+
+		// Case 1: Matching hostClass in parent chain succeeds
+		ThisPlaceholder tpParent = new ThisPlaceholder(parent.getClass().getName().replace('.', '/'));
+		Object resolvedParent = m.invoke(null, tpParent, arc.scene.ui.layout.Table.class, null, child);
+		assertNotNull(resolvedParent);
+
+		// Case 2: Specified hostClass not in parent chain must return null (unsafe fallback prohibited)
+		ThisPlaceholder tpUnknown = new ThisPlaceholder("non/existent/Host");
+		Object resolvedUnknown = m.invoke(null, tpUnknown, arc.scene.ui.layout.Table.class, null, child);
+		assertNull(resolvedUnknown);
+
+		// Case 3: tp with null hostClass but matching targetType along parent chain
+		ThisPlaceholder tpNullHost = new ThisPlaceholder(null);
+		Object resolvedByTarget = m.invoke(null, tpNullHost, arc.scene.ui.layout.Table.class, null, child);
+		assertNotNull(resolvedByTarget);
+	}
+
+	@Test
+	void testDryRunPropertiesWithElementAwareProperties() throws Exception {
+		arc.Application oldApp = arc.Core.app;
+		try {
+			arc.Core.app = (arc.Application) java.lang.reflect.Proxy.newProxyInstance(
+				arc.Application.class.getClassLoader(),
+				new Class<?>[]{arc.Application.class},
+				(proxy, method, methodArgs) -> {
+					if ("isDesktop".equals(method.getName())) return true;
+					return null;
+				}
+			);
+
+			Method m = CellPropertyRef.class.getDeclaredMethod("dryRunProperties", List.class);
+			m.setAccessible(true);
+
+			arc.func.Cons<arc.scene.Element> cons = elem -> {};
+			List<PropertyCall> calls = List.of(
+				new PropertyCall("arc/scene/ui/layout/Cell", "update", "(Larc/func/Cons;)Larc/scene/ui/layout/Cell;", new Object[]{cons}, 10)
+			);
+			boolean ok = (boolean) m.invoke(null, calls);
+			assertTrue(ok);
+		} finally {
+			arc.Core.app = oldApp;
+		}
 	}
 }

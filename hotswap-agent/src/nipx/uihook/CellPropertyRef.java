@@ -217,6 +217,7 @@ public class CellPropertyRef {
 	private static final Map<String, Map<String, List<List<PropertyCall>>>> chainCache     = new HashMap<>();
 	private static final Map<CellIdentity, ChainMatch>                      templateCache  = new HashMap<>();
 	private static final Map<Cell<?>, CellIdentity>                         unpatchedCells = new WeakHashMap<>();
+	private static final Map<Table, Map<String, Integer>>                   tableSiteOrdinals = new WeakHashMap<>();
 
 	private static volatile boolean enabled = false;
 	private static volatile byte[]  originalCellBytes;
@@ -266,24 +267,33 @@ public class CellPropertyRef {
 			return;
 		}
 
-		int ordinal = 0;
-		synchronized (cellState) {
-			for (CellState st : cellState.values()) {
-				if (st == IGNORED_STATE) continue;
-				if (st.id.hostClass.equals(hf.hostClass)
-				    && st.id.hostMethod.equals(hf.hostMethod)
-				    && st.id.line == hf.line) {
-					ordinal++;
-				}
+		Table table = cell.getTable();
+		String siteKey = hf.hostClass + "#" + hf.hostMethod + "@" + hf.line + "#" + (hf.creatorName == null ? "" : hf.creatorName)
+		                 + "#" + (hf.helperClass == null ? "" : hf.helperClass) + "@" + hf.helperLine;
+		int rawOrdinal = 0;
+		if (table != null) {
+			synchronized (cellState) {
+				Map<String, Integer> siteCounts = tableSiteOrdinals.computeIfAbsent(table, k -> new HashMap<>());
+				rawOrdinal = siteCounts.getOrDefault(siteKey, 0);
+				siteCounts.put(siteKey, rawOrdinal + 1);
 			}
 		}
 
 		CellIdentity id = new CellIdentity(hf.hostClass, hf.hostMethod, hf.hostDesc,
-		 hf.line, hf.creatorName, hf.helperClass, hf.helperMethod, hf.helperLine, ordinal);
+		 hf.line, hf.creatorName, hf.helperClass, hf.helperMethod, hf.helperLine, rawOrdinal);
 		ChainMatch match    = findChainMatch(id);
 		int        chainIdx = match == null ? -1 : match.index();
 		List<PropertyCall> chain = (match == null || match.chain() == null)
 		 ? new ArrayList<>() : new ArrayList<>(match.chain());
+
+		if (match != null && !chain.isEmpty()) {
+			int matchedOrdinal = chain.get(0).callOrdinal;
+			if (id.callOrdinal != matchedOrdinal) {
+				id = new CellIdentity(id.hostClass, id.hostMethod, id.hostDesc,
+				                      id.line, id.creatorName, id.helperClass, id.helperMethod, id.helperLine,
+				                      matchedOrdinal);
+			}
+		}
 
 		Geometry16 snap = null;
 		try {
@@ -476,8 +486,8 @@ public class CellPropertyRef {
 				}
 
 				if (cls.equals(CL_TABLE) || isTableCellCreator(cls, name)) {
-					if (TABLE_CELL_CREATORS.contains(name) || isTableCellCreator(cls, name)) {
-						if (creatorName == null) creatorName = name;
+					if (userFrames.isEmpty() && (TABLE_CELL_CREATORS.contains(name) || isTableCellCreator(cls, name))) {
+						creatorName = name;
 					}
 					continue;
 				}
@@ -522,7 +532,7 @@ public class CellPropertyRef {
 		});
 	}
 
-	private static boolean matchesIdentity(CellIdentity id, PropertyCall creator) {
+	private static boolean matchesSite(CellIdentity id, PropertyCall creator) {
 		if (id.creatorName != null && !id.creatorName.equals(creator.method)) return false;
 		if (id.line >= 0 && creator.line >= 0 && id.line != creator.line) return false;
 		if (id.helperClass != null) {
@@ -532,12 +542,17 @@ public class CellPropertyRef {
 		} else {
 			if (creator.helperClass != null) return false;
 		}
+		return true;
+	}
+
+	private static boolean matchesIdentity(CellIdentity id, PropertyCall creator) {
+		if (!matchesSite(id, creator)) return false;
 		return id.callOrdinal == creator.callOrdinal;
 	}
 
 	/**
-	 * 找 id 对应的静态链。候选不唯一（同一行同一 creator、行号取不到时命中多条）
-	 * 视为"不确定"，返回 NO_CHAIN。负缓存。
+	 * 找 id 对应的静态链。若该站点只有唯一样本，直接命中（支持循环与多实例）；
+	 * 同一行同 creator 多个站点时，按 callOrdinal 取模候选数路由。
 	 */
 	private static ChainMatch findChainMatch(CellIdentity id) {
 		ChainMatch cached = templateCache.get(id);
@@ -552,17 +567,26 @@ public class CellPropertyRef {
 			return null;
 		}
 
-		ChainMatch found = null;
-		int        hits  = 0;
+		List<Integer> candidateIndices = new ArrayList<>();
 		for (int i = 0; i < methodChains.size(); i++) {
 			List<PropertyCall> chain = methodChains.get(i);
 			if (chain.isEmpty()) continue;
 			PropertyCall creator = chain.get(0);
-			if (!matchesIdentity(id, creator)) continue;
-			if (found == null) found = new ChainMatch(i, chain);
-			hits++;
+			if (matchesSite(id, creator)) {
+				candidateIndices.add(i);
+			}
 		}
-		ChainMatch r = (hits == 1) ? found : NO_CHAIN;
+
+		ChainMatch r;
+		if (candidateIndices.isEmpty()) {
+			r = NO_CHAIN;
+		} else if (candidateIndices.size() == 1) {
+			int idx = candidateIndices.get(0);
+			r = new ChainMatch(idx, methodChains.get(idx));
+		} else {
+			int targetIdx = candidateIndices.get(Math.floorMod(id.callOrdinal, candidateIndices.size()));
+			r = new ChainMatch(targetIdx, methodChains.get(targetIdx));
+		}
 		templateCache.put(id, r);
 		return r == NO_CHAIN ? null : r;
 	}
@@ -573,18 +597,24 @@ public class CellPropertyRef {
 		List<List<PropertyCall>> methodChains = model.get(methodKey);
 		if (methodChains == null) return null;
 
-		ChainMatch found = null;
-		int        hits  = 0;
+		List<Integer> candidateIndices = new ArrayList<>();
 		for (int i = 0; i < methodChains.size(); i++) {
 			if (matchedNew.contains(methodKey + "#" + i)) continue;
 			List<PropertyCall> chain = methodChains.get(i);
 			if (chain.isEmpty()) continue;
 			PropertyCall creator = chain.get(0);
-			if (!matchesIdentity(id, creator)) continue;
-			if (found == null) found = new ChainMatch(i, chain);
-			hits++;
+			if (matchesSite(id, creator)) {
+				candidateIndices.add(i);
+			}
 		}
-		return (hits == 1) ? found : null;
+
+		if (candidateIndices.isEmpty()) return null;
+		if (candidateIndices.size() == 1) {
+			int idx = candidateIndices.get(0);
+			return new ChainMatch(idx, methodChains.get(idx));
+		}
+		int targetIdx = candidateIndices.get(Math.floorMod(id.callOrdinal, candidateIndices.size()));
+		return new ChainMatch(targetIdx, methodChains.get(targetIdx));
 	}
 
 	private static Map<String, List<List<PropertyCall>>> buildChainModel(String slashName) {
@@ -1544,7 +1574,7 @@ public class CellPropertyRef {
 
 	private static boolean dryRunProperties(List<PropertyCall> calls) {
 		Table   dummyTable = new Table();
-		Cell<?> dummyCell  = dummyTable.add();
+		Cell<?> dummyCell  = dummyTable.add(new Element());
 		try {
 			for (PropertyCall call : calls) {
 				if (!hasUsableArgs(call)) continue;
@@ -1754,21 +1784,41 @@ public class CellPropertyRef {
 		Table rootTable = table != null ? table : (cell != null ? cell.getTable() : null);
 		if (rootTable == null) return null;
 
+		// 1. 优先按 hostClass 沿 parent 链向上查找，支持子类 (isAssignableFrom)
+		if (tp.hostClass() != null) {
+			String hostClassDots = tp.hostClass().replace('/', '.');
+			Class<?> hostClazz = null;
+			try {
+				hostClazz = loadClass(hostClassDots);
+			} catch (Throwable ignored) {}
+
+			for (Element curr = rootTable; curr != null; curr = curr.parent) {
+				boolean matches = false;
+				if (hostClazz != null) {
+					matches = hostClazz.isInstance(curr);
+				} else {
+					for (Class<?> c = curr.getClass(); c != null; c = c.getSuperclass()) {
+						if (c.getName().equals(hostClassDots)) {
+							matches = true;
+							break;
+						}
+					}
+				}
+				if (matches && (targetType == null || targetType == Object.class || targetType.isInstance(curr))) {
+					return curr;
+				}
+			}
+			return null;
+		}
+
+		// 2. 未指定 hostClass 时，按 targetType 沿 parent 链寻找
 		if (targetType != null && targetType != Object.class) {
-			if (targetType.isInstance(rootTable)) return rootTable;
 			for (Element curr = rootTable; curr != null; curr = curr.parent) {
 				if (targetType.isInstance(curr)) return curr;
 			}
 		}
 
-		if (tp.hostClass() != null) {
-			String hostClassDots = tp.hostClass().replace('/', '.');
-			for (Element curr = rootTable; curr != null; curr = curr.parent) {
-				if (curr.getClass().getName().equals(hostClassDots)) return curr;
-			}
-		}
-
-		return rootTable;
+		return null;
 	}
 
 	private static Object[] convertArgs(MethodType methodType, Object[] args) {
@@ -1827,6 +1877,19 @@ public class CellPropertyRef {
 		return result;
 	}
 
+	private static Object defaultValue(Class<?> t) {
+		if (t == null || !t.isPrimitive() || t == void.class) return null;
+		if (t == boolean.class) return false;
+		if (t == byte.class) return (byte) 0;
+		if (t == short.class) return (short) 0;
+		if (t == char.class) return '\0';
+		if (t == int.class) return 0;
+		if (t == long.class) return 0L;
+		if (t == float.class) return 0.0f;
+		if (t == double.class) return 0.0d;
+		return Array.get(Array.newInstance(t, 1), 0);
+	}
+
 	private static Object makeDummyProxy(Class<?> target) {
 		return Proxy.newProxyInstance(target.getClassLoader(), new Class<?>[]{target},
 		 (proxy, method, methodArgs) -> {
@@ -1838,7 +1901,7 @@ public class CellPropertyRef {
 					 default -> null;
 				 };
 			 }
-			 return null;
+			 return defaultValue(method.getReturnType());
 		 });
 	}
 
@@ -1868,7 +1931,7 @@ public class CellPropertyRef {
 					 handle = lookup().findSpecial(owner, li.methodName(), type, owner);
 					 isStatic = false;
 				 }
-				 if (handle == null) return null;
+				 if (handle == null) return defaultValue(method.getReturnType());
 
 				 Object[] caps = li.captures();
 				 Object[] resolvedCaps = new Object[caps.length];
@@ -1891,7 +1954,7 @@ public class CellPropertyRef {
 				 if (isStatic) return invoke(handle, allArgs);
 
 				 Object instance = allArgs.length > 0 ? allArgs[0] : null;
-				 if (instance == null) return null;
+				 if (instance == null) return defaultValue(method.getReturnType());
 				 Object[] actual = new Object[Math.max(0, allArgs.length - 1)];
 				 if (actual.length > 0) { System.arraycopy(allArgs, 1, actual, 0, actual.length); }
 				 return invoke(handle, instance, actual);
@@ -1901,7 +1964,7 @@ public class CellPropertyRef {
 				 throw le;
 			 } catch (Throwable t) {
 				 error("[CellProperty] Lambda invocation failed", t);
-				 return null;
+				 return defaultValue(method.getReturnType());
 			 }
 		 });
 	}
@@ -3274,6 +3337,7 @@ public class CellPropertyRef {
 			chainCache.clear();
 			templateCache.clear();
 			unpatchedCells.clear();
+			tableSiteOrdinals.clear();
 			WHOLE_CLASS_HELPERS.clear();
 			HELPER_METHODS_BY_CLASS.clear();
 			SCANNED_HELPER_CLASSES.clear();
@@ -4150,7 +4214,7 @@ public class CellPropertyRef {
 			case 2 -> handle.invoke(instance, args[0], args[1]);
 			case 3 -> handle.invoke(instance, args[0], args[1], args[2]);
 			case 4 -> handle.invoke(instance, args[0], args[1], args[2], args[3]);
-			default -> handle.bindTo(instance).asSpreader(Object.class, args.length).invoke(args);
+			default -> handle.bindTo(instance).asSpreader(Object[].class, args.length).invoke(args);
 		};
 	}
 
@@ -4161,7 +4225,7 @@ public class CellPropertyRef {
 			case 2 -> handle.invoke(args[0], args[1]);
 			case 3 -> handle.invoke(args[0], args[1], args[2]);
 			case 4 -> handle.invoke(args[0], args[1], args[2], args[3]);
-			default -> handle.asSpreader(Object.class, args.length).invoke(args);
+			default -> handle.asSpreader(Object[].class, args.length).invoke(args);
 		};
 	}
 	//endregion

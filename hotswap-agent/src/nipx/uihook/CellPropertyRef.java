@@ -2176,10 +2176,7 @@ public class CellPropertyRef {
 			// Task 17 condition 2: Check for branches (IF*, SWITCH, GOTO)
 			for (AbstractInsnNode insn = helperMn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
 				int op = insn.getOpcode();
-				if ((op >= IFEQ && op <= JSR)
-				    || (op >= IF_ACMPEQ && op <= GOTO)
-				    || op == TABLESWITCH
-				    || op == LOOKUPSWITCH
+				if ((op >= IFEQ && op <= LOOKUPSWITCH)
 				    || op == IFNULL
 				    || op == IFNONNULL) {
 					if (DEBUG) log("[CellProperty] Helper contains branch, rejecting: " + key);

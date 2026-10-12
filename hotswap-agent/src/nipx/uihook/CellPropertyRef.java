@@ -27,6 +27,7 @@ import java.lang.reflect.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static nipx.AnnotationTransformer.internalName;
@@ -856,7 +857,7 @@ public class CellPropertyRef {
 		}
 		if (targetTable == null) return false;
 
-		MethodType   type = MethodType.fromMethodDescriptorString(creator.desc, Vars.mods.mainLoader());
+		MethodType   type = MethodType.fromMethodDescriptorString(creator.desc, getTargetLoader());
 		MethodHandle mh   = findTableMethod(creator.owner, creator.method, type);
 		if (mh == null) return false;
 
@@ -1156,7 +1157,7 @@ public class CellPropertyRef {
 		if (table == null) return;
 
 		try {
-			MethodType   type = MethodType.fromMethodDescriptorString(creator.desc, Vars.mods.mainLoader());
+			MethodType   type = MethodType.fromMethodDescriptorString(creator.desc, getTargetLoader());
 			MethodHandle mh   = findTableMethod(creator.owner, creator.method, type);
 			if (mh == null) return;
 
@@ -1406,32 +1407,88 @@ public class CellPropertyRef {
 
 	//region ASM 字节码分析
 
-	private static final Set<String> CELL_PROPERTY_METHODS = new HashSet<>(Arrays.asList(
-	 "size", "width", "height",
-	 "minSize", "minWidth", "minHeight",
-	 "maxSize", "maxWidth", "maxHeight",
-	 "pad", "padTop", "padLeft", "padBottom", "padRight",
-	 "fill", "fillX", "fillY",
-	 "align", "center", "top", "left", "bottom", "right",
-	 "grow", "growX", "growY",
-	 "row",
-	 "expand", "expandX", "expandY",
-	 "colspan",
-	 "uniform", "uniformX", "uniformY",
-	 "color",
-	 "margin", "marginTop", "marginLeft", "marginBottom", "marginRight",
-	 "name", "disabled", "touchable", "visible", "scaling",
-	 "wrap", "ellipsis", "labelAlign", "fontScale",
-	 "scrollX", "scrollY", "maxTextLength", "valid",
-	 "tooltip", "style", "checked", "update"
-	));
+	private static final Set<String> CELL_PROPERTY_METHODS = ConcurrentHashMap.newKeySet();
+	private static final Set<String> TABLE_CELL_CREATORS    = ConcurrentHashMap.newKeySet();
 
-	private static final Set<String> TABLE_CELL_CREATORS = new HashSet<>(Arrays.asList(
-	 "add", "button", "image", "label", "textButton",
-	 "imageButton", "area", "table", "pane", "stack",
-	 "toggleButton", "imageTextButton", "checkBox", "slider",
-	 "textField", "selectBox", "list", "tree"
-	));
+	static {
+		CELL_PROPERTY_METHODS.addAll(Arrays.asList(
+		 "size", "width", "height",
+		 "minSize", "minWidth", "minHeight",
+		 "maxSize", "maxWidth", "maxHeight",
+		 "pad", "padTop", "padLeft", "padBottom", "padRight",
+		 "fill", "fillX", "fillY",
+		 "align", "center", "top", "left", "bottom", "right",
+		 "grow", "growX", "growY",
+		 "row",
+		 "expand", "expandX", "expandY",
+		 "colspan",
+		 "uniform", "uniformX", "uniformY",
+		 "color",
+		 "margin", "marginTop", "marginLeft", "marginBottom", "marginRight",
+		 "name", "disabled", "touchable", "visible", "scaling",
+		 "wrap", "wrapLabel", "ellipsis", "labelAlign", "fontScale",
+		 "scrollX", "scrollY", "maxTextLength", "valid",
+		 "tooltip", "style", "checked", "update"
+		));
+
+		TABLE_CELL_CREATORS.addAll(Arrays.asList(
+		 "add", "button", "image", "label", "textButton",
+		 "imageButton", "area", "table", "pane", "stack",
+		 "toggleButton", "imageTextButton", "checkBox", "slider",
+		 "textField", "selectBox", "list", "tree",
+		 "field", "check", "buttonRow", "buttonCenter", "collapser",
+		 "wrapTable", "labelWrap", "spacer", "spacerX", "spacerY",
+		 "imageDraw", "rect"
+		));
+
+		initTableCellCreators();
+		initCellPropertyMethods();
+	}
+
+	private static void initTableCellCreators() {
+		try {
+			for (Method m : Table.class.getMethods()) {
+				if (Modifier.isPublic(m.getModifiers()) && !Modifier.isStatic(m.getModifiers())) {
+					if (Cell.class.isAssignableFrom(m.getReturnType())) {
+						String name = m.getName();
+						if (!"defaults".equals(name) && !"getCell".equals(name)
+						    && !"obtainCell".equals(name) && !"clearChildren".equals(name)
+						    && !"removeChild".equals(name)) {
+							TABLE_CELL_CREATORS.add(name);
+						}
+					}
+				}
+			}
+		} catch (Throwable ignored) { }
+	}
+
+	private static void initCellPropertyMethods() {
+		try {
+			for (Method m : Cell.class.getMethods()) {
+				if (Modifier.isPublic(m.getModifiers()) && !Modifier.isStatic(m.getModifiers())) {
+					String name = m.getName();
+					if ("defaults".equals(name) || "reset".equals(name) || "set".equals(name)
+					    || "clearElement".equals(name) || "setElement".equals(name)
+					    || "setLayout".equals(name) || "setBounds".equals(name)
+					    || "self".equals(name) || "group".equals(name) || "with".equals(name)
+					    || "get".equals(name) || "getElement".equals(name) || "getTable".equals(name)) {
+						continue;
+					}
+					if (Cell.class.isAssignableFrom(m.getReturnType()) || "row".equals(name)) {
+						CELL_PROPERTY_METHODS.add(name);
+					}
+				}
+			}
+		} catch (Throwable ignored) { }
+	}
+
+	public static void registerCreator(String name) {
+		if (name != null && !name.isEmpty()) TABLE_CELL_CREATORS.add(name);
+	}
+
+	public static void registerProperty(String name) {
+		if (name != null && !name.isEmpty()) CELL_PROPERTY_METHODS.add(name);
+	}
 
 	public static Map<String, List<List<PropertyCall>>> extractCellChains(byte[] bytecode) {
 		Map<String, List<List<PropertyCall>>> result = new HashMap<>();

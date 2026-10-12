@@ -42,7 +42,6 @@ import modtools.utils.ArrayUtils.DisposableSeq;
 import modtools.utils.JSFunc.*;
 import modtools.utils.search.*;
 import modtools.utils.ui.*;
-import org.lwjgl.sdl.SDLMouse;
 
 import java.util.Objects;
 import java.util.regex.Pattern;
@@ -110,7 +109,7 @@ public class IntUI {
 			try {
 				handle = SDL.SDL_CreateSystemCursor(type);
 			} catch (NoClassDefFoundError e) {
-				handle = SDLMouse.SDL_CreateSystemCursor(type);
+				handle = Reflect.invoke(Class.forName("org.lwjgl.sdl.SDLMouse"), "SDL_CreateSystemCursor", new Object[]{type}, int.class);
 			}
 			return new SdlCursor(0, handle);
 		} catch (Throwable e) {

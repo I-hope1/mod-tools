@@ -144,9 +144,9 @@ dependencies {
 //	compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 	compileOnly "com.github.Anuken.Arc:backend-android:$mindustryVersion"
 	compileOnly "com.github.Anuken.Arc:backend-sdl:$mindustryVersion"
-	compileOnly("com.github.Anuken.Arc:backend-sdl3:$mindustryVersion") {
-		exclude group: 'org.lwjgl'
-	}
+//	compileOnly("com.github.Anuken.Arc:backend-sdl3:$mindustryVersion") {
+//		exclude group: 'org.lwjgl'
+//	}
 
 //	compileOnly "org.lwjgl:lwjgl-sdl:3.4.0"
 	desugarLib 'com.android.tools:desugar_jdk_libs:2.1.5'

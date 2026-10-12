@@ -2307,11 +2307,22 @@ public class CellPropertyRef {
 			AbstractInsnNode prev = recv.insns.iterator().next();
 			if (!(prev instanceof MethodInsnNode prevCall)) return curr;
 			if (isHelper(prevCall.owner, prevCall.name, prevCall.desc)) return prevCall;
+			if (isTransparentCellCall(prevCall)) {
+				curr = prevCall;
+				continue;
+			}
 			if (!returnsCell(prevCall)) return curr;
 			if (!isTableCellCreator(cn, prevCall.owner, prevCall.name)
 			    && !isCellProperty(cn, prevCall.owner, prevCall.name, prevCall.desc)) { return curr; }
 			curr = prevCall;
 		}
+	}
+
+	private static boolean isTransparentCellCall(MethodInsnNode mi) {
+		if (isCellClass(null, mi.owner)) {
+			return "self".equals(mi.name) || "with".equals(mi.name);
+		}
+		return false;
 	}
 
 	private static SourceValue receiverSource(Frame<SourceValue>[] frames, MethodNode mn,

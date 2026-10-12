@@ -226,6 +226,11 @@ public class LambdaAligner {
 	public static volatile AlignmentStats    LAST_STATS;
 	public static volatile Map<String, Long> LAST_OLD_ANON_HASHES;
 	public static volatile Map<String, Long> LAST_NEW_ANON_HASHES;
+	/**
+	 * 最近一次 align 的方法映射表（oldName:oldDesc -> newName:newDesc）。
+	 * 供 CellPropertyRef 等 UI 追踪系统共享对齐结论。
+	 */
+	public static volatile Map<String, String> LAST_METHOD_MAPPING;
 
 	/**
 	 * 诊断开关：打开后打印配对决策的细节（谁在哪个阶段拿了哪个旧名字）。
@@ -627,12 +632,28 @@ public class LambdaAligner {
 			                                ctx.consumerMismatchWarnPairs, ctx.consumerMismatchDebugPairs, ctx.prunedPairs);
 			LAST_OLD_ANON_HASHES = new HashMap<>(ctx.oldAnonHashes);
 			LAST_NEW_ANON_HASHES = new HashMap<>(ctx.newAnonHashes);
+
+			Map<String, String> methodMapping = new HashMap<>();
+			for (int idx = newGroups.nextEntry(-1); idx != -1; idx = newGroups.nextEntry(idx)) {
+				List<SyntheticInfo> g = newGroups.valueAt(idx);
+				if (g == null) continue;
+				for (SyntheticInfo ni : g) {
+					if (ni.matchedWith != null) {
+						String oldKey = ni.matchedWith.name + ":" + ni.matchedWith.desc;
+						String newKey = ni.name + ":" + ni.desc;
+						methodMapping.put(oldKey, newKey);
+					}
+				}
+			}
+			LAST_METHOD_MAPPING = methodMapping;
+
 			// 传入 oldCn（已解析过一次）—— 避免 resurrectOrphanedLambdas 二次读 oldBytes
 			return resurrectOrphanedLambdas(oldCn, alignedBytes, presentKeys, oldMethodRefs, newMethodRefs, ctx);
 		} catch (Exception | LinkageError | StackOverflowError e) {
 			LAST_STATS = null;
 			LAST_OLD_ANON_HASHES = null;
 			LAST_NEW_ANON_HASHES = null;
+			LAST_METHOD_MAPPING = null;
 			// 降级：不崩溃，返回原始字节码。捕获 Exception 与 LinkageError、StackOverflowError 等。
 			// 默认只记一行（热更失败不该刷屏）；DEBUG 下走 Logger 的 (msg, Throwable)
 			// 重载打完整堆栈 —— 而不是直接 printStackTrace，保持输出统一经日志系统。

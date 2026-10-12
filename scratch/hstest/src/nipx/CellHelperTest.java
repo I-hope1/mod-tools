@@ -306,4 +306,101 @@ class CellHelperTest {
 		assertFalse(reinserted);
 		assertEquals(4, table.getCells().size);
 	}
+
+	static class SampleRebuildHost {
+		boolean rebuilt = false;
+
+		@nipx.annotation.HotRebuild
+		public void rebuildUI() {
+			this.rebuilt = true;
+		}
+	}
+
+	static class SampleArgRebuildHost {
+		String query = "init";
+		int count = 42;
+		String lastReceivedQuery = null;
+		int lastReceivedCount = 0;
+
+		@nipx.annotation.HotRebuild(argFields = {"query", "count"})
+		public void rebuildWithArgs(String q, int c) {
+			this.lastReceivedQuery = q;
+			this.lastReceivedCount = c;
+		}
+	}
+
+	static class SampleDirtyHost {
+		boolean dirty = false;
+		boolean rebuilt = false;
+
+		public void forceChanged() {
+			this.dirty = true;
+		}
+
+		@nipx.annotation.HotRebuild
+		public void rebuild() {
+			this.rebuilt = true;
+		}
+	}
+
+	static class UnannotatedHost {
+		boolean rebuilt = false;
+
+		public void customRebuild() {
+			this.rebuilt = true;
+		}
+	}
+
+	@Test
+	void testHotRebuildInvocationAndArgResolution() {
+		SampleRebuildHost host1 = new SampleRebuildHost();
+		CellPropertyRef.registerInstance(host1);
+		assertTrue(CellPropertyRef.hasHotRebuild(SampleRebuildHost.class));
+		assertFalse(host1.rebuilt);
+
+		boolean ok = CellPropertyRef.triggerHotRebuild(SampleRebuildHost.class);
+		assertTrue(ok);
+		assertTrue(host1.rebuilt);
+		CellPropertyRef.unregisterInstance(host1);
+
+		SampleArgRebuildHost host2 = new SampleArgRebuildHost();
+		host2.query = "customQuery";
+		host2.count = 99;
+		CellPropertyRef.registerInstance(host2);
+		assertTrue(CellPropertyRef.hasHotRebuild(SampleArgRebuildHost.class));
+
+		ok = CellPropertyRef.triggerHotRebuild(SampleArgRebuildHost.class);
+		assertTrue(ok);
+		assertEquals("customQuery", host2.lastReceivedQuery);
+		assertEquals(99, host2.lastReceivedCount);
+		CellPropertyRef.unregisterInstance(host2);
+
+		SampleDirtyHost host3 = new SampleDirtyHost();
+		CellPropertyRef.registerInstance(host3);
+		assertFalse(host3.dirty);
+		assertFalse(host3.rebuilt);
+
+		ok = CellPropertyRef.triggerHotRebuild(SampleDirtyHost.class);
+		assertTrue(ok);
+		assertTrue(host3.dirty);
+		assertTrue(host3.rebuilt);
+		CellPropertyRef.unregisterInstance(host3);
+	}
+
+	@Test
+	void testProgrammaticRegisterRebuildMethod() {
+		UnannotatedHost host = new UnannotatedHost();
+		CellPropertyRef.registerInstance(host);
+		assertFalse(CellPropertyRef.hasHotRebuild(UnannotatedHost.class));
+
+		CellPropertyRef.registerRebuildMethod(UnannotatedHost.class.getName(), "customRebuild");
+		assertTrue(CellPropertyRef.hasHotRebuild(UnannotatedHost.class));
+
+		boolean ok = CellPropertyRef.triggerHotRebuild(UnannotatedHost.class);
+		assertTrue(ok);
+		assertTrue(host.rebuilt);
+
+		CellPropertyRef.unregisterRebuildMethod(UnannotatedHost.class.getName(), "customRebuild");
+		CellPropertyRef.unregisterInstance(host);
+	}
 }

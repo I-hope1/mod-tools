@@ -13,8 +13,11 @@ import mindustry.Vars;
 import nipx.AnnotationTransformer;
 import nipx.HotSwapAgent;
 import nipx.Injector;
+import nipx.InstanceTracker;
 import nipx.LambdaAligner;
+import nipx.annotation.HotRebuild;
 import nipx.ref.ClassHierarchyOracle;
+import nipx.util.LibTool;
 import org.objectweb.asm.*;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.commons.AdviceAdapter;
@@ -747,6 +750,13 @@ public class CellPropertyRef {
 				applyHostRedefine(slashName, newBytecode, oldModel);
 			} else if (DEBUG) {
 				log("[CellProperty] No old model for " + slashName);
+			}
+
+			// 触发方法级 @HotRebuild 兜底重建 (Task 31)
+			try {
+				triggerHotRebuild(slashName);
+			} catch (Throwable t) {
+				if (DEBUG) log("[CellProperty] triggerHotRebuild failed for " + slashName + ": " + t.getMessage());
 			}
 
 			// 级联刷新依赖该 helper 的宿主类
@@ -3261,6 +3271,379 @@ public class CellPropertyRef {
 			       + "  Chain Cache: " + chainCache.size() + "\n"
 			       + "  Template Cache: " + templateCache.size();
 		}
+	}
+	//endregion
+
+	//region HotRebuild 重建兜底 (Task 31)
+
+	private static final Map<String, Set<String>> REGISTERED_REBUILD_METHODS = new ConcurrentHashMap<>();
+	public static final Set<Object>               REGISTERED_INSTANCES       = Collections.synchronizedSet(newWeakSet());
+
+	public static void registerRebuildMethod(String className, String methodName) {
+		if (className == null || methodName == null) return;
+		String norm = className.replace('/', '.');
+		REGISTERED_REBUILD_METHODS.computeIfAbsent(norm, k -> ConcurrentHashMap.newKeySet()).add(methodName);
+		String slash = className.replace('.', '/');
+		REGISTERED_REBUILD_METHODS.computeIfAbsent(slash, k -> ConcurrentHashMap.newKeySet()).add(methodName);
+	}
+
+	public static void unregisterRebuildMethod(String className, String methodName) {
+		if (className == null || methodName == null) return;
+		String norm = className.replace('/', '.');
+		Set<String> s1 = REGISTERED_REBUILD_METHODS.get(norm);
+		if (s1 != null) s1.remove(methodName);
+		String slash = className.replace('.', '/');
+		Set<String> s2 = REGISTERED_REBUILD_METHODS.get(slash);
+		if (s2 != null) s2.remove(methodName);
+	}
+
+	public static void registerInstance(Object instance) {
+		if (instance != null) {
+			REGISTERED_INSTANCES.add(instance);
+		}
+	}
+
+	public static void unregisterInstance(Object instance) {
+		if (instance != null) {
+			REGISTERED_INSTANCES.remove(instance);
+		}
+	}
+
+	public static boolean hasHotRebuild(Class<?> clazz) {
+		if (clazz == null) return false;
+		String name = clazz.getName();
+		String slash = name.replace('.', '/');
+		if (REGISTERED_REBUILD_METHODS.containsKey(name) || REGISTERED_REBUILD_METHODS.containsKey(slash)) {
+			return true;
+		}
+		Class<?> curr = clazz;
+		while (curr != null && curr != Object.class) {
+			for (Method m : curr.getDeclaredMethods()) {
+				if (m.isAnnotationPresent(HotRebuild.class)) {
+					return true;
+				}
+			}
+			for (Class<?> iface : curr.getInterfaces()) {
+				for (Method m : iface.getDeclaredMethods()) {
+					if (m.isAnnotationPresent(HotRebuild.class)) {
+						return true;
+					}
+				}
+			}
+			curr = curr.getSuperclass();
+		}
+		return false;
+	}
+
+	public static boolean triggerHotRebuild(String slashName) {
+		if (slashName == null) return false;
+		try {
+			Class<?> clazz = Class.forName(slashName.replace('/', '.'), false, getTargetLoader());
+			return triggerHotRebuild(clazz);
+		} catch (Throwable t) {
+			if (DEBUG) log("[HotRebuild] Failed to load class for rebuild: " + slashName + ": " + t.getMessage());
+			return false;
+		}
+	}
+
+	public static boolean triggerHotRebuild(Class<?> clazz) {
+		if (clazz == null || !hasHotRebuild(clazz)) return false;
+
+		if (Thread.currentThread() == uiThread || Core.app == null) {
+			return doTriggerHotRebuild(clazz);
+		} else {
+			Core.app.post(() -> doTriggerHotRebuild(clazz));
+			return true;
+		}
+	}
+
+	private static boolean doTriggerHotRebuild(Class<?> clazz) {
+		Map<String, Method> rebuildMethods = findRebuildMethods(clazz);
+		if (rebuildMethods.isEmpty()) return false;
+
+		Set<Object> instances = findInstancesOfClass(clazz);
+		boolean anyInvoked = false;
+
+		for (Method m : rebuildMethods.values()) {
+			String[] argFields = null;
+			HotRebuild hr = m.getAnnotation(HotRebuild.class);
+			if (hr != null) {
+				argFields = hr.argFields();
+			}
+			if (Modifier.isStatic(m.getModifiers())) {
+				try {
+					invokeRebuildMethod(null, m, argFields);
+					anyInvoked = true;
+				} catch (Throwable t) {
+					warn("[HotRebuild] Failed to invoke static rebuild method " + m.getName() + " on " + clazz.getName() + ": " + t.getMessage());
+				}
+			} else {
+				for (Object inst : instances) {
+					try {
+						invokeRebuildMethod(inst, m, argFields);
+						anyInvoked = true;
+					} catch (Throwable t) {
+						warn("[HotRebuild] Failed to invoke rebuild method " + m.getName() + " on instance " + inst + ": " + t.getMessage());
+					}
+				}
+			}
+		}
+		return anyInvoked;
+	}
+
+	private static Map<String, Method> findRebuildMethods(Class<?> clazz) {
+		Map<String, Method> map = new LinkedHashMap<>();
+		Class<?> curr = clazz;
+		while (curr != null && curr != Object.class) {
+			String name = curr.getName();
+			String slash = name.replace('.', '/');
+			Set<String> registered = new HashSet<>();
+			Set<String> r1 = REGISTERED_REBUILD_METHODS.get(name);
+			if (r1 != null) registered.addAll(r1);
+			Set<String> r2 = REGISTERED_REBUILD_METHODS.get(slash);
+			if (r2 != null) registered.addAll(r2);
+
+			for (Method m : curr.getDeclaredMethods()) {
+				boolean annotated = m.isAnnotationPresent(HotRebuild.class);
+				boolean reg = registered.contains(m.getName());
+				if (annotated || reg) {
+					String sig = m.getName() + Type.getMethodDescriptor(m);
+					if (!map.containsKey(sig)) {
+						map.put(sig, m);
+					}
+				}
+			}
+			for (Class<?> iface : curr.getInterfaces()) {
+				String iname = iface.getName();
+				String islash = iname.replace('.', '/');
+				Set<String> ireg = new HashSet<>();
+				Set<String> ir1 = REGISTERED_REBUILD_METHODS.get(iname);
+				if (ir1 != null) ireg.addAll(ir1);
+				Set<String> ir2 = REGISTERED_REBUILD_METHODS.get(islash);
+				if (ir2 != null) ireg.addAll(ir2);
+
+				for (Method m : iface.getDeclaredMethods()) {
+					if (m.isAnnotationPresent(HotRebuild.class) || ireg.contains(m.getName())) {
+						String sig = m.getName() + Type.getMethodDescriptor(m);
+						if (!map.containsKey(sig)) {
+							map.put(sig, m);
+						}
+					}
+				}
+			}
+			curr = curr.getSuperclass();
+		}
+		return map;
+	}
+
+	public static Set<Object> findInstancesOfClass(Class<?> clazz) {
+		Set<Object> instances = Collections.newSetFromMap(new IdentityHashMap<>());
+		if (clazz == null) return instances;
+
+		// 1. 手动注册实例 (REGISTERED_INSTANCES)
+		synchronized (REGISTERED_INSTANCES) {
+			for (Object obj : REGISTERED_INSTANCES) {
+				if (obj != null && clazz.isInstance(obj)) {
+					instances.add(obj);
+				}
+			}
+		}
+
+		// 2. Kotlin object / Java 单例 INSTANCE
+		try {
+			Field instanceField = clazz.getDeclaredField("INSTANCE");
+			if (Modifier.isStatic(instanceField.getModifiers())) {
+				instanceField.setAccessible(true);
+				Object singleton = instanceField.get(null);
+				if (singleton != null && clazz.isInstance(singleton)) {
+					instances.add(singleton);
+				}
+			}
+		} catch (Throwable ignored) { }
+
+		// 3. LibTool JVMTI 堆遍历
+		try {
+			if (LibTool.initialized()) {
+				Object[] heapObjs = LibTool.getInstances(clazz);
+				if (heapObjs != null) {
+					for (Object o : heapObjs) {
+						if (o != null && clazz.isInstance(o)) {
+							instances.add(o);
+						}
+					}
+				}
+			}
+		} catch (Throwable ignored) { }
+
+		// 4. InstanceTracker 跟踪表
+		try {
+			List<?> tracked = InstanceTracker.getInstances(clazz);
+			if (tracked != null) {
+				for (Object o : tracked) {
+					if (o != null && clazz.isInstance(o)) {
+						instances.add(o);
+					}
+				}
+			}
+		} catch (Throwable ignored) { }
+
+		// 5. 存活 Cell 与父级 Element 树遍历
+		synchronized (cellState) {
+			for (Entry<Cell<?>, CellState> entry : cellState.entrySet()) {
+				Cell<?> cell = entry.getKey();
+				if (cell == null) continue;
+
+				Table table = cell.getTable();
+				if (table != null) {
+					if (clazz.isInstance(table)) {
+						instances.add(table);
+					}
+					Element el = table.parent;
+					while (el != null) {
+						if (clazz.isInstance(el)) {
+							instances.add(el);
+						}
+						el = el.parent;
+					}
+				}
+
+				Element elem = cell.get();
+				if (elem != null) {
+					if (clazz.isInstance(elem)) {
+						instances.add(elem);
+					}
+					Element el = elem.parent;
+					while (el != null) {
+						if (clazz.isInstance(el)) {
+							instances.add(el);
+						}
+						el = el.parent;
+					}
+				}
+			}
+		}
+
+		// 6. 若内部类实例存在，检查 enclosing this$0
+		for (Object obj : new ArrayList<>(instances)) {
+			try {
+				Field this0 = obj.getClass().getDeclaredField("this$0");
+				this0.setAccessible(true);
+				Object outer = this0.get(obj);
+				if (outer != null && clazz.isInstance(outer)) {
+					instances.add(outer);
+				}
+			} catch (Throwable ignored) { }
+		}
+
+		return instances;
+	}
+
+	private static void invokeRebuildMethod(Object inst, Method m, String[] argFields) throws Exception {
+		Method targetMethod = m;
+		if (inst != null && Modifier.isAbstract(m.getModifiers())) {
+			try {
+				targetMethod = inst.getClass().getMethod(m.getName(), m.getParameterTypes());
+			} catch (Throwable ignored) { }
+		}
+		if (Modifier.isAbstract(targetMethod.getModifiers())) {
+			throw new IllegalStateException("Cannot invoke abstract rebuild method: " + targetMethod);
+		}
+
+		Object[] args = resolveRebuildArgs(inst, targetMethod, argFields);
+		tryResetDirtyFlags(inst);
+
+		boolean[] busyArr = BUSY.get();
+		boolean wasBusy = busyArr[0];
+		busyArr[0] = false;
+		try {
+			targetMethod.setAccessible(true);
+			targetMethod.invoke(inst, args);
+			if (DEBUG) log("[HotRebuild] Successfully invoked " + targetMethod.getName() + " on " + (inst != null ? inst : "static"));
+		} finally {
+			busyArr[0] = wasBusy;
+		}
+	}
+
+	private static Object[] resolveRebuildArgs(Object inst, Method m, String[] argFields) throws Exception {
+		int paramCount = m.getParameterCount();
+		if (paramCount == 0) {
+			return new Object[0];
+		}
+		if (argFields == null || argFields.length != paramCount) {
+			throw new IllegalArgumentException(
+				"Method " + m.getName() + " in " + m.getDeclaringClass().getName() +
+				" expects " + paramCount + " arguments, but @HotRebuild provided " +
+				(argFields == null ? 0 : argFields.length) + " argFields"
+			);
+		}
+		Object[] args = new Object[paramCount];
+		Class<?> searchClass = inst != null ? inst.getClass() : m.getDeclaringClass();
+		for (int i = 0; i < paramCount; i++) {
+			String fieldName = argFields[i];
+			Field f = findFieldRecursive(searchClass, fieldName);
+			if (f == null) {
+				throw new NoSuchFieldException("Field '" + fieldName + "' not found on class " + searchClass.getName() + " for @HotRebuild");
+			}
+			f.setAccessible(true);
+			args[i] = f.get(inst);
+		}
+		return args;
+	}
+
+	private static Field findFieldRecursive(Class<?> clazz, String fieldName) {
+		Class<?> curr = clazz;
+		while (curr != null && curr != Object.class) {
+			try {
+				return curr.getDeclaredField(fieldName);
+			} catch (NoSuchFieldException ignored) { }
+			curr = curr.getSuperclass();
+		}
+		return null;
+	}
+
+	private static Method findMethodRecursive(Class<?> clazz, String name, Class<?>... paramTypes) {
+		Class<?> curr = clazz;
+		while (curr != null && curr != Object.class) {
+			try {
+				Method m = curr.getDeclaredMethod(name, paramTypes);
+				m.setAccessible(true);
+				return m;
+			} catch (NoSuchMethodException ignored) { }
+			curr = curr.getSuperclass();
+		}
+		return null;
+	}
+
+	private static void tryResetDirtyFlags(Object inst) {
+		if (inst == null) return;
+		try {
+			Method m1 = findMethodRecursive(inst.getClass(), "forceChanged");
+			if (m1 != null && m1.getParameterCount() == 0) {
+				m1.invoke(inst);
+			}
+
+			Method m2 = findMethodRecursive(inst.getClass(), "markDirty");
+			if (m2 != null && m2.getParameterCount() == 0) {
+				m2.invoke(inst);
+			}
+
+			Field dataField = findFieldRecursive(inst.getClass(), "data");
+			if (dataField != null) {
+				dataField.setAccessible(true);
+				Object dataVal = dataField.get(inst);
+				if (dataVal != null) {
+					Method dm = findMethodRecursive(dataVal.getClass(), "forceChanged");
+					if (dm != null && dm.getParameterCount() == 0) {
+						dm.invoke(dataVal);
+					} else {
+						Method sm = findMethodRecursive(dataVal.getClass(), "setChanged", boolean.class);
+						if (sm != null) {
+							sm.invoke(dataVal, true);
+						}
+					}
+				}
+			}
+		} catch (Throwable ignored) { }
 	}
 	//endregion
 

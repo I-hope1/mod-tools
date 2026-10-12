@@ -2,6 +2,7 @@ package nipx.uihook;
 
 import arc.Core;
 import arc.scene.Element;
+import arc.scene.event.EventListener;
 import arc.scene.ui.*;
 import arc.scene.ui.Label;
 import arc.scene.ui.layout.*;
@@ -21,6 +22,7 @@ import org.objectweb.asm.tree.*;
 import org.objectweb.asm.tree.analysis.*;
 
 import java.lang.invoke.*;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -86,6 +88,8 @@ public class CellPropertyRef {
 		int                chainIdx;
 		List<PropertyCall> chain;
 		final Map<String, Integer> slotCursor = new HashMap<>();
+		Cell baseline;
+		final Map<Integer, WeakReference<EventListener>> slotListeners = new HashMap<>();
 		CellState(CellIdentity id, int chainIdx, List<PropertyCall> chain) {
 			this.id = id;
 			this.chainIdx = chainIdx;
@@ -165,8 +169,16 @@ public class CellPropertyRef {
 		List<PropertyCall> chain = (match == null || match.chain() == null)
 		 ? new ArrayList<>() : new ArrayList<>(match.chain());
 
+		Cell baseline = null;
+		try {
+			baseline = new Cell().set(cell);
+		} catch (Throwable ignored) { }
+
+		CellState st = new CellState(id, chainIdx, chain);
+		st.baseline = baseline;
+
 		synchronized (cellState) {
-			cellState.put(cell, new CellState(id, chainIdx, chain));
+			cellState.put(cell, st);
 			registerCellLocked(id, cell, chainIdx);
 		}
 
@@ -258,6 +270,9 @@ public class CellPropertyRef {
 		Object[]     merged   = mergeArgs(existing.args, sanitized);
 		if (!argsEqual(existing.args, merged)) {
 			chain.set(slot, new PropertyCall(existing.owner, method, desc, merged, existing.line));
+		}
+		if ("tooltip".equals(method) && cell.get() != null && cell.get().getListeners().size > 0) {
+			state.slotListeners.put(slot, new WeakReference<>(cell.get().getListeners().peek()));
 		}
 	}
 	//endregion
@@ -869,14 +884,22 @@ public class CellPropertyRef {
 			}
 		}
 
+		Cell baseline = null;
+		try {
+			baseline = new Cell().set(newCell);
+		} catch (Throwable ignored) { }
+
+		CellState st = new CellState(newId, newIdx, new ArrayList<>(newChain));
+		st.baseline = baseline;
+
 		synchronized (cellState) {
-			cellState.put(newCell, new CellState(newId, newIdx, new ArrayList<>(newChain)));
+			cellState.put(newCell, st);
 			registerCellLocked(newId, newCell, newIdx);
 		}
 		existingIds.add(newId);
 
 		List<PropertyCall> props = new ArrayList<>(newChain.subList(1, newChain.size()));
-		applyAllCalls(newCell, props);
+		applyAllCalls(newCell, st, props);
 
 		ArcReflectionAdapter.ensureTableRows(targetTable,
 		 ArcReflectionAdapter.getCellRow(newCell) + 1);
@@ -937,12 +960,17 @@ public class CellPropertyRef {
 	 */
 	private static List<PropertyCall> applyChainUpdate(Cell<?> cell, List<PropertyCall> oldChain,
 	                                                   List<PropertyCall> newChain) {
+		CellState state;
+		synchronized (cellState) {
+			state = cellState.get(cell);
+		}
+
 		if (oldChain == null || oldChain.isEmpty()) {
 			if (!newChain.isEmpty() && isCreatorCall(newChain.get(0))) {
 				updateChildElement(cell, newChain.get(0));
 			}
 			List<PropertyCall> props = newChain.subList(newChain.isEmpty() ? 0 : 1, newChain.size());
-			applyAllCalls(cell, props);
+			applyAllCalls(cell, state, props);
 			return newChain;
 		}
 
@@ -956,6 +984,9 @@ public class CellPropertyRef {
 			    || !argsEqual(oldCreator.args, newCreator.args)) {
 				updateChildElement(cell, newCreator);
 				elementUpdated = true;
+				if (state != null) {
+					state.slotListeners.clear();
+				}
 			}
 		}
 
@@ -984,10 +1015,11 @@ public class CellPropertyRef {
 			// （update/disabled/tooltip/checked）与文本随替换一起丢失；此时只补"新变化"不足，
 			// 未变化的回调不会被重新挂到新元素上。故 elementUpdated 时把参数已知的新属性整体重放
 			// （几何在 Cell 上幂等，回调在新元素上是首次挂载），未知参数的属性仍只能放弃。
-			for (PropertyCall p : newProps) {
+			for (int i = 0; i < newProps.size(); i++) {
+				PropertyCall p = newProps.get(i);
 				if (!hasUsableArgs(p)) continue;
 				if (elementUpdated || !containsCall(oldProps, p)) {
-					invokeCellMethod(cell, p.method, p.desc, p.args);
+					applyPropertyCallWithTracking(cell, state, i + 1, p);
 				}
 			}
 			return baseline;
@@ -998,8 +1030,9 @@ public class CellPropertyRef {
 		boolean touchesRow  = chainTouchesRow(oldProps) || chainTouchesRow(newProps);
 		boolean savedEndRow = !touchesRow && ArcReflectionAdapter.isEndRow(cell);
 
-		resetCell(cell);
-		applyAllCalls(cell, newProps);
+		cleanupAdditiveListeners(cell, state);
+		resetCell(cell, state);
+		applyAllCalls(cell, state, newProps);
 
 		if (!touchesRow) ArcReflectionAdapter.setEndRow(cell, savedEndRow);
 		return newChain;
@@ -1019,9 +1052,48 @@ public class CellPropertyRef {
 		return false;
 	}
 
-	private static void applyAllCalls(Cell<?> cell, List<PropertyCall> calls) {
-		for (PropertyCall call : calls) {
-			if (hasUsableArgs(call)) invokeCellMethod(cell, call.method, call.desc, call.args);
+	private static void cleanupAdditiveListeners(Cell<?> cell, CellState state) {
+		if (state == null || cell == null) return;
+		Element elem = cell.get();
+		if (elem != null && !state.slotListeners.isEmpty()) {
+			for (WeakReference<EventListener> ref : state.slotListeners.values()) {
+				EventListener l = ref != null ? ref.get() : null;
+				if (l != null) {
+					try {
+						elem.removeListener(l);
+					} catch (Throwable ignored) { }
+				}
+			}
+		}
+		state.slotListeners.clear();
+	}
+
+	private static void applyPropertyCallWithTracking(Cell<?> cell, CellState state, int slot, PropertyCall call) {
+		if (state != null) {
+			WeakReference<EventListener> oldRef = state.slotListeners.remove(slot);
+			if (oldRef != null) {
+				EventListener oldL = oldRef.get();
+				if (oldL != null && cell.get() != null) {
+					try {
+						cell.get().removeListener(oldL);
+					} catch (Throwable ignored) { }
+				}
+			}
+		}
+		Element elem = cell.get();
+		int countBefore = (elem != null && elem.getListeners() != null) ? elem.getListeners().size : -1;
+		invokeCellMethod(cell, call.method, call.desc, call.args);
+		if ("tooltip".equals(call.method) && state != null && elem != null && elem.getListeners() != null) {
+			if (elem.getListeners().size > countBefore && elem.getListeners().size > 0) {
+				state.slotListeners.put(slot, new WeakReference<>(elem.getListeners().peek()));
+			}
+		}
+	}
+
+	private static void applyAllCalls(Cell<?> cell, CellState state, List<PropertyCall> calls) {
+		for (int i = 0; i < calls.size(); i++) {
+			PropertyCall call = calls.get(i);
+			if (hasUsableArgs(call)) applyPropertyCallWithTracking(cell, state, i + 1, call);
 		}
 	}
 
@@ -1040,8 +1112,12 @@ public class CellPropertyRef {
 		}
 	}
 
-	private static void resetCell(Cell<?> cell) {
-		cell.set(Cell.defaults());
+	private static void resetCell(Cell<?> cell, CellState state) {
+		if (state != null && state.baseline != null) {
+			cell.set(state.baseline);
+		} else {
+			cell.set(Cell.defaults());
+		}
 		ArcReflectionAdapter.setEndRow(cell, false);
 	}
 

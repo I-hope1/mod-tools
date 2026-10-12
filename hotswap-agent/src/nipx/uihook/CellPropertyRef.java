@@ -1446,6 +1446,7 @@ public class CellPropertyRef {
 
 	private static final Set<String> CELL_PROPERTY_METHODS = ConcurrentHashMap.newKeySet();
 	private static final Set<String> TABLE_CELL_CREATORS    = ConcurrentHashMap.newKeySet();
+	private static final Set<String> PURE_FUNCTIONS         = ConcurrentHashMap.newKeySet();
 
 	static {
 		CELL_PROPERTY_METHODS.addAll(Arrays.asList(
@@ -1480,6 +1481,7 @@ public class CellPropertyRef {
 
 		initTableCellCreators();
 		initCellPropertyMethods();
+		initPureFunctions();
 	}
 
 	private static void initTableCellCreators() {
@@ -1525,6 +1527,61 @@ public class CellPropertyRef {
 
 	public static void registerProperty(String name) {
 		if (name != null && !name.isEmpty()) CELL_PROPERTY_METHODS.add(name);
+	}
+
+	private static void initPureFunctions() {
+		registerPureFunction("java/lang/Math", "max");
+		registerPureFunction("java/lang/Math", "min");
+		registerPureFunction("java/lang/Math", "abs");
+		registerPureFunction("java/lang/Math", "round");
+		registerPureFunction("java/lang/Math", "floor");
+		registerPureFunction("java/lang/Math", "ceil");
+		registerPureFunction("java/lang/Math", "sqrt");
+		registerPureFunction("java/lang/Math", "pow");
+		registerPureFunction("java/lang/Math", "sin");
+		registerPureFunction("java/lang/Math", "cos");
+		registerPureFunction("java/lang/Math", "tan");
+		registerPureFunction("java/lang/Math", "atan2");
+		registerPureFunction("java/lang/Math", "log");
+		registerPureFunction("java/lang/Math", "log10");
+		registerPureFunction("java/lang/Math", "exp");
+		registerPureFunction("java/lang/Math", "signum");
+	}
+
+	public static void registerPureFunction(String owner, String name) {
+		if (owner != null && name != null) {
+			PURE_FUNCTIONS.add(owner.replace('.', '/') + "#" + name);
+		}
+	}
+
+	public static void registerPureFunction(String owner, String name, String desc) {
+		if (owner != null && name != null) {
+			String key = owner.replace('.', '/') + "#" + name;
+			if (desc != null && !desc.isEmpty()) key += ":" + desc;
+			PURE_FUNCTIONS.add(key);
+		}
+	}
+
+	private static boolean isPureFunction(String owner, String name, String desc) {
+		if (owner == null || name == null) return false;
+		String base = owner + "#" + name;
+		if (PURE_FUNCTIONS.contains(base)) return true;
+		return desc != null && PURE_FUNCTIONS.contains(base + ":" + desc);
+	}
+
+	private static Object evaluatePureFunction(String owner, String name, String desc, Object[] args) {
+		try {
+			Class<?> clazz = "java/lang/Math".equals(owner)
+			 ? Math.class
+			 : Class.forName(owner.replace('/', '.'), false, getTargetLoader());
+			MethodType mt = MethodType.fromMethodDescriptorString(desc, getTargetLoader());
+			MethodHandle mh = lookup().findStatic(clazz, name, mt);
+			Object res = mh.invokeWithArguments(args);
+			return isConstantType(res) ? res : null;
+		} catch (Throwable t) {
+			if (DEBUG) log("[CellProperty] Failed to evaluate pure function " + owner + "." + name + ": " + t.getMessage());
+			return null;
+		}
 	}
 
 	public static Map<String, List<List<PropertyCall>>> extractCellChains(byte[] bytecode) {
@@ -1859,6 +1916,33 @@ public class CellPropertyRef {
 			int op = vin.getOpcode();
 			if (op == ILOAD || op == FLOAD || op == LLOAD || op == DLOAD || op == ALOAD) {
 				return resolveVar(cn, mn, frames, vin.var, visiting);
+			}
+		}
+
+		if (insn instanceof MethodInsnNode min && min.getOpcode() == INVOKESTATIC) {
+			int idx = mn.instructions.indexOf(min);
+			if (idx >= 0 && frames != null) {
+				Frame<SourceValue> f = frames[idx];
+				if (f != null && isPureFunction(min.owner, min.name, min.desc)) {
+					Type[] argTypes = Type.getArgumentTypes(min.desc);
+					int base = f.getStackSize() - argTypes.length;
+					if (base >= 0) {
+						Object[] args = new Object[argTypes.length];
+						boolean allConst = true;
+						for (int i = 0; i < argTypes.length; i++) {
+							Object v = resolveSourceValue(cn, mn, frames, f.getStack(base + i), visiting);
+							if (v == null || !isConstantType(v)) {
+								allConst = false;
+								break;
+							}
+							args[i] = coerce(argTypes[i], v);
+						}
+						if (allConst) {
+							Object evaluated = evaluatePureFunction(min.owner, min.name, min.desc, args);
+							if (evaluated != null) return evaluated;
+						}
+					}
+				}
 			}
 		}
 

@@ -10,6 +10,7 @@ import arc.struct.Seq;
 import arc.util.pooling.Pools;
 import mindustry.Vars;
 import nipx.Injector;
+import nipx.LambdaAligner;
 import org.objectweb.asm.*;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.commons.AdviceAdapter;
@@ -99,11 +100,12 @@ public class CellPropertyRef {
 	private static final    int                    MAX_FAILURES = 20;
 	private static volatile Thread                 uiThread;
 
-	private static final Map<Cell<?>, CellState>                            cellState     = new WeakHashMap<>();
-	private static final Map<CellIdentity, Set<Cell<?>>>                    idToCells     = new HashMap<>();
-	private static final Map<String, LinkedHashSet<CellIdentity>>           classToCells  = new HashMap<>();
-	private static final Map<String, Map<String, List<List<PropertyCall>>>> chainCache    = new HashMap<>();
-	private static final Map<CellIdentity, ChainMatch>                      templateCache = new HashMap<>();
+	private static final Map<Cell<?>, CellState>                            cellState      = new WeakHashMap<>();
+	private static final Map<CellIdentity, Set<Cell<?>>>                    idToCells      = new HashMap<>();
+	private static final Map<String, LinkedHashSet<CellIdentity>>           classToCells   = new HashMap<>();
+	private static final Map<String, Map<String, List<List<PropertyCall>>>> chainCache     = new HashMap<>();
+	private static final Map<CellIdentity, ChainMatch>                      templateCache  = new HashMap<>();
+	private static final Map<Cell<?>, CellIdentity>                         unpatchedCells = new WeakHashMap<>();
 
 	private static volatile boolean enabled = false;
 	private static volatile byte[]  originalCellBytes;
@@ -162,20 +164,26 @@ public class CellPropertyRef {
 
 		synchronized (cellState) {
 			cellState.put(cell, new CellState(id, chainIdx, chain));
-			registerCellLocked(id, cell);
+			registerCellLocked(id, cell, chainIdx);
 		}
 
 		if (DEBUG) log("[CellProperty] Bound: " + id + " idx=" + chainIdx);
 	}
 
-	private static void registerCellLocked(CellIdentity id, Cell<?> cell) {
+	private static void registerCellLocked(CellIdentity id, Cell<?> cell, int chainIdx) {
 		if (id == IGNORED_STATE.id) return;
+		if (chainIdx < 0) {
+			unpatchedCells.put(cell, id);
+		} else {
+			unpatchedCells.remove(cell);
+		}
 		idToCells.computeIfAbsent(id, k -> newWeakSet()).add(cell);
 		classToCells.computeIfAbsent(id.hostClass, k -> new LinkedHashSet<>()).add(id);
 	}
 
 	private static void unregisterCellLocked(CellIdentity id, Cell<?> cell) {
 		if (id == IGNORED_STATE.id) return;
+		unpatchedCells.remove(cell);
 		Set<Cell<?>> s = idToCells.get(id);
 		if (s != null) {
 			s.remove(cell);
@@ -321,6 +329,27 @@ public class CellPropertyRef {
 		ChainMatch r = (hits == 1) ? found : NO_CHAIN;
 		templateCache.put(id, r);
 		return r == NO_CHAIN ? null : r;
+	}
+
+	private static ChainMatch findChainMatchInModel(Map<String, List<List<PropertyCall>>> model,
+	                                                String methodKey, CellIdentity id,
+	                                                Set<String> matchedNew) {
+		List<List<PropertyCall>> methodChains = model.get(methodKey);
+		if (methodChains == null) return null;
+
+		ChainMatch found = null;
+		int        hits  = 0;
+		for (int i = 0; i < methodChains.size(); i++) {
+			if (matchedNew.contains(methodKey + "#" + i)) continue;
+			List<PropertyCall> chain = methodChains.get(i);
+			if (chain.isEmpty()) continue;
+			PropertyCall creator = chain.get(0);
+			if (id.creatorName != null && !id.creatorName.equals(creator.method)) continue;
+			if (id.line >= 0 && creator.line >= 0 && id.line != creator.line) continue;
+			if (found == null) found = new ChainMatch(i, chain);
+			hits++;
+		}
+		return (hits == 1) ? found : null;
 	}
 
 	private static Map<String, List<List<PropertyCall>>> buildChainModel(String slashName) {
@@ -502,7 +531,39 @@ public class CellPropertyRef {
 			}
 
 			if (ce.chainIdx < 0) {
-				// 绑定时就没链（不确定的站点），保持不动，坐标作废
+				ChainMatch retryMatch = findChainMatchInModel(newModel, newMk, ce.id, matchedNew);
+				if (retryMatch != null) {
+					int newIdx = retryMatch.index();
+					matchedNew.add(newMk + "#" + newIdx);
+					List<PropertyCall> newTemplate = retryMatch.chain();
+					List<PropertyCall> mergedNew   = mergeTemplate(newTemplate, ce.chain);
+					PropertyCall       newCreator  = mergedNew.get(0);
+					CellIdentity newId = new CellIdentity(
+					 slashName,
+					 methodNameFromKey(newMk),
+					 methodDescFromKey(newMk),
+					 newCreator.line,
+					 newCreator.method);
+					try {
+						List<PropertyCall> effective = applyChainUpdate(cell, ce.chain, mergedNew);
+						newIdOf.put(cell, newId);
+						newIdxOf.put(cell, newIdx);
+						newChainOf.put(cell, effective);
+						if (effective == mergedNew) {
+							if (!callsEqual(ce.chain, mergedNew)) updated++;
+						} else {
+							skipped++;
+						}
+					} catch (Throwable t) {
+						error("[CellProperty] retry applyChainUpdate failed for " + ce.id, t);
+						newIdOf.put(cell, newId);
+						newIdxOf.put(cell, newIdx);
+						newChainOf.put(cell, ce.chain);
+						skipped++;
+					}
+					continue;
+				}
+				// 绑定时就没链且重试仍未匹配：保持不动，坐标作废，保留在 unpatchedCells
 				skipped++;
 				continue;
 			}
@@ -572,7 +633,7 @@ public class CellPropertyRef {
 					// 没有跟上新模型：坐标作废，只登记
 					st.chainIdx = -1;
 				}
-				registerCellLocked(st.id, c);
+				registerCellLocked(st.id, c, st.chainIdx);
 			}
 		}
 
@@ -604,8 +665,8 @@ public class CellPropertyRef {
 	}
 
 	/**
-	 * 方法级配对。LambdaAligner 已经跑过、lambda 名大概率已对齐；
-	 * 这里作为兜底：非 lambda 同 key 直接配；lambda 按相似度配对，空方法不参与。
+	 * 方法级配对。以 LambdaAligner 的 old->new 映射为主，
+	 * 相似度配对（阈值 0.6）作为兜底；非 lambda 同 key 直接配。
 	 */
 	private static Map<String, String> matchMethods(Map<String, List<List<PropertyCall>>> oldM,
 	                                                Map<String, List<List<PropertyCall>>> newM) {
@@ -617,10 +678,23 @@ public class CellPropertyRef {
 			if (!isLambdaKey(k) && newM.containsKey(k)) out.put(k, k);
 		}
 
+		// 1. 优先采用 LambdaAligner 产出的权威映射（oldKey -> newKey）
+		Map<String, String> alignerMapping = LambdaAligner.LAST_METHOD_MAPPING;
+		if (alignerMapping != null && !alignerMapping.isEmpty()) {
+			for (Entry<String, String> e : alignerMapping.entrySet()) {
+				String ok = e.getKey();
+				String nk = e.getValue();
+				if (oldM.containsKey(ok) && newM.containsKey(nk) && !out.containsKey(ok)) {
+					out.put(ok, nk);
+				}
+			}
+		}
+
+		// 2. 相似度配对作为兜底（阈值 0.6），只处理尚未配对的 lambda 方法
 		List<Pair> pairs = new ArrayList<>();
 		for (Entry<String, List<List<PropertyCall>>> oe : oldM.entrySet()) {
 			String ok = oe.getKey();
-			if (!isLambdaKey(ok) || oe.getValue().isEmpty()) continue;
+			if (out.containsKey(ok) || !isLambdaKey(ok) || oe.getValue().isEmpty()) continue;
 			for (Entry<String, List<List<PropertyCall>>> ne : newM.entrySet()) {
 				String nk = ne.getKey();
 				if (!isLambdaKey(nk) || ne.getValue().isEmpty()) continue;
@@ -793,7 +867,7 @@ public class CellPropertyRef {
 
 		synchronized (cellState) {
 			cellState.put(newCell, new CellState(newId, newIdx, new ArrayList<>(newChain)));
-			registerCellLocked(newId, newCell);
+			registerCellLocked(newId, newCell, newIdx);
 		}
 		existingIds.add(newId);
 
@@ -1939,6 +2013,7 @@ public class CellPropertyRef {
 			classToCells.clear();
 			chainCache.clear();
 			templateCache.clear();
+			unpatchedCells.clear();
 		}
 		info("[CellProperty] 🗑 Cleared all records");
 	}
@@ -1953,6 +2028,7 @@ public class CellPropertyRef {
 			       + "  Enabled: " + enabled + "\n"
 			       + "  Failures: " + FAILURES.get() + "\n"
 			       + "  Tracked Cells: " + cellState.size() + " (ignored: " + ignored + ")\n"
+			       + "  Unpatched Cells: " + unpatchedCells.size() + "\n"
 			       + "  Identities: " + idToCells.size() + "\n"
 			       + "  Host Classes: " + classToCells.size() + "\n"
 			       + "  Chain Cache: " + chainCache.size() + "\n"

@@ -211,8 +211,20 @@ public class CellPropertyRef {
 			return;
 		}
 
+		int ordinal = 0;
+		synchronized (cellState) {
+			for (CellState st : cellState.values()) {
+				if (st == IGNORED_STATE) continue;
+				if (st.id.hostClass.equals(hf.hostClass)
+				    && st.id.hostMethod.equals(hf.hostMethod)
+				    && st.id.line == hf.line) {
+					ordinal++;
+				}
+			}
+		}
+
 		CellIdentity id = new CellIdentity(hf.hostClass, hf.hostMethod, hf.hostDesc,
-		 hf.line, hf.creatorName, hf.helperClass, hf.helperMethod, hf.helperLine);
+		 hf.line, hf.creatorName, hf.helperClass, hf.helperMethod, hf.helperLine, ordinal);
 		ChainMatch match    = findChainMatch(id);
 		int        chainIdx = match == null ? -1 : match.index();
 		List<PropertyCall> chain = (match == null || match.chain() == null)
@@ -1945,18 +1957,30 @@ public class CellPropertyRef {
 
 	/** 先扫站点，扫不到就不 analyze（大多数方法没有 Cell 调用，这一步省掉 Analyzer 开销）。 */
 	private static MethodExtraction extractFromMethod(ClassNode cn, MethodNode mn) {
+		return extractFromMethod(cn, mn, null, null, null, -1, new HashSet<>());
+	}
+
+	private static MethodExtraction extractFromMethod(ClassNode cn, MethodNode mn,
+	                                                  Map<Integer, Object> paramBindings,
+	                                                  String helperOwner, String helperName, int callerLine,
+	                                                  Set<String> expandingHelpers) {
 		List<List<PropertyCall>> chains = new ArrayList<>();
 		if (mn.instructions == null || mn.instructions.size() == 0) { return new MethodExtraction(true, chains); }
 
-		List<MethodInsnNode> cellCallSites = new ArrayList<>();
+		List<MethodInsnNode> cellCallSites   = new ArrayList<>();
+		List<MethodInsnNode> helperCallSites = new ArrayList<>();
 		for (AbstractInsnNode insn = mn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
 			if (!(insn instanceof MethodInsnNode mi)) continue;
+			if (isHelper(mi.owner, mi.name, mi.desc)) {
+				helperCallSites.add(mi);
+				continue;
+			}
 			if (!returnsCell(mi)) continue;
 			if (!isTableCellCreator(cn, mi.owner, mi.name)
 			    && !isCellProperty(cn, mi.owner, mi.name, mi.desc)) { continue; }
 			cellCallSites.add(mi);
 		}
-		if (cellCallSites.isEmpty()) return new MethodExtraction(true, chains);
+		if (cellCallSites.isEmpty() && helperCallSites.isEmpty()) return new MethodExtraction(true, chains);
 
 		Frame<SourceValue>[] frames;
 		try {
@@ -1981,12 +2005,180 @@ public class CellPropertyRef {
 		for (Entry<MethodInsnNode, List<MethodInsnNode>> e : byCreator.entrySet()) {
 			List<PropertyCall> chain = new ArrayList<>();
 			for (MethodInsnNode site : e.getValue()) {
-				Object[] args = extractArgsDataflow(cn, mn, frames, site);
-				chain.add(new PropertyCall(site.owner, site.name, site.desc, args, lineOf(mn, site)));
+				Object[] args = extractArgsDataflow(cn, mn, frames, site, paramBindings);
+				int l = lineOf(mn, site);
+				if (helperOwner != null) {
+					chain.add(new PropertyCall(site.owner, site.name, site.desc, args, callerLine,
+					                           helperOwner, helperName, l, 0));
+				} else {
+					chain.add(new PropertyCall(site.owner, site.name, site.desc, args, l));
+				}
 			}
 			if (!chain.isEmpty()) chains.add(chain);
 		}
+
+		for (MethodInsnNode helperSite : helperCallSites) {
+			int hLine = lineOf(mn, helperSite);
+			Object[] callerArgs = extractArgsDataflow(cn, mn, frames, helperSite, paramBindings);
+
+			List<List<PropertyCall>> inlinedChains = expandHelper(
+				cn, mn, helperSite.owner, helperSite.name, helperSite.desc,
+				callerArgs, hLine, expandingHelpers
+			);
+			if (inlinedChains == null || inlinedChains.isEmpty()) {
+				// Unexpandable helper: skip, will be recorded in ledger (unpatchedCells) at runtime
+				continue;
+			}
+
+			// Chained calls on the Cell returned by this helper: e.g. Underline.of(t, 3).pad(5)
+			List<MethodInsnNode> chainedOnHelper = new ArrayList<>();
+			for (MethodInsnNode site : cellCallSites) {
+				if (creatorOf.get(site) == helperSite) {
+					chainedOnHelper.add(site);
+				}
+			}
+			if (!chainedOnHelper.isEmpty()) {
+				List<PropertyCall> lastInlined = inlinedChains.get(inlinedChains.size() - 1);
+				for (MethodInsnNode outerCall : chainedOnHelper) {
+					Object[] args = extractArgsDataflow(cn, mn, frames, outerCall, paramBindings);
+					lastInlined.add(new PropertyCall(outerCall.owner, outerCall.name, outerCall.desc, args,
+					                                 lineOf(mn, outerCall)));
+				}
+			}
+
+			chains.addAll(inlinedChains);
+		}
+
+		// 任务 18：按调用点行号排序，同行按 helperLine / 出现顺序分配 callOrdinal
+		chains.sort((c1, c2) -> {
+			PropertyCall h1 = c1.get(0);
+			PropertyCall h2 = c2.get(0);
+			return compareCellOrder(h1.line, h1.helperLine, 0,
+			                        h2.line, h2.helperLine, 0);
+		});
+
+		Map<Integer, Integer> lineOrdinals = new HashMap<>();
+		for (List<PropertyCall> chain : chains) {
+			PropertyCall head = chain.get(0);
+			int line = head.line;
+			int ordinal = lineOrdinals.getOrDefault(line, 0);
+			lineOrdinals.put(line, ordinal + 1);
+
+			if (ordinal > 0) {
+				for (int i = 0; i < chain.size(); i++) {
+					PropertyCall pc = chain.get(i);
+					chain.set(i, new PropertyCall(
+						pc.owner, pc.method, pc.desc, pc.args, pc.line,
+						pc.helperClass, pc.helperMethod, pc.helperLine, ordinal
+					));
+				}
+			}
+		}
+
 		return new MethodExtraction(true, chains);
+	}
+
+	private static Map<Integer, Object> computeParamBindings(int access, String desc, Object[] callerArgs) {
+		Map<Integer, Object> bindings = new HashMap<>();
+		if (callerArgs == null) return bindings;
+		Type[] argTypes = Type.getArgumentTypes(desc);
+		int slot = (access & ACC_STATIC) != 0 ? 0 : 1;
+		for (int i = 0; i < argTypes.length && i < callerArgs.length; i++) {
+			bindings.put(slot, callerArgs[i]);
+			slot += argTypes[i].getSize();
+		}
+		return bindings;
+	}
+
+	private static List<List<PropertyCall>> expandHelper(
+		ClassNode callerCn, MethodNode callerMn,
+		String helperOwner, String helperName, String helperDesc,
+		Object[] callerArgs, int callerLine,
+		Set<String> expandingHelpers
+	) {
+		String key = helperOwner + "#" + helperName + ":" + (helperDesc != null ? helperDesc : "");
+		if (!expandingHelpers.add(key)) {
+			// Task 17 condition 4: Recursion cycle detected -> unexpandable
+			if (DEBUG) log("[CellProperty] Recursive helper cycle detected: " + key);
+			return null;
+		}
+		try {
+			byte[] bytes = fetchBytecode(helperOwner);
+			if (bytes == null) return null;
+
+			ClassReader cr = new ClassReader(bytes);
+			ClassNode helperCn = new ClassNode();
+			cr.accept(helperCn, ClassReader.SKIP_FRAMES);
+			AnnotationTransformer.HierarchyTree.register(helperCn);
+
+			MethodNode helperMn = null;
+			for (MethodNode mn : helperCn.methods) {
+				if (mn.name.equals(helperName) && (helperDesc == null || mn.desc.equals(helperDesc))) {
+					helperMn = mn;
+					break;
+				}
+			}
+			if (helperMn == null || helperMn.instructions == null || helperMn.instructions.size() == 0) {
+				return null;
+			}
+
+			// Task 17 condition 2: Check for branches (IF*, SWITCH, GOTO)
+			for (AbstractInsnNode insn = helperMn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+				int op = insn.getOpcode();
+				if ((op >= IFEQ && op <= JSR)
+				    || (op >= IF_ACMPEQ && op <= GOTO)
+				    || op == TABLESWITCH
+				    || op == LOOKUPSWITCH
+				    || op == IFNULL
+				    || op == IFNONNULL) {
+					if (DEBUG) log("[CellProperty] Helper contains branch, rejecting: " + key);
+					return null;
+				}
+			}
+
+			// Task 17 condition 3: Check for arbitrary external method calls
+			for (AbstractInsnNode insn = helperMn.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+				if (insn instanceof MethodInsnNode min) {
+					if ("<init>".equals(min.name) && ("java/lang/Object".equals(min.owner) || CL_CELL.equals(min.owner))) {
+						continue;
+					}
+					if (isTableCellCreator(helperCn, min.owner, min.name)) continue;
+					if (isCellProperty(helperCn, min.owner, min.name, min.desc)) continue;
+					if (isPureFunction(min.owner, min.name, min.desc)) continue;
+					if (isHelper(min.owner, min.name, min.desc)) continue;
+					if (DEBUG) log("[CellProperty] Helper calls non-helper external method, rejecting: " + min.owner + "#" + min.name);
+					return null;
+				}
+			}
+
+			Map<Integer, Object> bindings = computeParamBindings(helperMn.access, helperMn.desc, callerArgs);
+
+			MethodExtraction ex = extractFromMethod(
+				helperCn, helperMn, bindings, helperOwner, helperName, callerLine, expandingHelpers
+			);
+			if (!ex.analyzed() || ex.chains().isEmpty()) return null;
+
+			// Task 17 condition 1: Verify all required parameters were inferred
+			for (List<PropertyCall> chain : ex.chains()) {
+				for (PropertyCall pc : chain) {
+					if (pc.args != null) {
+						for (Object arg : pc.args) {
+							if (arg == null) {
+								if (DEBUG) log("[CellProperty] Helper property arg unresolvable, rejecting: " + pc.method);
+								return null;
+							}
+						}
+					}
+				}
+			}
+
+			return ex.chains();
+		} catch (Throwable t) {
+			if (DEBUG) log("[CellProperty] Failed to expand helper " + key + ": " + t.getMessage());
+			return null;
+		} finally {
+			expandingHelpers.remove(key);
+		}
 	}
 
 	private static boolean returnsCell(MethodInsnNode mi) {
@@ -2004,6 +2196,7 @@ public class CellPropertyRef {
 			if (recv == null || recv.insns.size() != 1) return curr;
 			AbstractInsnNode prev = recv.insns.iterator().next();
 			if (!(prev instanceof MethodInsnNode prevCall)) return curr;
+			if (isHelper(prevCall.owner, prevCall.name, prevCall.desc)) return prevCall;
 			if (!returnsCell(prevCall)) return curr;
 			if (!isTableCellCreator(cn, prevCall.owner, prevCall.name)
 			    && !isCellProperty(cn, prevCall.owner, prevCall.name, prevCall.desc)) { return curr; }
@@ -2027,6 +2220,12 @@ public class CellPropertyRef {
 
 	private static Object[] extractArgsDataflow(ClassNode cn, MethodNode mn,
 	                                            Frame<SourceValue>[] frames, MethodInsnNode site) {
+		return extractArgsDataflow(cn, mn, frames, site, null);
+	}
+
+	private static Object[] extractArgsDataflow(ClassNode cn, MethodNode mn,
+	                                            Frame<SourceValue>[] frames, MethodInsnNode site,
+	                                            Map<Integer, Object> paramBindings) {
 		Type[] argTypes = Type.getArgumentTypes(site.desc);
 		if (argTypes.length == 0) return null;
 
@@ -2041,7 +2240,7 @@ public class CellPropertyRef {
 		Object[]    args     = new Object[argTypes.length];
 		Set<String> visiting = new HashSet<>();
 		for (int i = 0; i < argTypes.length; i++) {
-			Object v = resolveSourceValue(cn, mn, frames, f.getStack(base + i), visiting);
+			Object v = resolveSourceValue(cn, mn, frames, f.getStack(base + i), visiting, paramBindings);
 			args[i] = coerce(argTypes[i], sanitizeValue(v));
 		}
 		return args;
@@ -2065,25 +2264,40 @@ public class CellPropertyRef {
 	private static Object resolveSourceValue(ClassNode cn, MethodNode mn,
 	                                         Frame<SourceValue>[] frames, SourceValue sv,
 	                                         Set<String> visiting) {
+		return resolveSourceValue(cn, mn, frames, sv, visiting, null);
+	}
+
+	private static Object resolveSourceValue(ClassNode cn, MethodNode mn,
+	                                         Frame<SourceValue>[] frames, SourceValue sv,
+	                                         Set<String> visiting,
+	                                         Map<Integer, Object> paramBindings) {
 		if (sv == null || sv.insns.size() != 1) return null;
-		return resolveInsnConstant(cn, mn, frames, sv.insns.iterator().next(), visiting);
+		return resolveInsnConstant(cn, mn, frames, sv.insns.iterator().next(), visiting, paramBindings);
 	}
 
 	private static Object operand(ClassNode cn, MethodNode mn,
 	                              Frame<SourceValue>[] frames, AbstractInsnNode insn,
-	                              int fromTop, Set<String> visiting) {
+	                              int fromTop, Set<String> visiting,
+	                              Map<Integer, Object> paramBindings) {
 		int idx = mn.instructions.indexOf(insn);
 		if (idx < 0) return null;
 		Frame<SourceValue> f = frames[idx];
 		if (f == null) return null;
 		int pos = f.getStackSize() - 1 - fromTop;
 		if (pos < 0) return null;
-		return resolveSourceValue(cn, mn, frames, f.getStack(pos), visiting);
+		return resolveSourceValue(cn, mn, frames, f.getStack(pos), visiting, paramBindings);
 	}
 
 	private static Object resolveInsnConstant(ClassNode cn, MethodNode mn,
 	                                          Frame<SourceValue>[] frames, AbstractInsnNode insn,
 	                                          Set<String> visiting) {
+		return resolveInsnConstant(cn, mn, frames, insn, visiting, null);
+	}
+
+	private static Object resolveInsnConstant(ClassNode cn, MethodNode mn,
+	                                          Frame<SourceValue>[] frames, AbstractInsnNode insn,
+	                                          Set<String> visiting,
+	                                          Map<Integer, Object> paramBindings) {
 		if (insn == null) return null;
 
 		if (insn instanceof FieldInsnNode fin && insn.getOpcode() == GETSTATIC) {
@@ -2150,7 +2364,7 @@ public class CellPropertyRef {
 				case I2B:
 				case I2C:
 				case I2S:
-					return convertNumeric(op, operand(cn, mn, frames, insn, 0, visiting));
+					return convertNumeric(op, operand(cn, mn, frames, insn, 0, visiting, paramBindings));
 				case IADD:
 				case ISUB:
 				case IMUL:
@@ -2167,15 +2381,15 @@ public class CellPropertyRef {
 				case DSUB:
 				case DMUL:
 				case DDIV: {
-					Object right = operand(cn, mn, frames, insn, 0, visiting);
-					Object left  = operand(cn, mn, frames, insn, 1, visiting);
+					Object right = operand(cn, mn, frames, insn, 0, visiting, paramBindings);
+					Object left  = operand(cn, mn, frames, insn, 1, visiting, paramBindings);
 					return evaluateBinaryOp(op, left, right);
 				}
 				case INEG:
 				case LNEG:
 				case FNEG:
 				case DNEG:
-					return evaluateUnaryOp(op, operand(cn, mn, frames, insn, 0, visiting));
+					return evaluateUnaryOp(op, operand(cn, mn, frames, insn, 0, visiting, paramBindings));
 			}
 		}
 
@@ -2185,7 +2399,7 @@ public class CellPropertyRef {
 		if (insn instanceof VarInsnNode vin) {
 			int op = vin.getOpcode();
 			if (op == ILOAD || op == FLOAD || op == LLOAD || op == DLOAD || op == ALOAD) {
-				return resolveVar(cn, mn, frames, vin.var, visiting);
+				return resolveVar(cn, mn, frames, vin.var, visiting, paramBindings);
 			}
 		}
 
@@ -2200,7 +2414,7 @@ public class CellPropertyRef {
 						Object[] args = new Object[argTypes.length];
 						boolean allConst = true;
 						for (int i = 0; i < argTypes.length; i++) {
-							Object v = resolveSourceValue(cn, mn, frames, f.getStack(base + i), visiting);
+							Object v = resolveSourceValue(cn, mn, frames, f.getStack(base + i), visiting, paramBindings);
 							if (v == null || !isConstantType(v)) {
 								allConst = false;
 								break;
@@ -2230,7 +2444,7 @@ public class CellPropertyRef {
 				int base = f.getStackSize() - captureTypes.length;
 				if (base >= 0) {
 					for (int i = 0; i < captureTypes.length; i++) {
-						Object v = resolveSourceValue(cn, mn, frames, f.getStack(base + i), visiting);
+						Object v = resolveSourceValue(cn, mn, frames, f.getStack(base + i), visiting, paramBindings);
 						captures[i] = sanitizeValue(v);
 					}
 				}
@@ -2258,6 +2472,13 @@ public class CellPropertyRef {
 	private static Object resolveVar(ClassNode cn, MethodNode mn,
 	                                 Frame<SourceValue>[] frames, int varIndex,
 	                                 Set<String> visiting) {
+		return resolveVar(cn, mn, frames, varIndex, visiting, null);
+	}
+
+	private static Object resolveVar(ClassNode cn, MethodNode mn,
+	                                 Frame<SourceValue>[] frames, int varIndex,
+	                                 Set<String> visiting,
+	                                 Map<Integer, Object> paramBindings) {
 		String visitKey = mn.name + ":" + mn.desc + "#" + varIndex;
 		if (!visiting.add(visitKey)) return null;
 		try {
@@ -2273,6 +2494,9 @@ public class CellPropertyRef {
 					}
 				} else if (insn instanceof IincInsnNode iin && iin.var == varIndex) writes++;
 			}
+			if (writes == 0 && paramBindings != null && paramBindings.containsKey(varIndex)) {
+				return paramBindings.get(varIndex);
+			}
 			if (writes == 0 && varIndex == 0 && (mn.access & ACC_STATIC) == 0) {
 				return new ThisPlaceholder(cn.name);
 			}
@@ -2282,7 +2506,7 @@ public class CellPropertyRef {
 					Frame<SourceValue> f = frames[idx];
 					if (f != null && f.getStackSize() > 0) {
 						Object v = resolveSourceValue(cn, mn, frames,
-						 f.getStack(f.getStackSize() - 1), visiting);
+						 f.getStack(f.getStackSize() - 1), visiting, paramBindings);
 						if (isConstantType(v)) return v;
 					}
 				}

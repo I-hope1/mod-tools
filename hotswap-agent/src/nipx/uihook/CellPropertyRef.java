@@ -55,6 +55,28 @@ public class CellPropertyRef {
 		                    String helperClass, String helperMethod, int helperLine) {
 			this(owner, method, desc, args, line, helperClass, helperMethod, helperLine, 0);
 		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof PropertyCall that)) return false;
+			return line == that.line
+			       && helperLine == that.helperLine
+			       && callOrdinal == that.callOrdinal
+			       && Objects.equals(owner, that.owner)
+			       && Objects.equals(method, that.method)
+			       && Objects.equals(desc, that.desc)
+			       && Objects.equals(helperClass, that.helperClass)
+			       && Objects.equals(helperMethod, that.helperMethod)
+			       && Arrays.equals(args, that.args);
+		}
+
+		@Override
+		public int hashCode() {
+			int result = Objects.hash(owner, method, desc, line, helperClass, helperMethod, helperLine, callOrdinal);
+			result = 31 * result + Arrays.hashCode(args);
+			return result;
+		}
 	}
 
 	public record CellIdentity(
@@ -72,6 +94,27 @@ public class CellPropertyRef {
 		                    int line, String creatorName,
 		                    String helperClass, String helperMethod, int helperLine) {
 			this(hostClass, hostMethod, hostDesc, line, creatorName, helperClass, helperMethod, helperLine, 0);
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (!(o instanceof CellIdentity that)) return false;
+			return line == that.line
+			       && helperLine == that.helperLine
+			       && callOrdinal == that.callOrdinal
+			       && Objects.equals(hostClass, that.hostClass)
+			       && Objects.equals(hostMethod, that.hostMethod)
+			       && Objects.equals(hostDesc, that.hostDesc)
+			       && Objects.equals(creatorName, that.creatorName)
+			       && Objects.equals(helperClass, that.helperClass)
+			       && Objects.equals(helperMethod, that.helperMethod);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(hostClass, hostMethod, hostDesc, line, creatorName,
+				helperClass, helperMethod, helperLine, callOrdinal);
 		}
 
 		@Override
@@ -1100,28 +1143,26 @@ public class CellPropertyRef {
 			}
 		}
 
-		Table targetTable     = null;
-		int   insertCellIndex = -1;
-
-		Cell<?> anchor = beforeId != null ? firstAliveCell(beforeId) : null;
-		if (anchor != null && anchor.getTable() != null) {
-			targetTable = anchor.getTable();
-			insertCellIndex = targetTable.getCells().indexOf(anchor, true) + 1;
-		} else {
-			anchor = afterId != null ? firstAliveCell(afterId) : null;
-			if (anchor != null && anchor.getTable() != null) {
-				targetTable = anchor.getTable();
-				insertCellIndex = targetTable.getCells().indexOf(anchor, true);
-			}
+		List<Cell<?>> anchors = new ArrayList<>();
+		boolean insertAfter = true;
+		if (beforeId != null) {
+			anchors = allAliveCells(beforeId);
+			insertAfter = true;
+		}
+		if (anchors.isEmpty() && afterId != null) {
+			anchors = allAliveCells(afterId);
+			insertAfter = false;
 		}
 
-		if (targetTable == null) {
+		Table targetTable = null;
+		if (!anchors.isEmpty()) {
+			targetTable = anchors.get(0).getTable();
+		} else {
 			for (CellIdentity id : existingIds) {
 				if (!methodKeyOf(id).equals(methodKey)) continue;
 				Cell<?> c = firstAliveCell(id);
 				if (c != null && c.getTable() != null) {
 					targetTable = c.getTable();
-					insertCellIndex = targetTable.getCells().size;
 					break;
 				}
 			}
@@ -1133,16 +1174,8 @@ public class CellPropertyRef {
 		if (mh == null) return false;
 
 		Object[] converted = creator.args == null ? null : convertArgs(type, creator.args);
-		ArcReflectionAdapter.clearImplicitEndRow(targetTable);
 
-		Cell<?> newCell = invoke(mh, targetTable, converted);
-		if (newCell == null) return false;
-
-		CellIdentity newId = new CellIdentity(slashName,
-		 methodNameFromKey(methodKey), methodDescFromKey(methodKey),
-		 creator.line, creator.method);
-
-		int                                   newIdx = -1;
+		int newIdx = -1;
 		Map<String, List<List<PropertyCall>>> chains = chainCache.get(slashName);
 		if (chains != null) {
 			List<List<PropertyCall>> methodChains = chains.get(methodKey);
@@ -1155,6 +1188,87 @@ public class CellPropertyRef {
 				}
 			}
 		}
+
+		// Anchor-based insertion (Task 20):
+		// Freeze initial cells of targetTable to ensure stable iteration (Task 14)
+		Seq<Cell> initialCells = new Seq<>(targetTable.getCells());
+		List<Cell<?>> orderedAnchors = new ArrayList<>();
+		if (!anchors.isEmpty()) {
+			for (Cell<?> c : initialCells) {
+				if (anchors.contains(c)) orderedAnchors.add(c);
+			}
+		}
+
+		boolean anyInserted = false;
+		if (orderedAnchors.isEmpty()) {
+			ArcReflectionAdapter.clearImplicitEndRow(targetTable);
+			Cell<?> newCell = invoke(mh, targetTable, converted);
+			if (newCell == null) return false;
+			setupNewCellState(slashName, methodKey, newChain, newIdx, newCell, creator, existingIds);
+			anyInserted = true;
+		} else {
+			for (Cell<?> anchor : orderedAnchors) {
+				Seq<Cell> currentCells = targetTable.getCells();
+				int anchorIdx = currentCells.indexOf(anchor, true);
+				if (anchorIdx < 0) continue;
+
+				if (insertAfter) {
+					if (anchorIdx + 1 < currentCells.size) {
+						Cell<?> next = currentCells.get(anchorIdx + 1);
+						if (isCellMatchingStation(next, slashName, methodKey, creator)) {
+							continue;
+						}
+					}
+					ArcReflectionAdapter.clearImplicitEndRow(targetTable);
+					Cell<?> newCell = invoke(mh, targetTable, converted);
+					if (newCell == null) continue;
+					setupNewCellState(slashName, methodKey, newChain, newIdx, newCell, creator, existingIds);
+
+					int curIdx = currentCells.indexOf(newCell, true);
+					if (curIdx != -1 && curIdx != anchorIdx + 1) {
+						currentCells.remove(newCell, true);
+						currentCells.insert(anchorIdx + 1, newCell);
+						moveChildElement(targetTable, newCell, anchorIdx + 1);
+					}
+					anyInserted = true;
+				} else {
+					if (anchorIdx > 0) {
+						Cell<?> prev = currentCells.get(anchorIdx - 1);
+						if (isCellMatchingStation(prev, slashName, methodKey, creator)) {
+							continue;
+						}
+					}
+					ArcReflectionAdapter.clearImplicitEndRow(targetTable);
+					Cell<?> newCell = invoke(mh, targetTable, converted);
+					if (newCell == null) continue;
+					setupNewCellState(slashName, methodKey, newChain, newIdx, newCell, creator, existingIds);
+
+					int curIdx = currentCells.indexOf(newCell, true);
+					if (curIdx != -1 && curIdx != anchorIdx) {
+						currentCells.remove(newCell, true);
+						currentCells.insert(anchorIdx, newCell);
+						moveChildElement(targetTable, newCell, anchorIdx);
+					}
+					anyInserted = true;
+				}
+			}
+		}
+
+		if (anyInserted) {
+			repairTableGrid(targetTable);
+			targetTable.invalidate();
+			if (Core.app != null) Core.app.post(targetTable::invalidateHierarchy);
+		}
+		return anyInserted;
+	}
+
+	private static void setupNewCellState(String slashName, String methodKey,
+	                                      List<PropertyCall> newChain, int newIdx,
+	                                      Cell<?> newCell, PropertyCall creator,
+	                                      List<CellIdentity> existingIds) {
+		CellIdentity newId = new CellIdentity(slashName,
+			methodNameFromKey(methodKey), methodDescFromKey(methodKey),
+			creator.line, creator.method);
 
 		Geometry16 snap = null;
 		try {
@@ -1175,39 +1289,42 @@ public class CellPropertyRef {
 		List<PropertyCall> props = new ArrayList<>(newChain.subList(1, newChain.size()));
 		applyAllCalls(newCell, st, props);
 
-		ArcReflectionAdapter.ensureTableRows(targetTable,
-		 ArcReflectionAdapter.getCellRow(newCell) + 1);
-		targetTable.invalidate();
+		Table targetTable = newCell.getTable();
+		if (targetTable != null) {
+			ArcReflectionAdapter.ensureTableRows(targetTable,
+				ArcReflectionAdapter.getCellRow(newCell) + 1);
+		}
+	}
 
-		if (insertCellIndex >= 0) {
-			Seq<Cell> cells      = targetTable.getCells();
-			int       currentIdx = cells.indexOf(newCell, true);
-			if (currentIdx != -1 && insertCellIndex < cells.size - 1) {
-				cells.remove(newCell, true);
-				cells.insert(insertCellIndex, newCell);
-
-				Element element = newCell.get();
-				if (element != null) {
-					Seq<Element> children = targetTable.getChildren();
-					children.remove(element, true);
-					int elementInsertIndex = children.size;
-					for (int i = insertCellIndex + 1; i < cells.size; i++) {
-						Cell<?> nextCell = cells.get(i);
-						if (!nextCell.hasElement()) continue;
-						int idx = children.indexOf(nextCell.get(), true);
-						if (idx != -1) {
-							elementInsertIndex = idx;
-							break;
-						}
-					}
-					children.insert(elementInsertIndex, element);
-				}
+	private static void moveChildElement(Table targetTable, Cell<?> newCell, int cellInsertIndex) {
+		Element element = newCell.get();
+		if (element == null) return;
+		Seq<Cell> cells = targetTable.getCells();
+		Seq<Element> children = targetTable.getChildren();
+		children.remove(element, true);
+		int elementInsertIndex = children.size;
+		for (int i = cellInsertIndex + 1; i < cells.size; i++) {
+			Cell<?> nextCell = cells.get(i);
+			if (!nextCell.hasElement()) continue;
+			int idx = children.indexOf(nextCell.get(), true);
+			if (idx != -1) {
+				elementInsertIndex = idx;
+				break;
 			}
 		}
+		children.insert(elementInsertIndex, element);
+	}
 
-		repairTableGrid(targetTable);
-		Core.app.post(targetTable::invalidateHierarchy);
-		return true;
+	private static boolean isCellMatchingStation(Cell<?> cell, String slashName, String methodKey, PropertyCall creator) {
+		if (cell == null) return false;
+		synchronized (cellState) {
+			CellState st = cellState.get(cell);
+			if (st == null || st == IGNORED_STATE) return false;
+			return st.id.hostClass.equals(slashName)
+			       && methodKeyOf(st.id).equals(methodKey)
+			       && st.id.line == creator.line
+			       && Objects.equals(st.id.creatorName, creator.method);
+		}
 	}
 
 	private static Cell<?> firstAliveCell(CellIdentity id) {
@@ -1220,6 +1337,19 @@ public class CellPropertyRef {
 			}
 		}
 		return null;
+	}
+
+	public static List<Cell<?>> allAliveCells(CellIdentity id) {
+		List<Cell<?>> res = new ArrayList<>();
+		if (id == null || id == IGNORED_STATE.id) return res;
+		synchronized (cellState) {
+			Set<Cell<?>> s = idToCells.get(id);
+			if (s == null) return res;
+			for (Cell<?> c : s) {
+				if (c != null && c.getTable() != null && c.get() != null) res.add(c);
+			}
+		}
+		return res;
 	}
 	//endregion
 

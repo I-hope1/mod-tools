@@ -250,4 +250,60 @@ class CellHelperTest {
 			arc.Core.app = oldApp;
 		}
 	}
+
+	@Test
+	void testAnchorBasedLoopInsertion() throws Exception {
+		CellPropertyRef.clearAll();
+		arc.scene.ui.layout.Table table = new arc.scene.ui.layout.Table();
+		arc.scene.Element e1 = new arc.scene.Element();
+		arc.scene.Element e2 = new arc.scene.Element();
+		arc.scene.ui.layout.Cell<?> b1 = table.add(e1);
+		arc.scene.ui.layout.Cell<?> b2 = table.add(e2);
+
+		CellIdentity btnId = new CellIdentity("TestHost", "build", "()V", 10, "add");
+
+		Method regMethod = CellPropertyRef.class.getDeclaredMethod("registerCellLocked",
+			CellIdentity.class, arc.scene.ui.layout.Cell.class, int.class);
+		regMethod.setAccessible(true);
+
+		java.lang.reflect.Field cellStateField = CellPropertyRef.class.getDeclaredField("cellState");
+		cellStateField.setAccessible(true);
+		@SuppressWarnings("unchecked")
+		Map<Object, Object> cellStateMap = (Map<Object, Object>) cellStateField.get(null);
+
+		Class<?> cellStateClass = Class.forName("nipx.uihook.CellPropertyRef$CellState");
+		java.lang.reflect.Constructor<?> csCtor = cellStateClass.getDeclaredConstructor(
+			CellIdentity.class, int.class, List.class);
+		csCtor.setAccessible(true);
+
+		Object st1 = csCtor.newInstance(btnId, 0, new ArrayList<>());
+		Object st2 = csCtor.newInstance(btnId, 0, new ArrayList<>());
+
+		synchronized (cellStateMap) {
+			cellStateMap.put(b1, st1);
+			cellStateMap.put(b2, st2);
+			regMethod.invoke(null, btnId, b1, 0);
+			regMethod.invoke(null, btnId, b2, 0);
+		}
+
+		PropertyCall addCreator = new PropertyCall("arc/scene/ui/layout/Table", "add",
+			"()Larc/scene/ui/layout/Cell;", new Object[0], 12);
+		List<PropertyCall> newChain = Collections.singletonList(addCreator);
+
+		Method appendMethod = CellPropertyRef.class.getDeclaredMethod("appendNewCell",
+			String.class, String.class, List.class, List.class);
+		appendMethod.setAccessible(true);
+
+		List<CellIdentity> existingIds = new ArrayList<>(Collections.singletonList(btnId));
+		boolean inserted = (boolean) appendMethod.invoke(null, "TestHost", "build:()V", newChain, existingIds);
+
+		assertTrue(inserted);
+		assertEquals(4, table.getCells().size);
+		assertSame(b1, table.getCells().get(0));
+		assertSame(b2, table.getCells().get(2));
+
+		boolean reinserted = (boolean) appendMethod.invoke(null, "TestHost", "build:()V", newChain, existingIds);
+		assertFalse(reinserted);
+		assertEquals(4, table.getCells().size);
+	}
 }

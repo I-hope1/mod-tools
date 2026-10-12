@@ -684,45 +684,58 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			}
 		}
 
-		/**
-		 * 核心逻辑：判断 subType 是否是 superType 的子类或实现类
-		 * 采用 BFS (广度优先搜索) 遍历继承树
-		 */
-		public static boolean isAssignableFrom(String superType, String subType, ClassLoader loader) {
+		public static void register(ClassNode cn) {
+			if (cn == null || cn.name == null) return;
+			String[] itfs = cn.interfaces == null ? new String[0] : cn.interfaces.toArray(new String[0]);
+			tree.put(cn.name, new HierarchyNode(cn.superName, itfs, cn.access));
+		}
+
+		public static nipx.ref.ClassHierarchyOracle.HierarchyCheck checkAssignableFrom(String superType, String subType, ClassLoader loader) {
 			if (superType.equals(subType) || "java/lang/Object".equals(superType)) {
-				return true;
+				return nipx.ref.ClassHierarchyOracle.HierarchyCheck.YES;
 			}
+			if (subType == null) return nipx.ref.ClassHierarchyOracle.HierarchyCheck.UNKNOWN;
 
 			Queue<String> queue   = new LinkedList<>();
 			Set<String>   visited = new HashSet<>();
 			queue.add(subType);
 			visited.add(subType);
+			boolean incomplete = false;
 
 			while (!queue.isEmpty()) {
-				String    current = queue.poll();
-				HierarchyNode node = getNode(current, loader);
+				String        current = queue.poll();
+				HierarchyNode node    = getNode(current, loader);
 
-				if (node == null) continue;
+				if (node == null) {
+					incomplete = true;
+					continue;
+				}
 
-				// 检查父类
 				if (node.superName != null) {
-					if (node.superName.equals(superType)) return true;
+					if (node.superName.equals(superType)) return nipx.ref.ClassHierarchyOracle.HierarchyCheck.YES;
 					if (visited.add(node.superName)) {
 						queue.add(node.superName);
 					}
 				}
 
-				// 检查接口
 				if (node.interfaces != null) {
 					for (String itf : node.interfaces) {
-						if (itf.equals(superType)) return true;
+						if (itf.equals(superType)) return nipx.ref.ClassHierarchyOracle.HierarchyCheck.YES;
 						if (visited.add(itf)) {
 							queue.add(itf);
 						}
 					}
 				}
 			}
-			return false;
+			return incomplete ? nipx.ref.ClassHierarchyOracle.HierarchyCheck.UNKNOWN : nipx.ref.ClassHierarchyOracle.HierarchyCheck.NO;
+		}
+
+		/**
+		 * 核心逻辑：判断 subType 是否是 superType 的子类或实现类
+		 * 采用 BFS (广度优先搜索) 遍历继承树
+		 */
+		public static boolean isAssignableFrom(String superType, String subType, ClassLoader loader) {
+			return checkAssignableFrom(superType, subType, loader) == nipx.ref.ClassHierarchyOracle.HierarchyCheck.YES;
 		}
 
 		/**

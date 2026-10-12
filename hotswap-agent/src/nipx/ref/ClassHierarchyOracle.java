@@ -27,7 +27,15 @@ import java.util.Optional;
  * @see InitFix
  */
 public interface ClassHierarchyOracle {
+	enum HierarchyCheck {
+		YES, NO, UNKNOWN
+	}
+
 	boolean isAssignableFrom(String superType, String subType);
+
+	default HierarchyCheck checkAssignableFrom(String superType, String subType) {
+		return isAssignableFrom(superType, subType) ? HierarchyCheck.YES : HierarchyCheck.UNKNOWN;
+	}
 
 	boolean isInterface(String className);
 

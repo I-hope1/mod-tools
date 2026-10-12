@@ -38,6 +38,14 @@ public final class HierarchyTreeOracle implements ClassHierarchyOracle {
 	public HierarchyTreeOracle(ClassLoader loader, ClassNode preferredClass) {
 		this.loader = new WeakReference<>(loader);
 		this.preferredClass = preferredClass;
+		if (preferredClass != null) {
+			AnnotationTransformer.HierarchyTree.register(preferredClass);
+		}
+	}
+
+	@Override
+	public HierarchyCheck checkAssignableFrom(String superType, String subType) {
+		return AnnotationTransformer.HierarchyTree.checkAssignableFrom(superType, subType, loader.get());
 	}
 
 	@Override

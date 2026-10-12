@@ -43,13 +43,44 @@ public class CellPropertyRef {
 	public static final String CL_CELL  = "arc/scene/ui/layout/Cell";
 
 	//region 数据结构
-	public record PropertyCall(String owner, String method, String desc, Object[] args, int line) { }
+	public record PropertyCall(
+		String owner, String method, String desc, Object[] args, int line,
+		String helperClass, String helperMethod, int helperLine, int callOrdinal
+	) {
+		public PropertyCall(String owner, String method, String desc, Object[] args, int line) {
+			this(owner, method, desc, args, line, null, null, -1, 0);
+		}
 
-	public record CellIdentity(String hostClass, String hostMethod, String hostDesc,
-	                           int line, String creatorName) {
+		public PropertyCall(String owner, String method, String desc, Object[] args, int line,
+		                    String helperClass, String helperMethod, int helperLine) {
+			this(owner, method, desc, args, line, helperClass, helperMethod, helperLine, 0);
+		}
+	}
+
+	public record CellIdentity(
+		String hostClass, String hostMethod, String hostDesc,
+		int line, String creatorName,
+		String helperClass, String helperMethod, int helperLine,
+		int callOrdinal
+	) {
+		public CellIdentity(String hostClass, String hostMethod, String hostDesc,
+		                    int line, String creatorName) {
+			this(hostClass, hostMethod, hostDesc, line, creatorName, null, null, -1, 0);
+		}
+
+		public CellIdentity(String hostClass, String hostMethod, String hostDesc,
+		                    int line, String creatorName,
+		                    String helperClass, String helperMethod, int helperLine) {
+			this(hostClass, hostMethod, hostDesc, line, creatorName, helperClass, helperMethod, helperLine, 0);
+		}
+
 		@Override
 		public String toString() {
-			return hostClass + "#" + hostMethod + "@" + line + "(" + creatorName + ")";
+			if (helperClass != null) {
+				return hostClass + "#" + hostMethod + "@" + line + "[" + callOrdinal + "]"
+				       + "->[" + helperClass + "#" + helperMethod + "@" + helperLine + "](" + creatorName + ")";
+			}
+			return hostClass + "#" + hostMethod + "@" + line + "[" + callOrdinal + "](" + creatorName + ")";
 		}
 	}
 
@@ -83,8 +114,15 @@ public class CellPropertyRef {
 		public String toString() { return "this[" + hostClass + "]"; }
 	}
 
-	private record HostFrame(String hostClass, String hostMethod, String hostDesc,
-	                         int line, String creatorName) { }
+	private record HostFrame(
+		String hostClass, String hostMethod, String hostDesc,
+		int line, String creatorName,
+		String helperClass, String helperMethod, int helperLine
+	) {
+		HostFrame(String hostClass, String hostMethod, String hostDesc, int line, String creatorName) {
+			this(hostClass, hostMethod, hostDesc, line, creatorName, null, null, -1);
+		}
+	}
 
 	private record CellEntry(Cell<?> cell, CellIdentity id, int chainIdx, List<PropertyCall> chain) { }
 
@@ -174,7 +212,7 @@ public class CellPropertyRef {
 		}
 
 		CellIdentity id = new CellIdentity(hf.hostClass, hf.hostMethod, hf.hostDesc,
-		 hf.line, hf.creatorName);
+		 hf.line, hf.creatorName, hf.helperClass, hf.helperMethod, hf.helperLine);
 		ChainMatch match    = findChainMatch(id);
 		int        chainIdx = match == null ? -1 : match.index();
 		List<PropertyCall> chain = (match == null || match.chain() == null)
@@ -280,7 +318,8 @@ public class CellPropertyRef {
 		PropertyCall existing = chain.get(slot);
 		Object[]     merged   = mergeArgs(existing.args, sanitized);
 		if (!argsEqual(existing.args, merged)) {
-			chain.set(slot, new PropertyCall(existing.owner, method, desc, merged, existing.line));
+			chain.set(slot, new PropertyCall(existing.owner, method, desc, merged, existing.line,
+			                                 existing.helperClass, existing.helperMethod, existing.helperLine, existing.callOrdinal));
 		}
 		if ("tooltip".equals(method) && cell.get() != null && cell.get().getListeners().size > 0) {
 			state.slotListeners.put(slot, new WeakReference<>(cell.get().getListeners().peek()));
@@ -306,25 +345,76 @@ public class CellPropertyRef {
 	private static HostFrame findHostContext() {
 		return WALKER.walk(s -> {
 			String creatorName = null;
+			List<StackWalker.StackFrame> userFrames = new ArrayList<>();
+
 			for (StackWalker.StackFrame f : (Iterable<StackWalker.StackFrame>) s::iterator) {
 				String cls  = f.getClassName().replace('.', '/');
 				String name = f.getMethodName();
 
 				if (cls.equals(CL_CELL)
 				    || cls.startsWith("arc/util/pooling/")
-				    || cls.startsWith("nipx/")) { continue; }
-
-				if (cls.equals(CL_TABLE)) {
-					if (TABLE_CELL_CREATORS.contains(name)) creatorName = name;
+				    || cls.startsWith("nipx/")) {
 					continue;
 				}
 
-				if (isLibraryClass(cls)) return null;
+				if (cls.equals(CL_TABLE) || isTableCellCreator(cls, name)) {
+					if (TABLE_CELL_CREATORS.contains(name) || isTableCellCreator(cls, name)) {
+						if (creatorName == null) creatorName = name;
+					}
+					continue;
+				}
 
-				return new HostFrame(cls, name, f.getDescriptor(), f.getLineNumber(), creatorName);
+				if (isLibraryClass(cls)) {
+					break;
+				}
+
+				userFrames.add(f);
 			}
+
+			if (userFrames.isEmpty()) return null;
+
+			StackWalker.StackFrame first = userFrames.get(0);
+			String firstCls  = first.getClassName().replace('.', '/');
+			String firstName = first.getMethodName();
+			String firstDesc = first.getDescriptor();
+
+			if (!isHelper(firstCls, firstName, firstDesc)) {
+				return new HostFrame(firstCls, firstName, firstDesc, first.getLineNumber(), creatorName);
+			}
+
+			// 最内层 helper 帧（方法名 + 行号）
+			String helperCls    = firstCls;
+			String helperMethod = firstName;
+			int    helperLine   = first.getLineNumber();
+
+			// 从内向外剥 helper 帧，嵌套取最外层作为调用点
+			for (int i = 1; i < userFrames.size(); i++) {
+				StackWalker.StackFrame f = userFrames.get(i);
+				String cls  = f.getClassName().replace('.', '/');
+				String name = f.getMethodName();
+				String desc = f.getDescriptor();
+
+				if (!isHelper(cls, name, desc)) {
+					return new HostFrame(cls, name, desc, f.getLineNumber(), creatorName,
+					                     helperCls, helperMethod, helperLine);
+				}
+			}
+
 			return null;
 		});
+	}
+
+	private static boolean matchesIdentity(CellIdentity id, PropertyCall creator) {
+		if (id.creatorName != null && !id.creatorName.equals(creator.method)) return false;
+		if (id.line >= 0 && creator.line >= 0 && id.line != creator.line) return false;
+		if (id.helperClass != null) {
+			if (!id.helperClass.equals(creator.helperClass)) return false;
+			if (id.helperMethod != null && creator.helperMethod != null && !id.helperMethod.equals(creator.helperMethod)) return false;
+			if (id.helperLine >= 0 && creator.helperLine >= 0 && id.helperLine != creator.helperLine) return false;
+		} else {
+			if (creator.helperClass != null) return false;
+		}
+		return id.callOrdinal == creator.callOrdinal;
 	}
 
 	/**
@@ -350,8 +440,7 @@ public class CellPropertyRef {
 			List<PropertyCall> chain = methodChains.get(i);
 			if (chain.isEmpty()) continue;
 			PropertyCall creator = chain.get(0);
-			if (id.creatorName != null && !id.creatorName.equals(creator.method)) continue;
-			if (id.line >= 0 && creator.line >= 0 && id.line != creator.line) continue;
+			if (!matchesIdentity(id, creator)) continue;
 			if (found == null) found = new ChainMatch(i, chain);
 			hits++;
 		}
@@ -373,8 +462,7 @@ public class CellPropertyRef {
 			List<PropertyCall> chain = methodChains.get(i);
 			if (chain.isEmpty()) continue;
 			PropertyCall creator = chain.get(0);
-			if (id.creatorName != null && !id.creatorName.equals(creator.method)) continue;
-			if (id.line >= 0 && creator.line >= 0 && id.line != creator.line) continue;
+			if (!matchesIdentity(id, creator)) continue;
 			if (found == null) found = new ChainMatch(i, chain);
 			hits++;
 		}
@@ -478,7 +566,8 @@ public class CellPropertyRef {
 			List<PropertyCall> list   = runtimeByKey.get(key);
 			PropertyCall       r      = (list != null && nth < list.size()) ? list.get(nth) : null;
 			Object[]           merged = r == null ? t.args : mergeArgs(t.args, r.args);
-			out.add(new PropertyCall(t.owner, t.method, t.desc, merged, t.line));
+			out.add(new PropertyCall(t.owner, t.method, t.desc, merged, t.line,
+			                         t.helperClass, t.helperMethod, t.helperLine, t.callOrdinal));
 		}
 		return out;
 	}
@@ -591,7 +680,11 @@ public class CellPropertyRef {
 					 methodNameFromKey(newMk),
 					 methodDescFromKey(newMk),
 					 newCreator.line,
-					 newCreator.method);
+					 newCreator.method,
+					 newCreator.helperClass,
+					 newCreator.helperMethod,
+					 newCreator.helperLine,
+					 newCreator.callOrdinal);
 					try {
 						List<PropertyCall> effective = applyChainUpdate(cell, ce.chain, mergedNew);
 						newIdOf.put(cell, newId);
@@ -635,7 +728,11 @@ public class CellPropertyRef {
 			 methodNameFromKey(newMk),
 			 methodDescFromKey(newMk),
 			 newCreator.line,
-			 newCreator.method);
+			 newCreator.method,
+			 newCreator.helperClass,
+			 newCreator.helperMethod,
+			 newCreator.helperLine,
+			 newCreator.callOrdinal);
 
 			try {
 				List<PropertyCall> effective = applyChainUpdate(cell, ce.chain, mergedNew);
@@ -833,6 +930,13 @@ public class CellPropertyRef {
 		return s;
 	}
 
+	private static int compareCellOrder(int line1, int helperLine1, int ordinal1,
+	                                    int line2, int helperLine2, int ordinal2) {
+		if (line1 != line2) return Integer.compare(line1, line2);
+		if (helperLine1 != helperLine2) return Integer.compare(helperLine1, helperLine2);
+		return Integer.compare(ordinal1, ordinal2);
+	}
+
 	private static boolean appendNewCell(String slashName, String methodKey,
 	                                     List<PropertyCall> newChain, List<CellIdentity> existingIds) throws Throwable {
 		PropertyCall creator = newChain.get(0);
@@ -843,18 +947,22 @@ public class CellPropertyRef {
 			return false;
 		}
 
-		CellIdentity beforeId   = null, afterId = null;
-		int          beforeLine = Integer.MIN_VALUE, afterLine = Integer.MAX_VALUE;
+		CellIdentity beforeId = null, afterId = null;
 		for (CellIdentity id : existingIds) {
 			if (!methodKeyOf(id).equals(methodKey)) continue;
 			if (id.line < 0) continue;
-			if (id.line < creator.line && id.line > beforeLine) {
-				beforeId = id;
-				beforeLine = id.line;
-			}
-			if (id.line > creator.line && id.line < afterLine) {
-				afterId = id;
-				afterLine = id.line;
+			int cmp = compareCellOrder(id.line, id.helperLine, id.callOrdinal,
+			                           creator.line, creator.helperLine, creator.callOrdinal);
+			if (cmp < 0) {
+				if (beforeId == null || compareCellOrder(id.line, id.helperLine, id.callOrdinal,
+				                                         beforeId.line, beforeId.helperLine, beforeId.callOrdinal) > 0) {
+					beforeId = id;
+				}
+			} else if (cmp > 0) {
+				if (afterId == null || compareCellOrder(id.line, id.helperLine, id.callOrdinal,
+				                                        afterId.line, afterId.helperLine, afterId.callOrdinal) < 0) {
+					afterId = id;
+				}
 			}
 		}
 
@@ -1681,14 +1789,18 @@ public class CellPropertyRef {
 				public MethodVisitor visitMethod(int access, String name, String descriptor,
 				                                 String signature, String[] exceptions) {
 					if (classIsHelper) {
-						HELPER_METHODS_BY_CLASS.computeIfAbsent(slashName, k -> ConcurrentHashMap.newKeySet()).add(name);
+						Set<String> set = HELPER_METHODS_BY_CLASS.computeIfAbsent(slashName, k -> ConcurrentHashMap.newKeySet());
+						set.add(name);
+						set.add(name + descriptor);
 						return null;
 					}
 					return new MethodVisitor(ASM9) {
 						@Override
 						public AnnotationVisitor visitAnnotation(String annDesc, boolean visible) {
 							if (ANNOTATION_CELL_HELPER.equals(annDesc)) {
-								HELPER_METHODS_BY_CLASS.computeIfAbsent(slashName, k -> ConcurrentHashMap.newKeySet()).add(name);
+								Set<String> set = HELPER_METHODS_BY_CLASS.computeIfAbsent(slashName, k -> ConcurrentHashMap.newKeySet());
+								set.add(name);
+								set.add(name + descriptor);
 							}
 							return super.visitAnnotation(annDesc, visible);
 						}
@@ -1705,13 +1817,20 @@ public class CellPropertyRef {
 		if (owner == null) return false;
 		String slashOwner = owner.replace('.', '/');
 		if (WHOLE_CLASS_HELPERS.contains(slashOwner)) return true;
+		int dollar = slashOwner.indexOf('$');
+		if (dollar > 0 && WHOLE_CLASS_HELPERS.contains(slashOwner.substring(0, dollar))) return true;
+
 		Set<String> methods = HELPER_METHODS_BY_CLASS.get(slashOwner);
 		if (methods != null && (methods.contains(name) || (desc != null && methods.contains(name + desc)))) {
 			return true;
 		}
 		if (!SCANNED_HELPER_CLASSES.contains(slashOwner)) {
 			scanHelpers(slashOwner);
+			if (dollar > 0 && !SCANNED_HELPER_CLASSES.contains(slashOwner.substring(0, dollar))) {
+				scanHelpers(slashOwner.substring(0, dollar));
+			}
 			if (WHOLE_CLASS_HELPERS.contains(slashOwner)) return true;
+			if (dollar > 0 && WHOLE_CLASS_HELPERS.contains(slashOwner.substring(0, dollar))) return true;
 			methods = HELPER_METHODS_BY_CLASS.get(slashOwner);
 			return methods != null && (methods.contains(name) || (desc != null && methods.contains(name + desc)));
 		}

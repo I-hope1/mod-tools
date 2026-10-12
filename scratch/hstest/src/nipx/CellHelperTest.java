@@ -171,4 +171,83 @@ class CellHelperTest {
 			"(F)Larc/scene/ui/layout/Cell;", new Object[]{null}, 12);
 		assertFalse(CellPropertyRef.hasUsablePropertyArgs(unresolvedProp));
 	}
+
+	@Test
+	void testTemplateCreatorDetection() {
+		assertTrue(CellPropertyRef.isTemplateCreator("defaults"));
+		assertFalse(CellPropertyRef.isTemplateCreator("button"));
+		assertFalse(CellPropertyRef.isTemplateCreator("image"));
+
+		PropertyCall tplHead = new PropertyCall("arc/scene/ui/layout/Table", "defaults",
+			"()Larc/scene/ui/layout/Cell;", new Object[0], 10);
+		assertTrue(CellPropertyRef.isTemplateCreator(tplHead));
+
+		PropertyCall btnHead = new PropertyCall("arc/scene/ui/layout/Table", "button",
+			"(Ljava/lang/CharSequence;)Larc/scene/ui/layout/Cell;", new Object[]{"OK"}, 12);
+		assertFalse(CellPropertyRef.isTemplateCreator(btnHead));
+
+		List<PropertyCall> tplChain = Arrays.asList(tplHead,
+			new PropertyCall("arc/scene/ui/layout/Cell", "size", "(F)Larc/scene/ui/layout/Cell;", new Object[]{32f}, 10));
+		List<PropertyCall> btnChain = Arrays.asList(btnHead);
+
+		List<List<PropertyCall>> found = CellPropertyRef.findTemplateChains(Arrays.asList(tplChain, btnChain));
+		assertEquals(1, found.size());
+		assertSame(tplChain, found.get(0));
+	}
+
+	@Test
+	void testMiddleOfChainActiveTemplate() {
+		PropertyCall tpl1Head = new PropertyCall("arc/scene/ui/layout/Table", "defaults",
+			"()Larc/scene/ui/layout/Cell;", new Object[0], 10);
+		List<PropertyCall> tpl1 = Arrays.asList(tpl1Head,
+			new PropertyCall("arc/scene/ui/layout/Cell", "size", "(F)Larc/scene/ui/layout/Cell;", new Object[]{32f}, 10));
+
+		PropertyCall tpl2Head = new PropertyCall("arc/scene/ui/layout/Table", "defaults",
+			"()Larc/scene/ui/layout/Cell;", new Object[0], 20);
+		List<PropertyCall> tpl2 = Arrays.asList(tpl2Head,
+			new PropertyCall("arc/scene/ui/layout/Cell", "size", "(F)Larc/scene/ui/layout/Cell;", new Object[]{64f}, 20));
+
+		List<List<PropertyCall>> templates = Arrays.asList(tpl1, tpl2);
+
+		// Cell at line 12 should match tpl1 (10 <= 12 < 20)
+		assertSame(tpl1, CellPropertyRef.findActiveTemplate(templates, 12));
+
+		// Cell at line 25 should match tpl2 (20 <= 25)
+		assertSame(tpl2, CellPropertyRef.findActiveTemplate(templates, 25));
+
+		// Cell at line 5 (before any template) should not match when multiple templates exist
+		assertNull(CellPropertyRef.findActiveTemplate(templates, 5));
+
+		// Single template fallback
+		assertSame(tpl1, CellPropertyRef.findActiveTemplate(Collections.singletonList(tpl1), 5));
+	}
+
+	@Test
+	void testEvaluateTemplateGeometry() {
+		arc.Application oldApp = arc.Core.app;
+		try {
+			arc.Core.app = (arc.Application) java.lang.reflect.Proxy.newProxyInstance(
+				arc.Application.class.getClassLoader(),
+				new Class<?>[]{arc.Application.class},
+				(proxy, method, methodArgs) -> {
+					if ("isDesktop".equals(method.getName())) return true;
+					return null;
+				}
+			);
+
+			PropertyCall tplHead = new PropertyCall("arc/scene/ui/layout/Table", "defaults",
+				"()Larc/scene/ui/layout/Cell;", new Object[0], 10);
+			PropertyCall sizeCall = new PropertyCall("arc/scene/ui/layout/Cell", "size",
+				"(FF)Larc/scene/ui/layout/Cell;", new Object[]{48f, 24f}, 10);
+
+			CellPropertyRef.Geometry16 geom = CellPropertyRef.evaluateTemplateGeometry(Arrays.asList(tplHead, sizeCall));
+			assertNotNull(geom);
+			assertNull(geom.get());
+			assertNull(geom.getTable());
+			assertEquals(48f, geom.minWidth());
+			assertEquals(24f, geom.minHeight());
+		} finally {
+			arc.Core.app = oldApp;
+		}
+	}
 }

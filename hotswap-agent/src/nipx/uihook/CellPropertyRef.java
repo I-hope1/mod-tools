@@ -750,6 +750,15 @@ public class CellPropertyRef {
 			}
 		}
 
+		Map<String, List<List<PropertyCall>>> oldTemplatesByMethod = new HashMap<>();
+		for (Entry<String, List<List<PropertyCall>>> oe : oldModel.entrySet()) {
+			oldTemplatesByMethod.put(oe.getKey(), findTemplateChains(oe.getValue()));
+		}
+		Map<String, List<List<PropertyCall>>> newTemplatesByMethod = new HashMap<>();
+		for (Entry<String, List<List<PropertyCall>>> ne : newModel.entrySet()) {
+			newTemplatesByMethod.put(ne.getKey(), findTemplateChains(ne.getValue()));
+		}
+
 		List<CellEntry> entries = new ArrayList<>();
 		synchronized (cellState) {
 			for (Entry<Cell<?>, CellState> e : cellState.entrySet()) {
@@ -806,13 +815,15 @@ public class CellPropertyRef {
 					 newCreator.helperMethod,
 					 newCreator.helperLine,
 					 newCreator.callOrdinal);
+					boolean templateChanged = updateCellTemplateIfChanged(cell, ce.id, newCreator, oldMk, newMk,
+						oldTemplatesByMethod, newTemplatesByMethod);
 					try {
-						List<PropertyCall> effective = applyChainUpdate(cell, ce.chain, mergedNew);
+						List<PropertyCall> effective = applyChainUpdate(cell, ce.chain, mergedNew, templateChanged);
 						newIdOf.put(cell, newId);
 						newIdxOf.put(cell, newIdx);
 						newChainOf.put(cell, effective);
 						if (effective == mergedNew) {
-							if (!callsEqual(ce.chain, mergedNew)) updated++;
+							if (!callsEqual(ce.chain, mergedNew) || templateChanged) updated++;
 						} else {
 							skipped++;
 						}
@@ -855,13 +866,15 @@ public class CellPropertyRef {
 			 newCreator.helperLine,
 			 newCreator.callOrdinal);
 
+			boolean templateChanged = updateCellTemplateIfChanged(cell, ce.id, newCreator, oldMk, newMk,
+				oldTemplatesByMethod, newTemplatesByMethod);
 			try {
-				List<PropertyCall> effective = applyChainUpdate(cell, ce.chain, mergedNew);
+				List<PropertyCall> effective = applyChainUpdate(cell, ce.chain, mergedNew, templateChanged);
 				newIdOf.put(cell, newId);
 				newIdxOf.put(cell, newIdx);
 				newChainOf.put(cell, effective);
 				if (effective == mergedNew) {
-					if (!callsEqual(ce.chain, mergedNew)) updated++;
+					if (!callsEqual(ce.chain, mergedNew) || templateChanged) updated++;
 				} else {
 					skipped++;
 				}
@@ -917,7 +930,7 @@ public class CellPropertyRef {
 				List<PropertyCall> chain = chains.get(j);
 				if (chain.isEmpty()) continue;
 				PropertyCall creator = chain.get(0);
-				if (!isCreatorCall(creator)) continue;
+				if (!isCreatorCall(creator) || isTemplateCreator(creator)) continue;
 				try {
 					if (appendNewCell(slashName, mk, chain, idsAfter)) added++;
 				} catch (Throwable t) {
@@ -1061,7 +1074,7 @@ public class CellPropertyRef {
 	private static boolean appendNewCell(String slashName, String methodKey,
 	                                     List<PropertyCall> newChain, List<CellIdentity> existingIds) throws Throwable {
 		PropertyCall creator = newChain.get(0);
-		if (!isCreatorCall(creator)) return false;
+		if (!isCreatorCall(creator) || isTemplateCreator(creator)) return false;
 
 		if (!hasUsableCreatorArgs(creator)) {
 			if (DEBUG) log("[CellProperty] Skipping append with unconstructible creator args: " + creator.method);
@@ -1221,13 +1234,19 @@ public class CellPropertyRef {
 	 */
 	private static List<PropertyCall> applyChainUpdate(Cell<?> cell, List<PropertyCall> oldChain,
 	                                                   List<PropertyCall> newChain) {
+		return applyChainUpdate(cell, oldChain, newChain, false);
+	}
+
+	private static List<PropertyCall> applyChainUpdate(Cell<?> cell, List<PropertyCall> oldChain,
+	                                                   List<PropertyCall> newChain,
+	                                                   boolean templateUpdated) {
 		CellState state;
 		synchronized (cellState) {
 			state = cellState.get(cell);
 		}
 
 		if (oldChain == null || oldChain.isEmpty()) {
-			if (!newChain.isEmpty() && isCreatorCall(newChain.get(0))) {
+			if (!newChain.isEmpty() && isCreatorCall(newChain.get(0)) && !isTemplateCreator(newChain.get(0))) {
 				updateChildElement(cell, newChain.get(0));
 			}
 			List<PropertyCall> props = newChain.subList(newChain.isEmpty() ? 0 : 1, newChain.size());
@@ -1239,7 +1258,7 @@ public class CellPropertyRef {
 		PropertyCall newCreator = newChain.get(0);
 
 		boolean elementUpdated = false;
-		if (isCreatorCall(newCreator)) {
+		if (isCreatorCall(newCreator) && !isTemplateCreator(newCreator)) {
 			if (!Objects.equals(oldCreator.owner, newCreator.owner)
 			    || !oldCreator.method.equals(newCreator.method)
 			    || !argsEqual(oldCreator.args, newCreator.args)) {
@@ -1259,7 +1278,7 @@ public class CellPropertyRef {
 		List<PropertyCall> newProps     = new ArrayList<>(newChain.subList(1, newChain.size()));
 		boolean            propsChanged = !callsEqual(oldProps, newProps);
 
-		if (!elementUpdated && !propsChanged) return newChain;
+		if (!elementUpdated && !propsChanged && !templateUpdated) return newChain;
 
 		List<PropertyCall> baseline = new ArrayList<>();
 		baseline.add(newCreator);
@@ -1283,7 +1302,7 @@ public class CellPropertyRef {
 			for (int i = 0; i < newProps.size(); i++) {
 				PropertyCall p = newProps.get(i);
 				if (!hasUsablePropertyArgs(p)) continue;
-				if (elementUpdated || !containsCall(oldProps, p)) {
+				if (elementUpdated || templateUpdated || !containsCall(oldProps, p)) {
 					applyPropertyCallWithTracking(cell, state, i + 1, p);
 				}
 			}
@@ -1300,6 +1319,11 @@ public class CellPropertyRef {
 		applyAllCalls(cell, state, newProps);
 
 		if (!touchesRow) ArcReflectionAdapter.setEndRow(cell, savedEndRow);
+		if (templateUpdated && cell.getTable() != null) {
+			try {
+				cell.getTable().invalidate();
+			} catch (Throwable ignored) { }
+		}
 		return newChain;
 	}
 
@@ -2065,8 +2089,16 @@ public class CellPropertyRef {
 		return isCellClass(null, owner);
 	}
 
+	public static boolean isTemplateCreator(String methodName) {
+		return "defaults".equals(methodName);
+	}
+
+	public static boolean isTemplateCreator(PropertyCall call) {
+		return call != null && isTemplateCreator(call.method);
+	}
+
 	private static boolean isTableCellCreator(ClassNode cn, String owner, String name) {
-		return isTableClass(cn, owner) && TABLE_CELL_CREATORS.contains(name);
+		return isTableClass(cn, owner) && (TABLE_CELL_CREATORS.contains(name) || isTemplateCreator(name));
 	}
 
 	private static boolean isTableCellCreator(String owner, String name) {
@@ -2076,6 +2108,95 @@ public class CellPropertyRef {
 	private static boolean isCreatorCall(PropertyCall pc) {
 		if (pc == null) return false;
 		return isTableCellCreator(pc.owner, pc.method);
+	}
+
+	public static List<List<PropertyCall>> findTemplateChains(List<List<PropertyCall>> chains) {
+		List<List<PropertyCall>> tpls = new ArrayList<>();
+		if (chains != null) {
+			for (List<PropertyCall> c : chains) {
+				if (!c.isEmpty() && isTemplateCreator(c.get(0))) {
+					tpls.add(c);
+				}
+			}
+		}
+		return tpls;
+	}
+
+	public static List<PropertyCall> findActiveTemplate(List<List<PropertyCall>> templateChains, int cellLine) {
+		if (templateChains == null || templateChains.isEmpty()) return null;
+		List<PropertyCall> active = null;
+		for (List<PropertyCall> tpl : templateChains) {
+			if (tpl == null || tpl.isEmpty()) continue;
+			PropertyCall head = tpl.get(0);
+			if (cellLine < 0 || head.line <= cellLine) {
+				active = tpl;
+			} else {
+				break;
+			}
+		}
+		if (active == null && templateChains.size() == 1) {
+			return templateChains.get(0);
+		}
+		return active;
+	}
+
+	public static Geometry16 evaluateTemplateGeometry(List<PropertyCall> templateChain) {
+		Geometry16 result = new Geometry16();
+		if (templateChain == null || templateChain.size() <= 1) {
+			result.set(Cell.defaults());
+			return result;
+		}
+		try {
+			Table   dummyTable = new Table();
+			Cell<?> dummyCell  = dummyTable.defaults();
+			for (int i = 1; i < templateChain.size(); i++) {
+				PropertyCall call = templateChain.get(i);
+				if (!hasUsablePropertyArgs(call)) continue;
+				invokeCellMethod(dummyCell, call.method, call.desc, call.args);
+			}
+			result.set(dummyCell);
+		} catch (Throwable t) {
+			if (DEBUG) log("[CellProperty] Failed to evaluate template geometry: " + t.getMessage());
+			result.set(Cell.defaults());
+		}
+		return result;
+	}
+
+	private static boolean updateCellTemplateIfChanged(Cell<?> cell, CellIdentity id,
+	                                                   PropertyCall newCreator,
+	                                                   String oldMk, String newMk,
+	                                                   Map<String, List<List<PropertyCall>>> oldTemplatesByMethod,
+	                                                   Map<String, List<List<PropertyCall>>> newTemplatesByMethod) {
+		List<PropertyCall> oldTpl = findActiveTemplate(oldTemplatesByMethod.get(oldMk), id.line);
+		List<PropertyCall> newTpl = findActiveTemplate(newTemplatesByMethod.get(newMk), newCreator != null ? newCreator.line : id.line);
+		boolean templateChanged = false;
+		if (oldTpl == null && newTpl != null) {
+			templateChanged = true;
+		} else if (oldTpl != null && newTpl == null) {
+			templateChanged = true;
+		} else if (oldTpl != null && newTpl != null) {
+			templateChanged = !callsEqual(oldTpl, newTpl);
+		}
+
+		if (templateChanged) {
+			Geometry16 newSnap = evaluateTemplateGeometry(newTpl);
+			synchronized (cellState) {
+				CellState st = cellState.get(cell);
+				if (st != null) {
+					st.snapshot = newSnap;
+				}
+			}
+			Table tbl = cell.getTable();
+			if (tbl != null) {
+				try {
+					Cell<?> def = tbl.defaults();
+					if (def != null && newSnap != null) {
+						def.set(newSnap);
+					}
+				} catch (Throwable ignored) { }
+			}
+		}
+		return templateChanged;
 	}
 
 	private static boolean isCellProperty(ClassNode cn, String owner, String name, String desc) {

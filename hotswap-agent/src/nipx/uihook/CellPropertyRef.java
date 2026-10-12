@@ -405,20 +405,35 @@ public class CellPropertyRef {
 	}
 
 	private static boolean isLambdaKey(String k) {
-		return methodNameFromKey(k).startsWith("lambda$");
+		String n = methodNameFromKey(k);
+		return n.startsWith("lambda$") || n.contains("$lambda$") || n.contains("$lambda-");
 	}
 
-	/** lambda$build$3 → "build"。 */
+	/**
+	 * Java:   lambda$build$3       → "build"
+	 * Kotlin: metricTable$lambda$1 → "metricTable"
+	 */
 	private static String lambdaOwner(String k) {
 		String n = methodNameFromKey(k);
-		int    a = n.indexOf('$');
-		int    b = n.lastIndexOf('$');
-		return a >= 0 && a < b ? n.substring(a + 1, b) : "";
+		if (n.startsWith("lambda$")) {
+			int a = 6;
+			int b = n.lastIndexOf('$');
+			return b > a ? n.substring(a + 1, b) : "";
+		}
+		int kIdx = n.indexOf("$lambda$");
+		if (kIdx >= 0) return n.substring(0, kIdx);
+		kIdx = n.indexOf("$lambda-");
+		if (kIdx >= 0) return n.substring(0, kIdx);
+		return "";
 	}
 
 	private static int lambdaOrdinal(String k) {
 		String n = methodNameFromKey(k);
-		try { return Integer.parseInt(n.substring(n.lastIndexOf('$') + 1)); } catch (Exception e) { return 0; }
+		int sep = Math.max(n.lastIndexOf('$'), n.lastIndexOf('-'));
+		if (sep >= 0 && sep < n.length() - 1) {
+			try { return Integer.parseInt(n.substring(sep + 1)); } catch (Exception ignored) { }
+		}
+		return 0;
 	}
 
 	private static int findNthSlotByMethodDesc(List<PropertyCall> chain, String method, String desc, int nth) {

@@ -403,4 +403,68 @@ class CellHelperTest {
 		CellPropertyRef.unregisterRebuildMethod(UnannotatedHost.class.getName(), "customRebuild");
 		CellPropertyRef.unregisterInstance(host);
 	}
+
+	@Test
+	void testContainerConsRebuildAndTopLevelBlocking() {
+		arc.scene.ui.layout.Table standalone = new arc.scene.ui.layout.Table();
+		int[] standaloneBuilds = {0};
+		arc.func.Cons<arc.scene.ui.layout.Table> standaloneCons = t -> standaloneBuilds[0]++;
+		CellPropertyRef.setTableBuilder(standalone, standaloneCons);
+
+		assertSame(standaloneCons, CellPropertyRef.getTableBuilder(standalone));
+		assertEquals(0, standaloneBuilds[0]);
+
+		// Direct container rebuild
+		boolean ok = CellPropertyRef.triggerContainerRebuild(standalone);
+		assertTrue(ok);
+		assertEquals(1, standaloneBuilds[0]);
+		CellPropertyRef.TRACKED_TABLES.remove(standalone);
+
+		// Top-level blocking test: parent has child
+		arc.scene.ui.layout.Table parent = new arc.scene.ui.layout.Table();
+		arc.scene.ui.layout.Table child = new arc.scene.ui.layout.Table();
+		parent.addChild(child);
+
+		int[] parentBuilds = {0};
+		int[] childBuilds = {0};
+
+		arc.func.Cons<arc.scene.ui.layout.Table> parentCons = t -> {
+			parentBuilds[0]++;
+		};
+		arc.func.Cons<arc.scene.ui.layout.Table> childCons = t -> {
+			childBuilds[0]++;
+		};
+
+		CellPropertyRef.setTableBuilder(parent, parentCons);
+		CellPropertyRef.setTableBuilder(child, childCons);
+
+		String hostClass = Injector.getHostClassName(parentCons);
+		if (hostClass != null) {
+			String slash = hostClass.replace('.', '/');
+			boolean rebuilt = CellPropertyRef.triggerContainerRebuild(slash);
+			assertTrue(rebuilt);
+			// Top-level blocking: parent was rebuilt, child was NOT redundantly invoked
+			assertEquals(1, parentBuilds[0]);
+			assertEquals(0, childBuilds[0]);
+		}
+
+		CellPropertyRef.TRACKED_TABLES.remove(parent);
+		CellPropertyRef.TRACKED_TABLES.remove(child);
+	}
+
+	@Test
+	void testContainerRebuildYieldsToHotRebuild() {
+		arc.scene.ui.layout.Table table = new arc.scene.ui.layout.Table();
+		int[] builds = {0};
+		arc.func.Cons<arc.scene.ui.layout.Table> cons = t -> builds[0]++;
+		CellPropertyRef.setTableBuilder(table, cons);
+
+		// SampleRebuildHost has @HotRebuild, so triggerContainerRebuild must yield (return false)
+		String slash = SampleRebuildHost.class.getName().replace('.', '/');
+		boolean ok = CellPropertyRef.triggerContainerRebuild(slash);
+		assertFalse(ok);
+		assertEquals(0, builds[0]);
+
+		CellPropertyRef.TRACKED_TABLES.remove(table);
+	}
 }

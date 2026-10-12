@@ -1,7 +1,9 @@
 package nipx.uihook;
 
 import arc.Core;
+import arc.func.Cons;
 import arc.scene.Element;
+import arc.scene.Group;
 import arc.scene.event.EventListener;
 import arc.scene.ui.*;
 import arc.scene.ui.Label;
@@ -757,6 +759,13 @@ public class CellPropertyRef {
 				triggerHotRebuild(slashName);
 			} catch (Throwable t) {
 				if (DEBUG) log("[CellProperty] triggerHotRebuild failed for " + slashName + ": " + t.getMessage());
+			}
+
+			// 触发容器级 Cons 重建兜底 (Task 32)
+			try {
+				triggerContainerRebuild(slashName);
+			} catch (Throwable t) {
+				if (DEBUG) log("[CellProperty] triggerContainerRebuild failed for " + slashName + ": " + t.getMessage());
 			}
 
 			// 级联刷新依赖该 helper 的宿主类
@@ -3202,6 +3211,16 @@ public class CellPropertyRef {
 				error("[CellProperty] Rollback failed", t);
 			}
 		}
+		byte[] origTable = originalTableBytes;
+		originalTableBytes = null;
+		if (origTable != null) {
+			try {
+				Injector.redefineOneClass(Table.class, origTable);
+				info("[CellProperty] Table class rolled back to original bytecode");
+			} catch (Throwable t) {
+				error("[CellProperty] Table rollback failed", t);
+			}
+		}
 		clearAll();
 	}
 
@@ -3644,6 +3663,307 @@ public class CellPropertyRef {
 				}
 			}
 		} catch (Throwable ignored) { }
+	}
+	//endregion
+
+	//region Container Cons 重建 (Task 32)
+
+	public static final Set<Table>          TRACKED_TABLES    = Collections.synchronizedSet(newWeakSet());
+	private static final Map<Table, Object> FALLBACK_BUILDERS = Collections.synchronizedMap(new WeakHashMap<>());
+	private static volatile Field           tableBuilderField;
+	private static volatile byte[]          originalTableBytes;
+
+	public static void setTableBuilder(Table table, Cons cons) {
+		if (table == null) return;
+		TRACKED_TABLES.add(table);
+		if (cons == null) return;
+
+		try {
+			if (tableBuilderField == null) {
+				try {
+					tableBuilderField = Table.class.getField("$nipx$builder");
+				} catch (NoSuchFieldException e) {
+					try {
+						tableBuilderField = Table.class.getDeclaredField("$nipx$builder");
+					} catch (NoSuchFieldException ignored) { }
+				}
+				if (tableBuilderField != null) {
+					tableBuilderField.setAccessible(true);
+				}
+			}
+			if (tableBuilderField != null) {
+				tableBuilderField.set(table, cons);
+				return;
+			}
+		} catch (Throwable ignored) { }
+
+		FALLBACK_BUILDERS.put(table, cons);
+	}
+
+	public static Cons getTableBuilder(Table table) {
+		if (table == null) return null;
+		try {
+			if (tableBuilderField == null) {
+				try {
+					tableBuilderField = Table.class.getField("$nipx$builder");
+				} catch (NoSuchFieldException e) {
+					try {
+						tableBuilderField = Table.class.getDeclaredField("$nipx$builder");
+					} catch (NoSuchFieldException ignored) { }
+				}
+				if (tableBuilderField != null) {
+					tableBuilderField.setAccessible(true);
+				}
+			}
+			if (tableBuilderField != null) {
+				return (Cons) tableBuilderField.get(table);
+			}
+		} catch (Throwable ignored) { }
+
+		return (Cons) FALLBACK_BUILDERS.get(table);
+	}
+
+	public static void onTableConsConstructed(Table table, Cons cons) {
+		if (table == null || cons == null) return;
+		setTableBuilder(table, cons);
+	}
+
+	public static void onTableMethodWithCons(Cell<?> cell, Cons cons) {
+		if (cell == null || cons == null) return;
+		Element elem = cell.get();
+		if (elem instanceof Table) {
+			setTableBuilder((Table) elem, cons);
+		}
+	}
+
+	public static boolean triggerContainerRebuild(String slashName) {
+		if (slashName == null) return false;
+		try {
+			Class<?> clazz = Class.forName(slashName.replace('/', '.'), false, getTargetLoader());
+			if (hasHotRebuild(clazz)) {
+				// 任务 32 规定：只在没有 @HotRebuild 方法时才用
+				return false;
+			}
+		} catch (Throwable ignored) { }
+
+		if (Thread.currentThread() == uiThread || Core.app == null) {
+			return doTriggerContainerRebuild(slashName);
+		} else {
+			Core.app.post(() -> doTriggerContainerRebuild(slashName));
+			return true;
+		}
+	}
+
+	public static boolean triggerContainerRebuild(Table table) {
+		if (table == null) return false;
+		Cons cons = getTableBuilder(table);
+		if (cons == null) return false;
+		rebuildTable(table, cons);
+		return true;
+	}
+
+	private static boolean doTriggerContainerRebuild(String slashName) {
+		Set<Table> affectedTables = new HashSet<>();
+
+		// 1. 检查已记录的 Table
+		synchronized (TRACKED_TABLES) {
+			for (Table t : TRACKED_TABLES) {
+				if (t == null) continue;
+				Cons cons = getTableBuilder(t);
+				if (cons != null) {
+					String hostClass = Injector.getHostClassName(cons);
+					if (hostClass != null && hostClass.replace('.', '/').equals(slashName)) {
+						affectedTables.add(t);
+					}
+				}
+			}
+		}
+
+		// 2. 检查 cellState 中所有的 Table
+		synchronized (cellState) {
+			for (Entry<Cell<?>, CellState> e : cellState.entrySet()) {
+				Cell<?> cell = e.getKey();
+				if (cell == null) continue;
+				Table t = cell.getTable();
+				if (t != null && !affectedTables.contains(t)) {
+					Cons cons = getTableBuilder(t);
+					if (cons != null) {
+						String hostClass = Injector.getHostClassName(cons);
+						if (hostClass != null && hostClass.replace('.', '/').equals(slashName)) {
+							affectedTables.add(t);
+						}
+					}
+				}
+			}
+		}
+
+		// 3. 检查场景树根节点（若存在）
+		if (Core.scene != null && Core.scene.root != null) {
+			collectAffectedTablesFromScene(Core.scene.root, affectedTables, slashName);
+		}
+
+		if (affectedTables.isEmpty()) return false;
+
+		// 4. 顶层阻断优化：只重建最高层级的受影响 Table
+		List<Table> topLevelTargets = new ArrayList<>();
+		for (Table t : affectedTables) {
+			boolean hasAncestorInAffected = false;
+			Element curr = t.parent;
+			while (curr != null) {
+				if (curr instanceof Table && affectedTables.contains((Table) curr)) {
+					hasAncestorInAffected = true;
+					break;
+				}
+				curr = curr.parent;
+			}
+			if (!hasAncestorInAffected) {
+				topLevelTargets.add(t);
+			}
+		}
+
+		// 5. 执行重建
+		for (Table t : topLevelTargets) {
+			Cons cons = getTableBuilder(t);
+			if (cons != null) {
+				rebuildTable(t, cons);
+			}
+		}
+
+		return !topLevelTargets.isEmpty();
+	}
+
+	private static void collectAffectedTablesFromScene(Element element, Set<Table> out, String slashName) {
+		if (element == null) return;
+		if (element instanceof Table) {
+			Table t = (Table) element;
+			Cons cons = getTableBuilder(t);
+			if (cons != null) {
+				String host = Injector.getHostClassName(cons);
+				if (host != null && host.replace('.', '/').equals(slashName)) {
+					out.add(t);
+					// 顶层阻断：如果父 Table 已被收集，不再深入遍历其子元素
+					return;
+				}
+			}
+		}
+		if (element instanceof Group) {
+			Group g = (Group) element;
+			for (Element child : g.getChildren()) {
+				collectAffectedTablesFromScene(child, out, slashName);
+			}
+		}
+	}
+
+	private static void rebuildTable(Table t, Cons cons) {
+		if (t == null || cons == null) return;
+		boolean[] busyArr = BUSY.get();
+		boolean wasBusy = busyArr[0];
+		busyArr[0] = false;
+		try {
+			t.clearChildren();
+			cons.get(t);
+			t.pack();
+			if (DEBUG) log("[ContainerRebuild] Rebuilt table container " + t);
+		} catch (Throwable ex) {
+			warn("[ContainerRebuild] Failed to rebuild table " + t + ": " + ex.getMessage());
+		} finally {
+			busyArr[0] = wasBusy;
+		}
+	}
+
+	public static void redefineTable() {
+		Class<Table> tableClass = Table.class;
+		byte[] bytes = fetchCurrentBytecode(tableClass);
+		if (bytes == null) {
+			error("[CellProperty] Cannot fetch Table bytecode");
+			return;
+		}
+
+		if (originalTableBytes == null) {
+			if (containsTableHook(bytes)) {
+				error("[CellProperty] Table already injected but no original bytes; aborting");
+				return;
+			}
+			originalTableBytes = bytes;
+		}
+
+		byte[] injected = injectTable(originalTableBytes);
+		if (injected == null) return;
+		if (!verifyBytecode(injected)) {
+			error("[CellProperty] Injected Table bytecode failed verification, aborting redefine");
+			return;
+		}
+
+		Injector.redefineOneClass(tableClass, injected);
+		info("[CellProperty] Table class redefined with $nipx$builder support");
+	}
+
+	private static boolean containsTableHook(byte[] bytes) {
+		return new String(bytes, StandardCharsets.ISO_8859_1).contains("onTableConsConstructed");
+	}
+
+	public static byte[] injectTable(byte[] bytes) {
+		ClassReader cr = new ClassReader(bytes);
+		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
+
+		ClassVisitor cv = new ClassVisitor(ASM9, cw) {
+			boolean isTable = false;
+
+			@Override
+			public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
+				super.visit(version, access, name, signature, superName, interfaces);
+				if (CL_TABLE.equals(name)) {
+					isTable = true;
+					super.visitField(ACC_PUBLIC, "$nipx$builder", "Larc/func/Cons;", null, null).visitEnd();
+				}
+			}
+
+			@Override
+			public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+				MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
+				if (!isTable) return mv;
+
+				if ("<init>".equals(name) && "(Larc/func/Cons;)V".equals(descriptor)) {
+					return new AdviceAdapter(ASM9, mv, access, name, descriptor) {
+						@Override
+						protected void onMethodExit(int opcode) {
+							if (opcode == ATHROW) return;
+							mv.visitVarInsn(ALOAD, 0);
+							mv.visitVarInsn(ALOAD, 1);
+							mv.visitMethodInsn(INVOKESTATIC,
+								internalName(CellPropertyRef.class),
+								"onTableConsConstructed",
+								"(Larc/scene/ui/layout/Table;Larc/func/Cons;)V", false);
+						}
+					};
+				}
+
+				if ("table".equals(name) && "(Larc/func/Cons;)Larc/scene/ui/layout/Cell;".equals(descriptor)) {
+					return new AdviceAdapter(ASM9, mv, access, name, descriptor) {
+						@Override
+						protected void onMethodExit(int opcode) {
+							if (opcode == ATHROW) return;
+							mv.visitInsn(DUP);
+							mv.visitVarInsn(ALOAD, 1);
+							mv.visitMethodInsn(INVOKESTATIC,
+								internalName(CellPropertyRef.class),
+								"onTableMethodWithCons",
+								"(Larc/scene/ui/layout/Cell;Larc/func/Cons;)V", false);
+						}
+					};
+				}
+
+				return mv;
+			}
+		};
+
+		try {
+			cr.accept(cv, ClassReader.EXPAND_FRAMES);
+			return cw.toByteArray();
+		} catch (Exception e) {
+			error("[CellProperty] Failed to inject Table class", e);
+			return null;
+		}
 	}
 	//endregion
 

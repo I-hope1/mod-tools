@@ -78,6 +78,11 @@ public class CellPropertyRef {
 		public String toString() { return owner + "." + name; }
 	}
 
+	public record ThisPlaceholder(String hostClass) {
+		@Override
+		public String toString() { return "this[" + hostClass + "]"; }
+	}
+
 	private record HostFrame(String hostClass, String hostMethod, String hostDesc,
 	                         int line, String creatorName) { }
 
@@ -1254,7 +1259,7 @@ public class CellPropertyRef {
 		MethodHandle mh   = findMatchingMethod(methodName, type);
 		if (mh == null) throw new NoSuchMethodException(methodName + "(" + len + " args)");
 
-		Object[] converted    = convertArgs(type, args);
+		Object[] converted    = convertArgs(cell, cell != null ? cell.getTable() : null, type, args);
 		Class<?> receiverType = mh.type().parameterType(0);
 		if (receiverType.isAssignableFrom(Cell.class)) {
 			invoke(mh, cell, converted);
@@ -1294,7 +1299,33 @@ public class CellPropertyRef {
 		}
 	}
 
+	private static Object resolveThisPlaceholder(ThisPlaceholder tp, Class<?> targetType, Cell<?> cell, Table table) {
+		if (tp == null) return null;
+		Table rootTable = table != null ? table : (cell != null ? cell.getTable() : null);
+		if (rootTable == null) return null;
+
+		if (targetType != null && targetType != Object.class) {
+			if (targetType.isInstance(rootTable)) return rootTable;
+			for (Element curr = rootTable; curr != null; curr = curr.parent) {
+				if (targetType.isInstance(curr)) return curr;
+			}
+		}
+
+		if (tp.hostClass() != null) {
+			String hostClassDots = tp.hostClass().replace('/', '.');
+			for (Element curr = rootTable; curr != null; curr = curr.parent) {
+				if (curr.getClass().getName().equals(hostClassDots)) return curr;
+			}
+		}
+
+		return rootTable;
+	}
+
 	private static Object[] convertArgs(MethodType methodType, Object[] args) {
+		return convertArgs(null, null, methodType, args);
+	}
+
+	private static Object[] convertArgs(Cell<?> contextCell, Table contextTable, MethodType methodType, Object[] args) {
 		if (args == null) return null;
 		Object[] result = new Object[args.length];
 		for (int i = 0; i < args.length; i++) {
@@ -1313,12 +1344,21 @@ public class CellPropertyRef {
 					continue;
 				}
 			}
+			if (arg instanceof ThisPlaceholder tp) {
+				Object resolved = resolveThisPlaceholder(tp, target, contextCell, contextTable);
+				if (resolved != null) {
+					arg = resolved;
+				} else if (target.isInterface()) {
+					result[i] = makeDummyProxy(target);
+					continue;
+				}
+			}
 			if (arg == null) {
 				result[i] = target.isInterface() ? makeDummyProxy(target) : null;
 				continue;
 			}
 			if (arg instanceof LambdaInfo li) {
-				result[i] = makeLambda(li, target);
+				result[i] = makeLambda(contextCell, contextTable, li, target);
 				continue;
 			}
 			result[i] = switch (target.getTypeName()) {
@@ -1352,7 +1392,7 @@ public class CellPropertyRef {
 		 });
 	}
 
-	private static Object makeLambda(LambdaInfo li, Class<?> target) {
+	private static Object makeLambda(Cell<?> cell, Table table, LambdaInfo li, Class<?> target) {
 		if (!hasUsableValue(li.captures())) return makeDummyProxy(target);
 
 		return Proxy.newProxyInstance(target.getClassLoader(), new Class<?>[]{target},
@@ -1385,6 +1425,8 @@ public class CellPropertyRef {
 				 for (int c = 0; c < caps.length; c++) {
 					 if (caps[c] instanceof StaticRef sr) {
 						 resolvedCaps[c] = resolveStaticRef(sr);
+					 } else if (caps[c] instanceof ThisPlaceholder tp) {
+						 resolvedCaps[c] = resolveThisPlaceholder(tp, Object.class, cell, table);
 					 } else {
 						 resolvedCaps[c] = caps[c];
 					 }
@@ -2003,6 +2045,9 @@ public class CellPropertyRef {
 					}
 				} else if (insn instanceof IincInsnNode iin && iin.var == varIndex) writes++;
 			}
+			if (writes == 0 && varIndex == 0 && (mn.access & ACC_STATIC) == 0) {
+				return new ThisPlaceholder(cn.name);
+			}
 			if (writes == 1 && singleStore != null) {
 				int idx = mn.instructions.indexOf(singleStore);
 				if (idx >= 0) {
@@ -2064,6 +2109,7 @@ public class CellPropertyRef {
 		if (v == null) return null;
 		if (isConstantType(v)) return v;
 		if (v instanceof StaticRef) return v;
+		if (v instanceof ThisPlaceholder) return v;
 		if (v instanceof LambdaInfo li) {
 			Object[] caps    = li.captures();
 			Object[] newCaps = caps == null ? null : sanitizeArgs(caps);

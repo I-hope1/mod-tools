@@ -467,4 +467,55 @@ class CellHelperTest {
 
 		CellPropertyRef.TRACKED_TABLES.remove(table);
 	}
+
+	@Test
+	void testRegisteredCallbackRebuildAndFiltering() {
+		arc.scene.Element elem = new arc.scene.Element();
+		int[] resizedCount = {0};
+		int[] updateCount = {0};
+
+		Runnable resizedCb = () -> resizedCount[0]++;
+		Runnable updateCb = () -> updateCount[0]++;
+
+		CellPropertyRef.registerElementCallback(elem, resizedCb, "resized");
+		CellPropertyRef.registerElementCallback(elem, updateCb, "update");
+
+		// Direct rebuild on elem invokes both
+		boolean ok = CellPropertyRef.triggerCallbackRebuild(elem);
+		assertTrue(ok);
+		assertEquals(1, resizedCount[0]);
+		assertEquals(1, updateCount[0]);
+
+		// slashName rebuild: "resized" is eligible and runs; "update" without Cell attribution is filtered out
+		String host = Injector.getHostClassName(resizedCb);
+		if (host != null) {
+			String slash = host.replace('.', '/');
+			resizedCount[0] = 0;
+			updateCount[0] = 0;
+
+			boolean rebuilt = CellPropertyRef.triggerCallbackRebuild(slash);
+			assertTrue(rebuilt);
+			assertEquals(1, resizedCount[0]);
+			// Filtered: update had no Cell attribution
+			assertEquals(0, updateCount[0]);
+		}
+
+		CellPropertyRef.unregisterElementCallback(elem, null);
+	}
+
+	@Test
+	void testCallbackRebuildYieldsToHotRebuild() {
+		arc.scene.Element elem = new arc.scene.Element();
+		int[] count = {0};
+		Runnable cb = () -> count[0]++;
+		CellPropertyRef.registerElementCallback(elem, cb, "resized");
+
+		// SampleRebuildHost has @HotRebuild, so callback rebuild must yield
+		String slash = SampleRebuildHost.class.getName().replace('.', '/');
+		boolean ok = CellPropertyRef.triggerCallbackRebuild(slash);
+		assertFalse(ok);
+		assertEquals(0, count[0]);
+
+		CellPropertyRef.unregisterElementCallback(elem, null);
+	}
 }

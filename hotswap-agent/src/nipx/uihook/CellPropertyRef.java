@@ -768,6 +768,13 @@ public class CellPropertyRef {
 				if (DEBUG) log("[CellProperty] triggerContainerRebuild failed for " + slashName + ": " + t.getMessage());
 			}
 
+			// 触发注册型回调重建兜底 (Task 33)
+			try {
+				triggerCallbackRebuild(slashName);
+			} catch (Throwable t) {
+				if (DEBUG) log("[CellProperty] triggerCallbackRebuild failed for " + slashName + ": " + t.getMessage());
+			}
+
 			// 级联刷新依赖该 helper 的宿主类
 			for (String dep : dependentHosts) {
 				if (!dep.equals(slashName)) {
@@ -3964,6 +3971,173 @@ public class CellPropertyRef {
 			error("[CellProperty] Failed to inject Table class", e);
 			return null;
 		}
+	}
+	//endregion
+
+	//region Registered Callback 重建 (Task 33)
+
+	public static class ElementCallback {
+		public final WeakReference<Element> elementRef;
+		public final Object                 callback;
+		public final String                 registerMethod;
+		public final String                 hostClass;
+
+		public ElementCallback(WeakReference<Element> elementRef, Object callback, String registerMethod, String hostClass) {
+			this.elementRef = elementRef;
+			this.callback = callback;
+			this.registerMethod = registerMethod;
+			this.hostClass = hostClass;
+		}
+	}
+
+	public static final Set<ElementCallback> TRACKED_CALLBACKS = Collections.synchronizedSet(new LinkedHashSet<>());
+
+	public static void registerElementCallback(Element element, Object callback, String registerMethod) {
+		if (element == null || callback == null) return;
+		String host = Injector.getHostClassName(callback);
+		String slashHost = host != null ? host.replace('.', '/') : null;
+		TRACKED_CALLBACKS.add(new ElementCallback(new WeakReference<>(element), callback, registerMethod, slashHost));
+	}
+
+	public static void unregisterElementCallback(Element element, Object callback) {
+		if (element == null && callback == null) return;
+		synchronized (TRACKED_CALLBACKS) {
+			TRACKED_CALLBACKS.removeIf(cb -> {
+				Element el = cb.elementRef.get();
+				if (el == null) return true;
+				if (element != null && el != element) return false;
+				return callback == null || cb.callback == callback;
+			});
+		}
+	}
+
+	public static boolean triggerCallbackRebuild(String slashName) {
+		if (slashName == null) return false;
+		try {
+			Class<?> clazz = Class.forName(slashName.replace('/', '.'), false, getTargetLoader());
+			if (hasHotRebuild(clazz)) {
+				// 任务 33 规定：依赖任务 31 护栏，有 @HotRebuild 时让位
+				return false;
+			}
+		} catch (Throwable ignored) { }
+
+		if (Thread.currentThread() == uiThread || Core.app == null) {
+			return doTriggerCallbackRebuild(slashName);
+		} else {
+			Core.app.post(() -> doTriggerCallbackRebuild(slashName));
+			return true;
+		}
+	}
+
+	public static boolean triggerCallbackRebuild(Element element) {
+		if (element == null) return false;
+		boolean anyInvoked = false;
+		List<ElementCallback> targets = new ArrayList<>();
+		synchronized (TRACKED_CALLBACKS) {
+			for (ElementCallback cb : TRACKED_CALLBACKS) {
+				if (cb.elementRef.get() == element) {
+					targets.add(cb);
+				}
+			}
+		}
+		for (ElementCallback cb : targets) {
+			if (invokeCallback(cb.elementRef.get(), cb.callback)) {
+				anyInvoked = true;
+			}
+		}
+		return anyInvoked;
+	}
+
+	private static boolean doTriggerCallbackRebuild(String slashName) {
+		List<ElementCallback> eligible = new ArrayList<>();
+		synchronized (TRACKED_CALLBACKS) {
+			Iterator<ElementCallback> it = TRACKED_CALLBACKS.iterator();
+			while (it.hasNext()) {
+				ElementCallback cb = it.next();
+				Element elem = cb.elementRef.get();
+				if (elem == null) {
+					it.remove();
+					continue;
+				}
+				if (cb.hostClass != null && cb.hostClass.equals(slashName)) {
+					if (isEligibleCallback(elem, cb)) {
+						eligible.add(cb);
+					}
+				}
+			}
+		}
+
+		if (eligible.isEmpty()) return false;
+
+		boolean anyInvoked = false;
+		for (ElementCallback cb : eligible) {
+			Element el = cb.elementRef.get();
+			if (el != null && invokeCallback(el, cb.callback)) {
+				anyInvoked = true;
+			}
+		}
+		return anyInvoked;
+	}
+
+	private static boolean isEligibleCallback(Element elem, ElementCallback cb) {
+		String m = cb.registerMethod != null ? cb.registerMethod : "";
+		// 1. 构建型入口天然放行 (resized, onResize, field, button 等)
+		if (m.equals("resized") || m.equals("onResize") || m.equals("field") || m.equals("button") || m.equals("shown")) {
+			return true;
+		}
+
+		// 2. 对于通用 update，必须具备 Cell 归属才重跑（过滤掉纯库循环与自终止的事务型 update）
+		if (m.equals("update")) {
+			return hasCellAttribution(elem);
+		}
+
+		return hasCellAttribution(elem);
+	}
+
+	private static boolean hasCellAttribution(Element elem) {
+		if (elem == null) return false;
+		synchronized (cellState) {
+			for (Entry<Cell<?>, CellState> e : cellState.entrySet()) {
+				Cell<?> cell = e.getKey();
+				if (cell == null) continue;
+				if (cell.get() == elem || cell.getTable() == elem) return true;
+				Table t = cell.getTable();
+				if (t != null) {
+					Element p = elem;
+					while (p != null) {
+						if (p == t) return true;
+						p = p.parent;
+					}
+				}
+			}
+		}
+		return false;
+	}
+
+	private static boolean invokeCallback(Element element, Object callback) {
+		if (callback == null) return false;
+		boolean[] busyArr = BUSY.get();
+		boolean wasBusy = busyArr[0];
+		busyArr[0] = false;
+		try {
+			if (callback instanceof Runnable) {
+				((Runnable) callback).run();
+				return true;
+			}
+			if (callback instanceof Cons) {
+				if (element instanceof TextField) {
+					((Cons) callback).get(((TextField) element).getText());
+				} else {
+					((Cons) callback).get(element);
+				}
+				return true;
+			}
+		} catch (Throwable t) {
+			warn("[CallbackRebuild] Failed to invoke callback on " + element + ": " + t.getMessage());
+		} finally {
+			busyArr[0] = wasBusy;
+		}
+		return false;
 	}
 	//endregion
 

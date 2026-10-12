@@ -231,6 +231,7 @@ public class LambdaAligner {
 	 * 供 CellPropertyRef 等 UI 追踪系统共享对齐结论。
 	 */
 	public static volatile Map<String, String> LAST_METHOD_MAPPING;
+	public static volatile String              LAST_ALIGNED_CLASS;
 
 	/**
 	 * 诊断开关：打开后打印配对决策的细节（谁在哪个阶段拿了哪个旧名字）。
@@ -646,6 +647,7 @@ public class LambdaAligner {
 				}
 			}
 			LAST_METHOD_MAPPING = methodMapping;
+			LAST_ALIGNED_CLASS = oldCn.name;
 
 			// 传入 oldCn（已解析过一次）—— 避免 resurrectOrphanedLambdas 二次读 oldBytes
 			return resurrectOrphanedLambdas(oldCn, alignedBytes, presentKeys, oldMethodRefs, newMethodRefs, ctx);
@@ -654,6 +656,7 @@ public class LambdaAligner {
 			LAST_OLD_ANON_HASHES = null;
 			LAST_NEW_ANON_HASHES = null;
 			LAST_METHOD_MAPPING = null;
+			LAST_ALIGNED_CLASS = null;
 			// 降级：不崩溃，返回原始字节码。捕获 Exception 与 LinkageError、StackOverflowError 等。
 			// 默认只记一行（热更失败不该刷屏）；DEBUG 下走 Logger 的 (msg, Throwable)
 			// 重载打完整堆栈 —— 而不是直接 printStackTrace，保持输出统一经日志系统。

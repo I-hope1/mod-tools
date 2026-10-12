@@ -251,6 +251,7 @@ public class CellPropertyRef {
 		busy[0] = true;
 		try {
 			onCellBoundImpl(cell);
+			FAILURES.set(0);
 		} catch (Throwable t) {
 			if (FAILURES.incrementAndGet() > MAX_FAILURES) {
 				error("[CellProperty] Circuit breaker tripped in onCellBound", t);
@@ -419,6 +420,7 @@ public class CellPropertyRef {
 		busy[0] = true;
 		try {
 			recordPropertyCallImpl(cell, method, desc, args);
+			FAILURES.set(0);
 		} catch (Throwable t) {
 			if (FAILURES.incrementAndGet() > MAX_FAILURES) {
 				error("[CellProperty] Circuit breaker tripped, disabling", t);
@@ -836,7 +838,7 @@ public class CellPropertyRef {
 
 		Map<String, List<List<PropertyCall>>> newModel = extractCellChains(newBytecode);
 
-		Map<String, String> methodPairs = matchMethods(oldModel, newModel);
+		Map<String, String> methodPairs = matchMethods(slashName, oldModel, newModel);
 
 		Map<String, Map<Integer, Integer>> chainAligns  = new HashMap<>();
 		Map<String, String>                oldMkToNewMk = new HashMap<>();
@@ -1053,7 +1055,8 @@ public class CellPropertyRef {
 	 * 方法级配对。以 LambdaAligner 的 old->new 映射为主，
 	 * 相似度配对（阈值 0.6）作为兜底；非 lambda 同 key 直接配。
 	 */
-	private static Map<String, String> matchMethods(Map<String, List<List<PropertyCall>>> oldM,
+	private static Map<String, String> matchMethods(String slashName,
+	                                                Map<String, List<List<PropertyCall>>> oldM,
 	                                                Map<String, List<List<PropertyCall>>> newM) {
 		record Pair(String o, String n, double s, int dist) { }
 
@@ -1063,9 +1066,10 @@ public class CellPropertyRef {
 			if (!isLambdaKey(k) && newM.containsKey(k)) out.put(k, k);
 		}
 
-		// 1. 优先采用 LambdaAligner 产出的权威映射（oldKey -> newKey）
+		// 1. 优先采用 LambdaAligner 产出的权威映射（oldKey -> newKey），且仅作用于当前对齐的类
 		Map<String, String> alignerMapping = LambdaAligner.LAST_METHOD_MAPPING;
-		if (alignerMapping != null && !alignerMapping.isEmpty()) {
+		if (alignerMapping != null && !alignerMapping.isEmpty()
+		    && Objects.equals(slashName, LambdaAligner.LAST_ALIGNED_CLASS)) {
 			for (Entry<String, String> e : alignerMapping.entrySet()) {
 				String ok = e.getKey();
 				String nk = e.getValue();
@@ -2259,6 +2263,7 @@ public class CellPropertyRef {
 	public static boolean isHelper(String owner, String name, String desc) {
 		if (owner == null) return false;
 		String slashOwner = owner.replace('.', '/');
+		if (isLibraryClass(slashOwner)) return false;
 		if (MANUAL_WHOLE_CLASS_HELPERS.contains(slashOwner) || WHOLE_CLASS_HELPERS.contains(slashOwner)) return true;
 		int dollar = slashOwner.indexOf('$');
 		if (dollar > 0 && (MANUAL_WHOLE_CLASS_HELPERS.contains(slashOwner.substring(0, dollar))

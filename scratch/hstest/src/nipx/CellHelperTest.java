@@ -675,4 +675,43 @@ class CellHelperTest {
 
 		CellPropertyRef.removeCell(c1);
 	}
+
+	@Test
+	void testIsHelperLibraryShortCircuit() {
+		assertFalse(CellPropertyRef.isHelper("java/lang/String", "valueOf", "()Ljava/lang/String;"));
+		assertFalse(CellPropertyRef.isHelper("arc/scene/ui/layout/Table", "button", "()Larc/scene/ui/layout/Cell;"));
+		assertFalse(CellPropertyRef.isHelper("mindustry/Vars", "load", "()V"));
+	}
+
+	@Test
+	void testAlignerMappingScopedToClass() throws Exception {
+		Method matchM = CellPropertyRef.class.getDeclaredMethod("matchMethods",
+			String.class, Map.class, Map.class);
+		matchM.setAccessible(true);
+
+		Map<String, List<List<PropertyCall>>> oldM = Map.of(
+			"lambda$build$0:()V", List.of()
+		);
+		Map<String, List<List<PropertyCall>>> newM = Map.of(
+			"lambda$build$1:()V", List.of()
+		);
+
+		Map<String, String> prevMapping = LambdaAligner.LAST_METHOD_MAPPING;
+		String prevClass = LambdaAligner.LAST_ALIGNED_CLASS;
+		try {
+			LambdaAligner.LAST_METHOD_MAPPING = Map.of("lambda$build$0:()V", "lambda$build$1:()V");
+			LambdaAligner.LAST_ALIGNED_CLASS = "TargetHost";
+
+			// Class matches TargetHost -> mapping is used
+			Map<String, String> resMatch = (Map<String, String>) matchM.invoke(null, "TargetHost", oldM, newM);
+			assertEquals("lambda$build$1:()V", resMatch.get("lambda$build$0:()V"));
+
+			// Class does NOT match TargetHost -> mapping is NOT used (preventing cascade pollution)
+			Map<String, String> resDiff = (Map<String, String>) matchM.invoke(null, "OtherHost", oldM, newM);
+			assertNull(resDiff.get("lambda$build$0:()V"));
+		} finally {
+			LambdaAligner.LAST_METHOD_MAPPING = prevMapping;
+			LambdaAligner.LAST_ALIGNED_CLASS = prevClass;
+		}
+	}
 }

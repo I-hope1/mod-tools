@@ -3097,16 +3097,17 @@ public class LambdaAligner {
 
 		try {
 			StackTraceElement[] t     = new Throwable().getStackTrace();
-			int                 entry = -1;
+			int lastOrphan = -1;
 			for (int i = 0; i < t.length; i++) {
 				if (SELF.equals(t[i].getClassName()) && "onOrphanInvoked".equals(t[i].getMethodName())) {
-					entry = i;
+					lastOrphan = i;
+				} else if (lastOrphan >= 0) {
 					break;
 				}
 			}
-			if (entry < 0) return false;
+			if (lastOrphan < 0) return false;
 			// 与 StackWalker 路径同构：桩之后跳过透明帧，取第一个真实调用者。
-			int skip  = entry + 2;   // 跳过 onOrphanInvoked 自身与桩
+			int skip  = lastOrphan + 2;   // 跳过最外层 onOrphanInvoked 自身与桩
 			int limit = Math.min(t.length, skip + MAX_TRANSPARENT_FRAMES + 1);
 			while (skip < limit && isTransparentFrame(t[skip].getClassName())) skip++;
 			if (skip >= t.length) return false;
@@ -3204,12 +3205,10 @@ public class LambdaAligner {
 
 		static boolean checkUpdateRef() {
 			if (!IS_SUPPORTED || WALKER == null) return false;
-			// 定位幽灵桩入口
-			// 跳过 onOrphanInvoked 自身与桩
-			// 穿透代理/隐藏帧
 			return Boolean.TRUE.equals(WALKER.walk(s -> s
 			 .dropWhile(f -> !isOrphanEntry(f))        // 定位幽灵桩入口
-			 .skip(2)                                  // 跳过 onOrphanInvoked 自身与桩
+			 .dropWhile(f -> isOrphanEntry(f))         // 跳过所有 onOrphanInvoked 帧（兼顾 1 参和 2 参重载）
+			 .skip(1)                                  // 跳过桩自身
 			 .limit(MAX_TRANSPARENT_FRAMES + 1)        // 透明帧扫描深度上界
 			 .filter(f -> !isTransparentFrame(f.getClassName()))  // 穿透代理/隐藏帧
 			 .findFirst()

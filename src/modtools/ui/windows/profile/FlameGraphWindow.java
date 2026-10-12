@@ -189,11 +189,7 @@ public class FlameGraphWindow extends Window {
 		return Math.max(0, node.totalNanos.sum() - childSum);
 	}
 	static long effectiveTotal(FlameNode node) {
-		long v = node.totalNanos.sum();
-		if (v > 0) return v;
-		long s = 0;
-		for (FlameNode c : node.children.values()) s += c.totalNanos.sum();
-		return s;
+		return FlameCanvas.effectiveTotal(node);
 	}
 
 	// ═══════════════════════════════════════════════════════════════════════════
@@ -259,8 +255,8 @@ public class FlameGraphWindow extends Window {
 		void rebuild(float availW) {
 			Pools.freeAll(slots, true);
 			slots.clear();
-			for (int i = 0; i < depthSlots.size(); i++) {
-				depthSlots.get(i).clear();
+			for (Seq<Slot> depthSlot : depthSlots) {
+				depthSlot.clear();
 			}
 			hoveredNode = null;
 			if (currentRoot.children.isEmpty()) {
@@ -318,8 +314,7 @@ public class FlameGraphWindow extends Window {
 		Slot findSlot(FlameNode node, int depth) {
 			if (depth < 0 || depth >= depthSlots.size()) return null;
 			Seq<Slot> row = depthSlots.get(depth);
-			for (int i = 0; i < row.size; i++) {
-				Slot s = row.get(i);
+			for (Slot s : row) {
 				if (s.node == node) return s;
 			}
 			return null;
@@ -631,6 +626,7 @@ public class FlameGraphWindow extends Window {
 				}
 
 				// 还原数组后缀
+				//noinspection StringRepeatCanBeUsed
 				for (int a = 0; a < arrCount; a++) {
 					sb.append("[]");
 				}

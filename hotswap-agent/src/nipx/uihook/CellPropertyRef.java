@@ -73,6 +73,11 @@ public class CellPropertyRef {
 		public String toString() { return "Lambda[" + methodName + "]"; }
 	}
 
+	public record StaticRef(String owner, String name, String desc) {
+		@Override
+		public String toString() { return owner + "." + name; }
+	}
+
 	private record HostFrame(String hostClass, String hostMethod, String hostDesc,
 	                         int line, String creatorName) { }
 
@@ -373,7 +378,7 @@ public class CellPropertyRef {
 
 	private static Map<String, List<List<PropertyCall>>> buildChainModel(String slashName) {
 		try {
-			Class<?> hostClass = Class.forName(slashName.replace('/', '.'), false, Vars.mods.mainLoader());
+			Class<?> hostClass = Class.forName(slashName.replace('/', '.'), false, getTargetLoader());
 			byte[]   bytes     = fetchCurrentBytecode(hostClass);
 			return bytes == null ? Map.of() : extractCellChains(bytes);
 		} catch (Throwable t) {
@@ -1245,7 +1250,7 @@ public class CellPropertyRef {
 			ArcReflectionAdapter.setEndRow(cell, true);
 			return;
 		}
-		MethodType   type = MethodType.fromMethodDescriptorString(methodDesc, Vars.mods.mainLoader());
+		MethodType   type = MethodType.fromMethodDescriptorString(methodDesc, getTargetLoader());
 		MethodHandle mh   = findMatchingMethod(methodName, type);
 		if (mh == null) throw new NoSuchMethodException(methodName + "(" + len + " args)");
 
@@ -1275,6 +1280,20 @@ public class CellPropertyRef {
 		return null;
 	}
 
+	private static Object resolveStaticRef(StaticRef sr) {
+		if (sr == null) return null;
+		try {
+			ClassLoader cl = getTargetLoader();
+			Class<?> clazz = Class.forName(sr.owner().replace('/', '.'), false, cl);
+			Field f = clazz.getDeclaredField(sr.name());
+			f.setAccessible(true);
+			return f.get(null);
+		} catch (Throwable t) {
+			if (DEBUG) log("[CellProperty] Failed to resolve StaticRef " + sr + ": " + t.getMessage());
+			return null;
+		}
+	}
+
 	private static Object[] convertArgs(MethodType methodType, Object[] args) {
 		if (args == null) return null;
 		Object[] result = new Object[args.length];
@@ -1285,6 +1304,15 @@ public class CellPropertyRef {
 				continue;
 			}
 			Class<?> target = methodType.parameterType(i);
+			if (arg instanceof StaticRef sr) {
+				Object resolved = resolveStaticRef(sr);
+				if (resolved != null) {
+					arg = resolved;
+				} else if (target.isInterface()) {
+					result[i] = makeDummyProxy(target);
+					continue;
+				}
+			}
 			if (arg == null) {
 				result[i] = target.isInterface() ? makeDummyProxy(target) : null;
 				continue;
@@ -1352,11 +1380,20 @@ public class CellPropertyRef {
 				 }
 				 if (handle == null) return null;
 
-				 Object[] allArgs = new Object[li.captures().length
+				 Object[] caps = li.captures();
+				 Object[] resolvedCaps = new Object[caps.length];
+				 for (int c = 0; c < caps.length; c++) {
+					 if (caps[c] instanceof StaticRef sr) {
+						 resolvedCaps[c] = resolveStaticRef(sr);
+					 } else {
+						 resolvedCaps[c] = caps[c];
+					 }
+				 }
+				 Object[] allArgs = new Object[resolvedCaps.length
 				                               + (methodArgs == null ? 0 : methodArgs.length)];
-				 System.arraycopy(li.captures(), 0, allArgs, 0, li.captures().length);
+				 System.arraycopy(resolvedCaps, 0, allArgs, 0, resolvedCaps.length);
 				 if (methodArgs != null) {
-					 System.arraycopy(methodArgs, 0, allArgs, li.captures().length, methodArgs.length);
+					 System.arraycopy(methodArgs, 0, allArgs, resolvedCaps.length, methodArgs.length);
 				 }
 
 				 if (isStatic) return invoke(handle, allArgs);
@@ -1723,17 +1760,19 @@ public class CellPropertyRef {
 		if (insn == null) return null;
 
 		if (insn instanceof FieldInsnNode fin && insn.getOpcode() == GETSTATIC) {
-			try {
-				if (!fin.owner.equals(cn.name)) return null;
-				Class<?> clazz = Class.forName(fin.owner.replace('/', '.'), false, Vars.mods.mainLoader());
-				Field    field = clazz.getDeclaredField(fin.name);
-				int      m     = field.getModifiers();
-				if (!Modifier.isStatic(m) || !Modifier.isFinal(m)) return null;
-				field.setAccessible(true);
-				Object v = field.get(null);
-				return isConstantType(v) ? v : null;
-			} catch (Throwable ignored) { }
-			return null;
+			if (fin.owner.equals(cn.name)) {
+				try {
+					Class<?> clazz = Class.forName(fin.owner.replace('/', '.'), false, getTargetLoader());
+					Field    field = clazz.getDeclaredField(fin.name);
+					int      m     = field.getModifiers();
+					if (Modifier.isStatic(m) && Modifier.isFinal(m)) {
+						field.setAccessible(true);
+						Object v = field.get(null);
+						if (isConstantType(v)) return v;
+					}
+				} catch (Throwable ignored) { }
+			}
+			return new StaticRef(fin.owner, fin.name, fin.desc);
 		}
 
 		if (insn instanceof LdcInsnNode ldc) return ldc.cst;
@@ -1940,6 +1979,7 @@ public class CellPropertyRef {
 	private static Object sanitizeValue(Object v) {
 		if (v == null) return null;
 		if (isConstantType(v)) return v;
+		if (v instanceof StaticRef) return v;
 		if (v instanceof LambdaInfo li) {
 			Object[] caps    = li.captures();
 			Object[] newCaps = caps == null ? null : sanitizeArgs(caps);
@@ -2132,7 +2172,7 @@ public class CellPropertyRef {
 	//region 辅助方法
 
 	private static Class<?> loadClass(String className) throws ClassNotFoundException {
-		return Class.forName(className, true, Vars.mods.mainLoader());
+		return Class.forName(className, true, getTargetLoader());
 	}
 	//endregion
 

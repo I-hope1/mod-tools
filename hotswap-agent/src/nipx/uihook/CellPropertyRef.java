@@ -235,8 +235,20 @@ public class CellPropertyRef {
 		return Collections.newSetFromMap(new WeakHashMap<>());
 	}
 
+	private static boolean isUiThread() {
+		if (uiThread != null) return Thread.currentThread() == uiThread;
+		if (Core.app == null) return true;
+		Core.app.post(() -> {
+			if (uiThread == null) {
+				uiThread = Thread.currentThread();
+				info("[CellProperty] UI thread resolved: " + uiThread.getName());
+			}
+		});
+		return false;
+	}
+
 	private static boolean offUiThread() {
-		return uiThread != null && Thread.currentThread() != uiThread;
+		return !isUiThread();
 	}
 	//endregion
 
@@ -244,7 +256,7 @@ public class CellPropertyRef {
 
 	public static void onCellBound(Cell<?> cell) {
 		if (!enabled || cell == null) return;
-		if (Thread.currentThread() != uiThread) return;
+		if (!isUiThread()) return;
 
 		boolean[] busy = BUSY.get();
 		if (busy[0]) return;
@@ -340,7 +352,7 @@ public class CellPropertyRef {
 	public static void onCellSet(Cell<?> cell, Cell<?> arg) {
 		if (!enabled || cell == null || arg == null) return;
 		if (arg instanceof Geometry16) return;
-		if (Thread.currentThread() != uiThread) return;
+		if (!isUiThread()) return;
 
 		boolean[] busy = BUSY.get();
 		if (busy[0]) return;
@@ -397,7 +409,7 @@ public class CellPropertyRef {
 
 	public static void onCellFreed(Cell<?> cell) {
 		if (!enabled || cell == null) return;
-		if (Thread.currentThread() != uiThread) return;
+		if (!isUiThread()) return;
 
 		boolean[] busy = BUSY.get();
 		if (busy[0]) return;
@@ -413,7 +425,7 @@ public class CellPropertyRef {
 
 	public static void recordPropertyCall(Cell<?> cell, String method, String desc, Object[] args) {
 		if (!enabled || cell == null) return;
-		if (Thread.currentThread() != uiThread) return;
+		if (!isUiThread()) return;
 
 		boolean[] busy = BUSY.get();
 		if (busy[0]) return;
@@ -734,26 +746,26 @@ public class CellPropertyRef {
 
 	public static void afterRedefine(String slashName, byte[] newBytecode) {
 		if (!enabled) return;
+		Map<String, List<List<PropertyCall>>> capturedOldModel = chainCache.get(slashName);
 		Runnable work = () -> {
 			boolean[] busy = BUSY.get();
 			if (busy[0]) return;
 			busy[0] = true;
 			try {
-				afterRedefinedImpl(slashName, newBytecode);
+				afterRedefinedImpl(slashName, newBytecode, capturedOldModel);
 			} catch (Throwable t) {
 				error("[CellProperty] afterRedefined failed for " + slashName, t);
 			} finally {
 				busy[0] = false;
 			}
 		};
-		if (Thread.currentThread() == uiThread) { work.run(); } else if (Core.app != null) { Core.app.post(work); } else {
-			work.run();
-		}
+		if (isUiThread() || Core.app == null) { work.run(); } else { Core.app.post(work); }
 	}
 
 	private static final ThreadLocal<Set<String>> REENTRANT_REDEFINE = ThreadLocal.withInitial(HashSet::new);
 
-	private static void afterRedefinedImpl(String slashName, byte[] newBytecode) {
+	private static void afterRedefinedImpl(String slashName, byte[] newBytecode,
+	                                       Map<String, List<List<PropertyCall>>> capturedOldModel) {
 		Set<String> reentrant = REENTRANT_REDEFINE.get();
 		if (!reentrant.add(slashName)) return;
 		try {
@@ -786,7 +798,7 @@ public class CellPropertyRef {
 				}
 			}
 
-			Map<String, List<List<PropertyCall>>> oldModel = chainCache.get(slashName);
+			Map<String, List<List<PropertyCall>>> oldModel = capturedOldModel != null ? capturedOldModel : chainCache.get(slashName);
 			if (oldModel != null) {
 				applyHostRedefine(slashName, newBytecode, oldModel);
 			} else if (DEBUG) {
@@ -821,7 +833,7 @@ public class CellPropertyRef {
 						byte[] depBytes = fetchBytecode(dep);
 						if (depBytes != null) {
 							if (DEBUG) log("[CellProperty] Cascading helper update to host " + dep);
-							afterRedefinedImpl(dep, depBytes);
+							afterRedefinedImpl(dep, depBytes, chainCache.get(dep));
 						}
 					} catch (Throwable t) {
 						if (DEBUG) log("[CellProperty] Failed cascade to " + dep + ": " + t.getMessage());
@@ -1244,7 +1256,8 @@ public class CellPropertyRef {
 		MethodHandle mh   = findTableMethod(creator.owner, creator.method, type);
 		if (mh == null) return false;
 
-		Object[] converted = creator.args == null ? null : convertArgs(type, creator.args);
+		Table anyTable = anchorsByTable.keySet().iterator().next();
+		Object[] converted = creator.args == null ? null : convertArgs(null, anyTable, type, creator.args);
 
 		int newIdx = -1;
 		Map<String, List<List<PropertyCall>>> chains = chainCache.get(slashName);
@@ -1442,11 +1455,6 @@ public class CellPropertyRef {
 	 * 下一次热重载会重新尝试。
 	 */
 	private static List<PropertyCall> applyChainUpdate(Cell<?> cell, List<PropertyCall> oldChain,
-	                                                   List<PropertyCall> newChain) {
-		return applyChainUpdate(cell, oldChain, newChain, false);
-	}
-
-	private static List<PropertyCall> applyChainUpdate(Cell<?> cell, List<PropertyCall> oldChain,
 	                                                   List<PropertyCall> newChain,
 	                                                   boolean templateUpdated) {
 		CellState state;
@@ -1456,7 +1464,16 @@ public class CellPropertyRef {
 
 		if (oldChain == null || oldChain.isEmpty()) {
 			if (!newChain.isEmpty() && isCreatorCall(newChain.get(0)) && !isTemplateCreator(newChain.get(0))) {
-				updateChildElement(cell, newChain.get(0));
+				if (cell.get() == null) {
+					updateChildElement(cell, newChain.get(0));
+				} else if (newChain.get(0).args != null && newChain.get(0).args.length > 0
+				           && newChain.get(0).args[0] instanceof String newText) {
+					if (cell.get() instanceof Label label) {
+						label.setText(newText);
+					} else if (cell.get() instanceof TextButton button) {
+						button.setText(newText);
+					}
+				}
 			}
 			List<PropertyCall> props = newChain.subList(newChain.isEmpty() ? 0 : 1, newChain.size());
 			applyAllCalls(cell, state, props);
@@ -1661,7 +1678,7 @@ public class CellPropertyRef {
 			if (mh == null) return;
 
 			Table    dummyTable = new Table();
-			Object[] converted  = creator.args == null ? null : convertArgs(type, creator.args);
+			Object[] converted  = creator.args == null ? null : convertArgs(cell, table, type, creator.args);
 			Cell<?>  dummyCell  = invoke(mh, dummyTable, converted);
 			if (dummyCell == null || dummyCell.get() == null) return;
 
@@ -1844,10 +1861,6 @@ public class CellPropertyRef {
 		return null;
 	}
 
-	private static Object[] convertArgs(MethodType methodType, Object[] args) {
-		return convertArgs(null, null, methodType, args);
-	}
-
 	private static Object[] convertArgs(Cell<?> contextCell, Table contextTable, MethodType methodType, Object[] args) {
 		if (args == null) return null;
 		Object[] result = new Object[args.length];
@@ -1865,6 +1878,9 @@ public class CellPropertyRef {
 				} else if (target.isInterface()) {
 					result[i] = makeDummyProxy(target);
 					continue;
+				} else {
+					result[i] = defaultValue(target);
+					continue;
 				}
 			}
 			if (arg instanceof ThisPlaceholder tp) {
@@ -1873,6 +1889,9 @@ public class CellPropertyRef {
 					arg = resolved;
 				} else if (target.isInterface()) {
 					result[i] = makeDummyProxy(target);
+					continue;
+				} else {
+					result[i] = defaultValue(target);
 					continue;
 				}
 			}
@@ -2376,9 +2395,6 @@ public class CellPropertyRef {
 		return CL_CELL.equals(owner);
 	}
 
-	private static boolean isCellClass(String owner) {
-		return isCellClass(null, owner);
-	}
 
 	public static boolean isTemplateCreator(String methodName) {
 		return "defaults".equals(methodName);
@@ -2782,11 +2798,6 @@ public class CellPropertyRef {
 	}
 
 	private static Object[] extractArgsDataflow(ClassNode cn, MethodNode mn,
-	                                            Frame<SourceValue>[] frames, MethodInsnNode site) {
-		return extractArgsDataflow(cn, mn, frames, site, null);
-	}
-
-	private static Object[] extractArgsDataflow(ClassNode cn, MethodNode mn,
 	                                            Frame<SourceValue>[] frames, MethodInsnNode site,
 	                                            Map<Integer, Object> paramBindings) {
 		Type[] argTypes = Type.getArgumentTypes(site.desc);
@@ -2826,12 +2837,6 @@ public class CellPropertyRef {
 
 	private static Object resolveSourceValue(ClassNode cn, MethodNode mn,
 	                                         Frame<SourceValue>[] frames, SourceValue sv,
-	                                         Set<String> visiting) {
-		return resolveSourceValue(cn, mn, frames, sv, visiting, null);
-	}
-
-	private static Object resolveSourceValue(ClassNode cn, MethodNode mn,
-	                                         Frame<SourceValue>[] frames, SourceValue sv,
 	                                         Set<String> visiting,
 	                                         Map<Integer, Object> paramBindings) {
 		if (sv == null || sv.insns.size() != 1) return null;
@@ -2849,12 +2854,6 @@ public class CellPropertyRef {
 		int pos = f.getStackSize() - 1 - fromTop;
 		if (pos < 0) return null;
 		return resolveSourceValue(cn, mn, frames, f.getStack(pos), visiting, paramBindings);
-	}
-
-	private static Object resolveInsnConstant(ClassNode cn, MethodNode mn,
-	                                          Frame<SourceValue>[] frames, AbstractInsnNode insn,
-	                                          Set<String> visiting) {
-		return resolveInsnConstant(cn, mn, frames, insn, visiting, null);
 	}
 
 	private static Object resolveInsnConstant(ClassNode cn, MethodNode mn,
@@ -2932,18 +2931,34 @@ public class CellPropertyRef {
 				case ISUB:
 				case IMUL:
 				case IDIV:
+				case IREM:
+				case ISHL:
+				case ISHR:
+				case IUSHR:
+				case IAND:
+				case IOR:
+				case IXOR:
 				case LADD:
 				case LSUB:
 				case LMUL:
 				case LDIV:
+				case LREM:
+				case LSHL:
+				case LSHR:
+				case LUSHR:
+				case LAND:
+				case LOR:
+				case LXOR:
 				case FADD:
 				case FSUB:
 				case FMUL:
 				case FDIV:
+				case FREM:
 				case DADD:
 				case DSUB:
 				case DMUL:
-				case DDIV: {
+				case DDIV:
+				case DREM: {
 					Object right = operand(cn, mn, frames, insn, 0, visiting, paramBindings);
 					Object left  = operand(cn, mn, frames, insn, 1, visiting, paramBindings);
 					return evaluateBinaryOp(op, left, right);
@@ -3032,11 +3047,6 @@ public class CellPropertyRef {
 		};
 	}
 
-	private static Object resolveVar(ClassNode cn, MethodNode mn,
-	                                 Frame<SourceValue>[] frames, int varIndex,
-	                                 Set<String> visiting) {
-		return resolveVar(cn, mn, frames, varIndex, visiting, null);
-	}
 
 	private static Object resolveVar(ClassNode cn, MethodNode mn,
 	                                 Frame<SourceValue>[] frames, int varIndex,
@@ -3088,18 +3098,37 @@ public class CellPropertyRef {
 			case ISUB -> l.intValue() - r.intValue();
 			case IMUL -> l.intValue() * r.intValue();
 			case IDIV -> r.intValue() == 0 ? null : l.intValue() / r.intValue();
+			case IREM -> r.intValue() == 0 ? null : l.intValue() % r.intValue();
+			case ISHL -> l.intValue() << r.intValue();
+			case ISHR -> l.intValue() >> r.intValue();
+			case IUSHR -> l.intValue() >>> r.intValue();
+			case IAND -> l.intValue() & r.intValue();
+			case IOR -> l.intValue() | r.intValue();
+			case IXOR -> l.intValue() ^ r.intValue();
+
 			case LADD -> l.longValue() + r.longValue();
 			case LSUB -> l.longValue() - r.longValue();
 			case LMUL -> l.longValue() * r.longValue();
 			case LDIV -> r.longValue() == 0L ? null : l.longValue() / r.longValue();
+			case LREM -> r.longValue() == 0L ? null : l.longValue() % r.longValue();
+			case LSHL -> l.longValue() << r.intValue();
+			case LSHR -> l.longValue() >> r.intValue();
+			case LUSHR -> l.longValue() >>> r.intValue();
+			case LAND -> l.longValue() & r.longValue();
+			case LOR -> l.longValue() | r.longValue();
+			case LXOR -> l.longValue() ^ r.longValue();
+
 			case FADD -> l.floatValue() + r.floatValue();
 			case FSUB -> l.floatValue() - r.floatValue();
 			case FMUL -> l.floatValue() * r.floatValue();
 			case FDIV -> r.floatValue() == 0.0f ? null : l.floatValue() / r.floatValue();
+			case FREM -> r.floatValue() == 0.0f ? null : l.floatValue() % r.floatValue();
+
 			case DADD -> l.doubleValue() + r.doubleValue();
 			case DSUB -> l.doubleValue() - r.doubleValue();
 			case DMUL -> l.doubleValue() * r.doubleValue();
 			case DDIV -> r.doubleValue() == 0.0d ? null : l.doubleValue() / r.doubleValue();
+			case DREM -> r.doubleValue() == 0.0d ? null : l.doubleValue() % r.doubleValue();
 			default -> null;
 		};
 	}
@@ -3337,13 +3366,17 @@ public class CellPropertyRef {
 	//region 生命周期管理
 
 	public static void enable() {
-		Runnable init = () -> {
-			uiThread = Thread.currentThread();
-			FAILURES.set(0);
-			enabled = true;
-			info("[CellProperty] Enabled, UI thread = " + uiThread.getName());
-		};
-		if (Core.app != null) { Core.app.post(init); } else init.run();
+		FAILURES.set(0);
+		enabled = true;
+		if (Core.app != null) {
+			Core.app.post(() -> {
+				uiThread = Thread.currentThread();
+				info("[CellProperty] Enabled, UI thread = " + uiThread.getName());
+			});
+		} else {
+			uiThread = null;
+			info("[CellProperty] Enabled (Core.app not ready yet, uiThread deferred)");
+		}
 	}
 
 	public static void disable() {
@@ -3523,7 +3556,7 @@ public class CellPropertyRef {
 	public static boolean triggerHotRebuild(Class<?> clazz) {
 		if (clazz == null || !hasHotRebuild(clazz)) return false;
 
-		if (Thread.currentThread() == uiThread || Core.app == null) {
+		if (isUiThread() || Core.app == null) {
 			return doTriggerHotRebuild(clazz);
 		} else {
 			Core.app.post(() -> doTriggerHotRebuild(clazz));
@@ -3901,7 +3934,7 @@ public class CellPropertyRef {
 			}
 		} catch (Throwable ignored) { }
 
-		if (Thread.currentThread() == uiThread || Core.app == null) {
+		if (isUiThread() || Core.app == null) {
 			return doTriggerContainerRebuild(slashName);
 		} else {
 			Core.app.post(() -> doTriggerContainerRebuild(slashName));
@@ -4169,7 +4202,7 @@ public class CellPropertyRef {
 			}
 		} catch (Throwable ignored) { }
 
-		if (Thread.currentThread() == uiThread || Core.app == null) {
+		if (isUiThread() || Core.app == null) {
 			return doTriggerCallbackRebuild(slashName);
 		} else {
 			Core.app.post(() -> doTriggerCallbackRebuild(slashName));

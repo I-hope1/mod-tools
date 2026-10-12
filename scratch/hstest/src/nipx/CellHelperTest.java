@@ -714,4 +714,68 @@ class CellHelperTest {
 			LambdaAligner.LAST_ALIGNED_CLASS = prevClass;
 		}
 	}
+
+	@Test
+	void testConvertArgsUnresolvedFallback() throws Exception {
+		Method convertM = CellPropertyRef.class.getDeclaredMethod("convertArgs",
+			arc.scene.ui.layout.Cell.class, arc.scene.ui.layout.Table.class,
+			MethodType.class, Object[].class);
+		convertM.setAccessible(true);
+
+		CellPropertyRef.StaticRef unresolvedStatic = new CellPropertyRef.StaticRef("non/existent/Class", "field", "Ljava/lang/String;");
+		CellPropertyRef.ThisPlaceholder unresolvedThis = new CellPropertyRef.ThisPlaceholder("non/existent/Host");
+
+		MethodType mt = MethodType.methodType(void.class, String.class, int.class);
+		Object[] result = (Object[]) convertM.invoke(null, null, null, mt, new Object[]{unresolvedStatic, unresolvedThis});
+
+		assertNotNull(result);
+		assertEquals(2, result.length);
+		// String is non-interface: unresolved StaticRef must fall back to defaultValue (null), NOT the StaticRef object
+		assertNull(result[0]);
+		// int is primitive: unresolved ThisPlaceholder must fall back to defaultValue (0), NOT the ThisPlaceholder object
+		assertEquals(0, result[1]);
+	}
+
+	@Test
+	void testConstantFoldingExtendedOps() throws Exception {
+		Method evalM = CellPropertyRef.class.getDeclaredMethod("evaluateBinaryOp", int.class, Object.class, Object.class);
+		evalM.setAccessible(true);
+
+		// IREM, ISHL, ISHR, IUSHR, IAND, IOR, IXOR
+		assertEquals(1, evalM.invoke(null, org.objectweb.asm.Opcodes.IREM, 10, 3));
+		assertEquals(16, evalM.invoke(null, org.objectweb.asm.Opcodes.ISHL, 4, 2));
+		assertEquals(2, evalM.invoke(null, org.objectweb.asm.Opcodes.ISHR, 8, 2));
+		assertEquals(2, evalM.invoke(null, org.objectweb.asm.Opcodes.IUSHR, 8, 2));
+		assertEquals(4, evalM.invoke(null, org.objectweb.asm.Opcodes.IAND, 6, 4));
+		assertEquals(7, evalM.invoke(null, org.objectweb.asm.Opcodes.IOR, 5, 2));
+		assertEquals(6, evalM.invoke(null, org.objectweb.asm.Opcodes.IXOR, 5, 3));
+
+		// LREM
+		assertEquals(2L, evalM.invoke(null, org.objectweb.asm.Opcodes.LREM, 12L, 5L));
+
+		// FREM, DREM
+		assertEquals(1.5f, evalM.invoke(null, org.objectweb.asm.Opcodes.FREM, 5.5f, 2.0f));
+		assertEquals(1.5d, evalM.invoke(null, org.objectweb.asm.Opcodes.DREM, 5.5d, 2.0d));
+	}
+
+	@Test
+	void testApplyChainUpdatePreservesExistingElementOnEmptyOldChain() throws Exception {
+		arc.scene.ui.layout.Table table = new arc.scene.ui.layout.Table();
+		arc.scene.Element elem = new arc.scene.Element();
+		arc.scene.ui.layout.Cell<?> cell = table.add(elem);
+
+		Method applyM = CellPropertyRef.class.getDeclaredMethod("applyChainUpdate",
+			arc.scene.ui.layout.Cell.class, List.class, List.class, boolean.class);
+		applyM.setAccessible(true);
+
+		PropertyCall newCreator = new PropertyCall("arc/scene/ui/layout/Table", "add",
+			"(Larc/scene/Element;)Larc/scene/ui/layout/Cell;", new Object[]{new arc.scene.Element()}, 10);
+		List<PropertyCall> newChain = List.of(newCreator);
+
+		// oldChain is empty
+		applyM.invoke(null, cell, List.of(), newChain, false);
+
+		// The existing element should NOT be replaced by a newly instantiated Element
+		assertSame(elem, cell.get(), "Existing element should be preserved on empty oldChain");
+	}
 }

@@ -606,18 +606,69 @@ public class CellPropertyRef {
 		}
 	}
 
+	private static final ThreadLocal<Set<String>> REENTRANT_REDEFINE = ThreadLocal.withInitial(HashSet::new);
+
 	private static void afterRedefinedImpl(String slashName, byte[] newBytecode) {
-		info("[CellProperty] Class redefined: " + slashName);
+		Set<String> reentrant = REENTRANT_REDEFINE.get();
+		if (!reentrant.add(slashName)) return;
+		try {
+			info("[CellProperty] Class redefined: " + slashName);
 
-		WHOLE_CLASS_HELPERS.remove(slashName);
-		HELPER_METHODS_BY_CLASS.remove(slashName);
-		SCANNED_HELPER_CLASSES.remove(slashName);
+			WHOLE_CLASS_HELPERS.remove(slashName);
+			HELPER_METHODS_BY_CLASS.remove(slashName);
+			SCANNED_HELPER_CLASSES.remove(slashName);
 
-		Map<String, List<List<PropertyCall>>> oldModel = chainCache.get(slashName);
-		if (oldModel == null) {
-			if (DEBUG) log("[CellProperty] No old model for " + slashName);
-			return;
+			// 收集依赖于此 helper 的宿主类
+			Set<String> dependentHosts = new HashSet<>();
+			synchronized (cellState) {
+				for (CellState st : cellState.values()) {
+					if (st == IGNORED_STATE) continue;
+					if (slashName.equals(st.id.helperClass)) {
+						dependentHosts.add(st.id.hostClass);
+					}
+				}
+			}
+			for (Entry<String, Map<String, List<List<PropertyCall>>>> e : chainCache.entrySet()) {
+				for (List<List<PropertyCall>> chains : e.getValue().values()) {
+					for (List<PropertyCall> chain : chains) {
+						for (PropertyCall pc : chain) {
+							if (slashName.equals(pc.helperClass)) {
+								dependentHosts.add(e.getKey());
+								break;
+							}
+						}
+					}
+				}
+			}
+
+			Map<String, List<List<PropertyCall>>> oldModel = chainCache.get(slashName);
+			if (oldModel != null) {
+				applyHostRedefine(slashName, newBytecode, oldModel);
+			} else if (DEBUG) {
+				log("[CellProperty] No old model for " + slashName);
+			}
+
+			// 级联刷新依赖该 helper 的宿主类
+			for (String dep : dependentHosts) {
+				if (!dep.equals(slashName)) {
+					try {
+						byte[] depBytes = fetchBytecode(dep);
+						if (depBytes != null) {
+							if (DEBUG) log("[CellProperty] Cascading helper update to host " + dep);
+							afterRedefinedImpl(dep, depBytes);
+						}
+					} catch (Throwable t) {
+						if (DEBUG) log("[CellProperty] Failed cascade to " + dep + ": " + t.getMessage());
+					}
+				}
+			}
+		} finally {
+			reentrant.remove(slashName);
 		}
+	}
+
+	private static void applyHostRedefine(String slashName, byte[] newBytecode,
+	                                      Map<String, List<List<PropertyCall>>> oldModel) {
 
 		Map<String, List<List<PropertyCall>>> newModel = extractCellChains(newBytecode);
 

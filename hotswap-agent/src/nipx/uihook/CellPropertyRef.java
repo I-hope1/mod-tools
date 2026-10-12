@@ -132,12 +132,19 @@ public class CellPropertyRef {
 
 	private static final ChainMatch NO_CHAIN = new ChainMatch(-1, null);
 
+	public static class Geometry16 extends Cell<Element> {
+		public Geometry16() {
+			super();
+		}
+	}
+
 	private static final class CellState {
 		CellIdentity       id;
 		int                chainIdx;
 		List<PropertyCall> chain;
 		final Map<String, Integer> slotCursor = new HashMap<>();
 		Cell baseline;
+		Geometry16 snapshot;
 		final Map<Integer, WeakReference<EventListener>> slotListeners = new HashMap<>();
 		CellState(CellIdentity id, int chainIdx, List<PropertyCall> chain) {
 			this.id = id;
@@ -230,13 +237,15 @@ public class CellPropertyRef {
 		List<PropertyCall> chain = (match == null || match.chain() == null)
 		 ? new ArrayList<>() : new ArrayList<>(match.chain());
 
-		Cell baseline = null;
+		Geometry16 snap = null;
 		try {
-			baseline = new Cell().set(cell);
+			snap = new Geometry16();
+			snap.set(cell);
 		} catch (Throwable ignored) { }
 
 		CellState st = new CellState(id, chainIdx, chain);
-		st.baseline = baseline;
+		st.baseline = snap;
+		st.snapshot = snap;
 
 		synchronized (cellState) {
 			cellState.put(cell, st);
@@ -244,6 +253,55 @@ public class CellPropertyRef {
 		}
 
 		if (DEBUG) log("[CellProperty] Bound: " + id + " idx=" + chainIdx);
+	}
+
+	private static final Set<Cell<?>> KNOWN_DEFAULTS = Collections.newSetFromMap(new WeakHashMap<>());
+
+	public static boolean isCellDefaults(Cell<?> c) {
+		if (c == null) return false;
+		Cell<?> def = null;
+		try {
+			def = Cell.defaults();
+		} catch (Throwable ignored) { }
+		if (def != null) {
+			KNOWN_DEFAULTS.add(def);
+			if (c == def) return true;
+		}
+		if (KNOWN_DEFAULTS.contains(c)) return true;
+		return c.getTable() == null && !c.hasElement();
+	}
+
+	public static void onCellSet(Cell<?> cell, Cell<?> arg) {
+		if (!enabled || cell == null || arg == null) return;
+		if (arg instanceof Geometry16) return;
+		if (Thread.currentThread() != uiThread) return;
+
+		boolean[] busy = BUSY.get();
+		if (busy[0]) return;
+		busy[0] = true;
+		try {
+			if (isCellDefaults(arg)) {
+				removeCell(cell);
+			} else {
+				onCellApplyTemplate(cell, arg);
+			}
+		} catch (Throwable t) {
+			if (DEBUG) log("[CellProperty] onCellSet failed: " + t.getMessage());
+		} finally {
+			busy[0] = false;
+		}
+	}
+
+	private static void onCellApplyTemplate(Cell<?> cell, Cell<?> arg) {
+		synchronized (cellState) {
+			CellState st = cellState.get(cell);
+			if (st != null && st != IGNORED_STATE) {
+				Geometry16 snap = new Geometry16();
+				snap.set(arg);
+				st.snapshot = snap;
+				st.baseline = snap;
+			}
+		}
 	}
 
 	private static void registerCellLocked(CellIdentity id, Cell<?> cell, int chainIdx) {
@@ -1085,13 +1143,15 @@ public class CellPropertyRef {
 			}
 		}
 
-		Cell baseline = null;
+		Geometry16 snap = null;
 		try {
-			baseline = new Cell().set(newCell);
+			snap = new Geometry16();
+			snap.set(newCell);
 		} catch (Throwable ignored) { }
 
 		CellState st = new CellState(newId, newIdx, new ArrayList<>(newChain));
-		st.baseline = baseline;
+		st.baseline = snap;
+		st.snapshot = snap;
 
 		synchronized (cellState) {
 			cellState.put(newCell, st);
@@ -1143,7 +1203,7 @@ public class CellPropertyRef {
 			Set<Cell<?>> s = idToCells.get(id);
 			if (s == null) return null;
 			for (Cell<?> c : s) {
-				if (c != null) return c;
+				if (c != null && c.getTable() != null && c.get() != null) return c;
 			}
 		}
 		return null;
@@ -1314,7 +1374,9 @@ public class CellPropertyRef {
 	}
 
 	private static void resetCell(Cell<?> cell, CellState state) {
-		if (state != null && state.baseline != null) {
+		if (state != null && state.snapshot != null) {
+			cell.set(state.snapshot);
+		} else if (state != null && state.baseline != null) {
 			cell.set(state.baseline);
 		} else {
 			cell.set(Cell.defaults());
@@ -2702,6 +2764,19 @@ public class CellPropertyRef {
 							mv.visitMethodInsn(INVOKESTATIC,
 							 internalName(CellPropertyRef.class),
 							 "onCellBound", "(Larc/scene/ui/layout/Cell;)V", false);
+						}
+					};
+				}
+
+				if (name.equals("set") && "(Larc/scene/ui/layout/Cell;)Larc/scene/ui/layout/Cell;".equals(descriptor)) {
+					return new AdviceAdapter(ASM9, mv, access, name, descriptor) {
+						@Override
+						protected void onMethodEnter() {
+							mv.visitVarInsn(ALOAD, 0);
+							mv.visitVarInsn(ALOAD, 1);
+							mv.visitMethodInsn(INVOKESTATIC,
+							 internalName(CellPropertyRef.class),
+							 "onCellSet", "(Larc/scene/ui/layout/Cell;Larc/scene/ui/layout/Cell;)V", false);
 						}
 					};
 				}

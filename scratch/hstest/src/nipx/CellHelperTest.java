@@ -97,4 +97,49 @@ class CellHelperTest {
 		CellIdentity diffLineId = new CellIdentity("Host", "build", "()V", 42, "image", "Underline", "of", 16);
 		assertFalse((boolean) match.invoke(null, diffLineId, inlinedCreator));
 	}
+
+	@Test
+	void testGeometry16Snapshot() {
+		arc.Application oldApp = arc.Core.app;
+		try {
+			arc.Core.app = (arc.Application) java.lang.reflect.Proxy.newProxyInstance(
+				arc.Application.class.getClassLoader(),
+				new Class<?>[]{arc.Application.class},
+				(proxy, method, methodArgs) -> {
+					if ("isDesktop".equals(method.getName())) return true;
+					return null;
+				}
+			);
+			arc.scene.ui.layout.Cell<?> c1 = new arc.scene.ui.layout.Cell<>();
+			c1.size(64f, 32f);
+			c1.pad(8f);
+
+			CellPropertyRef.Geometry16 snap = new CellPropertyRef.Geometry16();
+			snap.set(c1);
+
+			assertNull(snap.get());
+			assertNull(snap.getTable());
+
+			arc.scene.ui.layout.Cell<?> c2 = new arc.scene.ui.layout.Cell<>();
+			c2.set(snap);
+
+			assertEquals(64f, c2.minWidth());
+			assertEquals(32f, c2.minHeight());
+		} finally {
+			arc.Core.app = oldApp;
+		}
+	}
+
+	@Test
+	void testIsCellDefaults() {
+		arc.scene.ui.layout.Cell<?> def = arc.scene.ui.layout.Cell.defaults();
+		assertTrue(CellPropertyRef.isCellDefaults(def));
+
+		arc.scene.ui.layout.Cell<?> unattached = new arc.scene.ui.layout.Cell<>();
+		assertTrue(CellPropertyRef.isCellDefaults(unattached));
+
+		arc.scene.ui.layout.Table table = new arc.scene.ui.layout.Table();
+		arc.scene.ui.layout.Cell<?> attached = table.add();
+		assertFalse(CellPropertyRef.isCellDefaults(attached));
+	}
 }

@@ -142,4 +142,33 @@ class CellHelperTest {
 		arc.scene.ui.layout.Cell<?> attached = table.add();
 		assertFalse(CellPropertyRef.isCellDefaults(attached));
 	}
+
+	@Test
+	void testCapabilityBitSeparation() {
+		// Constant creator args -> usable
+		PropertyCall constantCreator = new PropertyCall("arc/scene/ui/layout/Table", "button",
+			"(Ljava/lang/CharSequence;)Larc/scene/ui/layout/Cell;", new Object[]{"Click"}, 10);
+		assertTrue(CellPropertyRef.hasUsableCreatorArgs(constantCreator));
+
+		// Lambda creator args -> not usable for recreating element
+		PropertyCall lambdaCreator = new PropertyCall("arc/scene/ui/layout/Table", "button",
+			"(Ljava/lang/CharSequence;Ljava/lang/Runnable;)Larc/scene/ui/layout/Cell;",
+			new Object[]{"Click", new CellPropertyRef.LambdaInfo("Host", "lambda$0", "()V", new Object[0])}, 10);
+		assertFalse(CellPropertyRef.hasUsableCreatorArgs(lambdaCreator));
+
+		// Unresolved/null creator args -> not usable
+		PropertyCall unresolvedCreator = new PropertyCall("arc/scene/ui/layout/Table", "button",
+			"(Ljava/lang/CharSequence;)Larc/scene/ui/layout/Cell;", new Object[]{null}, 10);
+		assertFalse(CellPropertyRef.hasUsableCreatorArgs(unresolvedCreator));
+
+		// Constant property args -> usable
+		PropertyCall constantProp = new PropertyCall("arc/scene/ui/layout/Cell", "size",
+			"(F)Larc/scene/ui/layout/Cell;", new Object[]{32f}, 11);
+		assertTrue(CellPropertyRef.hasUsablePropertyArgs(constantProp));
+
+		// Unresolved property args -> not usable
+		PropertyCall unresolvedProp = new PropertyCall("arc/scene/ui/layout/Cell", "pad",
+			"(F)Larc/scene/ui/layout/Cell;", new Object[]{null}, 12);
+		assertFalse(CellPropertyRef.hasUsablePropertyArgs(unresolvedProp));
+	}
 }

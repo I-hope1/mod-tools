@@ -1063,8 +1063,8 @@ public class CellPropertyRef {
 		PropertyCall creator = newChain.get(0);
 		if (!isCreatorCall(creator)) return false;
 
-		if (!hasUsableArgs(creator)) {
-			if (DEBUG) log("[CellProperty] Skipping append with unknown creator args: " + creator.method);
+		if (!hasUsableCreatorArgs(creator)) {
+			if (DEBUG) log("[CellProperty] Skipping append with unconstructible creator args: " + creator.method);
 			return false;
 		}
 
@@ -1243,10 +1243,14 @@ public class CellPropertyRef {
 			if (!Objects.equals(oldCreator.owner, newCreator.owner)
 			    || !oldCreator.method.equals(newCreator.method)
 			    || !argsEqual(oldCreator.args, newCreator.args)) {
-				updateChildElement(cell, newCreator);
-				elementUpdated = true;
-				if (state != null) {
-					state.slotListeners.clear();
+				if (hasUsableCreatorArgs(newCreator)) {
+					updateChildElement(cell, newCreator);
+					elementUpdated = true;
+					if (state != null) {
+						state.slotListeners.clear();
+					}
+				} else if (DEBUG) {
+					log("[CellProperty] Creator changed but creator args dynamic; retaining element and updating properties");
 				}
 			}
 		}
@@ -1263,7 +1267,7 @@ public class CellPropertyRef {
 
 		boolean allUsable = true;
 		for (PropertyCall p : newProps) {
-			if (!hasUsableArgs(p)) {
+			if (!hasUsablePropertyArgs(p)) {
 				allUsable = false;
 				break;
 			}
@@ -1278,7 +1282,7 @@ public class CellPropertyRef {
 			// （几何在 Cell 上幂等，回调在新元素上是首次挂载），未知参数的属性仍只能放弃。
 			for (int i = 0; i < newProps.size(); i++) {
 				PropertyCall p = newProps.get(i);
-				if (!hasUsableArgs(p)) continue;
+				if (!hasUsablePropertyArgs(p)) continue;
 				if (elementUpdated || !containsCall(oldProps, p)) {
 					applyPropertyCallWithTracking(cell, state, i + 1, p);
 				}
@@ -1410,8 +1414,8 @@ public class CellPropertyRef {
 			}
 		}
 
-		if (!hasUsableArgs(creator)) {
-			if (DEBUG) log("[CellProperty] Skipping rebuild with unknown args: " + creator.method);
+		if (!hasUsableCreatorArgs(creator)) {
+			if (DEBUG) log("[CellProperty] Skipping rebuild with unconstructible args: " + creator.method);
 			return;
 		}
 
@@ -1479,6 +1483,20 @@ public class CellPropertyRef {
 			if (!Objects.equals(a[i], b[i])) return false;
 		}
 		return true;
+	}
+
+	public static boolean hasUsableCreatorArgs(PropertyCall creator) {
+		if (creator == null) return false;
+		if (creator.args == null) return true;
+		for (Object a : creator.args) {
+			if (a == null) return false;
+			if (a instanceof LambdaInfo) return false;
+		}
+		return true;
+	}
+
+	public static boolean hasUsablePropertyArgs(PropertyCall call) {
+		return hasUsableArgs(call);
 	}
 
 	private static boolean hasUsableArgs(PropertyCall call) {

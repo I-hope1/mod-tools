@@ -887,4 +887,93 @@ class CellHelperTest {
 		int fpIndy2 = (int) fpM.invoke(null, null, null, null, indy2, new HashSet<>(), null, 0);
 		assertNotEquals(fpIndy1, fpIndy2);
 	}
+
+	@Test
+	void testRawOrdinalPreservationAcrossLoop() throws Exception {
+		Method boundM = CellPropertyRef.class.getDeclaredMethod("onCellBoundImpl", arc.scene.ui.layout.Cell.class);
+		boundM.setAccessible(true);
+
+		Field csField = CellPropertyRef.class.getDeclaredField("cellState");
+		csField.setAccessible(true);
+		Map<arc.scene.ui.layout.Cell<?>, Object> cs = (Map<arc.scene.ui.layout.Cell<?>, Object>) csField.get(null);
+
+		arc.scene.ui.layout.Table table = new arc.scene.ui.layout.Table();
+		arc.scene.ui.layout.Cell<?> cell1 = table.add(new arc.scene.Element());
+		arc.scene.ui.layout.Cell<?> cell2 = table.add(new arc.scene.Element());
+		arc.scene.ui.layout.Cell<?> cell3 = table.add(new arc.scene.Element());
+
+		try {
+			boundM.invoke(null, cell1);
+			boundM.invoke(null, cell2);
+			boundM.invoke(null, cell3);
+
+			Field idField = Class.forName("nipx.uihook.CellPropertyRef$CellState").getDeclaredField("id");
+			idField.setAccessible(true);
+
+			Object st1 = cs.get(cell1);
+			assertNotNull(st1);
+			CellIdentity id1 = (CellIdentity) idField.get(st1);
+			assertEquals(0, id1.callOrdinal(), "First cell on site must have rawOrdinal 0");
+
+			Object st2 = cs.get(cell2);
+			assertNotNull(st2);
+			CellIdentity id2 = (CellIdentity) idField.get(st2);
+			assertEquals(1, id2.callOrdinal(), "Second cell on site must have rawOrdinal 1");
+
+			Object st3 = cs.get(cell3);
+			assertNotNull(st3);
+			CellIdentity id3 = (CellIdentity) idField.get(st3);
+			assertEquals(2, id3.callOrdinal(), "Third cell on site must have rawOrdinal 2");
+		} finally {
+			CellPropertyRef.removeCell(cell1);
+			CellPropertyRef.removeCell(cell2);
+			CellPropertyRef.removeCell(cell3);
+		}
+	}
+
+	@Test
+	void testTableSiteOrdinalsLifecycleReset() throws Exception {
+		Method boundM = CellPropertyRef.class.getDeclaredMethod("onCellBoundImpl", arc.scene.ui.layout.Cell.class);
+		boundM.setAccessible(true);
+
+		Field csField = CellPropertyRef.class.getDeclaredField("cellState");
+		csField.setAccessible(true);
+		Map<arc.scene.ui.layout.Cell<?>, Object> cs = (Map<arc.scene.ui.layout.Cell<?>, Object>) csField.get(null);
+
+		Field tsoField = CellPropertyRef.class.getDeclaredField("tableSiteOrdinals");
+		tsoField.setAccessible(true);
+		Map<arc.scene.ui.layout.Table, Map<String, Integer>> tso = (Map<arc.scene.ui.layout.Table, Map<String, Integer>>) tsoField.get(null);
+
+		arc.scene.ui.layout.Table table = new arc.scene.ui.layout.Table();
+		arc.scene.ui.layout.Cell<?> cell1 = table.add(new arc.scene.Element());
+		arc.scene.ui.layout.Cell<?> cell2 = table.add(new arc.scene.Element());
+
+		Field idField = Class.forName("nipx.uihook.CellPropertyRef$CellState").getDeclaredField("id");
+		idField.setAccessible(true);
+
+		try {
+			boundM.invoke(null, cell1);
+			boundM.invoke(null, cell2);
+
+			assertTrue(tso.containsKey(table), "Table must be recorded in tableSiteOrdinals");
+
+			// Clear children resets the table's site ordinal counters
+			CellPropertyRef.onTableClearChildren(table);
+			assertFalse(tso.containsKey(table), "onTableClearChildren must reset tableSiteOrdinals for table");
+
+			// Next cell bound on cleared table must restart rawOrdinal from 0
+			arc.scene.ui.layout.Cell<?> cellAfterClear = table.add(new arc.scene.Element());
+			boundM.invoke(null, cellAfterClear);
+
+			Object stAfter = cs.get(cellAfterClear);
+			assertNotNull(stAfter);
+			CellIdentity idAfter = (CellIdentity) idField.get(stAfter);
+			assertEquals(0, idAfter.callOrdinal(), "After table clear, rawOrdinal must reset to 0");
+
+			CellPropertyRef.removeCell(cellAfterClear);
+		} finally {
+			CellPropertyRef.removeCell(cell1);
+			CellPropertyRef.removeCell(cell2);
+		}
+	}
 }

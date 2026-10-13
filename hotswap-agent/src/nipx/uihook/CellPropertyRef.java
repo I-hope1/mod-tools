@@ -246,7 +246,7 @@ public class CellPropertyRef {
 	private static volatile boolean enabled = false;
 	private static volatile byte[]  originalCellBytes;
 
-	private static final StackWalker WALKER = StackWalker.getInstance();
+	private static final StackWalker WALKER = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
 
 	private static <T> Set<T> newWeakSet() {
 		return Collections.newSetFromMap(new WeakHashMap<>());
@@ -322,15 +322,6 @@ public class CellPropertyRef {
 		int        chainIdx = match == null ? -1 : match.index();
 		List<PropertyCall> chain = (match == null || match.chain() == null)
 		 ? new ArrayList<>() : new ArrayList<>(match.chain());
-
-		if (match != null && !chain.isEmpty()) {
-			int matchedOrdinal = chain.get(0).callOrdinal;
-			if (id.callOrdinal != matchedOrdinal) {
-				id = new CellIdentity(id.hostClass, id.hostMethod, id.hostDesc,
-				                      id.line, id.creatorName, id.helperClass, id.helperMethod, id.helperLine,
-				                      matchedOrdinal);
-			}
-		}
 
 		Geometry16 snap = null;
 		try {
@@ -974,7 +965,7 @@ public class CellPropertyRef {
 					 newCreator.helperClass,
 					 newCreator.helperMethod,
 					 newCreator.helperLine,
-					 newCreator.callOrdinal);
+					 ce.id.callOrdinal);
 					boolean templateChanged = updateCellTemplateIfChanged(cell, ce.id, newCreator, oldMk, newMk,
 						oldTemplatesByMethod, newTemplatesByMethod);
 					try {
@@ -1024,7 +1015,7 @@ public class CellPropertyRef {
 			 newCreator.helperClass,
 			 newCreator.helperMethod,
 			 newCreator.helperLine,
-			 newCreator.callOrdinal);
+			 ce.id.callOrdinal);
 
 			boolean templateChanged = updateCellTemplateIfChanged(cell, ce.id, newCreator, oldMk, newMk,
 				oldTemplatesByMethod, newTemplatesByMethod);
@@ -1457,9 +1448,12 @@ public class CellPropertyRef {
 		synchronized (cellState) {
 			CellState st = cellState.get(cell);
 			if (st == null || st == IGNORED_STATE) return false;
-			return st.id.hostClass.equals(slashName)
-			       && methodKeyOf(st.id).equals(methodKey)
-			       && matchesIdentity(st.id, creator);
+			if (!st.id.hostClass.equals(slashName) || !methodKeyOf(st.id).equals(methodKey)) return false;
+			if (!matchesSite(st.id, creator)) return false;
+			if (st.chain != null && !st.chain.isEmpty()) {
+				return st.chain.get(0).callOrdinal == creator.callOrdinal;
+			}
+			return matchesIdentity(st.id, creator);
 		}
 	}
 
@@ -2120,6 +2114,10 @@ public class CellPropertyRef {
 			CellState st = cellState.remove(cell);
 			if (st == null || st == IGNORED_STATE) return;
 			unregisterCellLocked(st.id, cell);
+			Table table = cell.getTable();
+			if (table != null && (table.getCells() == null || table.getCells().isEmpty())) {
+				tableSiteOrdinals.remove(table);
+			}
 		}
 	}
 	//endregion
@@ -3728,6 +3726,11 @@ public class CellPropertyRef {
 
 		chainCache.remove(hostSlashName);
 		templateCache.keySet().removeIf(id -> id.hostClass.equals(hostSlashName));
+		synchronized (cellState) {
+			for (Map<String, Integer> siteCounts : tableSiteOrdinals.values()) {
+				siteCounts.keySet().removeIf(k -> k.startsWith(hostSlashName + "#"));
+			}
+		}
 		WHOLE_CLASS_HELPERS.remove(hostSlashName);
 		HELPER_METHODS_BY_CLASS.remove(hostSlashName);
 		SCANNED_HELPER_CLASSES.remove(hostSlashName);
@@ -4215,6 +4218,13 @@ public class CellPropertyRef {
 		}
 	}
 
+	public static void onTableClearChildren(Table table) {
+		if (table == null) return;
+		synchronized (cellState) {
+			tableSiteOrdinals.remove(table);
+		}
+	}
+
 	public static boolean triggerContainerRebuild(String slashName) {
 		if (slashName == null) return false;
 		try {
@@ -4378,7 +4388,8 @@ public class CellPropertyRef {
 	}
 
 	private static boolean containsTableHook(byte[] bytes) {
-		return new String(bytes, StandardCharsets.ISO_8859_1).contains("onTableConsConstructed");
+		String s = new String(bytes, StandardCharsets.ISO_8859_1);
+		return s.contains("onTableConsConstructed") || s.contains("onTableClearChildren");
 	}
 
 	public static byte[] injectTable(byte[] bytes) {
@@ -4428,6 +4439,19 @@ public class CellPropertyRef {
 								internalName(CellPropertyRef.class),
 								"onTableMethodWithCons",
 								"(Larc/scene/ui/layout/Cell;Larc/func/Cons;)V", false);
+						}
+					};
+				}
+
+				if ("clearChildren".equals(name) && "()V".equals(descriptor)) {
+					return new AdviceAdapter(ASM9, mv, access, name, descriptor) {
+						@Override
+						protected void onMethodEnter() {
+							mv.visitVarInsn(ALOAD, 0);
+							mv.visitMethodInsn(INVOKESTATIC,
+								internalName(CellPropertyRef.class),
+								"onTableClearChildren",
+								"(Larc/scene/ui/layout/Table;)V", false);
 						}
 					};
 				}

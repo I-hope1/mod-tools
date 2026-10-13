@@ -778,4 +778,113 @@ class CellHelperTest {
 		// The existing element should NOT be replaced by a newly instantiated Element
 		assertSame(elem, cell.get(), "Existing element should be preserved on empty oldChain");
 	}
+
+	@Test
+	void testDynamicArgMergeOnReload() throws Exception {
+		Method mergeM = CellPropertyRef.class.getDeclaredMethod("mergeArgs", Object[].class, Object[].class);
+		mergeM.setAccessible(true);
+
+		// Case 1: Runtime hook fills concrete runtime value into template's DynamicArg
+		CellPropertyRef.DynamicArg templateDyn = new CellPropertyRef.DynamicArg(0x1234);
+		Object[] mergedFromHook = (Object[]) mergeM.invoke(null, new Object[]{templateDyn}, new Object[]{"[accent]Alice"});
+		assertNotNull(mergedFromHook);
+		assertTrue(mergedFromHook[0] instanceof CellPropertyRef.DynamicArg);
+		CellPropertyRef.DynamicArg populatedDyn = (CellPropertyRef.DynamicArg) mergedFromHook[0];
+		assertEquals(0x1234, populatedDyn.fingerprint());
+		assertEquals("[accent]Alice", populatedDyn.runtimeValue());
+
+		// Case 2: Redefine with same fingerprint -> preserves old runtime value
+		CellPropertyRef.DynamicArg newSameDyn = new CellPropertyRef.DynamicArg(0x1234);
+		Object[] preserved = (Object[]) mergeM.invoke(null, new Object[]{newSameDyn}, new Object[]{populatedDyn});
+		assertNotNull(preserved);
+		CellPropertyRef.DynamicArg resultPreserved = (CellPropertyRef.DynamicArg) preserved[0];
+		assertEquals(0x1234, resultPreserved.fingerprint());
+		assertEquals("[accent]Alice", resultPreserved.runtimeValue());
+
+		// Case 3: Redefine with changed fingerprint -> discards old runtime value (null)
+		CellPropertyRef.DynamicArg newDiffDyn = new CellPropertyRef.DynamicArg(0x5678);
+		Object[] discarded = (Object[]) mergeM.invoke(null, new Object[]{newDiffDyn}, new Object[]{populatedDyn});
+		assertNotNull(discarded);
+		CellPropertyRef.DynamicArg resultDiscarded = (CellPropertyRef.DynamicArg) discarded[0];
+		assertEquals(0x5678, resultDiscarded.fingerprint());
+		assertNull(resultDiscarded.runtimeValue(), "Changed fingerprint must discard stale runtime value");
+	}
+
+	@Test
+	void testDynamicArgUsability() {
+		CellPropertyRef.DynamicArg emptyDyn = new CellPropertyRef.DynamicArg(0x1234);
+		CellPropertyRef.DynamicArg populatedDyn = emptyDyn.withRuntimeValue("Hello");
+
+		// Creator with DynamicArg is never constructible
+		PropertyCall creatorWithDyn = new PropertyCall("arc/scene/ui/layout/Table", "button",
+			"(Ljava/lang/String;)Larc/scene/ui/layout/Cell;", new Object[]{populatedDyn}, 10);
+		assertFalse(CellPropertyRef.hasUsableCreatorArgs(creatorWithDyn),
+			"Creators with DynamicArg must not be considered usable for creation");
+
+		// Property with empty DynamicArg (null runtimeValue) is not usable
+		PropertyCall propEmpty = new PropertyCall("arc/scene/ui/layout/Cell", "tooltip",
+			"(Ljava/lang/String;)Larc/scene/ui/layout/Cell;", new Object[]{emptyDyn}, 12);
+		assertFalse(CellPropertyRef.hasUsablePropertyArgs(propEmpty),
+			"DynamicArg without runtimeValue must not be usable");
+
+		// Property with populated DynamicArg IS usable
+		PropertyCall propPopulated = new PropertyCall("arc/scene/ui/layout/Cell", "tooltip",
+			"(Ljava/lang/String;)Larc/scene/ui/layout/Cell;", new Object[]{populatedDyn}, 12);
+		assertTrue(CellPropertyRef.hasUsablePropertyArgs(propPopulated),
+			"DynamicArg with non-null runtimeValue must be usable");
+	}
+
+	@Test
+	void testDynamicArgConvertArgsUnwrap() throws Exception {
+		Method convertM = CellPropertyRef.class.getDeclaredMethod("convertArgs",
+			arc.scene.ui.layout.Cell.class, arc.scene.ui.layout.Table.class,
+			MethodType.class, Object[].class);
+		convertM.setAccessible(true);
+
+		CellPropertyRef.DynamicArg populatedDyn = new CellPropertyRef.DynamicArg(0x1234, "unwrapped-value");
+		CellPropertyRef.DynamicArg emptyDyn = new CellPropertyRef.DynamicArg(0x1234, null);
+
+		MethodType mt = MethodType.methodType(void.class, String.class, int.class);
+		Object[] converted = (Object[]) convertM.invoke(null, null, null, mt,
+			new Object[]{populatedDyn, emptyDyn});
+
+		assertNotNull(converted);
+		assertEquals("unwrapped-value", converted[0]);
+		// emptyDyn for primitive int falls back to defaultValue(int) = 0
+		assertEquals(0, converted[1]);
+	}
+
+	@Test
+	void testComputeSliceFingerprintDistinguishesExpressions() throws Exception {
+		Method fpM = CellPropertyRef.class.getDeclaredMethod("computeInsnFingerprint",
+			org.objectweb.asm.tree.ClassNode.class, org.objectweb.asm.tree.MethodNode.class,
+			org.objectweb.asm.tree.analysis.Frame[].class, org.objectweb.asm.tree.AbstractInsnNode.class,
+			Set.class, Map.class, int.class);
+		fpM.setAccessible(true);
+
+		// Two LDC instructions with different constants must yield different fingerprints
+		org.objectweb.asm.tree.LdcInsnNode ldc1 = new org.objectweb.asm.tree.LdcInsnNode("[accent]");
+		org.objectweb.asm.tree.LdcInsnNode ldc2 = new org.objectweb.asm.tree.LdcInsnNode("[blue]");
+		int fp1 = (int) fpM.invoke(null, null, null, null, ldc1, new HashSet<>(), null, 0);
+		int fp2 = (int) fpM.invoke(null, null, null, null, ldc2, new HashSet<>(), null, 0);
+		assertNotEquals(fp1, fp2);
+
+		// Two StringConcatFactory indy insns with different recipes must yield different fingerprints
+		org.objectweb.asm.Handle bsm = new org.objectweb.asm.Handle(
+			org.objectweb.asm.Opcodes.H_INVOKESTATIC,
+			"java/lang/invoke/StringConcatFactory",
+			"makeConcatWithConstants",
+			"(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/invoke/CallSite;",
+			false
+		);
+		org.objectweb.asm.tree.InvokeDynamicInsnNode indy1 = new org.objectweb.asm.tree.InvokeDynamicInsnNode(
+			"makeConcatWithConstants", "(Ljava/lang/String;)Ljava/lang/String;", bsm, "\1[accent]\1"
+		);
+		org.objectweb.asm.tree.InvokeDynamicInsnNode indy2 = new org.objectweb.asm.tree.InvokeDynamicInsnNode(
+			"makeConcatWithConstants", "(Ljava/lang/String;)Ljava/lang/String;", bsm, "\1[blue]\1"
+		);
+		int fpIndy1 = (int) fpM.invoke(null, null, null, null, indy1, new HashSet<>(), null, 0);
+		int fpIndy2 = (int) fpM.invoke(null, null, null, null, indy2, new HashSet<>(), null, 0);
+		assertNotEquals(fpIndy1, fpIndy2);
+	}
 }

@@ -169,6 +169,23 @@ public class CellPropertyRef {
 		public String toString() { return "this[" + hostClass + "]"; }
 	}
 
+	public record DynamicArg(int fingerprint, Object runtimeValue) {
+		public DynamicArg(int fingerprint) {
+			this(fingerprint, null);
+		}
+
+		public DynamicArg withRuntimeValue(Object val) {
+			return new DynamicArg(fingerprint, val);
+		}
+
+		@Override
+		public String toString() {
+			return runtimeValue != null
+				? "DynamicArg#" + Integer.toHexString(fingerprint) + "(" + runtimeValue + ")"
+				: "DynamicArg#" + Integer.toHexString(fingerprint);
+		}
+	}
+
 	private record HostFrame(
 		String hostClass, String hostMethod, String hostDesc,
 		int line, String creatorName,
@@ -454,7 +471,6 @@ public class CellPropertyRef {
 		List<PropertyCall> chain = state.chain;
 		if (chain.isEmpty()) return;
 
-		Object[] sanitized = sanitizeArgs(args);
 		String   key       = method + desc;
 		int      cursor    = state.slotCursor.getOrDefault(key, 0);
 		int      slot      = findNthSlotByMethodDesc(chain, method, desc, cursor);
@@ -465,7 +481,7 @@ public class CellPropertyRef {
 		state.slotCursor.put(key, cursor + 1);
 
 		PropertyCall existing = chain.get(slot);
-		Object[]     merged   = mergeArgs(existing.args, sanitized);
+		Object[]     merged   = mergeArgs(existing.args, args);
 		if (!argsEqual(existing.args, merged)) {
 			chain.set(slot, new PropertyCall(existing.owner, method, desc, merged, existing.line,
 			                                 existing.helperClass, existing.helperMethod, existing.helperLine, existing.callOrdinal));
@@ -713,7 +729,31 @@ public class CellPropertyRef {
 		if (lt != lr) return runtimeKnown;
 		Object[] out = template.clone();
 		for (int j = 0; j < out.length; j++) {
-			if (out[j] == null && runtimeKnown[j] != null) out[j] = runtimeKnown[j];
+			Object tArg = out[j];
+			Object rArg = runtimeKnown[j];
+			if (tArg instanceof DynamicArg newDyn) {
+				if (rArg instanceof DynamicArg oldDyn) {
+					// 热重载时模板合并：比较表达式切片指纹
+					if (newDyn.fingerprint() == oldDyn.fingerprint()) {
+						// 指纹未变：安全继承已有运行时值
+						out[j] = newDyn.withRuntimeValue(oldDyn.runtimeValue());
+					} else {
+						// 指纹改变：旧值已作废，不能再填旧值，保持 null 标脏
+						out[j] = newDyn;
+						if (DEBUG) log("[CellProperty] Dynamic argument fingerprint changed, marking dirty for rebuild: "
+						               + oldDyn.fingerprint() + " -> " + newDyn.fingerprint());
+					}
+				} else if (rArg != null) {
+					// 运行时钩子填充 (recordPropertyCallImpl)：rArg 为具体运行时实参
+					out[j] = newDyn.withRuntimeValue(rArg);
+				}
+			} else if (tArg == null && rArg != null) {
+				if (rArg instanceof DynamicArg) {
+					out[j] = null;
+				} else {
+					out[j] = rArg;
+				}
+			}
 		}
 		return out;
 	}
@@ -997,6 +1037,10 @@ public class CellPropertyRef {
 					if (!callsEqual(ce.chain, mergedNew) || templateChanged) updated++;
 				} else {
 					skipped++;
+					synchronized (cellState) {
+						unpatchedCells.put(cell, ce.id);
+					}
+					warn("[CellProperty] Cell " + ce.id + " has unpatched dynamic properties (needs rebuild)");
 				}
 			} catch (Throwable t) {
 				error("[CellProperty] applyChainUpdate failed for " + ce.id, t);
@@ -1741,6 +1785,7 @@ public class CellPropertyRef {
 		for (Object a : creator.args) {
 			if (a == null) return false;
 			if (a instanceof LambdaInfo) return false;
+			if (a instanceof DynamicArg) return false;
 		}
 		return true;
 	}
@@ -1757,6 +1802,7 @@ public class CellPropertyRef {
 		if (arr == null) return true;
 		for (Object a : arr) {
 			if (a == null) return false;
+			if (a instanceof DynamicArg da && da.runtimeValue() == null) return false;
 			if (a instanceof LambdaInfo li && !hasUsableValue(li.captures())) return false;
 		}
 		return true;
@@ -1866,6 +1912,9 @@ public class CellPropertyRef {
 		Object[] result = new Object[args.length];
 		for (int i = 0; i < args.length; i++) {
 			Object arg = args[i];
+			if (arg instanceof DynamicArg da) {
+				arg = da.runtimeValue();
+			}
 			if (i >= methodType.parameterCount()) {
 				result[i] = arg;
 				continue;
@@ -1896,7 +1945,7 @@ public class CellPropertyRef {
 				}
 			}
 			if (arg == null) {
-				result[i] = target.isInterface() ? makeDummyProxy(target) : null;
+				result[i] = target.isInterface() ? makeDummyProxy(target) : defaultValue(target);
 				continue;
 			}
 			if (arg instanceof LambdaInfo li) {
@@ -2814,8 +2863,19 @@ public class CellPropertyRef {
 		Object[]    args     = new Object[argTypes.length];
 		Set<String> visiting = new HashSet<>();
 		for (int i = 0; i < argTypes.length; i++) {
-			Object v = resolveSourceValue(cn, mn, frames, f.getStack(base + i), visiting, paramBindings);
-			args[i] = coerce(argTypes[i], sanitizeValue(v));
+			SourceValue sv = f.getStack(base + i);
+			Object v = resolveSourceValue(cn, mn, frames, sv, visiting, paramBindings);
+			Object sanitized = sanitizeValue(v);
+			if (sanitized != null) {
+				args[i] = coerce(argTypes[i], sanitized);
+			} else {
+				int fp = computeSliceFingerprint(cn, mn, frames, sv, new HashSet<>(), paramBindings, 0);
+				if (fp != 0) {
+					args[i] = new DynamicArg(fp, null);
+				} else {
+					args[i] = null;
+				}
+			}
 		}
 		return args;
 	}
@@ -3154,6 +3214,7 @@ public class CellPropertyRef {
 		if (isConstantType(v)) return v;
 		if (v instanceof StaticRef) return v;
 		if (v instanceof ThisPlaceholder) return v;
+		if (v instanceof DynamicArg) return v;
 		if (v instanceof LambdaInfo li) {
 			Object[] caps    = li.captures();
 			Object[] newCaps = caps == null ? null : sanitizeArgs(caps);
@@ -3167,6 +3228,236 @@ public class CellPropertyRef {
 		Object[] out = new Object[args.length];
 		for (int i = 0; i < args.length; i++) out[i] = sanitizeValue(args[i]);
 		return out;
+	}
+
+	private static SourceValue stackOperand(MethodNode mn, Frame<SourceValue>[] frames,
+	                                        AbstractInsnNode insn, int fromTop) {
+		if (mn == null || mn.instructions == null || frames == null || insn == null) return null;
+		int idx = mn.instructions.indexOf(insn);
+		if (idx < 0) return null;
+		Frame<SourceValue> f = frames[idx];
+		if (f == null) return null;
+		int pos = f.getStackSize() - 1 - fromTop;
+		if (pos < 0) return null;
+		return f.getStack(pos);
+	}
+
+	private static int computeSliceFingerprint(ClassNode cn, MethodNode mn,
+	                                          Frame<SourceValue>[] frames, SourceValue sv,
+	                                          Set<String> visiting,
+	                                          Map<Integer, Object> paramBindings, int depth) {
+		if (sv == null || sv.insns == null || sv.insns.isEmpty() || depth > 8) return 0;
+		int h = 1;
+		for (AbstractInsnNode insn : sv.insns) {
+			h = 31 * h + computeInsnFingerprint(cn, mn, frames, insn, visiting, paramBindings, depth);
+		}
+		return h == 0 ? 1 : h;
+	}
+
+	private static int computeInsnFingerprint(ClassNode cn, MethodNode mn,
+	                                         Frame<SourceValue>[] frames, AbstractInsnNode insn,
+	                                         Set<String> visiting,
+	                                         Map<Integer, Object> paramBindings, int depth) {
+		if (insn == null || depth > 8) return 0;
+		int op = insn.getOpcode();
+
+		if (insn instanceof LdcInsnNode ldc) {
+			return 31 * op + Objects.hashCode(ldc.cst);
+		}
+
+		if (insn instanceof IntInsnNode iin) {
+			return 31 * op + iin.operand;
+		}
+
+		if (insn instanceof InsnNode) {
+			switch (op) {
+				case ACONST_NULL:
+				case ICONST_M1:
+				case ICONST_0:
+				case ICONST_1:
+				case ICONST_2:
+				case ICONST_3:
+				case ICONST_4:
+				case ICONST_5:
+				case LCONST_0:
+				case LCONST_1:
+				case FCONST_0:
+				case FCONST_1:
+				case FCONST_2:
+				case DCONST_0:
+				case DCONST_1:
+					return op;
+				case I2L:
+				case I2F:
+				case I2D:
+				case L2I:
+				case L2F:
+				case L2D:
+				case F2I:
+				case F2L:
+				case F2D:
+				case D2I:
+				case D2L:
+				case D2F:
+				case I2B:
+				case I2C:
+				case I2S:
+				case INEG:
+				case LNEG:
+				case FNEG:
+				case DNEG:
+				case ARRAYLENGTH: {
+					SourceValue op0 = stackOperand(mn, frames, insn, 0);
+					return 31 * op + computeSliceFingerprint(cn, mn, frames, op0, visiting, paramBindings, depth + 1);
+				}
+				case IADD:
+				case ISUB:
+				case IMUL:
+				case IDIV:
+				case IREM:
+				case ISHL:
+				case ISHR:
+				case IUSHR:
+				case IAND:
+				case IOR:
+				case IXOR:
+				case LADD:
+				case LSUB:
+				case LMUL:
+				case LDIV:
+				case LREM:
+				case LSHL:
+				case LSHR:
+				case LUSHR:
+				case LAND:
+				case LOR:
+				case LXOR:
+				case FADD:
+				case FSUB:
+				case FMUL:
+				case FDIV:
+				case FREM:
+				case DADD:
+				case DSUB:
+				case DMUL:
+				case DDIV:
+				case DREM: {
+					SourceValue right = stackOperand(mn, frames, insn, 0);
+					SourceValue left  = stackOperand(mn, frames, insn, 1);
+					int h = 31 * op + computeSliceFingerprint(cn, mn, frames, left, visiting, paramBindings, depth + 1);
+					return 31 * h + computeSliceFingerprint(cn, mn, frames, right, visiting, paramBindings, depth + 1);
+				}
+				default:
+					return op;
+			}
+		}
+
+		if (insn instanceof FieldInsnNode fin) {
+			int h = Objects.hash(op, fin.owner, fin.name, fin.desc);
+			if (op == GETFIELD) {
+				SourceValue recv = stackOperand(mn, frames, insn, 0);
+				h = 31 * h + computeSliceFingerprint(cn, mn, frames, recv, visiting, paramBindings, depth + 1);
+			}
+			return h;
+		}
+
+		if (insn instanceof MethodInsnNode min) {
+			int h = Objects.hash(op, min.owner, min.name, min.desc);
+			Type[] argTypes = Type.getArgumentTypes(min.desc);
+			int argCount = argTypes.length;
+			for (int i = 0; i < argCount; i++) {
+				int fromTop = argCount - 1 - i;
+				SourceValue argSv = stackOperand(mn, frames, insn, fromTop);
+				h = 31 * h + computeSliceFingerprint(cn, mn, frames, argSv, visiting, paramBindings, depth + 1);
+			}
+			if (op != INVOKESTATIC) {
+				SourceValue recv = stackOperand(mn, frames, insn, argCount);
+				h = 31 * h + computeSliceFingerprint(cn, mn, frames, recv, visiting, paramBindings, depth + 1);
+			}
+			return h;
+		}
+
+		if (insn instanceof VarInsnNode vin) {
+			if (op == ILOAD || op == LLOAD || op == FLOAD || op == DLOAD || op == ALOAD) {
+				if (vin.var == 0 && mn != null && (mn.access & ACC_STATIC) == 0) {
+					return Objects.hash(op, "THIS", cn != null ? cn.name : "");
+				}
+				if (paramBindings != null && paramBindings.containsKey(vin.var)) {
+					return Objects.hash(op, "PARAM", paramBindings.get(vin.var));
+				}
+				// 检查是否为单次写入局部变量
+				if (mn != null && mn.instructions != null) {
+					int writes = 0;
+					AbstractInsnNode singleStore = null;
+					for (AbstractInsnNode cur = mn.instructions.getFirst(); cur != null; cur = cur.getNext()) {
+						if (cur instanceof VarInsnNode svin && svin.var == vin.var) {
+							int sop = svin.getOpcode();
+							if (sop == ISTORE || sop == LSTORE || sop == FSTORE || sop == DSTORE || sop == ASTORE) {
+								writes++;
+								singleStore = svin;
+							}
+						} else if (cur instanceof IincInsnNode iin && iin.var == vin.var) {
+							writes++;
+						}
+					}
+					if (writes == 1 && singleStore != null && depth < 8) {
+						String visitKey = mn.name + ":" + mn.desc + "#" + vin.var;
+						if (visiting.add(visitKey)) {
+							try {
+								SourceValue storeVal = stackOperand(mn, frames, singleStore, 0);
+								if (storeVal != null) {
+									return 31 * op + computeSliceFingerprint(cn, mn, frames, storeVal, visiting, paramBindings, depth + 1);
+								}
+							} finally {
+								visiting.remove(visitKey);
+							}
+						}
+					}
+				}
+				return Objects.hash(op, "VAR", vin.var);
+			}
+			return Objects.hash(op, vin.var);
+		}
+
+		if (insn instanceof InvokeDynamicInsnNode indy) {
+			int h = Objects.hash(op, indy.name, indy.desc);
+			if (indy.bsm != null) {
+				h = 31 * h + Objects.hash(indy.bsm.getOwner(), indy.bsm.getName(), indy.bsm.getDesc());
+			}
+			if (indy.bsm != null && "java/lang/invoke/StringConcatFactory".equals(indy.bsm.getOwner())) {
+				if (indy.bsmArgs != null) {
+					for (Object bsmArg : indy.bsmArgs) {
+						h = 31 * h + Objects.hashCode(bsmArg);
+					}
+				}
+			} else if (indy.bsmArgs != null) {
+				for (Object bsmArg : indy.bsmArgs) {
+					if (bsmArg instanceof Handle handle) {
+						h = 31 * h + Objects.hash(handle.getOwner(), handle.getName(), handle.getDesc(), handle.getTag());
+					} else {
+						h = 31 * h + Objects.hashCode(bsmArg);
+					}
+				}
+			}
+			Type[] indyArgTypes = Type.getArgumentTypes(indy.desc);
+			for (int i = 0; i < indyArgTypes.length; i++) {
+				int fromTop = indyArgTypes.length - 1 - i;
+				SourceValue argSv = stackOperand(mn, frames, indy, fromTop);
+				h = 31 * h + computeSliceFingerprint(cn, mn, frames, argSv, visiting, paramBindings, depth + 1);
+			}
+			return h;
+		}
+
+		if (insn instanceof TypeInsnNode tin) {
+			int h = Objects.hash(op, tin.desc);
+			if (op == CHECKCAST || op == INSTANCEOF) {
+				SourceValue op0 = stackOperand(mn, frames, insn, 0);
+				h = 31 * h + computeSliceFingerprint(cn, mn, frames, op0, visiting, paramBindings, depth + 1);
+			}
+			return h;
+		}
+
+		return op;
 	}
 
 	private static int lineOf(MethodNode mn, AbstractInsnNode insn) {

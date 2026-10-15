@@ -1,10 +1,8 @@
 package nipx;
 
-import arc.Core;
 import nipx.annotation.*;
 import nipx.profiler.DynamicProfilerAPI;
 import nipx.ref.InitFix;
-import nipx.uihook.CellPropertyRef;
 import nipx.util.*;
 import org.objectweb.asm.tree.ClassNode;
 
@@ -198,9 +196,253 @@ public class HotSwapAgent {
 
 	/**
 	 * 在不使用retransform的情况下，确保旧bytecode正确的唯一方法
-	 * dotClassName -> bytecode
+	 * dotClassName -> bytecode（JVM 实际生效/织入后基线，供 LayoutGate、InitFix、redefineClasses 使用）
 	 */
 	public static final Map<String, byte[]> bytecodeCache = new ConcurrentHashMap<>();
+
+	/**
+	 * 源码级未织入基线缓存（用于对齐器与源码变更分析，避免 Mixin 等增强注入的合成方法/字段污染对齐逻辑）
+	 * dotClassName -> sourceBytecode
+	 */
+	public static final Map<String, byte[]> sourceBytecodeCache = new ConcurrentHashMap<>();
+
+	/**
+	 * 字节码重织入桥接接口（用于 Mixin、AspectJ、自定义字节码增强器在热重载时重新织入）。
+	 *
+	 * <p>在类对齐完成后、进入布局安全门 (LayoutGate) 与重定义 (redefineClasses) 之前介入，
+	 * 将源码级编译产物转换为带有增强钩子（如 Mixin @Inject/@Unique）的运行时字节码。</p>
+	 */
+	public interface BytecodeTransformerBridge {
+		/**
+		 * 对新编译/对齐后的字节码执行重新织入。
+		 * @param loader 目标类的 ClassLoader
+		 * @param dotClassName 点分类名 (com.example.Foo)
+		 * @param targetClass 已加载的目标类（未加载时为 null）
+		 * @param sourceBytecode 经过对齐后的源码编译字节码
+		 * @return 织入后的字节码；若未对此类进行修改，返回 null 或原数组
+		 */
+		byte[] transform(ClassLoader loader, String dotClassName, Class<?> targetClass, byte[] sourceBytecode) throws Exception;
+	}
+
+	private static final List<BytecodeTransformerBridge> transformerBridges = new CopyOnWriteArrayList<>();
+
+	public static void addTransformerBridge(BytecodeTransformerBridge bridge) {
+		if (bridge != null && !transformerBridges.contains(bridge)) {
+			transformerBridges.add(bridge);
+		}
+	}
+
+	public static void removeTransformerBridge(BytecodeTransformerBridge bridge) {
+		if (bridge != null) {
+			transformerBridges.remove(bridge);
+		}
+	}
+
+	/** 执行所有已注册的字节码重织入桥 */
+	public static byte[] applyTransformerBridges(ClassLoader loader, String dotClassName, Class<?> targetClass, byte[] bytecode) {
+		if (transformerBridges.isEmpty() || bytecode == null) return bytecode;
+		byte[] current = bytecode;
+		for (BytecodeTransformerBridge bridge : transformerBridges) {
+			try {
+				byte[] transformed = bridge.transform(loader, dotClassName, targetClass, current);
+				if (transformed != null && transformed.length > 0) {
+					current = transformed;
+				}
+			} catch (Throwable t) {
+				error("[BRIDGE-ERROR] Error transforming " + dotClassName + " with " + bridge.getClass().getName(), t);
+			}
+		}
+		return current;
+	}
+
+	//region Dispatcher & SPI Lifecycle
+	private static volatile MainThreadDispatcher mainThreadDispatcher = Runnable::run;
+	private static final List<HotswapBatchListener> batchListeners = new CopyOnWriteArrayList<>();
+	private static final List<HotswapPlugin> plugins = new CopyOnWriteArrayList<>();
+
+	/**
+	 * 设置主线程调度器（默认 {@code Runnable::run}）。
+	 * GUI 宿主可在启动时注册（例如 Mindustry 注册 {@code Core.app::post}）。
+	 */
+	public static void setMainThreadDispatcher(MainThreadDispatcher dispatcher) {
+		mainThreadDispatcher = dispatcher != null ? dispatcher : Runnable::run;
+	}
+
+	public static MainThreadDispatcher getMainThreadDispatcher() {
+		return mainThreadDispatcher;
+	}
+
+	public static void postToMain(Runnable task) {
+		if (task != null) {
+			mainThreadDispatcher.dispatch(task);
+		}
+	}
+
+	/** 注册热重载批次生命周期监听器 */
+	public static void addBatchListener(HotswapBatchListener listener) {
+		if (listener != null && !batchListeners.contains(listener)) {
+			batchListeners.add(listener);
+		}
+	}
+
+	/** 注销热重载批次生命周期监听器 */
+	public static void removeBatchListener(HotswapBatchListener listener) {
+		if (listener != null) {
+			batchListeners.remove(listener);
+		}
+	}
+
+	private static void notifyBatchListeners(List<ClassDefinition> definitions) {
+		if (definitions == null || definitions.isEmpty()) return;
+		for (HotswapBatchListener listener : batchListeners) {
+			try {
+				listener.afterInternalBatch(definitions);
+			} catch (Throwable t) {
+				error("[HotswapBatchListener] Error notifying batch listener: " + listener.getClass().getName(), t);
+			}
+		}
+	}
+
+	public static void notifyExternalClassRedefined(Class<?> clazz, byte[] wovenBytes) {
+		if (clazz == null) return;
+		for (HotswapBatchListener listener : batchListeners) {
+			try {
+				listener.onExternalClassRedefined(clazz, wovenBytes);
+			} catch (Throwable t) {
+				error("[HotswapBatchListener] Error notifying external redefine: " + clazz.getName(), t);
+			}
+		}
+	}
+
+	/** 注册热重载扩展插件 */
+	public static void registerPlugin(HotswapPlugin plugin) {
+		if (plugin == null || plugins.contains(plugin)) return;
+		plugins.add(plugin);
+		if (inst != null) {
+			try {
+				plugin.onAgentInit(inst);
+			} catch (Throwable t) {
+				error("[HotswapPlugin] Error initializing plugin: " + plugin.getName(), t);
+			}
+		}
+	}
+
+	/** 注销热重载扩展插件 */
+	public static void unregisterPlugin(HotswapPlugin plugin) {
+		if (plugin != null) {
+			plugins.remove(plugin);
+		}
+	}
+
+	/** 注册孤儿 Lambda 熔断判定谓词（供插件如 UpdateRef 注册） */
+	public static void addOrphanBreaker(OrphanBreakerPredicate predicate) {
+		LambdaAligner.addOrphanBreaker(predicate);
+	}
+
+	public static void removeOrphanBreaker(OrphanBreakerPredicate predicate) {
+		LambdaAligner.removeOrphanBreaker(predicate);
+	}
+
+	/** 注册栈遍历透明帧判定谓词（供 UI / 代理框架插件注册） */
+	public static void addTransparentFramePredicate(TransparentFramePredicate predicate) {
+		LambdaAligner.addTransparentFramePredicate(predicate);
+	}
+
+	public static void removeTransparentFramePredicate(TransparentFramePredicate predicate) {
+		LambdaAligner.removeTransparentFramePredicate(predicate);
+	}
+
+	/** 供动态代码生成框架提交新字节码执行重定义（别名） */
+	public static boolean redefine(Class<?> targetClass, byte[] newBytecode) {
+		return redefineDynamic(targetClass, newBytecode);
+	}
+
+	/** 获取源码基线（对齐后、未织入第三方切片的原始字节，供 Diff / 对齐比对用） */
+	public static byte[] getSourceBytecode(String dotClassName) {
+		return dotClassName != null ? sourceBytecodeCache.get(dotClassName) : null;
+	}
+
+	/** 获取运行时生效基线（织入 Mixin / 插件后的实际运行字节，供 InitFix / Schema 判断用） */
+	public static byte[] getRuntimeBytecode(String dotClassName) {
+		return dotClassName != null ? bytecodeCache.get(dotClassName) : null;
+	}
+	//endregion
+
+	/**
+	 * 内部热更重定义上下文，用于在 {@link Instrumentation#redefineClasses} 与 {@link AnnotationTransformer#transform}
+	 * 之间传递调用起源与目标类集合，精准识别是否由 HotSwapAgent 自身发起。
+	 */
+	public static final class InternalRedefineContext {
+		public final Set<String> targetDotClasses;
+		public final long timestampNanos;
+		public final boolean isRetransform;
+		final InternalRedefineContext previous;
+
+		public InternalRedefineContext(Collection<String> targetDotClasses, boolean isRetransform, InternalRedefineContext previous) {
+			this.targetDotClasses = targetDotClasses == null ? Collections.emptySet() : new HashSet<>(targetDotClasses);
+			this.timestampNanos = System.nanoTime();
+			this.isRetransform = isRetransform;
+			this.previous = previous;
+		}
+
+		public boolean isTarget(String dotClassName) {
+			if (targetDotClasses.contains(dotClassName)) return true;
+			return previous != null && previous.isTarget(dotClassName);
+		}
+	}
+
+	public static final ThreadLocal<InternalRedefineContext> INTERNAL_CONTEXT = new ThreadLocal<>();
+
+	public static void enterInternalRedefine(Collection<String> dotClassNames) {
+		InternalRedefineContext prev = INTERNAL_CONTEXT.get();
+		INTERNAL_CONTEXT.set(new InternalRedefineContext(dotClassNames, false, prev));
+	}
+
+	public static void enterInternalRetransform(Collection<String> dotClassNames) {
+		InternalRedefineContext prev = INTERNAL_CONTEXT.get();
+		INTERNAL_CONTEXT.set(new InternalRedefineContext(dotClassNames, true, prev));
+	}
+
+	public static void exitInternalRedefine() {
+		InternalRedefineContext curr = INTERNAL_CONTEXT.get();
+		if (curr != null) {
+			if (curr.previous != null) {
+				INTERNAL_CONTEXT.set(curr.previous);
+			} else {
+				INTERNAL_CONTEXT.remove();
+			}
+		} else {
+			INTERNAL_CONTEXT.remove();
+		}
+	}
+
+	/**
+	 * 为外部触发的类重定义（IDE JDWP / 外部 Agent）调度后置异步任务，在 JVM 完成类元数据安装后执行 InitFix 修补与 @OnReload。
+	 */
+	public static void scheduleDeferredPostRedefine(Class<?> clazz) {
+		if (clazz == null) return;
+		Runnable task = () -> {
+			try {
+				InitFix.afterRedefineExternal(clazz);
+			} catch (Throwable t) {
+				error("[EXTERNAL-HOTSWAP] Error during deferred InitFix for " + clazz.getName(), t);
+			}
+
+			try {
+				processAnnotationsInternal(clazz);
+			} catch (Throwable t) {
+				error("[EXTERNAL-HOTSWAP] Error during deferred @OnReload for " + clazz.getName(), t);
+			}
+
+			try {
+				notifyExternalClassRedefined(clazz, getRuntimeBytecode(clazz.getName()));
+			} catch (Throwable t) {
+				error("[EXTERNAL-HOTSWAP] Error during deferred notifyExternalClassRedefined for " + clazz.getName(), t);
+			}
+		};
+
+		scheduler.schedule(() -> postToMain(task), 20, TimeUnit.MILLISECONDS);
+	}
 
 	// 仅记录byte的指纹
 	private static final LongLongMap fileDiskHashes = new LongLongMap(2048);
@@ -310,9 +552,13 @@ public class HotSwapAgent {
 		if (RETRANSFORM_LOADED) {
 			retransformLoaded(loadedClasses);
 		}
-		if (UI_HOOK) {
-			LambdaRef.init();
-			// CellPropertyRef.enable();
+
+		for (HotswapPlugin plugin : plugins) {
+			try {
+				plugin.onAgentInit(inst);
+			} catch (Throwable t) {
+				error("[HotswapPlugin] Error initializing plugin: " + plugin.getName(), t);
+			}
 		}
 
 		// 解析传入的监控路径 (支持分号或冒号分割)，按类型分流
@@ -404,7 +650,13 @@ public class HotSwapAgent {
 		info("UI Hook: " + UI_HOOK);
 		boolean cellPropertyRef = Boolean.parseBoolean(System.getProperty("nipx.agent.cell_property_ref", "false"));
 		info("Cell Property Ref: " + cellPropertyRef);
-		CellPropertyRef.setEnabled(cellPropertyRef);
+		for (HotswapPlugin plugin : plugins) {
+			try {
+				plugin.onConfigReload();
+			} catch (Throwable t) {
+				error("[HotswapPlugin] Error reloading plugin config: " + plugin.getName(), t);
+			}
+		}
 		info("Anon Align: " + ANON_ALIGN + " (strict=" + ANON_STRICT + ", debug=" + ANON_DEBUG
 		     + ", maxPerHost=" + AnonClassAligner.MAX_ANON_PER_HOST
 		     + ", timeoutMs=" + AnonClassAligner.ALIGN_TIMEOUT_MS
@@ -546,7 +798,8 @@ public class HotSwapAgent {
 			Map<String, byte[]> oldAnon = new HashMap<>();
 			for (Map.Entry<String, byte[]> entry : bytecodeCache.entrySet()) {
 				if (AnonClassAligner.isAnonymousClassName(hostSlash, entry.getKey())) {
-					oldAnon.put(entry.getKey(), entry.getValue());
+					byte[] src = sourceBytecodeCache.get(entry.getKey());
+					oldAnon.put(entry.getKey(), src != null ? src : entry.getValue());
 				}
 			}
 
@@ -580,7 +833,11 @@ public class HotSwapAgent {
 				log("[ANON_ALIGN] Aligning anonymous classes for host: " + hostName + " (old=" + oldAnon.size() + ", new=" + newAnon.size() + ")");
 			}
 
-			java.util.function.Function<String, byte[]> oldRes = name -> bytecodeCache.get(name.replace('/', '.'));
+			java.util.function.Function<String, byte[]> oldRes = name -> {
+				String dot = name.replace('/', '.');
+				byte[] src = sourceBytecodeCache.get(dot);
+				return src != null ? src : bytecodeCache.get(dot);
+			};
 			java.util.function.Function<String, byte[]> newRes = name -> newBatchBytes.get(name.replace('/', '.'));
 
 			AnonClassAligner.Result res;
@@ -632,6 +889,36 @@ public class HotSwapAgent {
 				tx.targetClasses.add(targetDot);
 			}
 			transactions.put(hostName, tx);
+		}
+
+		// 记录源码级对齐基线
+		for (Map.Entry<String, byte[]> e : newBatchBytes.entrySet()) {
+			sourceBytecodeCache.put(e.getKey(), e.getValue());
+		}
+
+		// ---- 字节码重织入桥（Mixin / AspectJ / 自定义字节码增强器）----
+		// 位置：源码级对齐之后、局部类门与布局门之前。
+		// 保证对齐器看到的是纯净源码，而布局门与 JVM redefine 看到的是织入后的物理结构。
+		if (!transformerBridges.isEmpty()) {
+			for (String className : new ArrayList<>(newBatchBytes.keySet())) {
+				byte[] rawBytes = newBatchBytes.get(className);
+				if (rawBytes == null) continue;
+				Class<?> targetClass = loadedClassesMap.get(className);
+				ClassLoader cl = targetClass != null ? targetClass.getClassLoader() : findTargetClassLoader(className, classToPath.get(className));
+				byte[] weaved = applyTransformerBridges(cl, className, targetClass, rawBytes);
+				if (weaved != null && weaved != rawBytes) {
+					newBatchBytes.put(className, weaved);
+					for (AlignmentTransaction tx : transactions.values()) {
+						if (tx.cacheUpdates.containsKey(className)) {
+							tx.cacheUpdates.put(className, weaved);
+						}
+						String slash = className.replace('.', '/');
+						if (tx.pendingAdds.containsKey(slash)) {
+							tx.pendingAdds.put(slash, weaved);
+						}
+					}
+				}
+			}
 		}
 
 		// ---- 同名局部类编号漂移止血门（docs/topology/07-layout-gate-and-risks.md §2）----
@@ -693,6 +980,11 @@ public class HotSwapAgent {
 				Class<?> targetClass = loadedClassesMap.get(className);
 
 				if (targetClass != null) {
+					// 过滤 JVM 不可修改类（如 Hidden Class、VM 内部动态代理类等）
+					if (inst != null && !inst.isModifiableClass(targetClass)) {
+						if (DEBUG) log("[SKIP-UNMODIFIABLE] " + className + " is not modifiable by JVM.");
+						continue;
+					}
 					// 类已加载：无论模式，都必须执行 redefinition
 					if (DEBUG) log("[MODIFIED] " + className);
 
@@ -727,10 +1019,16 @@ public class HotSwapAgent {
 								 newBytecode, slashClassName, targetClass.getClassLoader());
 							}
 							java.util.function.Function<String, byte[]> oldResolver =
-							 name -> bytecodeCache.get(name.replace('/', '.'));
+							 name -> {
+								String dot = name.replace('/', '.');
+								byte[] src = sourceBytecodeCache.get(dot);
+								return src != null ? src : bytecodeCache.get(dot);
+							 };
 							java.util.function.Function<String, byte[]> newResolver =
 							 name -> newBatchBytes.get(name.replace('/', '.'));
-							newBytecode = LambdaAligner.align(oldBytecode, newBytecode, oldResolver, newResolver);
+							byte[] oldSrc = sourceBytecodeCache.get(className);
+							byte[] alignOld = oldSrc != null ? oldSrc : oldBytecode;
+							newBytecode = LambdaAligner.align(alignOld, newBytecode, oldResolver, newResolver);
 						}
 					}
 					if (oldBytecode != null) {
@@ -872,7 +1170,13 @@ public class HotSwapAgent {
 				InitFix.afterRedefineFailed(def.getDefinitionClass());
 			}
 		}
-		processUIDispatch(definitions, redefinedOk);
+		List<ClassDefinition> successfulDefinitions = new ArrayList<>(definitions.size());
+		for (ClassDefinition def : definitions) {
+			if (redefinedOk.contains(def.getDefinitionClass().getName())) {
+				successfulDefinitions.add(def);
+			}
+		}
+		notifyBatchListeners(successfulDefinitions);
 
 		if (skippedCount > 0) info("Skipped " + skippedCount + " unchanged classes.");
 		if (injectedCount > 0) info("Injected " + injectedCount + " new classes.");
@@ -897,7 +1201,9 @@ public class HotSwapAgent {
 	 *
 	 * <p>仅用于布局不兼容的类，因此调用频率很低。</p>
 	 */
-	static boolean hasLiveInstances(String dotClassName) {
+	static boolean hasLiveInstances(Class<?> c) {
+		if (c == null) return false;
+		String dotClassName = c.getName();
 		Boolean cached = LIVE_INSTANCE_CACHE.get(dotClassName);
 		if (cached != null) return cached;
 
@@ -908,14 +1214,7 @@ public class HotSwapAgent {
 				// 尝试初始化；失败会抛 UnsatisfiedLinkError
 				LibTool.init();
 			}
-			Class<?> c = loadedClassesMap.get(dotClassName);
-			if (c == null) {
-				// 旧类未加载 ⇒ 不可能有实例。这是**安全**方向的"无实例"：
-				// 未加载的类没有对象可言，放行配对不会让任何东西读到零值。
-				result = false;
-			} else {
-				result = LibTool.getInstances(c).length > 0;
-			}
+			result = LibTool.getInstances(c).length > 0;
 		} catch (Throwable t) {
 			// JVMTI 不可用 / 初始化失败 / 扫描异常 —— 一律按"有实例"处理（保守）。
 			warn("[ANON-LAYOUT] Cannot scan instances for " + dotClassName
@@ -930,6 +1229,16 @@ public class HotSwapAgent {
 		}
 		LIVE_INSTANCE_CACHE.put(dotClassName, result);
 		return result;
+	}
+
+	static boolean hasLiveInstances(String dotClassName) {
+		Class<?> c = loadedClassesMap.get(dotClassName);
+		if (c == null) {
+			// 旧类未加载 ⇒ 不可能有实例。这是**安全**方向的"无实例"：
+			// 未加载的类没有对象可言，放行配对不会让任何东西读到零值。
+			return false;
+		}
+		return hasLiveInstances(c);
 	}
 
 	/** 每轮热更开始时清空实例扫描缓存（实例的存活状况会随轮次变化）。 */
@@ -953,7 +1262,7 @@ public class HotSwapAgent {
 
 			if (!(FORCE_REINIT || clazz.isAnnotationPresent(Reloadable.class))) continue;
 
-			Core.app.post(() -> Core.app.post(() -> processAnnotationsInternal(clazz)));
+			postToMain(() -> postToMain(() -> processAnnotationsInternal(clazz)));
 		}
 	}
 	private static void processAnnotationsInternal(Class<?> clazz) {
@@ -992,17 +1301,6 @@ public class HotSwapAgent {
 	}
 
 
-	private static void processUIDispatch(List<ClassDefinition> definitions, Set<String> redefinedOk) {
-		if (CellPropertyRef.isEnabled()) {
-			for (ClassDefinition definition : definitions) {
-				Class<?> clazz = definition.getDefinitionClass();
-				if (!redefinedOk.contains(clazz.getName())) continue;
-				CellPropertyRef.afterRedefine(AnnotationTransformer.internalName(clazz), definition.getDefinitionClassFile());
-			}
-		}
-	}
-
-
 	static boolean isBlacklisted(String className) {
 		if (HOTSWAP_BLACKLIST == null) return false;
 		for (String prefix : HOTSWAP_BLACKLIST) {
@@ -1027,10 +1325,12 @@ public class HotSwapAgent {
 		}
 		MyTransformer transformer1 = new MyTransformer();
 		inst.addTransformer(transformer1, true);
+		enterInternalRetransform(Collections.singleton(clazz.getName()));
 		try {
 			inst.retransformClasses(clazz);
 			return bytecode[0];
 		} finally {
+			exitInternalRedefine();
 			inst.removeTransformer(transformer1);
 		}
 	}
@@ -1607,6 +1907,11 @@ public class HotSwapAgent {
 			if (!a1 && a2) return 1;
 			return 0;
 		});
+		Set<String> targetNames = new HashSet<>();
+		for (ClassDefinition def : definitions) {
+			targetNames.add(def.getDefinitionClass().getName());
+		}
+		enterInternalRedefine(targetNames);
 		try {
 			inst.redefineClasses(definitions.toArray(new ClassDefinition[0]));
 			info("HotSwap successful: " + definitions.size() + " classes redefined.");
@@ -1657,6 +1962,8 @@ public class HotSwapAgent {
 					rolledBackClasses.addAll(tx.targetClasses);
 				}
 			}
+		} finally {
+			exitInternalRedefine();
 		}
 		return new RedefineOutcome(successfulClasses, rolledBackClasses);
 	}
@@ -1952,6 +2259,76 @@ public class HotSwapAgent {
 		try {
 			// 快照必须在锁内取：排队等待期间 getAllLoadedClasses() 的结果会过期
 			triggerHotswapWith(inst.getAllLoadedClasses());
+		} finally {
+			HOTSWAP_LOCK.unlock();
+		}
+	}
+
+	/**
+	 * 动态生成类的热更入口（供 Aspector、动态代理框架等无磁盘文件的场景调用）。
+	 *
+	 * <p>直接对内存中的类进行重定义，跳过磁盘文件监听与文件 Diff，但仍执行字节码重织入桥、
+	 * 布局安全门 (LayoutGate) 校验与 InitFix 实例初始化补丁。</p>
+	 *
+	 * @param targetClass 已加载的目标类
+	 * @param newBytecode 新生成的未织入或已织入字节码
+	 * @return 是否重定义成功
+	 */
+	public static boolean redefineDynamic(Class<?> targetClass, byte[] newBytecode) {
+		if (targetClass == null || newBytecode == null) return false;
+		if (inst == null || !inst.isRedefineClassesSupported()) {
+			error("[DYNAMIC-REDEFINE] JVM does not support class redefinition or agent not attached.");
+			return false;
+		}
+		if (!inst.isModifiableClass(targetClass)) {
+			warn("[DYNAMIC-REDEFINE] Class " + targetClass.getName() + " is not modifiable by JVM; skipped.");
+			return false;
+		}
+
+		HOTSWAP_LOCK.lock();
+		try {
+			String className = targetClass.getName();
+			byte[] sourceBytes = newBytecode;
+			byte[] runtimeBytes = applyTransformerBridges(targetClass.getClassLoader(), className, targetClass, newBytecode);
+
+			byte[] oldBytes = bytecodeCache.get(className);
+			if (oldBytes != null) {
+				ClassDiffUtil.ClassDiff diff = ClassDiffUtil.diff(oldBytes, runtimeBytes);
+				if (diff.hierarchyChanged) {
+					error("REJECTED: Class hierarchy change detected for dynamic class " + className);
+					return false;
+				}
+				LayoutGate.Result layoutRes = LayoutGate.checkChangedFields(diff.changedFields);
+				if (!layoutRes.compatible() && LayoutGate.MODE_REJECT.equals(LAYOUT_GATE)) {
+					if (hasLiveInstances(className) || LayoutGate.hasStaticFieldChange(diff.changedFields)) {
+						warn("[LAYOUT-REJECT] Dynamic class " + className + " rejected: " + layoutRes.detail());
+						return false;
+					}
+				}
+				InitFix.transform(targetClass, runtimeBytes, diff);
+			}
+
+			enterInternalRedefine(Collections.singleton(className));
+			try {
+				inst.redefineClasses(new ClassDefinition(targetClass, runtimeBytes));
+				bytecodeCache.put(className, runtimeBytes);
+				sourceBytecodeCache.put(className, sourceBytes);
+				try {
+					InitFix.afterRedefine(targetClass);
+				} catch (Throwable t) {
+					error("Failed to run InitFix after redefine for " + className, t);
+					InitFix.afterRedefineFailed(targetClass);
+				}
+				notifyBatchListeners(Collections.singletonList(new ClassDefinition(targetClass, runtimeBytes)));
+				info("[DYNAMIC-REDEFINE] Successfully redefined " + className);
+				return true;
+			} finally {
+				exitInternalRedefine();
+			}
+		} catch (Throwable t) {
+			error("[DYNAMIC-REDEFINE] Failed to redefine " + targetClass.getName(), t);
+			InitFix.afterRedefineFailed(targetClass);
+			return false;
 		} finally {
 			HOTSWAP_LOCK.unlock();
 		}

@@ -114,7 +114,9 @@ def extractHiddenApiBypass = tasks.register('extractHiddenApiBypass', Jar) {
 dependencies {
 	compileOnly project(":annotations")
 	annotationProcessor project(":compiler")
-	compileOnly project(":hotswap-agent")
+	compileOnly project(":hotswap-api")
+	compileOnly project(":hotswap-core")
+	compileOnly project(":hotswap-plugin-arc")
 	compileOnly project(":utils-agent")
 	compileOnly project(":jni-agent")
 
@@ -124,6 +126,7 @@ dependencies {
 //			"trash/procyon-0.6.jar",
 			"_libs/Mindustry_android.jar", // this contains android project of mindustry
 			"_libs/Android_dalvik-1.0.jar",
+			"_libs/magicClass.jar",
 	)
 	compileOnly files(stripAndroidJar)
 	implementation files("_libs/AndroidField.jar")
@@ -232,10 +235,11 @@ jar {
 //		println "includeLib: $name"
 		evaluationDependsOn(":" + name) // 确保 xxx 的 build.gradle 先运行
 		def agent = project(":" + name)
+		dependsOn agent.tasks.named("jar")
 		from("${agent.buildDir0}/libs/") { include "$name-${agent.version}.jar" rename { o -> "libs/${name}.jar" } }
 	}
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-	includeLib.accept("hotswap-agent")
+	includeLib.accept("hotswap-core")
 	includeLib.accept("utils-agent")
 	includeLib.accept("jni-agent")
 }
@@ -552,7 +556,7 @@ class Reflect {
 //
 // 设计（按 review 建议，不再用 shell 手写 classpath）：
 //   • hstest source set 只放**测试入口**（同名 fixture 分属不同版本，不能混编）；
-//   • ASM 等依赖由 project(":hotswap-agent") 传递，不列 jar；
+//   • ASM 等依赖由 project(":hotswap-core") 传递，不列 jar；
 //   • toolchain 固定为 21，不依赖 PATH 上恰好是什么 javac；
 //   • 夹具仍由脚本按版本编到各自目录（它们同包同名），之后应改为硬编码字节码。
 // ---------------------------------------------------------------
@@ -575,9 +579,13 @@ sourceSets {
 
 
 dependencies {
-	hstestImplementation project(":hotswap-agent")
+	hstestImplementation project(":hotswap-api")
+	hstestImplementation project(":hotswap-core")
+	hstestImplementation project(":hotswap-plugin-arc")
 	hstestImplementation project(":jni-agent")
 	hstestImplementation "Anuken:Mindustry:$mindustryVersion"
+	hstestImplementation "org.spongepowered:mixin:0.8.5"
+	hstestImplementation "com.google.guava:guava:33.4.0-jre"
 	// 新建 source set 的 classpath 为空，KGP 不会自动补 stdlib；夹具引用 kotlin.* 必须显式声明。
 	// 版本交由 KGP 的 kotlin-stdlib 约束解析（与 main 的 kotlin-stdlib-jdk8 同源）。
 	ktfixV1Implementation "org.jetbrains.kotlin:kotlin-stdlib"
@@ -593,7 +601,7 @@ dependencies {
 // major 版本（实测 69 = JDK 25），运行时可能 UnsupportedClassVersionError。
 // 注意：不能给 hstest 设 toolchain 21、也不能设 options.release=21 ——
 // 两者都会让 Gradle 认为 hstest 的目标运行版本是 21，进而拒绝消费用 25 编的
-// hotswap-agent / jni-agent。测试入口就跟着宿主 JDK 编（与那些库一致），
+// hotswap-core / jni-agent。测试入口就跟着宿主 JDK 编（与那些库一致），
 // 需要跨版本读字节码的是**夹具**，它们由 --release 21 单独编译。
 
 // 并发入口加固断言（先红后绿）。
@@ -605,7 +613,7 @@ tasks.register("hstestConcurrency", JavaExec) {
 	dependsOn tasks.named("hstestClasses")
 	// 同 hstestInitFixOracle：runtimeClasspath 解析到 build/libs 下的 jar，
 	// 少了 dependsOn jar 会跑出陈旧结果（改动只进 classes、没进 jar）。
-	dependsOn project(":hotswap-agent").tasks.named("jar")
+	dependsOn project(":hotswap-core").tasks.named("jar")
 	dependsOn project(":jni-agent").tasks.named("jar")
 	classpath = sourceSets.hstest.runtimeClasspath
 	mainClass = "ConcurrencyAssert"
@@ -617,7 +625,7 @@ tasks.register("hstestFingerprint", JavaExec) {
 	group = "verification"
 	description = "运行指纹延后落账断言"
 	dependsOn tasks.named("hstestClasses")
-	dependsOn project(":hotswap-agent").tasks.named("jar")
+	dependsOn project(":hotswap-core").tasks.named("jar")
 	dependsOn project(":jni-agent").tasks.named("jar")
 	classpath = sourceSets.hstest.runtimeClasspath
 	mainClass = "FingerprintAssert"
@@ -629,12 +637,29 @@ tasks.register("hstestLayoutGate", JavaExec) {
 	group = "verification"
 	description = "运行 LayoutGate 规则表断言"
 	dependsOn tasks.named("hstestClasses")
-	dependsOn project(":hotswap-agent").tasks.named("jar")
+	dependsOn project(":hotswap-core").tasks.named("jar")
 	dependsOn project(":jni-agent").tasks.named("jar")
 	classpath = sourceSets.hstest.runtimeClasspath
 	mainClass = "LayoutGateAssert"
 }
 tasks.named("check") { dependsOn tasks.named("hstestLayoutGate") }
+
+// Mixin 接入与热更新兼容性实测任务
+tasks.register("hstestMixinProbe", JavaExec) {
+	group = "verification"
+	description = "运行 Mixin 接入与热更新兼容性实测 (E2E)"
+	dependsOn tasks.named("hstestClasses")
+	dependsOn project(":hotswap-core").tasks.named("shadowJar")
+	dependsOn project(":jni-agent").tasks.named("jar")
+	classpath = sourceSets.hstest.runtimeClasspath
+	mainClass = "nipx.MixinCompatibilityTest"
+	doFirst {
+		jvmArgs "-javaagent:${project(':hotswap-core').tasks.named('shadowJar').get().archiveFile.get().asFile.absolutePath}",
+		        "--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",
+		        "-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8"
+	}
+}
+tasks.named("check") { dependsOn tasks.named("hstestMixinProbe") }
 
 // ---- SemAssert 场景迁移用的夹具编译（真实 javac 21，与 suite.sh 逐项对齐）----
 //
@@ -679,14 +704,14 @@ def hstestFixtureTasks = hstestFixtureSpecs.collect { g, v, helper ->
 // 注意：
 //  • useJUnitPlatform + junit-platform-launcher（runtimeOnly）缺一不可；
 //  • maxParallelForks=1：对齐器与 HotSwapAgent 有可变静态状态（bytecodeCache 等）；
-//  • 运行期仍需 hotswap-agent / jni-agent 的 jar（runtimeClasspath 走 build/libs）。
+//  • 运行期仍需 hotswap-core / jni-agent 的 jar（runtimeClasspath 走 build/libs）。
 tasks.register("hstestJunit", Test) {
 	group = "verification"
 	description = "hstest 的 JUnit 入口（试点：布局门接线 + SemAssert 场景）"
 	testClassesDirs = sourceSets.hstest.output.classesDirs
 	classpath = sourceSets.hstest.runtimeClasspath
 	dependsOn tasks.named("hstestClasses")
-	dependsOn project(":hotswap-agent").tasks.named("jar")
+	dependsOn project(":hotswap-core").tasks.named("jar")
 	dependsOn project(":jni-agent").tasks.named("jar")
 	dependsOn hstestFixtureTasks
 	inputs.dir(hstestFixtureRoot)   // 夹具变了必须重跑
@@ -781,7 +806,9 @@ tasks.register("verifyDocStatusMarkers") {
 		def checkDirs = [
 			file("docs/initfix"),
 			file("docs/topology"),
-			file("hotswap-agent/src")
+			file("hotswap-core/src"),
+			file("hotswap-api/src"),
+			file("hotswap-plugin-arc/src")
 		]
 		def pattern = ~/[✅❌⬜🔶🟣]|\[(已实现|未实现|部分实现|已偏离)/
 		def violations = []
@@ -813,7 +840,7 @@ tasks.register("hstestGhostProbe", JavaExec) {
 	group = "verification"
 	description = "运行幽灵桩熔断栈探测断言（GhostProbe）"
 	dependsOn tasks.named("hstestClasses")
-	dependsOn project(":hotswap-agent").tasks.named("jar")
+	dependsOn project(":hotswap-core").tasks.named("jar")
 	dependsOn project(":jni-agent").tasks.named("jar")
 	classpath = sourceSets.hstest.runtimeClasspath
 	mainClass = "GhostProbe"
@@ -823,14 +850,14 @@ tasks.named("check") { dependsOn tasks.named("hstestGhostProbe") }
 // InitFix 差分 Oracle（参考 docs/initfix/ 系列文档与 AGENTS.md）。
 //
 // 与 SemAssert 不同，它**不需要**任何外部 javac：夹具用 javax.tools 在内存里编译，
-// 因此可以作为 check 的常驻门槛。但必须依赖 hotswap-agent 的 jar 重建 ——
+// 因此可以作为 check 的常驻门槛。但必须依赖 hotswap-core 的 jar 重建 ——
 // runtimeClasspath 解析到的是 build/libs 下的 jar，而不是 classes 目录
 // （见 hstestJunit 上方同一坑的注释），少了 dependsOn jar 会跑出陈旧结果。
 tasks.register("hstestInitFixOracle", JavaExec) {
 	group = "verification"
 	description = "运行 InitFix 差分 Oracle（正向值比对 + 负向阻断断言）"
 	dependsOn tasks.named("hstestClasses")
-	dependsOn project(":hotswap-agent").tasks.named("jar")
+	dependsOn project(":hotswap-core").tasks.named("jar")
 	dependsOn project(":jni-agent").tasks.named("jar")
 	classpath = sourceSets.hstest.runtimeClasspath
 	mainClass = "InitFixOracle"

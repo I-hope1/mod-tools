@@ -17,9 +17,11 @@ import nipx.HotSwapAgent;
 import nipx.Injector;
 import nipx.InstanceTracker;
 import nipx.LambdaAligner;
+import nipx.HotswapBatchListener;
 import nipx.annotation.HotRebuild;
 import nipx.ref.ClassHierarchyOracle;
 import nipx.util.LibTool;
+import java.lang.instrument.ClassDefinition;
 import org.objectweb.asm.*;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.commons.AdviceAdapter;
@@ -245,6 +247,19 @@ public class CellPropertyRef {
 
 	private static volatile boolean enabled = false;
 	private static volatile byte[]  originalCellBytes;
+
+	static {
+		HotSwapAgent.addTransparentFramePredicate(className ->
+			CellPropertyRef.class.getName().equals(className)
+		);
+		HotSwapAgent.addBatchListener(new HotswapBatchListener() {
+			@Override
+			public void afterInternalBatch(List<ClassDefinition> redefinedClasses) {
+				if (!isEnabled()) return;
+				afterRedefineBatch(redefinedClasses);
+			}
+		});
+	}
 
 	private static final StackWalker WALKER = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
 
@@ -774,6 +789,44 @@ public class CellPropertyRef {
 	//endregion
 
 	//region 热替换回调
+
+	/**
+	 * 批次重定义回调：每批次在 UI 线程统一调度执行一次，避免单类多次调度引发卡顿与闪烁。
+	 */
+	public static void afterRedefineBatch(List<ClassDefinition> definitions) {
+		if (!isEnabled() || definitions == null || definitions.isEmpty()) return;
+		List<Map.Entry<String, byte[]>> batchItems = new ArrayList<>(definitions.size());
+		Map<String, Map<String, List<List<PropertyCall>>>> capturedOldModels = new HashMap<>();
+		for (ClassDefinition def : definitions) {
+			String slashName = internalName(def.getDefinitionClass());
+			byte[] bytes = def.getDefinitionClassFile();
+			batchItems.add(new AbstractMap.SimpleImmutableEntry<>(slashName, bytes));
+			Map<String, List<List<PropertyCall>>> oldModel = chainCache.get(slashName);
+			if (oldModel != null) {
+				capturedOldModels.put(slashName, oldModel);
+			}
+		}
+
+		Runnable work = () -> {
+			boolean[] busy = BUSY.get();
+			if (busy[0]) return;
+			busy[0] = true;
+			try {
+				for (Map.Entry<String, byte[]> item : batchItems) {
+					String slashName = item.getKey();
+					byte[] newBytecode = item.getValue();
+					try {
+						afterRedefinedImpl(slashName, newBytecode, capturedOldModels.get(slashName));
+					} catch (Throwable t) {
+						error("[CellProperty] afterRedefined failed for " + slashName, t);
+					}
+				}
+			} finally {
+				busy[0] = false;
+			}
+		};
+		if (isUiThread() || Core.app == null) { work.run(); } else { Core.app.post(work); }
+	}
 
 	public static void afterRedefine(String slashName, byte[] newBytecode) {
 		if (!enabled) return;
@@ -3700,10 +3753,16 @@ public class CellPropertyRef {
 		clearAll();
 	}
 
+	private static volatile Boolean enabledOverride = null;
+
 	public static void setEnabled(boolean b) {
+		enabledOverride = b;
 		enabled = b;
 	}
-	public static boolean isEnabled() { return enabled; }
+	public static boolean isEnabled() {
+		if (enabledOverride != null) return enabledOverride;
+		return enabled || Boolean.parseBoolean(System.getProperty("nipx.agent.cell_property_ref", "false"));
+	}
 
 	public static void clearClassRecords(String hostSlashName) {
 		if (hostSlashName == null) return;

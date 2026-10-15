@@ -29,6 +29,9 @@ public class GhostProbe {
 		LambdaAligner.setOrphanPolicy(LambdaAligner.OrphanPolicy.SMART_ADAPTIVE);
 
 		Class<?> updateRef = Class.forName("nipx.ref.UpdateRef");
+		try {
+			Class.forName("nipx.uihook.CellPropertyRef");
+		} catch (Throwable ignored) { }
 		Method wrap = updateRef.getMethod("wrap", Runnable.class);
 
 		// ── 用例 1：UpdateRef 直接持有方法引用 ──

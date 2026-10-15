@@ -1,5 +1,6 @@
 package modtools.unsupported;
 
+import arc.Core;
 import arc.Events;
 import arc.files.Fi;
 import arc.util.OS;
@@ -21,7 +22,7 @@ import java.io.File;
  * 这个类是无状态的，可以被重复调用。
  */
 public class HotSwapManager {
-	private static final String  AGENT_NAME          = "hotswap-agent";
+	private static final String  AGENT_NAME          = "hotswap-core";
 	private static final String  AGENT_RESOURCE_PATH = "/libs/" + AGENT_NAME + ".jar";
 	private static       String  agentPathCache      = null;
 	private static       boolean initialized         = false;
@@ -33,8 +34,14 @@ public class HotSwapManager {
 			UNSAFE.addExports(Object.class, "jdk.internal.misc");
 			UNSAFE.addExports(Object.class, "jdk.internal.reflect");
 			UNSAFE.addExports(Object.class, "jdk.internal.loader");
+			if (loaded()) {
+				HotSwapAgent.setMainThreadDispatcher(Core.app::post);
+				HotSwapAgent.registerPlugin(new nipx.arc.ArcHotswapPlugin());
+			}
 			E_Hook.hot_swap_watch_paths.onChange(() -> {
 				if (loaded()) {
+					HotSwapAgent.setMainThreadDispatcher(Core.app::post);
+					HotSwapAgent.registerPlugin(new nipx.arc.ArcHotswapPlugin());
 					HotSwapAgent.init(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator), true);
 				}
 			});
@@ -43,6 +50,10 @@ public class HotSwapManager {
 			initialized = true;
 		}
 		hotswap(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator));
+		if (loaded()) {
+			HotSwapAgent.setMainThreadDispatcher(Core.app::post);
+			HotSwapAgent.registerPlugin(new nipx.arc.ArcHotswapPlugin());
+		}
 		UpdateRef.flushDeferredRemovals();
 		Events.on(ClientLoadEvent.class, _ -> UpdateRef.flushDeferredRemovals());
 		try {
@@ -81,7 +92,11 @@ public class HotSwapManager {
 		if (agentPathCache != null && new File(agentPathCache).exists()) {
 			return agentPathCache;
 		}
-		Fi lib      = IntVars.libs.child(AGENT_NAME + ".jar");
+		Fi lib = IntVars.libs.child(AGENT_NAME + ".jar");
+		if (!lib.exists()) {
+			Fi fallback = IntVars.libs.child("hotswap-agent.jar");
+			if (fallback.exists()) lib = fallback;
+		}
 		Fi tempFile = FileUtils.copyToTmp(lib);
 		tempFile.file().deleteOnExit();
 		agentPathCache = tempFile.path();

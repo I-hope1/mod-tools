@@ -1,6 +1,13 @@
 pluginManagement {
+	repositories {
+		maven { url 'https://maven.aliyun.com/repository/public' }
+		maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+		gradlePluginPortal()
+		mavenCentral()
+	}
 	plugins {
 		id 'org.jetbrains.kotlin.jvm' version '2.3.0'
+		id 'com.gradleup.shadow' version '9.6.1'
 	}
 }
 plugins {
@@ -12,7 +19,9 @@ include 'annotations'
 include 'compiler'
 include 'test'
 
-include 'hotswap-agent'
+include 'hotswap-api'
+include 'hotswap-core'
+include 'hotswap-plugin-arc'
 
 include 'utils-agent'
 include 'jni-agent'
@@ -29,6 +38,7 @@ dependencyResolutionManagement {
 		mavenCentral()
 		maven { url 'https://jitpack.io' }
 		maven { url 'https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository' }
+		maven { url 'https://repo.spongepowered.org/repository/maven-public/' }
 		google()
 		//Downloads the server-release JAR file from Mindustry releases; does not use any real repository. Surprisingly, this is the most reliable option.
 		ivy {

@@ -69,6 +69,9 @@ public class UpdateRef {
 		} catch (Throwable t) {
 			throw new ExceptionInInitializerError(t);
 		}
+		HotSwapAgent.addOrphanBreaker((className, methodName) ->
+			UpdateRef.class.getName().equals(className) && methodName.startsWith("run")
+		);
 	}
 
 	private boolean compareAndSetOnRemove(Runnable expect, Runnable update) {

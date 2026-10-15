@@ -7,15 +7,12 @@ import java.lang.instrument.*;
 import java.util.*;
 
 public class DynamicProfilerAPI {
-	public static final ProfilerTransformer transformer     = new ProfilerTransformer();
-	public static final GlTimerInjector     glTimerInjector = new GlTimerInjector();
+	public static final ProfilerTransformer transformer = new ProfilerTransformer();
 
 	public static void init() {
 		try {
 			Instrumentation inst = HotSwapAgent.getInst();
 			inst.addTransformer(transformer, true);
-			inst.addTransformer(glTimerInjector, true);
-			glTimerInjector.load();
 		} catch (Throwable t) {
 			HotSwapAgent.error("Failed to initialize DynamicProfilerAPI", t);
 		}
@@ -59,7 +56,12 @@ public class DynamicProfilerAPI {
 			}
 		}, 0);
 		bytes = cw.toByteArray();
-		inst.redefineClasses(new ClassDefinition(Walker, bytes));
+		HotSwapAgent.enterInternalRedefine(Collections.singleton(Walker.getName()));
+		try {
+			inst.redefineClasses(new ClassDefinition(Walker, bytes));
+		} finally {
+			HotSwapAgent.exitInternalRedefine();
+		}
 
 		StackWalker internalWalker = StackWalker.getInstance(
 		 StackWalker.Option.RETAIN_CLASS_REFERENCE

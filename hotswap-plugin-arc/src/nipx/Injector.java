@@ -22,10 +22,13 @@ import static nipx.HotSwapAgent.*;
 public class Injector {
 	static final String CL_ELEMENT = "arc/scene/Element";
 	public static void redefineOneClass(Class<?> theClass, byte[] bytes) {
+		HotSwapAgent.enterInternalRedefine(Collections.singleton(theClass.getName()));
 		try {
 			inst.redefineClasses(new ClassDefinition(theClass, bytes));
 		} catch (Exception e) {
 			throw new RuntimeException(e);
+		} finally {
+			HotSwapAgent.exitInternalRedefine();
 		}
 	}
 	public static void redefineTask(Class<?> clazz, String methodName, String lambdaType) {
@@ -50,11 +53,17 @@ public class Injector {
 			}
 			tasks.add(new ClassDefinition(clazz, currentBytecode));
 		}
+		Set<String> targetNames = new HashSet<>();
+		for (ClassDefinition task : tasks) {
+			targetNames.add(task.getDefinitionClass().getName());
+		}
+		HotSwapAgent.enterInternalRedefine(targetNames);
 		try {
 			inst.redefineClasses(tasks.toArray(new ClassDefinition[0]));
 		} catch (ClassNotFoundException | UnmodifiableClassException e) {
 			throw new RuntimeException(e);
 		} finally {
+			HotSwapAgent.exitInternalRedefine();
 			todos.clear();
 		}
 	}

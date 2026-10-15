@@ -26,9 +26,9 @@ import java.util.function.Supplier;
  *   <li><b>孤儿 Lambda 智能自适应分流（{@link OrphanPolicy#SMART_ADAPTIVE}）：</b><br>
  *       对于在新版本中被彻底删除的“孤儿方法”，生成带调用栈探测的空壳方法：
  *       <ul>
- *         <li>若直接调用者为 {@link nipx.ref.UpdateRef} 的回调分发方法（UI / 定时轮询 / 事件监听）：主动抛出 {@link NoSuchMethodError}，
- *             驱动 {@code UpdateRef} 执行精准局部熔断（如注销回调 {@code el.update(null)}），彻底根除 60FPS 刷屏空转；</li>
- *         <li>若由普通业务代码发起（未受 UpdateRef 保护）：静默降级返回类型默认值（0 / null / false），绝不引发程序崩溃。</li>
+ *         <li>若直接调用者匹配注册的孤儿熔断器（{@link OrphanBreakerPredicate}，如 UI / 定时轮询 / 事件监听）：主动抛出 {@link NoSuchMethodError}，
+ *             驱动调用方执行精准局部熔断（如注销回调），彻底根除高频刷屏空转；</li>
+ *         <li>若由普通业务代码发起（未受熔断保护）：静默降级返回类型默认值（0 / null / false），绝不引发程序崩溃。</li>
  *       </ul>
  *   </li>
  * </ol>
@@ -92,8 +92,8 @@ import java.util.function.Supplier;
  * <p><b>可见性假设：</b>注入的幽灵桩通过 {@code INVOKESTATIC} 调用
  * {@link #onOrphanInvoked(String)}，因此目标类的类加载器必须能看到 {@code nipx.LambdaAligner}。
  * 父委派正常时成立。</p>
- * @see nipx.ref.UpdateRef
- * @see nipx.LambdaRef
+ * @see OrphanBreakerPredicate
+ * @see TransparentFramePredicate
  * @see nipx.HotSwapAgent
  */
 public class LambdaAligner {
@@ -288,9 +288,9 @@ public class LambdaAligner {
 		/**
 		 * 智能自适应策略（<b>推荐且默认</b>）：
 		 * <ul>
-		 *   <li>若由 {@link nipx.ref.UpdateRef} 发起（UI / 定时轮询 / 事件回调）：抛出 {@link NoSuchMethodError}，
-		 *       触发精准局部熔断（如 {@code element.update(null)}），彻底切断 60FPS 空转与死循环刷屏；</li>
-		 *   <li>若由普通业务代码发起（未受 UpdateRef 保护）：经 {@link HotSwapAgent#warn} 打印警告并返回默认值（0 / null / false），
+		 *   <li>若由注册的孤儿熔断器（{@link OrphanBreakerPredicate}）发起（UI / 定时轮询 / 事件回调）：抛出 {@link NoSuchMethodError}，
+		 *       触发精准局部熔断，彻底切断高频空转与死循环刷屏；</li>
+		 *   <li>若由普通业务代码发起（未受熔断保护）：经 {@link HotSwapAgent#warn} 打印警告并返回默认值（0 / null / false），
 		 *       <b>不抛出异常</b>（指幽灵自身不抛；返回的 null / 0 在下游仍可能触发 NPE，需调用方自行判空）。</li>
 		 * </ul>
 		 */
@@ -2922,10 +2922,10 @@ public class LambdaAligner {
 	 * <p>
 	 * <b>关键设计（100% 线性无跳转分支，彻底杜绝 VerifyError）</b>：<br>
 	 * 字节码中完全不使用任何 {@code IFEQ} / {@code GOTO} 等分支跳转指令和 {@link Label}。
-	 * 所有的策略判定、UpdateRef 栈探测、异常抛出与日志去重均下沉到纯 Java 静态方法
+	 * 所有的策略判定、孤儿熔断栈探测、异常抛出与日志去重均下沉到纯 Java 静态方法
 	 * {@link #onOrphanInvoked(String, boolean)} 中执行。<br>
 	 * <ul>
-	 *   <li>若为 UpdateRef 保护的调用：Java 静态方法直接抛出 {@link NoSuchMethodError} 展开栈中断执行；</li>
+	 *   <li>若为熔断器保护的调用：Java 静态方法直接抛出 {@link NoSuchMethodError} 展开栈中断执行；</li>
 	 *   <li>若为普通业务调用：若命中方法引用委托则透明转发；若非委托则线性返回类型默认值（0 / null / false）。</li>
 	 * </ul>
 	 * 从而在各版本 JVM 下无需 StackMapTable 即可 100% 通过类验证。
@@ -2935,7 +2935,7 @@ public class LambdaAligner {
 		mv.visitCode();
 		boolean willForward = delegate != null;
 
-		// 1. 调用纯 Java 静态方法：统一处理策略分发、UpdateRef 栈探测及日志去重。
+		// 1. 调用纯 Java 静态方法：统一处理策略分发、熔断栈探测及日志去重。
 		//
 		// 传入拼好的 location 常量与 willForward 标志（单个 LDC + ICONST）：
 		// 运行时热路径上不分配任何 String，集合查找是 O(1) 哈希查找。
@@ -2998,7 +2998,24 @@ public class LambdaAligner {
 		}
 	}
 
-	private static final String UPDATE_REF_CLASS = "nipx.ref.UpdateRef";
+	private static final List<OrphanBreakerPredicate>    ORPHAN_BREAKERS       = new CopyOnWriteArrayList<>();
+	private static final List<TransparentFramePredicate> TRANSPARENT_PREDICATES = new CopyOnWriteArrayList<>();
+
+	public static void addOrphanBreaker(OrphanBreakerPredicate predicate) {
+		if (predicate != null) ORPHAN_BREAKERS.add(predicate);
+	}
+
+	public static void removeOrphanBreaker(OrphanBreakerPredicate predicate) {
+		ORPHAN_BREAKERS.remove(predicate);
+	}
+
+	public static void addTransparentFramePredicate(TransparentFramePredicate predicate) {
+		if (predicate != null) TRANSPARENT_PREDICATES.add(predicate);
+	}
+
+	public static void removeTransparentFramePredicate(TransparentFramePredicate predicate) {
+		TRANSPARENT_PREDICATES.remove(predicate);
+	}
 
 	/**
 	 * 已打印过日志的 location（并发安全）。
@@ -3040,7 +3057,7 @@ public class LambdaAligner {
 		OrphanPolicy policy = orphanPolicy;
 
 		if (policy == OrphanPolicy.SMART_ADAPTIVE) {
-			if (isCalledByUpdateRef()) {
+			if (isOrphanBreakerTriggered()) {
 				throw new NoSuchMethodError("Lambda removed by hot swap: " + location);
 			}
 			// 普通业务调用：去重后打印日志
@@ -3073,28 +3090,28 @@ public class LambdaAligner {
 	}
 
 	/**
-	 * 判断当前调用是否由 {@link nipx.ref.UpdateRef} 发起（决定是否熔断）。
+	 * 判断当前调用是否由已注册的孤儿熔断器（{@link OrphanBreakerPredicate}）发起（决定是否熔断）。
 	 *
-	 * <p><b>判据是"幽灵桩的直接调用者是否为 UpdateRef"</b>，而不是"调用栈上某处是否有
-	 * UpdateRef"：后者会被无关的同栈帧干扰（例如"业务代码 → UpdateRef → 另一个 lambda"
+	 * <p><b>判据是"幽灵桩的直接调用者是否匹配注册的熔断器"</b>，而不是"调用栈上某处是否有
+	 * 匹配项"：后者会被无关的同栈帧干扰（例如"业务代码 → 框架分发器 → 另一个 lambda"
 	 * 这种情形，那个 lambda 其实不是受保护回调）。</p>
 	 *
 	 * <p><b>为什么不再用 {@code limit(16)} 扫描</b>：那是<b>深度相关</b>的判据 ——
 	 * 回调链路上只要夹了较深的用户代码或框架帧（例如嵌套的
-	 * {@code Time.run(10, () -> Time.run(5, () -> ...))}），UpdateRef 帧就会被截掉，
-	 * 于是误判为"非 UpdateRef"，<b>熔断静默失效</b>。改为"定位幽灵桩入口后取 +2 帧"
+	 * {@code Time.run(10, () -> Time.run(5, () -> ...))}），熔断帧就会被截掉，
+	 * 于是误判为"非熔断帧"，<b>熔断静默失效</b>。改为"定位幽灵桩入口后取 +2 帧"
 	 * 与深度无关：栈有多深都能看到直接调用者。</p>
 	 *
 	 * <p>降级路径（无 StackWalker 的环境，如 Android/desugar）同样按"定位 {@code onOrphanInvoked}，
 	 * 再跳过透明帧取调用者"处理，语义与 StackWalker 路径一致。
 	 * 桌面 JVM 上该分支实际不可达（本类最低要求 Java 16+，而 StackWalker 自 Java 9 起可用），
 	 * 保留它是为了 Android 等没有 StackWalker 的运行时。</p>
-	 * @return 若直接调用者为 UpdateRef 的 run 系方法（或兜底命中）则返回 true
+	 * @return 若直接调用者匹配已注册的熔断器则返回 true
 	 */
-	public static boolean isCalledByUpdateRef() {
+	public static boolean isOrphanBreakerTriggered() {
 		try {
 			if (StackWalkerHolder.IS_SUPPORTED) {
-				return StackWalkerHolder.checkUpdateRef();
+				return StackWalkerHolder.checkBreaker();
 			}
 		} catch (Throwable ignored) { }
 
@@ -3114,24 +3131,22 @@ public class LambdaAligner {
 			int limit = Math.min(t.length, skip + MAX_TRANSPARENT_FRAMES + 1);
 			while (skip < limit && isTransparentFrame(t[skip].getClassName())) skip++;
 			if (skip >= t.length) return false;
-			return isUpdateRefInvoke(t[skip].getClassName(), t[skip].getMethodName());
+			return shouldBreakOrphan(t[skip].getClassName(), t[skip].getMethodName());
 		} catch (Throwable ignored) { }
 		return false;
 	}
 
+	/**
+	 * 兼容旧代码与历史测试的别名方法。
+	 * @deprecated 请使用 {@link #isOrphanBreakerTriggered()}
+	 */
+	@Deprecated
+	public static boolean isCalledByUpdateRef() {
+		return isOrphanBreakerTriggered();
+	}
+
 	/** 本类的全限定名，用于在栈帧里定位幽灵桩入口。 */
 	private static final String SELF = LambdaAligner.class.getName();
-
-	/**
-	 * Cell 属性链代理的宿主类。
-	 *
-	 * <p>{@code CellPropertyRef.makeLambda} 用 {@link java.lang.reflect.Proxy} 把 lambda 参数包成
-	 * 动态代理，其 handler 是 {@code CellPropertyRef} 里的合成 lambda 方法，handler 内又经本类的
-	 * {@code invoke(MethodHandle,...)} 辅助方法调到真实 lambda 体。因此当这条链触到幽灵桩时，
-	 * 桩与真正的调用者（{@code UpdateRef.run*}）之间会夹着这些 {@code CellPropertyRef} 帧。
-	 * 必须按类名穿透，否则 {@link #isCalledByUpdateRef()} 会误判为"非 UpdateRef"，熔断静默失效。</p>
-	 */
-	private static final String CELL_PROPERTY_REF_CLASS = "nipx.uihook.CellPropertyRef";
 
 	/**
 	 * 透明帧扫描的深度上限。
@@ -3143,7 +3158,7 @@ public class LambdaAligner {
 	private static final int MAX_TRANSPARENT_FRAMES = 64;
 
 	/**
-	 * 透明帧：桩与真实调用者之间由 {@code invokedynamic} 生成的代理类帧。
+	 * 透明帧：桩与真实调用者之间由 {@code invokedynamic} 生成的代理类帧或注册的包装代理帧。
 	 *
 	 * <p>必须穿透，否则"固定 +2"在两种环境下会静默失效，而后果正是本机制要消灭的
 	 * （熔断不触发）：</p>
@@ -3153,39 +3168,44 @@ public class LambdaAligner {
 	 *       {@code getStackTrace} 里本来就是可见帧。</li>
 	 * </ul>
 	 *
-	 * <p>此外，{@link nipx.uihook.CellPropertyRef#makeLambda} 会用 {@link java.lang.reflect.Proxy}
-	 * 把 Cell 属性链里的 lambda 参数包成动态代理：幽灵桩与真正的调用者 {@code UpdateRef.run*}
-	 * 之间会夹着 <b>代理类帧</b>（JDK 9+ 的 {@code jdk.proxyN.$ProxyNN}、JDK 8 的
-	 * {@code com.sun.proxy.$ProxyNN}）、<b>代理 handler 帧</b>（{@code CellPropertyRef} 的合成
-	 * lambda）与<b>方法句柄帧</b>（{@code java.lang.invoke.*}，仅 ShowHiddenFrames 下可见）。
-	 * 这些同样必须穿透，否则熔断对"被代理的回调"永远不触发。</p>
-	 *
-	 * <p>这是<b>针对性放行</b>，不是通用扫描：只认上述固定形态的帧，不会把"lambda 本身被
-	 * UpdateRef 持有"的严格判据放宽。</p>
+	 * <p>此外，UI 框架（如代理层）会用 {@link java.lang.reflect.Proxy}
+	 * 把回调参数包成动态代理：幽灵桩与真正的调用者之间会夹着 <b>代理类帧</b>（JDK 9+ 的
+	 * {@code jdk.proxyN.$ProxyNN}、JDK 8 的 {@code com.sun.proxy.$ProxyNN}）、
+	 * <b>代理 handler 帧</b> 与 <b>方法句柄帧</b>（{@code java.lang.invoke.*}，仅 ShowHiddenFrames 下可见）。
+	 * 这些同样通过已注册的 {@link TransparentFramePredicate} 穿透，否则熔断对"被代理的回调"永远不触发。</p>
 	 */
 	private static boolean isTransparentFrame(String className) {
 		if (className == null || className.isEmpty()) return false;
 		// 刻意只用**类名**（不取 Class 对象），因此无需 RETAIN_CLASS_REFERENCE，
 		// 也避免为判断而触发类加载。
-		return className.contains("$$Lambda")
+		if (className.contains("$$Lambda")
 		       || className.contains("$$$Lambda")
 		       || className.startsWith("jdk.internal.reflect.")
 		       || className.startsWith("jdk.proxy")           // JDK 9+ 动态代理 jdk.proxyN.$ProxyNN
 		       || className.startsWith("com.sun.proxy.")      // JDK 8 动态代理
 		       || className.startsWith("java.lang.reflect.")  // Proxy 调度
-		       || className.startsWith("java.lang.invoke.")   // MethodHandle 隐藏帧
-		       || CELL_PROPERTY_REF_CLASS.equals(className);  // 代理 handler / invoke 辅助方法
+		       || className.startsWith("java.lang.invoke.")) { // MethodHandle 隐藏帧
+			return true;
+		}
+		for (TransparentFramePredicate predicate : TRANSPARENT_PREDICATES) {
+			try {
+				if (predicate.isTransparent(className)) return true;
+			} catch (Throwable ignored) { }
+		}
+		return false;
 	}
 
 	/**
-	 * 该帧是否看起来是 UpdateRef 的回调执行点。
-	 *
-	 * <p>只做<b>精确</b>类名匹配：直接调用者必然是 {@code UpdateRef} 自己的方法，
-	 * 不存在内部类的场景，因此不需要内部类前缀匹配 —— 那会连带匹配
-	 * {@code UpdateRef$...}，属于不必要的放宽。</p>
+	 * 该帧是否匹配已注册的孤儿熔断器。
 	 */
-	private static boolean isUpdateRefInvoke(String className, String methodName) {
-		return UPDATE_REF_CLASS.equals(className) && methodName.startsWith("run");
+	private static boolean shouldBreakOrphan(String className, String methodName) {
+		if (className == null || methodName == null) return false;
+		for (OrphanBreakerPredicate breaker : ORPHAN_BREAKERS) {
+			try {
+				if (breaker.shouldBreak(className, methodName)) return true;
+			} catch (Throwable ignored) { }
+		}
+		return false;
 	}
 
 	/**
@@ -3206,7 +3226,7 @@ public class LambdaAligner {
 			WALKER = walker;
 		}
 
-		static boolean checkUpdateRef() {
+		static boolean checkBreaker() {
 			if (!IS_SUPPORTED || WALKER == null) return false;
 			return Boolean.TRUE.equals(WALKER.walk(s -> s
 			 .dropWhile(f -> !isOrphanEntry(f))        // 定位幽灵桩入口
@@ -3215,7 +3235,7 @@ public class LambdaAligner {
 			 .limit(MAX_TRANSPARENT_FRAMES + 1)        // 透明帧扫描深度上界
 			 .filter(f -> !isTransparentFrame(f.getClassName()))  // 穿透代理/隐藏帧
 			 .findFirst()
-			 .map(f -> isUpdateRefInvoke(f.getClassName(), f.getMethodName()))
+			 .map(f -> shouldBreakOrphan(f.getClassName(), f.getMethodName()))
 			 .orElse(false)));
 		}
 

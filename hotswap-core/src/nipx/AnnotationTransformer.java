@@ -9,6 +9,7 @@ import org.objectweb.asm.tree.*;
 import java.io.*;
 import java.lang.annotation.Annotation;
 import java.lang.instrument.ClassFileTransformer;
+import java.lang.instrument.IllegalClassFormatException;
 import java.security.ProtectionDomain;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -90,12 +91,12 @@ public class AnnotationTransformer implements ClassFileTransformer {
 	//region ClassFileTransformer Core
 	@Override
 	public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
-	                        ProtectionDomain protectionDomain, byte[] classfileBuffer) {
+	                        ProtectionDomain protectionDomain, byte[] classfileBuffer) throws IllegalClassFormatException {
 		if (className == null) return null;
 
 		if (loader == null) return null;
 		if (className.startsWith("org/objectweb/asm/")) return null;
-		if (className.startsWith("nipx/")) return null;
+		if (className.startsWith("nipx/") && !className.startsWith("nipx/probe/")) return null;
 
 		// 注册到继承树
 		try {
@@ -106,6 +107,13 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		String dotClassName = className.replace('/', '.');
 		if (HotSwapAgent.isBlacklisted(dotClassName)) return null;
 
+		HotSwapAgent.InternalRedefineContext internalCtx = HotSwapAgent.INTERNAL_CONTEXT.get();
+		if (internalCtx != null && internalCtx.isRetransform) {
+			// 内部探测性 retransform（例如 fetchBytecodeMemory），直接返回 null 保持原样
+			return null;
+		}
+
+		boolean isInternal = (internalCtx != null && internalCtx.isTarget(dotClassName));
 		boolean modified = false;
 
 		// 加载期拦截：若属于已对齐但尚未加载的类，优先使用对齐后的字节码
@@ -125,6 +133,82 @@ public class AnnotationTransformer implements ClassFileTransformer {
 
 		byte[] bytes = classfileBuffer;  // 不clone，用引用做"是否修改"判断
 
+		if (classBeingRedefined != null && !isInternal) {
+			// ================== 外部重定义通道 (IDE JDWP / 外部 Agent) ==================
+			// 1. 重新织入 Mixin 注入点
+			byte[] woven = HotSwapAgent.applyTransformerBridges(loader, dotClassName, classBeingRedefined, bytes);
+			if (woven != null && woven != bytes) {
+				bytes = woven;
+				modified = true;
+			}
+
+			// 2. 基线获取与 LayoutGate 校验
+			byte[] oldBytecode = HotSwapAgent.bytecodeCache.get(dotClassName);
+			if (oldBytecode == null) {
+				oldBytecode = HotSwapAgent.sourceBytecodeCache.get(dotClassName);
+			}
+			if (oldBytecode == null) {
+				oldBytecode = HotSwapAgent.fetchOriginalBytecode(classBeingRedefined);
+			}
+
+			if (oldBytecode != null) {
+				ClassDiffUtil.ClassDiff diff = ClassDiffUtil.diff(oldBytecode, bytes);
+				if (diff.hierarchyChanged) {
+					HotSwapAgent.error("[EXTERNAL-HOTSWAP] Hierarchy change detected for " + dotClassName + "; rejecting redefine.");
+					throw new IllegalClassFormatException("Hierarchy change not supported: " + dotClassName);
+				}
+				LayoutGate.Result layoutRes = LayoutGate.checkChangedFields(diff.changedFields);
+				if (!layoutRes.compatible() && LayoutGate.MODE_REJECT.equals(HotSwapAgent.LAYOUT_GATE)) {
+					if (HotSwapAgent.hasLiveInstances(classBeingRedefined) || LayoutGate.hasStaticFieldChange(diff.changedFields)) {
+						HotSwapAgent.error("[EXTERNAL-HOTSWAP] Layout change rejected by LayoutGate: " + layoutRes.detail());
+						throw new IllegalClassFormatException("Field layout change rejected for " + dotClassName + ": " + layoutRes.detail());
+					}
+				}
+
+				// 3. InitFix 补丁构建
+				if (HOTSWAP_PLUS && (!diff.addedInstanceFields.isEmpty() || !diff.addedStaticFields.isEmpty())) {
+					InitFix.transform(classBeingRedefined, bytes, diff);
+				}
+			}
+
+			if (HOTSWAP_PLUS) {
+				byte[] forced = forceStaticLambdas(bytes, className, loader);
+				if (forced != bytes) {
+					bytes = forced;
+					modified = true;
+				}
+			}
+
+			try {
+				if (ENABLE_HOTSWAP_EVENT) {
+					if (hasClassAnnotation(bytes, Tracker.class)) {
+						bytes = injectTracker(bytes, className, loader);
+						modified = true;
+					}
+					byte[] profiled = injectProfiler(bytes, className, loader);
+					if (profiled != bytes) {
+						bytes = profiled;
+						modified = true;
+					}
+				}
+			} catch (Throwable t) {
+				error("Transformer crashed for class: " + dotClassName, t);
+			}
+
+			// 4. 快照抓取与后置任务注册
+			InitFix.beforeRedefine(classBeingRedefined);
+			HotSwapAgent.scheduleDeferredPostRedefine(classBeingRedefined);
+
+			// 5. 更新基线缓存
+			byte[] finalBytes = modified ? bytes : classfileBuffer;
+			HotSwapAgent.sourceBytecodeCache.put(dotClassName, classfileBuffer);
+			HotSwapAgent.bytecodeCache.put(dotClassName, finalBytes);
+
+			if (DEBUG && modified) writeTo(className, bytes);
+			return modified ? bytes : null;
+		}
+
+		// ================== 内部重定义 或 首次加载 通道 ==================
 		if (HOTSWAP_PLUS) {
 			classfileBuffer = forceStaticLambdas(classfileBuffer, className, loader);
 			if (classfileBuffer != bytes) {
@@ -133,7 +217,6 @@ public class AnnotationTransformer implements ClassFileTransformer {
 			}
 		}
 		if (classBeingRedefined != null) {
-			LambdaRef.beforeClassRedefined(className, classfileBuffer);
 			InitFix.beforeRedefine(classBeingRedefined);
 		}
 
@@ -157,8 +240,10 @@ public class AnnotationTransformer implements ClassFileTransformer {
 				if (classBeingRedefined == null) {
 					if (pending != null) {
 						bytecodeCache.put(dotClassName, resultBytes);
+						HotSwapAgent.sourceBytecodeCache.put(dotClassName, classfileBuffer);
 					} else {
 						bytecodeCache.putIfAbsent(dotClassName, resultBytes);
+						HotSwapAgent.sourceBytecodeCache.putIfAbsent(dotClassName, classfileBuffer);
 					}
 				}
 				return modified ? bytes : null;
@@ -172,8 +257,10 @@ public class AnnotationTransformer implements ClassFileTransformer {
 		if (classBeingRedefined == null) {
 			if (pending != null) {
 				bytecodeCache.put(dotClassName, resultBytes);
+				HotSwapAgent.sourceBytecodeCache.put(dotClassName, classfileBuffer);
 			} else {
 				bytecodeCache.putIfAbsent(dotClassName, resultBytes);
+				HotSwapAgent.sourceBytecodeCache.putIfAbsent(dotClassName, classfileBuffer);
 			}
 		}
 		return modified ? bytes : null;

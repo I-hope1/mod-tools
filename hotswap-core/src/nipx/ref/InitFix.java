@@ -2717,6 +2717,30 @@ public class InitFix {
 
 	// ==================== 应用与生命周期 ====================
 
+	/**
+	 * 供外部重定义（IDE JDWP / 外部 Agent）后置异步任务调用的修补方法。
+	 * 先复核 JVM 是否真正成功重定义了该类；若被 JVM 拒绝则立即注销并记入台账（保证不变量 5）。
+	 */
+	public static void afterRedefineExternal(Class<?> clazz) {
+		if (!HotSwapAgent.HOTSWAP_PLUS || clazz == null) return;
+
+		PendingPatch patch = PENDING.get(clazz);
+		if (patch == null) return;
+
+		// 验证字段是否已在 JVM 中就绪（若未就绪说明 redefine 被 JVM 拒绝）
+		if (!patch.plan().allTasks().isEmpty()) {
+			FieldPatchTask sampleTask = patch.plan().allTasks().get(0);
+			try {
+				clazz.getDeclaredField(sampleTask.fieldName());
+			} catch (NoSuchFieldException e) {
+				HotSwapAgent.warn("Class " + clazz.getName() + " was not redefined by JVM; aborting external patch.");
+				afterRedefineFailed(clazz);
+				return;
+			}
+		}
+		afterRedefine(clazz);
+	}
+
 	public static void afterRedefine(Class<?> clazz) {
 		if (!HotSwapAgent.HOTSWAP_PLUS || clazz == null) return;
 

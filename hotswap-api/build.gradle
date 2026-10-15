@@ -1,0 +1,23 @@
+plugins {
+	id 'java-library'
+	id 'maven-publish'
+}
+
+sourceSets.main.java.srcDirs = ["src"]
+
+publishing {
+	publications {
+		maven(MavenPublication) {
+			from components.java
+		}
+	}
+}
+
+dependencies {
+	// 纯 API 模块，0 外部依赖
+}
+
+test {
+	useJUnitPlatform()
+	failOnNoDiscoveredTests = false
+}

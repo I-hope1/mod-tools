@@ -40,7 +40,12 @@ public class GlTimerInjector implements ClassFileTransformer {
 		if (!isBatch && !isFrame) return null;
 
 		ClassReader cr = new ClassReader(classfileBuffer);
-		ClassWriter cw = new AnnotationTransformer.MyClassWriter(cr, loader);
+		ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES) {
+			@Override
+			protected ClassLoader getClassLoader() {
+				return loader != null ? loader : super.getClassLoader();
+			}
+		};
 
 		cr.accept(new ClassVisitor(Opcodes.ASM9, cw) {
 			@Override

@@ -140,6 +140,9 @@
 
 | 规划条目 | 优先级 | 规范章节 | 前置依赖 | 目标价值与关联问题 |
 |:---|:---:|:---|:---|:---|
+| **独立仓库远程发布与 CI 矩阵** | P1 | 独立工程提取 | `nipx-hotswap` 本地构建与全量测试通过 | 将同级独立仓库推送到 GitHub/Gitee 远程并启用多 JDK 自动化 CI 守护 |
+| **独立制品 Maven Central / JitPack 分发** | P1 | 发布发布配置 | 独立仓库通过远程 CI 检验 | 配置 Maven Central / JitPack 发布元数据与 GPG 签名，对外提供独立依赖坐标 |
+| **mod-tools 消费侧切换与内部副本清理** | P1 | 架构解耦闭环 | 独立制品发布完成 | 将 mod-tools 依赖切换为外部 Maven 坐标，彻底移除仓内 core 副本完成解耦闭环 |
 | **构造器尾部插桩** | P1 | [`04-target-design.md`](initfix/04-target-design.md) §4 | `InitFix` 离线切片提取与直线字节码生成器 (`AliasInterpreter`) | 在阶段 A 构造器尾部注入切片，物理消除堆遍历快照完成到重定义生效之间的并发对象初始化缝隙（闭合风险 1 与风险 6） |
 | **两阶段 Schema-First 重定义** | P1 | [`04-target-design.md`](initfix/04-target-design.md) §1 | 构造器尾部插桩、JBR 21+ 增强重定义 API 探针 | 消除热更新瞬间新方法体读到未就绪字段的读穿异常，以及 `static final` 字段在 redefine 与补丁之间的 JIT 常量折叠 |
 | **PatchPlan 基线指纹校验** | P1 | [`04-target-design.md`](initfix/04-target-design.md) §2 | 离线分析器导出协议 | 校验 Target 当前内存字节码哈希与构建期基线一致性，防止类漂移热更造成严重字节码损坏 |

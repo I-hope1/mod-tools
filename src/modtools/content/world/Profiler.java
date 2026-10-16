@@ -26,8 +26,8 @@ import modtools.utils.profiler.DeadlockDetector;
 import modtools.utils.profiler.SamplingProfiler;
 import modtools.utils.search.*;
 import modtools.utils.ui.ShowInfoWindow;
-import nipx.profiler.*;
-import nipx.profiler.ProfilerData.MethodStats;
+import remold.profiler.*;
+import remold.profiler.ProfilerData.MethodStats;
 
 import java.util.*;
 import java.util.regex.Pattern;
@@ -63,7 +63,7 @@ public class Profiler extends Content {
 	public void build() {
 		if (OS.isAndroid) return;
 		if (!HotSwapManager.loaded()) {
-			IntUI.showException("Failed to load HotSwapAgent", new Throwable());
+			IntUI.showException("Failed to load RemoldAgent", new Throwable());
 			return;
 		}
 

@@ -19,12 +19,13 @@ include 'annotations'
 include 'compiler'
 include 'test'
 
-include 'hotswap-api'
-include 'hotswap-core'
-include 'hotswap-plugin-arc'
-
 include 'utils-agent'
-include 'jni-agent'
+
+if (file('../nipx-hotswap').exists()) {
+	includeBuild('../nipx-hotswap')
+} else if (file('../Remold').exists()) {
+	includeBuild('../Remold')
+}
 
 include 'magic-accessor:annotations'
 include 'magic-accessor:compiler'

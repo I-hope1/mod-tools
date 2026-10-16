@@ -38,8 +38,8 @@ import modtools.utils.reflect.*;
 import modtools.utils.search.*;
 import modtools.utils.search.Search.SearchItem;
 import modtools.utils.ui.LerpFun.DrawExecutor;
-import nipx.HotSwapAgent;
-import nipx.util.LibTool;
+import remold.RemoldAgent;
+import remold.util.LibTool;
 import rhino.NativeArray;
 
 import java.lang.invoke.MethodHandle;
@@ -255,14 +255,14 @@ public class ShowInfoWindow extends Window implements IDisposable, DrawExecutor 
 					Boolf<TextButton> boolf = _ -> !(HotSwapManager.valid() && clazz != null);
 					p.button("View Bytecode", Styles.flatt, runT(() -> {
 						 Fi fi = dataDir.child("bytecode").child(clazz.getName() + ".class");
-						 fi.writeBytes(HotSwapAgent.fetchCurrentBytecode(clazz));
+						 fi.writeBytes(RemoldAgent.fetchCurrentBytecode(clazz));
 						 IntUI.showInfoFade("See: " + fi.absolutePath());
 						 hide.run();
 					 }))
 					 .disabled(boolf).row();
 					p.button("View MemBytecode", Styles.flatt, runT(() -> {
 						 Fi fi = dataDir.child("bytecode").child(clazz.getName() + ".class");
-						 fi.writeBytes(HotSwapAgent.fetchBytecodeMemory(clazz));
+						 fi.writeBytes(RemoldAgent.fetchBytecodeMemory(clazz));
 						 IntUI.showInfoFade("See: " + fi.absolutePath());
 						 hide.run();
 					 }))

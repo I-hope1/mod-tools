@@ -2,18 +2,18 @@ package modtools.utils.profiler;
 
 import arc.util.*;
 import modtools.unsupported.HotSwapManager;
-import nipx.jni.JNIEnv;
-import nipx.jni.helper.GlobalRef;
-import nipx.jvmti.JVMTIEnv;
-import nipx.jvmti.JVMTIEnv.FrameConsumer;
-import nipx.profiler.*;
-import nipx.profiler.ProfilerData.FlameNode;
+import remold.jni.JNIEnv;
+import remold.jni.helper.GlobalRef;
+import remold.jvmti.JVMTIEnv;
+import remold.jvmti.JVMTIEnv.FrameConsumer;
+import remold.profiler.*;
+import remold.profiler.ProfilerData.FlameNode;
 
 import java.lang.foreign.Arena;
 import java.lang.management.*;
 import java.util.*;
 
-import static nipx.HotSwapAgent.*;
+import static remold.RemoldAgent.*;
 
 /**
  * 采样式 profiler：独立线程定期抓取目标线程的调用栈，
@@ -203,7 +203,8 @@ public class SamplingProfiler {
 	}
 
 	private static boolean isBlacklist(String className) {
-		return className.startsWith("nipx.") || className.startsWith("nipx/")
+		return className.startsWith("remold.") || className.startsWith("remold/")
+		       || className.startsWith("nipx.") || className.startsWith("nipx/")
 		       || className.startsWith("modtools.ui.windows.profile.") || className.startsWith("modtools/ui/windows/profile/");
 	}
 

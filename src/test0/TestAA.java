@@ -5,7 +5,7 @@ import arc.scene.ui.Tooltip.Tooltips;
 import arc.util.Log;
 import modtools.ui.IntUI.ITooltip;
 import modtools.ui.comp.Window;
-import nipx.annotation.OnReload;
+import remold.annotation.OnReload;
 
 public class TestAA {
 	public static void main(String[] args) {

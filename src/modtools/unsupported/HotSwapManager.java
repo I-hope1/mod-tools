@@ -10,10 +10,10 @@ import modtools.events.E_Hook;
 import modtools.jsfunc.reflect.UNSAFE;
 import modtools.utils.io.FileUtils;
 import modtools.utils.reflect.ClassUtils;
-import nipx.HotSwapAgent;
-import nipx.jni.helper.MasterKey;
-import nipx.ref.UpdateRef;
-import nipx.util.LibTool;
+import remold.RemoldAgent;
+import remold.jni.helper.MasterKey;
+import remold.ref.UpdateRef;
+import remold.util.LibTool;
 
 import java.io.File;
 
@@ -22,7 +22,7 @@ import java.io.File;
  * 这个类是无状态的，可以被重复调用。
  */
 public class HotSwapManager {
-	private static final String  AGENT_NAME          = "hotswap-core";
+	private static final String  AGENT_NAME          = "remold-core";
 	private static final String  AGENT_RESOURCE_PATH = "/libs/" + AGENT_NAME + ".jar";
 	private static       String  agentPathCache      = null;
 	private static       boolean initialized         = false;
@@ -35,14 +35,14 @@ public class HotSwapManager {
 			UNSAFE.addExports(Object.class, "jdk.internal.reflect");
 			UNSAFE.addExports(Object.class, "jdk.internal.loader");
 			if (loaded()) {
-				HotSwapAgent.setMainThreadDispatcher(Core.app::post);
-				HotSwapAgent.registerPlugin(new nipx.arc.ArcHotswapPlugin());
+				RemoldAgent.setMainThreadDispatcher(Core.app::post);
+				RemoldAgent.registerPlugin(new remold.arc.ArcHotswapPlugin());
 			}
 			E_Hook.hot_swap_watch_paths.onChange(() -> {
 				if (loaded()) {
-					HotSwapAgent.setMainThreadDispatcher(Core.app::post);
-					HotSwapAgent.registerPlugin(new nipx.arc.ArcHotswapPlugin());
-					HotSwapAgent.init(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator), true);
+					RemoldAgent.setMainThreadDispatcher(Core.app::post);
+					RemoldAgent.registerPlugin(new remold.arc.ArcHotswapPlugin());
+					RemoldAgent.init(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator), true);
 				}
 			});
 
@@ -51,17 +51,17 @@ public class HotSwapManager {
 		}
 		hotswap(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator));
 		if (loaded()) {
-			HotSwapAgent.setMainThreadDispatcher(Core.app::post);
-			HotSwapAgent.registerPlugin(new nipx.arc.ArcHotswapPlugin());
+			RemoldAgent.setMainThreadDispatcher(Core.app::post);
+			RemoldAgent.registerPlugin(new remold.arc.ArcHotswapPlugin());
 		}
 		UpdateRef.flushDeferredRemovals();
 		Events.on(ClientLoadEvent.class, _ -> UpdateRef.flushDeferredRemovals());
 		try {
 			Fi lib = IntVars.libs.child(mapLibraryName("tool"));
-			System.setProperty("nipx.path.libtool", FileUtils.copyToTmp(lib).absolutePath());
+			System.setProperty("remold.path.libtool", FileUtils.copyToTmp(lib).absolutePath());
 			LibTool.init();
 		} catch (Throwable e) {
-			HotSwapAgent.error("[HotSwapManager] Failed to load libtool.", e);
+			RemoldAgent.error("[HotSwapManager] Failed to load libtool.", e);
 		}
 	}
 	/**
@@ -75,7 +75,7 @@ public class HotSwapManager {
 		return libraryName;
 	}
 	public static boolean loaded() {
-		return ClassUtils.exists("nipx.HotSwapAgent");
+		return ClassUtils.exists("remold.RemoldAgent");
 	}
 	public static void hotswap(String watchPaths) {
 		try {
@@ -84,7 +84,7 @@ public class HotSwapManager {
 			// UtilsAgentManager.appendToBootstrap(agentPath);
 			UtilsAgentManager.attachAgent(agentPath, true, watchPaths);
 		} catch (Throwable e) {
-			HotSwapAgent.error("[HotSwapManager] An error occurred during the hotswap process.", e);
+			RemoldAgent.error("[HotSwapManager] An error occurred during the hotswap process.", e);
 		}
 	}
 
@@ -94,7 +94,8 @@ public class HotSwapManager {
 		}
 		Fi lib = IntVars.libs.child(AGENT_NAME + ".jar");
 		if (!lib.exists()) {
-			Fi fallback = IntVars.libs.child("hotswap-agent.jar");
+			Fi fallback = IntVars.libs.child("hotswap-core.jar");
+			if (!fallback.exists()) fallback = IntVars.libs.child("hotswap-agent.jar");
 			if (fallback.exists()) lib = fallback;
 		}
 		Fi tempFile = FileUtils.copyToTmp(lib);

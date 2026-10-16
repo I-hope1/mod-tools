@@ -26,11 +26,11 @@ public class HotSwapController {
 	// 外部线程（Socket）调用此方法暂停
 	public static void requestPause() {
 		isReloading = true;
-		Log.info("[NIPX] Pausing Game Thread...");
+		Log.info("[Remold] Pausing Game Thread...");
 		Core.app.post(() -> {
 			// 2. 检查暂停状态（必须在循环中检查，防止虚假唤醒）
 			while (isReloading) {
-				Log.info("[NIPX] Game Paused. Waiting...");
+				Log.info("[Remold] Game Paused. Waiting...");
 				// 挂起当前线程
 				LockSupport.park();
 			}
@@ -44,7 +44,7 @@ public class HotSwapController {
 		if (gameThread != null) {
 			LockSupport.unpark(gameThread);
 		}
-		Log.info("[NIPX] Game Thread Resumed!");
+		Log.info("[Remold] Game Thread Resumed!");
 	}
 
 	// ========== Socket 监听部分 ==========

@@ -111,14 +111,25 @@ def extractHiddenApiBypass = tasks.register('extractHiddenApiBypass', Jar) {
 	destinationDirectory = layout.buildDirectory.dir("libs")
 }
 
+configurations {
+	remoldAgentLib {
+		canBeResolved = true
+		canBeConsumed = false
+		transitive = false
+	}
+}
+
 dependencies {
 	compileOnly project(":annotations")
 	annotationProcessor project(":compiler")
-	compileOnly project(":hotswap-api")
-	compileOnly project(":hotswap-core")
-	compileOnly project(":hotswap-plugin-arc")
+	compileOnly "io.github.i-hope1.remold:api:1.0.0"
+	compileOnly "io.github.i-hope1.remold:core:1.0.0"
+	compileOnly "io.github.i-hope1.remold:plugin-arc:1.0.0"
+	compileOnly "io.github.i-hope1.remold:native:1.0.0"
 	compileOnly project(":utils-agent")
-	compileOnly project(":jni-agent")
+
+	remoldAgentLib "io.github.i-hope1.remold:core:1.0.0"
+	remoldAgentLib "io.github.i-hope1.remold:native:1.0.0"
 
 //	println "AndroidHome: $sdkRoot"
 	compileOnly files(
@@ -239,9 +250,15 @@ jar {
 		from("${agent.buildDir0}/libs/") { include "$name-${agent.version}.jar" rename { o -> "libs/${name}.jar" } }
 	}
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-	includeLib.accept("hotswap-core")
 	includeLib.accept("utils-agent")
-	includeLib.accept("jni-agent")
+	from(configurations.remoldAgentLib) {
+		into "libs"
+		rename { String name ->
+			if (name.startsWith("core-")) return "remold-core.jar"
+			if (name.startsWith("native-")) return "remold-native.jar"
+			return name
+		}
+	}
 }
 // 定义发送指令的辅助方法
 static def sendGameCommand(int command) {
@@ -545,346 +562,5 @@ class Reflect {
 			e.printStackTrace()
 		}
 		jdkExports0 = jdkExports
-	}
-}
-
-// ---------------------------------------------------------------
-// 对齐器验证套件（scratch/hstest）接入构建。
-//
-// 背景：这些断言原先完全在构建之外（scratch/hstest 不在任何 source set 里），
-// `BUILD SUCCESSFUL` 对它们没有任何约束 —— 断言组 7 曾长期是红的而构建一直绿。
-//
-// 设计（按 review 建议，不再用 shell 手写 classpath）：
-//   • hstest source set 只放**测试入口**（同名 fixture 分属不同版本，不能混编）；
-//   • ASM 等依赖由 project(":hotswap-core") 传递，不列 jar；
-//   • toolchain 固定为 21，不依赖 PATH 上恰好是什么 javac；
-//   • 夹具仍由脚本按版本编到各自目录（它们同包同名），之后应改为硬编码字节码。
-// ---------------------------------------------------------------
-sourceSets {
-	hstest {
-		java.srcDirs = ["scratch/hstest/src"]
-		compileClasspath += sourceSets.main.output + configurations.compileClasspath
-	}
-	// Kotlin 夹具（构建期编译，见 hstestInitFixOracle）。
-	// v1/v2 是**同名同类**，必须分属两个编译单元、各自独立输出目录；
-	// InitFixOracle 按目录路径读字节 + 独立 ByteLoader 定义类，
-	// 这两个输出目录**绝不能**出现在任何 classpath 上（否则同名类只会命中其一）。
-	ktfixV1 {
-		kotlin.srcDirs = ["scratch/hstest/ktfix/v1"]
-	}
-	ktfixV2 {
-		kotlin.srcDirs = ["scratch/hstest/ktfix/v2"]
-	}
-}
-
-
-dependencies {
-	hstestImplementation project(":hotswap-api")
-	hstestImplementation project(":hotswap-core")
-	hstestImplementation project(":hotswap-plugin-arc")
-	hstestImplementation project(":jni-agent")
-	hstestImplementation "Anuken:Mindustry:$mindustryVersion"
-	hstestImplementation "org.spongepowered:mixin:0.8.5"
-	hstestImplementation "com.google.guava:guava:33.4.0-jre"
-	// 新建 source set 的 classpath 为空，KGP 不会自动补 stdlib；夹具引用 kotlin.* 必须显式声明。
-	// 版本交由 KGP 的 kotlin-stdlib 约束解析（与 main 的 kotlin-stdlib-jdk8 同源）。
-	ktfixV1Implementation "org.jetbrains.kotlin:kotlin-stdlib"
-	ktfixV2Implementation "org.jetbrains.kotlin:kotlin-stdlib"
-	// hstest 的 JUnit 试点入口（hstestJunit）。与 main 的 test 无关，只挂在 hstest 这套
-	// 手工夹具体系上。BOM 统一版本；launcher 必须在 runtimeOnly。
-	hstestImplementation platform("org.junit:junit-bom:5.11.4")
-	hstestImplementation "org.junit.jupiter:junit-jupiter"
-	hstestRuntimeOnly "org.junit.platform:junit-platform-launcher"
-}
-
-// javaLauncher 只管**运行**，不管编译：不设这一行，测试入口会被编成宿主 JDK 的
-// major 版本（实测 69 = JDK 25），运行时可能 UnsupportedClassVersionError。
-// 注意：不能给 hstest 设 toolchain 21、也不能设 options.release=21 ——
-// 两者都会让 Gradle 认为 hstest 的目标运行版本是 21，进而拒绝消费用 25 编的
-// hotswap-core / jni-agent。测试入口就跟着宿主 JDK 编（与那些库一致），
-// 需要跨版本读字节码的是**夹具**，它们由 --release 21 单独编译。
-
-// 并发入口加固断言（先红后绿）。
-// 守的是 processChanges 全流程串行 —— scheduler 单线程只覆盖"监听→防抖→热更"，
-// 绕过它的入口（UI 按钮 daemon 线程、init 的 else 分支）会与之重叠。
-tasks.register("hstestConcurrency", JavaExec) {
-	group = "verification"
-	description = "运行并发入口加固断言（锁不变量 / 可重入 / 探针）"
-	dependsOn tasks.named("hstestClasses")
-	// 同 hstestInitFixOracle：runtimeClasspath 解析到 build/libs 下的 jar，
-	// 少了 dependsOn jar 会跑出陈旧结果（改动只进 classes、没进 jar）。
-	dependsOn project(":hotswap-core").tasks.named("jar")
-	dependsOn project(":jni-agent").tasks.named("jar")
-	classpath = sourceSets.hstest.runtimeClasspath
-	mainClass = "ConcurrencyAssert"
-}
-tasks.named("check") { dependsOn tasks.named("hstestConcurrency") }
-
-// 指纹延后落账断言：守"失败/被拒的类不得留下指纹，否则再触发会被误判为 unchanged"。
-tasks.register("hstestFingerprint", JavaExec) {
-	group = "verification"
-	description = "运行指纹延后落账断言"
-	dependsOn tasks.named("hstestClasses")
-	dependsOn project(":hotswap-core").tasks.named("jar")
-	dependsOn project(":jni-agent").tasks.named("jar")
-	classpath = sourceSets.hstest.runtimeClasspath
-	mainClass = "FingerprintAssert"
-}
-tasks.named("check") { dependsOn tasks.named("hstestFingerprint") }
-
-// 布局门规则表断言（纯函数，先红后绿的前半）。
-tasks.register("hstestLayoutGate", JavaExec) {
-	group = "verification"
-	description = "运行 LayoutGate 规则表断言"
-	dependsOn tasks.named("hstestClasses")
-	dependsOn project(":hotswap-core").tasks.named("jar")
-	dependsOn project(":jni-agent").tasks.named("jar")
-	classpath = sourceSets.hstest.runtimeClasspath
-	mainClass = "LayoutGateAssert"
-}
-tasks.named("check") { dependsOn tasks.named("hstestLayoutGate") }
-
-// Mixin 接入与热更新兼容性实测任务
-tasks.register("hstestMixinProbe", JavaExec) {
-	group = "verification"
-	description = "运行 Mixin 接入与热更新兼容性实测 (E2E)"
-	dependsOn tasks.named("hstestClasses")
-	dependsOn project(":hotswap-core").tasks.named("shadowJar")
-	dependsOn project(":jni-agent").tasks.named("jar")
-	classpath = sourceSets.hstest.runtimeClasspath
-	mainClass = "nipx.MixinCompatibilityTest"
-	doFirst {
-		jvmArgs "-javaagent:${project(':hotswap-core').tasks.named('shadowJar').get().archiveFile.get().asFile.absolutePath}",
-		        "--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",
-		        "-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8"
-	}
-}
-tasks.named("check") { dependsOn tasks.named("hstestMixinProbe") }
-
-// ---- SemAssert 场景迁移用的夹具编译（真实 javac 21，与 suite.sh 逐项对齐）----
-//
-// suite.sh 用 `javac -nowarn -encoding UTF-8`（无 -g/-parameters），SemAssert 的 15 个夹具
-// 全部 JDK21。Gradle 的 JavaCompile 默认会加 `-g`，必须显式把 debugLevel 钉成 javac 默认
-// 的 "source,lines"，否则 .class 字节不同、与 suite.sh 产物对不上哈希。
-//
-// 源位置：Case 在 scratch/hstest/<group>/<ver>/，helper（同包替身）在 scratch/hstest/<group>/。
-// 输出：build/hstest-fixtures/jdk21/<group>/<ver>/（DirFx 按 <group>/<ver>/<pkg>/<Case>.class 取）。
-def hstestFixtureRoot = layout.buildDirectory.dir("hstest-fixtures")
-def hstestFixtureSpecs = [
-	// [group, ver, helper 源(相对 scratch/hstest，可为 null)]
-	["swap2", "v1", "swap2/Time.java"], ["swap2", "v2", "swap2/Time.java"],
-	["leaf",  "v1", null],              ["leaf",  "v2", null], ["leaf", "v3", null],
-	["deep",  "v1", "deep/Time.java"],  ["deep",  "v2", "deep/Time.java"],
-	["two",   "v1", "two/Time2.java"],  ["two",   "v2", "two/Time2.java"],
-	["deep2", "v1", "deep2/Time3.java"],["deep2", "v2", "deep2/Time3.java"], ["deep2", "v3", "deep2/Time3.java"],
-	["save3", "v1", "save3/Time4.java"],["save3", "v2", "save3/Time4.java"], ["save3", "v3", "save3/Time4.java"],
-]
-def hstestFixtureJdk = 21
-def hstestFixtureTasks = hstestFixtureSpecs.collect { g, v, helper ->
-	tasks.register("hstestFx_${g}_${v}", JavaCompile) {
-		group = "verification"
-		description = "编译 SemAssert 夹具 ${g}/${v} (jdk${hstestFixtureJdk})"
-		source = files(fileTree("scratch/hstest/${g}/${v}") { include "**/*.java" },
-		               helper ? [file("scratch/hstest/${helper}")] : [])
-		classpath = files()   // 夹具不依赖项目库
-		destinationDirectory = hstestFixtureRoot.map { it.dir("jdk${hstestFixtureJdk}/${g}/${v}") }
-		javaCompiler = javaToolchains.compilerFor {
-			languageVersion = JavaLanguageVersion.of(hstestFixtureJdk)
-		}
-		options.encoding = "UTF-8"
-		options.warnings = false                          // -nowarn
-		options.debug = true
-		options.debugOptions.debugLevel = "source,lines"  // javac 默认；不写 Gradle 会发 -g（含 vars）
-		sourceCompatibility = "${hstestFixtureJdk}"
-		targetCompatibility = "${hstestFixtureJdk}"
-	}
-}
-
-// JUnit 入口：hstest 的全部断言都在这里（main 程序入口已逐批迁入；suite.sh / hstestRun 已下线）。
-// 注意：
-//  • useJUnitPlatform + junit-platform-launcher（runtimeOnly）缺一不可；
-//  • maxParallelForks=1：对齐器与 HotSwapAgent 有可变静态状态（bytecodeCache 等）；
-//  • 运行期仍需 hotswap-core / jni-agent 的 jar（runtimeClasspath 走 build/libs）。
-tasks.register("hstestJunit", Test) {
-	group = "verification"
-	description = "hstest 的 JUnit 入口（试点：布局门接线 + SemAssert 场景）"
-	testClassesDirs = sourceSets.hstest.output.classesDirs
-	classpath = sourceSets.hstest.runtimeClasspath
-	dependsOn tasks.named("hstestClasses")
-	dependsOn project(":hotswap-core").tasks.named("jar")
-	dependsOn project(":jni-agent").tasks.named("jar")
-	dependsOn hstestFixtureTasks
-	inputs.dir(hstestFixtureRoot)   // 夹具变了必须重跑
-	useJUnitPlatform()
-	maxParallelForks = 1
-	// 三个真实 javac 由 Gradle toolchain 解析后以系统属性交给测试，不再硬编码 F:/... 默认值。
-	// 测试侧会校验 javac -version，防止 toolchain 解析到别的 JDK 而让 "javac 8" 场景悄悄用 21 编。
-	//
-	// CI 守卫：五个 JDK（8/11/17/21/25）都必须能被 toolchain 解析。缺任何一个默认**直接失败**
-	// （并列出缺失项），避免"某个 JDK 悄悄跑不到却在 CI 里全绿"。无全部 JDK 的环境可传
-	// -Dhstest.requireJdks=false 继续（相关测试会因缺少 hstest.javacN 而硬失败）。
-	// 25 是**新 javac 编本工具链自己**的产物矩阵维度：命名/字段形态随 javac 版本变化，25 也要覆盖。
-	def requiredJdkMajors = [8, 11, 17, 21, 25]
-	doFirst {
-		def missing = []
-		requiredJdkMajors.each { v ->
-			try {
-				systemProperty "hstest.javac${v}", javaToolchains.compilerFor {
-					languageVersion = JavaLanguageVersion.of(v)
-				}.get().executablePath.asFile.absolutePath
-			} catch (Exception e) {
-				missing << v
-			}
-		}
-		if (!missing.isEmpty()) {
-			def msg = "hstestJunit: 缺少 javac toolchain " + missing.join(", ") +
-				"（配置 org.gradle.java.installations.paths，或传 -Dhstest.requireJdks=false 跳过）"
-			if (!"false".equalsIgnoreCase(System.getProperty("hstest.requireJdks", "true"))) {
-				throw new GradleException(msg)
-			}
-			logger.warn("hstest: " + msg)
-		}
-	}
-	jvmArgs "--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",
-	        "-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8"
-	systemProperty "hstest.fixtures", hstestFixtureRoot.get().asFile.absolutePath
-	// 方法顺序：默认 MethodName（确定性）；-Dhstest.order=random 改 Random 以浸泡隐式依赖。
-	// 种子用 -Dhstest.seed=NNN 传入（映射到 junit 的 random.seed 配置参数）。Random 不设为默认，
-	// 免得每次构建多个随机因素。
-	systemProperty "junit.jupiter.testmethod.order.default",
-		System.getProperty("hstest.order", "methodname").equalsIgnoreCase("random")
-			? 'org.junit.jupiter.api.MethodOrderer$Random'
-			: 'org.junit.jupiter.api.MethodOrderer$MethodName'
-	def hstestSeed = System.getProperty("hstest.seed")
-	if (hstestSeed != null) {
-		systemProperty "junit.jupiter.execution.order.random.seed", hstestSeed
-	}
-	testLogging {
-		events "failed"
-		exceptionFormat "full"
-		showStandardStreams = false
-	}
-}
-// 回归下限：hstestJunit 的测试方法总数不得低于基线（防止删一个 @Test、或整类被注释而静默变少）。
-// Gradle 的 failOnNoDiscoveredTests 只拦"一个都没发现"；这里钉住总量，上调基线须有意识地改此行。
-def hstestMinTests = 181
-tasks.register("verifyHstestTestCount") {
-	group = "verification"
-	description = "断言 hstestJunit 测试数不低于基线 ${hstestMinTests}"
-	dependsOn tasks.named("hstestJunit")
-	doLast {
-		def dir = layout.buildDirectory.dir("test-results/hstestJunit").get().asFile
-		int total = 0
-		int skipped = 0
-		dir.listFiles()?.each { f ->
-			if (f.name.startsWith("TEST-") && f.name.endsWith(".xml")) {
-				def text = f.getText("UTF-8")
-				def mt = text =~ /<testsuite[^>]*\btests="(\d+)"/
-				if (mt.find()) total += (mt.group(1) as int)
-				def ms = text =~ /<testsuite[^>]*\bskipped="(\d+)"/
-				if (ms.find()) skipped += (ms.group(1) as int)
-			}
-		}
-		if (skipped > 0) {
-			throw new GradleException("hstestJunit 有 " + skipped + " 个 skipped 测试：约定是缺 JDK 就硬失败、"
-				+ "不跳过（检查是否混入了 assumeTrue / Assumptions）。")
-		}
-		if (total < hstestMinTests) {
-			throw new GradleException("hstestJunit 测试数 " + total + " < 基线 " + hstestMinTests
-				+ "：有测试被删除或禁用？确认后用新值更新 build.gradle 的 hstestMinTests。")
-		}
-		logger.lifecycle("hstestJunit 测试数 = " + total + ", skipped = " + skipped + " (>= " + hstestMinTests + ")")
-	}
-}
-tasks.named("check") { dependsOn tasks.named("verifyHstestTestCount") }
-
-// 状态标记守卫：docs/initfix/、docs/topology/ 与源码严禁重新混入易腐状态标记（唯一真相源为 docs/status.md）。
-tasks.register("verifyDocStatusMarkers") {
-	group = "verification"
-	description = "检查设计规格文档与源码中严禁混入易腐状态标记"
-	doLast {
-		def checkDirs = [
-			file("docs/initfix"),
-			file("docs/topology"),
-			file("hotswap-core/src"),
-			file("hotswap-api/src"),
-			file("hotswap-plugin-arc/src")
-		]
-		def pattern = ~/[✅❌⬜🔶🟣]|\[(已实现|未实现|部分实现|已偏离)/
-		def violations = []
-		checkDirs.each { dir ->
-			if (dir.exists()) {
-				dir.eachFileRecurse { f ->
-					if (f.isFile() && (f.name.endsWith(".md") || f.name.endsWith(".java"))) {
-						f.eachLine("UTF-8") { line, lineNum ->
-							if (line =~ pattern) {
-								violations << "${rootDir.toPath().relativize(f.toPath())}:${lineNum}: ${line.trim()}"
-							}
-						}
-					}
-				}
-			}
-		}
-		if (!violations.isEmpty()) {
-			throw new GradleException("发现违规混入的实现状态标记（规则：实现状态唯一真相源为 docs/status.md，各设计规范与源码 Javadoc 严禁混入易腐标记）：\n"
-				+ violations.join("\n"))
-		}
-		logger.lifecycle("verifyDocStatusMarkers: 全部规范文档与源码均无违规状态标记")
-	}
-}
-tasks.named("check") { dependsOn tasks.named("verifyDocStatusMarkers") }
-
-// 幽灵桩熔断的栈探测判据（先红后绿）：透明帧必须穿透动态代理 / CellPropertyRef handler /
-// 方法句柄帧，否则被 CellPropertyRef 代理包过的回调在 UpdateRef 发起时不熔断（60FPS 空转）。
-tasks.register("hstestGhostProbe", JavaExec) {
-	group = "verification"
-	description = "运行幽灵桩熔断栈探测断言（GhostProbe）"
-	dependsOn tasks.named("hstestClasses")
-	dependsOn project(":hotswap-core").tasks.named("jar")
-	dependsOn project(":jni-agent").tasks.named("jar")
-	classpath = sourceSets.hstest.runtimeClasspath
-	mainClass = "GhostProbe"
-}
-tasks.named("check") { dependsOn tasks.named("hstestGhostProbe") }
-
-// InitFix 差分 Oracle（参考 docs/initfix/ 系列文档与 AGENTS.md）。
-//
-// 与 SemAssert 不同，它**不需要**任何外部 javac：夹具用 javax.tools 在内存里编译，
-// 因此可以作为 check 的常驻门槛。但必须依赖 hotswap-core 的 jar 重建 ——
-// runtimeClasspath 解析到的是 build/libs 下的 jar，而不是 classes 目录
-// （见 hstestJunit 上方同一坑的注释），少了 dependsOn jar 会跑出陈旧结果。
-tasks.register("hstestInitFixOracle", JavaExec) {
-	group = "verification"
-	description = "运行 InitFix 差分 Oracle（正向值比对 + 负向阻断断言）"
-	dependsOn tasks.named("hstestClasses")
-	dependsOn project(":hotswap-core").tasks.named("jar")
-	dependsOn project(":jni-agent").tasks.named("jar")
-	classpath = sourceSets.hstest.runtimeClasspath
-	mainClass = "InitFixOracle"
-	// Kotlin 夹具：两个 source set 各自编 v1/v2，输出目录按路径（-D）传入 oracle。
-	// 注意：只传路径，不进 classpath —— 同名 v1/v2 上 classpath 会互相遮蔽。
-	dependsOn tasks.named("compileKtfixV1Kotlin")
-	dependsOn tasks.named("compileKtfixV2Kotlin")
-	systemProperty "nipx.ktfix.v1", sourceSets.ktfixV1.output.classesDirs.asPath
-	systemProperty "nipx.ktfix.v2", sourceSets.ktfixV2.output.classesDirs.asPath
-	// InitFix 直接引用 jdk.internal.misc.Unsafe（`Unsafe UNSAFE = Unsafe.getUnsafe()`），
-	// 因此运行期必须显式导出该包 —— 生产环境的 launcher 也是这么给的（见 .idea/compiler.xml
-	// 与游戏启动参数里的 --add-exports java.base/jdk.internal.misc=ALL-UNNAMED）。
-	jvmArgs("--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED")
-	// Force UTF-8 for the forked JVM so redirected stdout/stderr can be read as UTF-8
-	// (the oracle prints Chinese scenario names / assertion messages).
-	jvmArgs("-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8")
-}
-tasks.named("check") { dependsOn tasks.named("hstestInitFixOracle") }
-
-// hstestRun（suite.sh / main 程序 + expected-count 基线）已下线：
-// 剩余入口全部迁到 JUnit（hstestJunit），夹具由各测试用 hstest.javacN 现编到 @TempDir。
-// 原 main 程序保留在源码树里作为可手工运行的探针，但不再参与 check。
-// （check 对 hstestJunit 的依赖见上方 verifyHstestTestCount。）
-
-// 打印 hstest 运行 classpath，供手工实验复用（唯一可信来源，避免手拼）
-tasks.register("hstestCp") {
-	doLast {
-		println sourceSets.hstest.runtimeClasspath.asPath
 	}
 }

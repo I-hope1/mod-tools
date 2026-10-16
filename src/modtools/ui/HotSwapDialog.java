@@ -10,9 +10,9 @@ import mindustry.ui.Styles;
 import modtools.ui.comp.Window;
 import modtools.ui.gen.HopeIcons;
 import modtools.unsupported.HotSwapManager;
-import nipx.HotSwapAgent;
-import nipx.HotSwapAgent.Logger;
-import nipx.profiler.ProfilerData;
+import remold.RemoldAgent;
+import remold.RemoldAgent.Logger;
+import remold.profiler.ProfilerData;
 
 /**
  * 热重载控制台
@@ -37,7 +37,7 @@ public class HotSwapDialog extends Window {
 		super("HotSwap Control", 400, 300, true);
 
 		// 1. 劫持 Logger (Agent -> UI 的桥梁)
-		this.originalLogger = HotSwapAgent.logger;
+		this.originalLogger = RemoldAgent.logger;
 		setupAgentLogger();
 
 		logLabel = new Label("");
@@ -52,7 +52,7 @@ public class HotSwapDialog extends Window {
 			IntUI.addTooltipListener(t.button(Icon.refresh, Styles.cleari, () -> {
 				 log("[lightgray]Triggering manual hotswap...[]");
 				 // 在后台执行，防止卡顿 UI
-				 Threads.daemon(HotSwapAgent::triggerHotswap);
+				 Threads.daemon(RemoldAgent::triggerHotswap);
 			 }).get(),
 			 () -> "Check for changes & Hotswap");
 
@@ -60,7 +60,7 @@ public class HotSwapDialog extends Window {
 			IntUI.addTooltipListener(t.button(Icon.box, Styles.cleari, () -> {
 				// 这里需要反射或者修改 Agent 公开 transformLoaded
 				// 假设你在 Agent 里把 transformLoaded 改为了 public static
-				Threads.daemon(HotSwapAgent::retransformLoaded);
+				Threads.daemon(RemoldAgent::retransformLoaded);
 			}).get(), () -> "Force Retransform All Classes");
 
 			// 垃圾回收
@@ -109,11 +109,11 @@ public class HotSwapDialog extends Window {
 		cont.table(t -> {
 			t.label(() -> "Heap: " + (Core.app.getJavaHeap() / 1024 / 1024) + "MB").color(Color.gray).fontScale(0.8f);
 			t.add().growX();
-			t.label(() -> "Watch: " + (HotSwapAgent.ENABLE_HOTSWAP_EVENT ? "Active" : "Passive")).color(Color.gray).fontScale(0.8f);
+			t.label(() -> "Watch: " + (RemoldAgent.ENABLE_HOTSWAP_EVENT ? "Active" : "Passive")).color(Color.gray).fontScale(0.8f);
 		}).growX().pad(2);
 
 		// 3. 窗口关闭时的资源回收 (否定之否定：恢复原状)
-		this.hidden(() -> HotSwapAgent.logger = (Logger) originalLogger);
+		this.hidden(() -> RemoldAgent.logger = (Logger) originalLogger);
 	}
 
 	/**
@@ -121,11 +121,11 @@ public class HotSwapDialog extends Window {
 	 * 既保留控制台输出，又转发到 UI，同时解决线程安全问题
 	 */
 	private void setupAgentLogger() {
-		HotSwapAgent.logger = new Logger() {
+		RemoldAgent.logger = new Logger() {
 			@Override
 			public void log(String msg) {
 				((Logger) originalLogger).log(msg); // 转发给原控制台
-				if (HotSwapAgent.DEBUG) appendUI("[lightgray]" + msg + "[]");
+				if (RemoldAgent.DEBUG) appendUI("[lightgray]" + msg + "[]");
 			}
 
 			@Override
@@ -178,7 +178,7 @@ public class HotSwapDialog extends Window {
 			appendUI("[lightgray]" + msg + "[]");
 			Log.info(msg);
 		} else {
-			HotSwapAgent.info(msg);
+			RemoldAgent.info(msg);
 		}
 	}
 }

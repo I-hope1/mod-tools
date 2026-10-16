@@ -7,8 +7,8 @@ import jdk.internal.misc.Unsafe;
 import mindustry.Vars;
 import modtools.IntVars;
 import modtools.utils.io.FileUtils;
-import nipx.UtilsAgent;
-import nipx.jni.JNIEnv;
+import modtools.agent.UtilsAgent;
+import remold.jni.JNIEnv;
 
 import java.io.*;
 import java.lang.management.ManagementFactory;
@@ -16,7 +16,9 @@ import java.util.*;
 import java.util.jar.JarFile;
 
 public class UtilsAgentManager {
-	public static final boolean DEBUG = Boolean.parseBoolean(System.getenv("nipx.agent.debug"));
+	public static final boolean DEBUG = Boolean.parseBoolean(
+		System.getenv("remold.agent.debug") != null ? System.getenv("remold.agent.debug") : System.getenv("nipx.agent.debug")
+	);
 
 	public static final  String  AGENT_NAME          = "utils-agent";
 	private static final String  AGENT_RESOURCE_PATH = "/libs/" + AGENT_NAME + ".jar";
@@ -87,8 +89,9 @@ public class UtilsAgentManager {
 		if (initialized) return; // 避免重复
 		initialized = true;
 		attachAgent(getAgentPath(), true, "");
-		Fi fi   = IntVars.libs.child("jni-agent.jar");
-		Fi dest = Vars.tmpDirectory.child("jni-agent.jar");
+		Fi fi = IntVars.libs.child("remold-native.jar");
+		if (!fi.exists()) fi = IntVars.libs.child("jni-agent.jar");
+		Fi dest = Vars.tmpDirectory.child("remold-native.jar");
 		fi.copyTo(dest);
 		appendToBootstrap(dest.absolutePath());
 

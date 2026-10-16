@@ -8,8 +8,8 @@ sourceSets.main.java.srcDirs = ["src"]
 jar {
 	manifest {
 		attributes(
-				'Agent-Class': 'nipx.UtilsAgent',
-				'Premain-Class': 'nipx.UtilsAgent',
+				'Agent-Class': 'modtools.agent.UtilsAgent',
+				'Premain-Class': 'modtools.agent.UtilsAgent',
 				'Can-Retransform-Classes': true,
 				'Can-Redefine-Classes': true
 		)

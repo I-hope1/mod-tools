@@ -16,7 +16,7 @@ import modtools.ui.comp.input.JSRequest;
 import modtools.ui.menu.MenuItem;
 import modtools.utils.ArrayUtils;
 import modtools.utils.reflect.FieldUtils;
-import nipx.annotation.*;
+import remold.annotation.*;
 
 import java.lang.reflect.Field;
 

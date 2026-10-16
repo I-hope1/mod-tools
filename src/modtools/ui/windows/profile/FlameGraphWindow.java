@@ -21,8 +21,8 @@ import modtools.ui.comp.Window;
 import modtools.ui.effect.MyDraw;
 import modtools.utils.ElementUtils;
 import modtools.utils.profiler.SamplingProfiler;
-import nipx.profiler.ProfilerData;
-import nipx.profiler.ProfilerData.FlameNode;
+import remold.profiler.ProfilerData;
+import remold.profiler.ProfilerData.FlameNode;
 
 import java.util.*;
 import java.util.function.Consumer;

@@ -6,7 +6,7 @@ import arc.util.serialization.Jval;
 import modtools.IntVars;
 import modtools.annotations.settings.*;
 import modtools.utils.reflect.ClassUtils;
-import nipx.HotSwapAgent;
+import remold.RemoldAgent;
 
 @SettingsInit
 public enum E_Hook implements ISettings {
@@ -24,7 +24,7 @@ public enum E_Hook implements ISettings {
 	hotswap_blacklist(String[].class, i -> i.array(
 	 new String[]{"java.", "javax.", "jdk.", "sun.",
 	              "kotlin.", "kotlinx.", "arc.", "mindustry.", "rhino.", "mindustryX.",
-	              "nipx."})),
+	              "remold."})),
 	@Switch(dependency = "hot_swap")
 	retransform_loaded,
 	@Switch(dependency = "hot_swap")
@@ -95,14 +95,14 @@ public enum E_Hook implements ISettings {
 		hotswapOnChange(capture_all_exceptions, func);
 	}
 	private static void setProperty(E_Hook _enum) {
-		System.setProperty("nipx.agent." + _enum.name(), _enum.getString());
+		System.setProperty("remold.agent." + _enum.name(), _enum.getString());
 	}
 
 	static void hotswapOnChange(ISettings setting, Func<ISettings, String> func) {
 		setting.runAndOnChange(() -> {
-			System.setProperty("nipx.agent." + setting.name(), func.get(setting));
+			System.setProperty("remold.agent." + setting.name(), func.get(setting));
 			try {
-				HotSwapAgent.initConfig();
+				RemoldAgent.initConfig();
 			} catch (NoClassDefFoundError _) { }
 		});
 	}

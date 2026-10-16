@@ -93,12 +93,6 @@ public class HotSwapManager {
 			return agentPathCache;
 		}
 		Fi lib = IntVars.libs.child(AGENT_NAME + ".jar");
-		if (!lib.exists()) {
-			Fi fallback = IntVars.libs.child("remold-core.jar");
-			if (!fallback.exists()) fallback = IntVars.libs.child("hotswap-core.jar");
-			if (!fallback.exists()) fallback = IntVars.libs.child("hotswap-agent.jar");
-			if (fallback.exists()) lib = fallback;
-		}
 		Fi tempFile = FileUtils.copyToTmp(lib);
 		tempFile.file().deleteOnExit();
 		agentPathCache = tempFile.path();

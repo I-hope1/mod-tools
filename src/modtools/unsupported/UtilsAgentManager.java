@@ -16,9 +16,7 @@ import java.util.*;
 import java.util.jar.JarFile;
 
 public class UtilsAgentManager {
-	public static final boolean DEBUG = Boolean.parseBoolean(
-		System.getenv("remold.agent.debug") != null ? System.getenv("remold.agent.debug") : System.getenv("nipx.agent.debug")
-	);
+	public static final boolean DEBUG = Boolean.parseBoolean(System.getenv("remold.agent.debug"));
 
 	public static final  String  AGENT_NAME          = "utils-agent";
 	private static final String  AGENT_RESOURCE_PATH = "/libs/" + AGENT_NAME + ".jar";
@@ -90,8 +88,6 @@ public class UtilsAgentManager {
 		initialized = true;
 		attachAgent(getAgentPath(), true, "");
 		Fi fi = IntVars.libs.child("remold-panama.jar");
-		if (!fi.exists()) fi = IntVars.libs.child("remold-native.jar");
-		if (!fi.exists()) fi = IntVars.libs.child("jni-agent.jar");
 		Fi dest = Vars.tmpDirectory.child("remold-panama.jar");
 		fi.copyTo(dest);
 		appendToBootstrap(dest.absolutePath());

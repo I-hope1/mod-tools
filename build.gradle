@@ -254,8 +254,8 @@ jar {
 	from(configurations.remoldAgentLib) {
 		into "libs"
 		rename { String name ->
-			if (name.startsWith("remold-agent") || name.startsWith("remold-core") || name.startsWith("core-")) return "remold-agent.jar"
-			if (name.startsWith("remold-panama") || name.startsWith("panama-") || name.startsWith("remold-native") || name.startsWith("native-")) return "remold-panama.jar"
+			if (name.startsWith("remold-agent") || name.startsWith("core-")) return "remold-agent.jar"
+			if (name.startsWith("remold-panama") || name.startsWith("panama-")) return "remold-panama.jar"
 			return name
 		}
 	}

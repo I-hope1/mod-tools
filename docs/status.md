@@ -151,7 +151,7 @@
 | **子类引用多重集独立正交维度** | P2 | [`08-decisions.md#d-anon-1`](topology/08-decisions.md#d-anon-1) | `AnonClassHasher` 哈希解耦 | 将子类引用建模为独立正交维度，解决 D-ANON-1 中子类改动对父类逐级向上传导的雪崩退化，收敛夹具 L/M 保守拒绝代价 |
 | **Analyzer 独立库化** | P2 | [`04-target-design.md`](initfix/04-target-design.md) §3 | ASM 工具链解耦 | 分析器作为纯函数独立，支持在 Gradle 构建端或 PC 端离线分析，减小运行期探针开销与内存占用 |
 | **增强重定义模式四个未覆盖盲区验证与防护** | P2 | [`08-decisions.md`](topology/08-decisions.md) 附录 A | 专用探针套件建设 | 覆盖 JIT 编译后内联代码对新布局的观察、`volatile`/`final` 复杂修饰符、继承体系跨层遮蔽、JBR 25 重复验证 |
-| **JBR 运行时嫁接与自重启引导器 (`graft-agent`)** | P2 | 运行环境引导与启动规范 | `HotSwapAgent.isEnhancedHotswapEnabled()` 探针 | 应用以普通 Java 启动时，由 graft-agent 探测 JVM 环境；若缺少增强能力，自动下载/就绪 JBR 运行时，并通过 ProcessBuilder 蹦床机制带增强参数与 Agent 重启宿主，实现开箱即用热更嫁接 |
+| **JBR 运行时重塑与自重启引导器 (`Remold` / `remold-launcher`)** | P2 | 运行环境引导与启动规范 | `HotSwapAgent.isEnhancedHotswapEnabled()` 探针 | 应用以普通 Java 启动时，由 Remold 探测 JVM 环境；若缺少增强重定义能力，自动下载/就绪 JBR 运行时，并通过 ProcessBuilder 蹦床机制带增强参数与热更核心重启宿主，实现开箱即用运行时重塑 |
 | **ECJ 编译器矩阵支持** | P3 | [`07-layout-gate-and-risks.md`](topology/07-layout-gate-and-risks.md) §4 | ECJ 构建环境夹具 | 针对 Eclipse 编译器的 switch table 实现（内部 `$SWITCH_TABLE$` 方法）与 EnclosingMethod 结构差异建立对齐与防护 |
 | **新 javac 加旧 -target 交叉编译矩阵支持** | P3 | [`07-layout-gate-and-risks.md`](topology/07-layout-gate-and-risks.md) §3 | CI 交叉编译任务配置 | 验证新版 javac 携带 `-target 8/11` 等产物的命名与属性表现 |
 | **未知 class major 显式拒绝** | P3 | [`06-runtime-and-perf.md`](topology/06-runtime-and-perf.md) §1 | 无 | 遇到高于当前 JVM 支持的 class major 版本时显式拒绝而非尝试解析，防止 ASM Crash |

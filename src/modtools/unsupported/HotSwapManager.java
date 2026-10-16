@@ -22,7 +22,7 @@ import java.io.File;
  * 这个类是无状态的，可以被重复调用。
  */
 public class HotSwapManager {
-	private static final String  AGENT_NAME          = "remold-core";
+	private static final String  AGENT_NAME          = "remold-agent";
 	private static final String  AGENT_RESOURCE_PATH = "/libs/" + AGENT_NAME + ".jar";
 	private static       String  agentPathCache      = null;
 	private static       boolean initialized         = false;
@@ -94,7 +94,8 @@ public class HotSwapManager {
 		}
 		Fi lib = IntVars.libs.child(AGENT_NAME + ".jar");
 		if (!lib.exists()) {
-			Fi fallback = IntVars.libs.child("hotswap-core.jar");
+			Fi fallback = IntVars.libs.child("remold-core.jar");
+			if (!fallback.exists()) fallback = IntVars.libs.child("hotswap-core.jar");
 			if (!fallback.exists()) fallback = IntVars.libs.child("hotswap-agent.jar");
 			if (fallback.exists()) lib = fallback;
 		}

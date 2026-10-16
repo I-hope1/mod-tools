@@ -89,9 +89,10 @@ public class UtilsAgentManager {
 		if (initialized) return; // 避免重复
 		initialized = true;
 		attachAgent(getAgentPath(), true, "");
-		Fi fi = IntVars.libs.child("remold-native.jar");
+		Fi fi = IntVars.libs.child("remold-panama.jar");
+		if (!fi.exists()) fi = IntVars.libs.child("remold-native.jar");
 		if (!fi.exists()) fi = IntVars.libs.child("jni-agent.jar");
-		Fi dest = Vars.tmpDirectory.child("remold-native.jar");
+		Fi dest = Vars.tmpDirectory.child("remold-panama.jar");
 		fi.copyTo(dest);
 		appendToBootstrap(dest.absolutePath());
 

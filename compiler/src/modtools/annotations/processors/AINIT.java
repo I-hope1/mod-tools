@@ -2,6 +2,7 @@ package modtools.annotations.processors;
 
 import com.google.auto.service.AutoService;
 import modtools.annotations.*;
+import modtools.annotations.unsafe.JavacTargeting;
 import modtools.annotations.unsafe.Replace;
 
 import javax.annotation.processing.*;
@@ -46,7 +47,7 @@ public class AINIT extends AbstractProcessor {
 	}
 
 	public Set<String> getSupportedOptions() {
-		return Set.of(Replace.forceJavaVersionOri);
+		return Set.of(JavacTargeting.FORCE_JAVA_VERSION_ORI);
 	}
 	// 这里的override用于只是启用process
 	public Set<String> getSupportedAnnotationTypes() {

@@ -4,8 +4,6 @@ import com.sun.source.util.*;
 import com.sun.tools.javac.api.*;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Kinds.Kind;
-import com.sun.tools.javac.code.Lint.LintCategory;
-import com.sun.tools.javac.code.Source.Feature;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.comp.*;
 import com.sun.tools.javac.comp.CompileStates.CompileState;
@@ -30,7 +28,6 @@ import javax.annotation.processing.*;
 import javax.lang.model.element.Element;
 import javax.tools.JavaFileObject;
 import java.io.*;
-import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -43,13 +40,10 @@ import static com.sun.tools.javac.util.Iterators.createCompoundIterator;
 import static modtools.annotations.HopeReflect.*;
 import static modtools.annotations.PrintHelper.SPrinter.*;
 import static modtools.annotations.PrintHelper.errs;
+import static modtools.annotations.unsafe.ContextPatcher.removeKey;
 
 @SuppressWarnings("removal")
 public class Replace {
-	public static final String forceJavaVersionOri = "targetVersion";
-	public static final String forceJavaVersion    = "-A" + forceJavaVersionOri;
-	public static       Source targetVersion       = Source.JDK8;
-
 	public static Context       context;
 	public static ClassFinder   classFinder;
 	public static Symtab        syms;
@@ -136,9 +130,9 @@ public class Replace {
 	private static void extendingFunc0() throws Exception {
 		accessOverride();
 
-		forceJavaVersion();
+		JavacTargeting.forceJavaVersion(context);
 
-		forcePreview();
+		JavacTargeting.forcePreview(context);
 
 		other();
 
@@ -154,7 +148,7 @@ public class Replace {
 	 */
 	private static void accessOverride() {
 		Resolve prev = Resolve.instance(context);
-		removeKey(Resolve.class, () -> tryDefineOne(prev));
+		removeKey(context, Resolve.class, () -> tryDefineOne(prev));
 		Resolve resolve = Resolve.instance(context);
 		NOT_FOUND = getAccess(Resolve.class, resolve, "typeNotFound");
 
@@ -230,7 +224,7 @@ public class Replace {
 		// 适配d8无法编译jdk21的枚举(enum)的字节码
 		Options.instance(context).put(Option.PARAMETERS, "");
 
-		removeKey(TransPatterns.class, () -> new MyTransPatterns(context));
+		removeKey(context, TransPatterns.class, () -> new MyTransPatterns(context));
 
 		TopTranslator     topTranslator     = TopTranslator.instance(context);
 		MultiTaskListener multiTaskListener = MultiTaskListener.instance(context);
@@ -290,69 +284,6 @@ public class Replace {
 		}
 	}
 
-	public static void forceJavaVersion() {
-		String   key     = forceJavaVersion;
-		Options  options = Options.instance(context);
-		String[] s       = {null};
-		options.keySet().stream()
-		 .filter(f -> f.startsWith(key + "=")).findFirst()
-		 .map(v -> {
-			 s[0] = v;
-			 return v.substring(key.length() + 1); // 包括了'='
-		 })
-		 .map(Target::lookup).ifPresent(Replace::setTarget);
-		if (s[0] != null) options.remove(s[0]);
-		// Options.instance(context).keySet().stream()
-		//  .filter(f -> f.startsWith("-AtargetVersion=")).findFirst().ifPresent(f -> Options.instance(context).remove(f));
-	}
-	/** 使source8就可以支持所有特性 */
-	public static void replaceSource() {
-		long off = fieldOffset(Feature.class, "minLevel");
-		for (Feature feature : Feature.values()) {
-			if (!feature.allowedInSource(targetVersion)) {
-				unsafe.putObject(feature, off, targetVersion);
-			}
-		}
-	}
-	private static void forcePreview() {
-		try {
-			forceEnablePreview0();
-		} catch (NoClassDefFoundError | NoSuchMethodError _) { }
-	}
-
-	private static void forceEnablePreview0() {
-		Preview preview = Preview.instance(context);
-		if (!preview.isEnabled()) {
-			setAccess(Preview.class, preview, "enabled", true);
-		}
-		Lint.instance(context).suppress(LintCategory.PREVIEW);
-		runIgnoredException(() -> Check.instance(context).disablePreviewCheck = true);
-		setAccess(Preview.class, preview, "sourcesWithPreviewFeatures", new HashSet<>() {
-			public boolean contains(Object o) {
-				return false;
-			}
-		});
-	}
-	private static void setTarget(Target target) {
-		if (target == null) return;
-		removeKey(Target.class, () -> target);
-		println("targetVersion: @ (@)", target.ordinal() + 1, target);
-
-		// jdk9才有
-		removeKey("concatKey", StringConcat.class, null);
-
-		// removeKey(ClassWriter.class, () -> new MyClassWriter(context));
-		// setAccess(JavaCompiler.class, JavaCompiler.instance(context), "writer", ClassWriter.instance(context));
-
-		// 用于适配低版本
-		runIgnoredException(() -> setAccess(Lower.class, Lower.instance(context), "useMatchException", false));
-		setAccess(Lower.class, Lower.instance(context), "target", target);
-		runIgnoredException(() -> setAccess(LambdaToMethod.class, LambdaToMethod.instance(context), "nestmateLambdas", false));
-		setAccess(Gen.class, Gen.instance(context), "concat", StringConcat.instance(context));
-		setAccess(ClassWriter.class, ClassWriter.instance(context), "target", target);
-	}
-
-
 	/** @see com.sun.tools.javac.comp.Resolve#lookupInvisibleSymbol */
 	public static <S extends Symbol> Symbol lookupInvisibleSymbol(
 	 Env<AttrContext> env,
@@ -404,58 +335,12 @@ public class Replace {
 		}
 	}
 
-	private static void runIgnoredException(Runnable r) { try { r.run(); } catch (Throwable ignored) { } }
-	static void setValue(Class<?> cl, String key, Object val) {
-		Object instance = invoke(cl, null, "instance", new Object[]{context}, Context.class);
-		setAccess(cl, instance, key, val);
-	}
-	private static <T> void re_init(Class<T> clazz, T instance) throws Throwable {
-		MethodHandle init = InitHandleC.findInitDesktop(clazz, clazz.getDeclaredConstructor(Context.class), clazz);
-		init.invoke(instance, context);
-	}
-
-	/// ------------------------------
-
-	private static void removeKey(Class<?> cls) {
-		removeKey(cls, null);
-	}
-	public static <T> void removeKey(Class<T> cls, Supplier<T> newVal) {
-		String s = (cls.isMemberClass() ? cls.getNestHost().getSimpleName() : "") + cls.getSimpleName();
-		if (s.startsWith("JC")) s = s.substring(2);
-		removeKey(s.substring(0, 1).toLowerCase() + s.substring(1) + "Key", cls, newVal);
-	}
-	private static <T> void removeKey(String name, Class<T> cls, Supplier<T> newVal) {
-		Key<Resolve>            key  = getAccess(cls, null, name);
-		HashMap<Key<?>, Object> ht   = getAccess(Context.class, context, "ht");
-		Object                  prev = ht.remove(key);
-		if (newVal != null) {
-			Object value = newVal.get();
-			// if (prev != null) copyTo(prev, value);
-			if (!ht.containsKey(key)) ht.put(key, value);
-		}
-	}
-
-	private static <T> void copyTo(T src, T dest) {
-		Class<?> clazz = src.getClass();
-		while (clazz != Object.class) {
-			for (Field field : clazz.getDeclaredFields()) {
-				if (field.getType().isPrimitive()) continue;
-				int mod = field.getModifiers();
-				if (Modifier.isStatic(mod)) continue;
-				long off = unsafe.objectFieldOffset(field);
-				unsafe.putObject(dest, off, unsafe.getObject(src, off));
-				// println(unsafe.getObject(dest, off));
-			}
-			clazz = clazz.getSuperclass();
-		}
-	}
-
 	private static long off_stateValue;
 	public static void init() throws Throwable {
 		off_stateValue = unsafe.objectFieldOffset(CompileState.class.getDeclaredField("value"));
 		/* 使语法解析不会stop继续编译 */
 		unsafe.putInt(CompileState.INIT, off_stateValue, 100);
-		replaceSource();
+		JavacTargeting.replaceSource();
 	}
 	static boolean first = true;
 	/** 优先级很高 */

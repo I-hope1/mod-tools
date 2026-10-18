@@ -131,6 +131,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 	ClassSymbol currentSettings;
 	JCClassDecl currentClassDecl;
+	private final SwitchMethods switchMethods = new SwitchMethods();
 
 	private void processSetting(ClassSymbol settings, JCClassDecl classDecl,
 	                            Object literalName, String parent, boolean fireEvents) throws IOException {
@@ -149,7 +150,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		// mMaker.at(classDecl.defs.get(0));
 		// classDecl.extending = mMaker.Ident(settingsImpl);
 
-		allSwitches.clear();
+		switchMethods.clear();
 		allEnumFields.clear();
 		flushAssignment.clear();
 
@@ -164,7 +165,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 				VarSymbol symbol = getSymbol(unit, tree);
 
 				allEnumFields.put(symbol, "boolean");
-				collectSwitch(symbol);
+				switchMethods.collect(symbol);
 
 				// %name%.def(%args%[0])
 				Name name = tree.name;
@@ -241,7 +242,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 		// println(classDecl);
 
-		buildSwitch();
+		switchMethods.build(classDecl, settings, iSettings, mMaker, mSymtab);
 		addImport(settings, dataClass);
 
 		mMaker.at(classDecl.defs.last());
@@ -346,57 +347,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			buildAssignment(classType, access, mMaker.This(currentSettings.type)), null)
 		);
 	}
-	// ai 生成就是快
-	private void buildSwitch() {
-		if (allSwitches.isEmpty()) return;
-		/* 仿照上面的，参加一个方法 boolean hasSwitch() {
-			if (this == %name1%) return true;
-			if (this == %name2%) return true;
-			...
-			return false;
-		} */
-		mMaker.at(currentClassDecl.defs.last());
-		MethodSymbol            ms         = new MethodSymbol(Flags.PUBLIC, ns("hasSwitch"), mSymtab.booleanType, currentSettings);
-		ListBuffer<JCStatement> listBuffer = new ListBuffer<>();
-		allSwitches.forEach((symbol, aSwitch) -> {
-			JCStatement ifState = mMaker.If(mMaker.Binary(Tag.EQ, mMaker.Ident(symbol),
-			 mMaker.This(currentSettings.type)), mMaker.Return(mMaker.Literal(true)), null);
-			listBuffer.append(ifState);
-		});
-		listBuffer.append(mMaker.Return(mMaker.Literal(false)));
-		JCMethodDecl method = mMaker.MethodDef(ms, PBlock(listBuffer.toList()));
-		method.restype = mMaker.Type(mSymtab.booleanType);
-		currentSettings.members().enter(ms);
-		currentClassDecl.defs = currentClassDecl.defs.append(method);
-
-		/* 仿照上面的，参加一个方法 String switchKey() {
-			if (this == %name1%) return %dependency1%;
-			if (this == %name2%) return %dependency2%;
-			...
-			return ISettings.super.switchKey();
-		} */
-
-		mMaker.at(currentClassDecl.defs.last());
-		ms = new MethodSymbol(Flags.PUBLIC, ns("switchKey"), mSymtab.stringType, currentSettings);
-		listBuffer.clear();
-		allSwitches.forEach((symbol, aSwitch) -> {
-			if (aSwitch.dependency().isEmpty()) return;
-			listBuffer.append(mMaker.If(mMaker.Binary(Tag.EQ, mMaker.Ident(symbol),
-			 mMaker.This(currentSettings.type)), mMaker.Return(mMaker.Literal(aSwitch.dependency())), null));
-		});
-		listBuffer.append(mMaker.Return(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Select(mMaker.Type(iSettings.type), ns("super")), ns("switchKey")), List.nil())));
-		method = mMaker.MethodDef(ms, PBlock(listBuffer.toList()));
-		method.restype = mMaker.Type(mSymtab.stringType);
-		currentSettings.members().enter(ms);
-		currentClassDecl.defs = currentClassDecl.defs.append(method);
-	}
-	Map<VarSymbol, Switch> allSwitches   = new LinkedHashMap<>();
 	Map<VarSymbol, String> allEnumFields = new LinkedHashMap<>();
-	private void collectSwitch(VarSymbol symbol) {
-		Switch aSwitch = symbol.getAnnotation(Switch.class);
-		if (aSwitch == null) return;
-		allSwitches.put(symbol, aSwitch);
-	}
 	private JCExpressionStatement buildAssignment(JCFieldAccess classType, JCFieldAccess access,
 	                                              JCExpression selector) {
 		return mMaker.Exec(mMaker.Assign(access,

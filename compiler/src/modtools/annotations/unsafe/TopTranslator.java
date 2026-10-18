@@ -412,11 +412,16 @@ public class TopTranslator extends TreeTranslator {
 	}
 
 	private void transTree(JCTree tree) {
-		todos.stream().filter(todo -> todo.predicate.test(tree))
-		 .map(todo -> todo.treeTrans.apply(tree))
-		 .filter(Objects::nonNull)
-		 .limit(1)
-		 .forEach(tree2 -> result = tree2);
+		// 每个 AST 节点都会走这里，别用 stream（每次都要分配 4 个中间对象）
+		for (int i = 0, size = todos.size(); i < size; i++) {
+			ToTranslate todo = todos.get(i);
+			if (!todo.predicate.test(tree)) continue;
+			JCTree replaced = todo.treeTrans.apply(tree);
+			if (replaced != null) {
+				result = replaced;
+				return;
+			}
+		}
 	}
 	//endregion visit
 

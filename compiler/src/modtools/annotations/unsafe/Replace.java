@@ -119,6 +119,12 @@ public class Replace {
 	}
 
 	public static final HashMap<ModuleSymbol, ClassSymbol> moduleRepresentClass = new HashMap<>();
+	/** 换 {@link Context} 时必须丢弃上一轮编译的模块/包符号 */
+	public static void resetContextCaches() {
+		moduleRepresentClass.clear();
+		needExportedApi.clear();
+		first = true;
+	}
 	public static void searchModuleExport(ModuleSymbol module) {
 		if (moduleRepresentClass.containsKey(module)) return;
 		module.exports.stream().filter(export -> export.modules == null).findFirst().ifPresent(d -> {
@@ -238,64 +244,50 @@ public class Replace {
 		// setAccess(Gen.class, Gen.instance(context), "lower", lower);
 	}
 	public static final HashSet<PackageSymbol> needExportedApi = new HashSet<>();
+
+	/**
+	 * 摘掉两类诊断：包不可见错误，以及“能自愈”的语法错误（自愈逻辑见 {@link SyntaxErrorPatcher}）。
+	 * <p>
+	 * 自愈失败时保留诊断，让 javac 正常报错——这里不能反过来打断编译。
+	 */
 	public static void fixSyntaxErrorAndSkipInvisibleError() {
 		DeferredDiagnosticHandler handler = getAccess(Log.class, Log.instance(context), "diagnosticHandler");
 		Collection<JCDiagnostic> deferred = getAccess(DeferredDiagnosticHandler.class, handler, "deferred");
-		ListBuffer<JCDiagnostic>  buffer  = new ListBuffer<>();
+		ListBuffer<JCDiagnostic> buffer = new ListBuffer<>();
 
-		int[] positionOffset = {0};
+		SyntaxErrorPatcher patcher = SyntaxErrorPatcher.forContext(context);
+		buffer.addAll(deferred.stream().filter(diag -> keepDiagnostic(diag, patcher)).toList());
 
-		boolean illegalStartOf = true;
-		// handler.getDiagnostics()
-		//  .stream().forEach(diag -> println(diag.getMessage(Locale.getDefault()) + ":" + getAccess(JCDiagnostic.class, diag, "flags")));
-		buffer.addAll(deferred
-		 .stream()
-		 .filter(diag -> {
-			 // skip包不可见的错误
-			 if (diag.isFlagSet(DiagnosticFlag.RESOLVE_ERROR) && diag.getCode().contains("package.not.visible")) return false;
-			 // 语法错误
-			 if (!diag.isFlagSet(DiagnosticFlag.SYNTAX)) return true;
-
-			 try {
-				 JavaFileObject filer = diag.getSource();
-				 String[]       args  = Arrays.stream(diag.getArgs()).map(String::valueOf).toArray(String[]::new);
-				 if (args.length == 0) {
-					 if (illegalStartOf && diag.getCode().contains("illegal.start.of")) {
-						 StringBuilder target = new StringBuilder(filer.getCharContent(true));
-						 try (var input = new FileOutputStream(new File(filer.toUri()))) {
-							 input.write(target.deleteCharAt((int) diag.getPosition() + positionOffset[0]).toString().getBytes());
-							 positionOffset[0]--;
-						 }
-						 return false;
-					 }
-					 // println(diag);
-					 return true;
-				 }
-				 if (!(args[0].length() == 3 && args[0].charAt(0) == '\'' && args[0].charAt(2) == '\'')) return true;
-
-				 errs(
-					"Added " + args[0] + " at " + filer.getName() + "(" + diag.getLineNumber() + ":" + diag.getColumnNumber() + ")"
-				 );
-				 StringBuilder target = new StringBuilder(filer.getCharContent(true));
-				 int           index  = (int) diag.getPosition() + positionOffset[0];
-				 if (target.charAt(index) == ')') {
-					 target.deleteCharAt(index);
-				 } else {
-					 target.insert(index, args[0].charAt(1));
-				 }
-				 positionOffset[0]++;
-
-				 try (var input = new FileOutputStream(new File(filer.toUri()))) {
-					 input.write(target.toString().getBytes());
-				 }
-				 return false;
-			 } catch (Throwable e) {
-				 err(e);
-			 }
-			 return true;
-		 }).toList());
 		setAccess(DeferredDiagnosticHandler.class, handler, "deferred",
 		 deferred instanceof java.util.List<JCDiagnostic> ? new ArrayList<>(buffer) : buffer);
+	}
+
+	/** @return {@code true} 表示保留该诊断 */
+	private static boolean keepDiagnostic(JCDiagnostic diag, SyntaxErrorPatcher patcher) {
+		// skip包不可见的错误
+		if (diag.isFlagSet(DiagnosticFlag.RESOLVE_ERROR) && diag.getCode().contains("package.not.visible")) return false;
+		// 只有语法错误才尝试自愈
+		if (!diag.isFlagSet(DiagnosticFlag.SYNTAX)) return true;
+
+		try {
+			JavaFileObject source = diag.getSource();
+			if (source == null) return true;
+
+			String[] args = Arrays.stream(diag.getArgs()).map(String::valueOf).toArray(String[]::new);
+			if (args.length == 0) {
+				// illegal.start.of：多写了一个字符
+				return !(diag.getCode().contains("illegal.start.of") && patcher.drop(source, (int) diag.getPosition()));
+			}
+			// 参数形如 "'x'"，即 javac 认为这里少了一个字符
+			if (!(args[0].length() == 3 && args[0].charAt(0) == '\'' && args[0].charAt(2) == '\'')) return true;
+
+			errs("Added " + args[0] + " at " + source.getName() + "(" + diag.getLineNumber() + ":" + diag.getColumnNumber() + ")");
+			return !patcher.fix(source, (int) diag.getPosition(), args[0].charAt(1));
+		} catch (Throwable e) {
+			// 自动修正只是尽力而为：单条诊断失败就放过，绝不能让 javac 停下来
+			errs("[MISC]: failed to patch source, skipped: " + e);
+			return true;
+		}
 	}
 
 	public static void forceJavaVersion() {
@@ -370,7 +362,8 @@ public class Replace {
 	 Predicate<S> validate,
 	 Symbol defaultResult) {
 		if (name.toString().startsWith("[")) return defaultResult;
-		Times.mark();
+		// 注意：这里曾经调用过 Times.mark()，但对应的 printElapsed 已被注释掉，
+		// 而 mark() 压入的栈永远没有出栈 —— 每次符号查找都会泄漏一个 Long。计时需要成对使用。
 		try {
 			//even if a class/package cannot be found in the current module and among packages in modules
 			//it depends on that are exported for any or this module, the class/package may exist internally

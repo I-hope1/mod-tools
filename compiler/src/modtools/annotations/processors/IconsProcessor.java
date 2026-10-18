@@ -84,7 +84,7 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 		 .append(mainClassName).append(".class).name;\n");
 
 		for (File fi : pngs) {
-			String f_name = kebabToCamel(nameWithoutExtension(fi));
+			String f_name = NameUtils.kebabToCamel(nameWithoutExtension(fi));
 			out.append("    public static TextureRegionDrawable ").append(f_name).append(";\n");
 			loadBody.append("        ").append(f_name).append(" = n(\"").append(nameWithoutExtension(fi)).append("\");\n");
 		}

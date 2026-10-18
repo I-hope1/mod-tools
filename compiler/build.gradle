@@ -3,7 +3,20 @@ plugins {
     id 'maven-publish'
 }
 
-sourceSets.main.java.srcDirs = ["src"]
+// 主源集直接就是 src/，必须把测试目录排除掉，否则 src/test/java 会被当成主代码编译
+sourceSets {
+	main {
+		java {
+			srcDirs = ["src"]
+			exclude "test/**"
+		}
+	}
+	test {
+		java {
+			srcDirs = ["src/test/java"]
+		}
+	}
+}
 
 publishing {
 	publications {
@@ -33,6 +46,36 @@ dependencies {
 //	implementation "com.github.Anuken.Arc:arc-core:$mindustryVersion"
 //	implementation "com.github.Anuken.Mindustry:core:$mindustryVersion"
 
+	testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+	useJUnitPlatform()
+	// 测试直接在进程内驱动 javac 的 Context/AST，需要与主构建一致的模块开放
+	def testExports = [
+		'java.base/jdk.internal.misc',
+		'java.base/jdk.internal.reflect',
+		'java.base/jdk.internal.module',
+		'java.base/jdk.internal.access',
+		'java.base/sun.reflect.annotation',
+		'jdk.compiler/com.sun.tools.javac.api',
+		'jdk.compiler/com.sun.tools.javac.code',
+		'jdk.compiler/com.sun.tools.javac.comp',
+		'jdk.compiler/com.sun.tools.javac.file',
+		'jdk.compiler/com.sun.tools.javac.jvm',
+		'jdk.compiler/com.sun.tools.javac.main',
+		'jdk.compiler/com.sun.tools.javac.model',
+		'jdk.compiler/com.sun.tools.javac.parser',
+		'jdk.compiler/com.sun.tools.javac.processing',
+		'jdk.compiler/com.sun.tools.javac.tree',
+		'jdk.compiler/com.sun.tools.javac.util',
+	]
+	jvmArgs += testExports.collect { "--add-exports=$it=ALL-UNNAMED" }
+	testLogging {
+		events "passed", "skipped", "failed"
+		exceptionFormat "full"
+	}
 }
 jar {
 	exclude "module-info.class"

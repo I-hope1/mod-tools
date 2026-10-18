@@ -32,10 +32,6 @@ public interface AnnotationUtils {
 			});
 		});
 	}
-	/* 标识，以免冲突 */
-	class MyList<T> extends ArrayList<T> {
-		public MyList() { }
-	}
 	private static void covertTreeToAttribute(Attribute attribute, Object value) {
 		if (attribute instanceof Constant) {
 			HopeReflect.set(Constant.class, attribute, "value", value);
@@ -106,64 +102,16 @@ public interface AnnotationUtils {
 		return ann;
 	}
 
+	/** @see AnnotationValues#genericAnnotation(Class, CompilationUnitTree, Tree) */
 	default Map<String, Object>
 	genericAnnotation(Class<? extends Annotation> clazz,
 	                  CompilationUnitTree unit,
 	                  Tree node) {
-		Map<String, Object> ann = AnnotationType.getInstance(clazz).memberDefaults();
-		for (JCExpression arg : ((JCAnnotation) node).args) {
-			JCExpression rhs   = ((JCAssign) arg).rhs;
-			Object       value = treeToConstant(unit, rhs);
-			if (value != null) ann.put(((JCAssign) arg).lhs.toString(), value);
-		}
-		// Log.info(ann);
-		return ann;
+		return AnnotationValues.genericAnnotation(clazz, unit, node);
 	}
-	default Object treeToConstant(CompilationUnitTree unit, JCTree node) {
-		return treeToConstantStatic(unit, node);
-	}
-	private Object treeToConstantStatic(CompilationUnitTree unit, JCTree node) {
-		switch (node) {
-			case JCLiteral jcLiteral -> {
-				return jcLiteral.value;
-			}
-			case JCNewArray jcNewArray -> {
-				return jcNewArray.elems.stream().map(t -> treeToConstant(unit, t))
-				 .collect(Collectors.toCollection(MyList::new));
-			}
-			case JCFieldAccess field -> {
-				TreePath path   = trees.getPath(unit, node);
-				Symbol   symbol = trees.getElement(path);
 
-				if (symbol instanceof VarSymbol v) {
-					if ("class".equals(symbol.name.toString())) {
-						return symbol.type.getTypeArguments().get(0);
-					}
-					if (field.selected instanceof JCIdent ident && ident.sym != symbol && ident.sym instanceof ClassSymbol cs) {
-						JCVariableDecl child = findChild(trees.getTree(cs), Tag.VARDEF,
-						 (JCVariableDecl t) -> t.name.equals(((JCFieldAccess) node).name));
-						// if (child == null) return null;
-						return treeToConstant(unit, child.init);
-					}
-					JCVariableDecl decl = (JCVariableDecl) trees.getTree(v);
-					if (decl != null) {
-						return treeToConstant(unit, decl.init);
-					}
-				}
-			}
-			case JCIdent _ -> {
-				TreePath path   = trees.getPath(unit, node);
-				Symbol   symbol = trees.getElement(path);
-				if (symbol instanceof VarSymbol v) {
-					JCVariableDecl decl = (JCVariableDecl) trees.getTree(v);
-					if (decl != null) {
-						return treeToConstant(unit, decl.init);
-					}
-				}
-			}
-			case null, default -> {
-			}
-		}
-		return null;
+	/** @see AnnotationValues#treeToConstant(CompilationUnitTree, JCTree) */
+	default Object treeToConstant(CompilationUnitTree unit, JCTree node) {
+		return AnnotationValues.treeToConstant(unit, node);
 	}
 }

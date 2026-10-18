@@ -55,6 +55,11 @@ public interface PrintHelper {
 			String s = sw.toString();
 			return new Error("any", "1", s);
 		} */
+		/**
+		 * 上报处理器内部错误：打印堆栈，并<b>中止本轮编译</b>。
+		 * <p>
+		 * 正常诊断请用 {@code log.error(SPrinter.err(msg))}，不要走这里——这里的语义是“处理器自身出问题了”。
+		 */
 		static void err(Throwable th) {
 			StringWriter sw = new StringWriter();
 			PrintWriter  pw = new PrintWriter(sw);
@@ -65,7 +70,15 @@ public interface PrintHelper {
 			if (Replace.log == null) {
 				throw new RuntimeException(th);
 			}
-			Replace.log.error(SPrinter.err(s));
+			abortCompilation(s);
+		}
+
+		/**
+		 * 中止编译的唯一出口：记一条 error，并让 javac 停在 {@link CompileState#INIT}。
+		 * 用于处理器无法安全继续的场景（半成品树继续走下去只会产出更难查的错误）。
+		 */
+		static void abortCompilation(String message) {
+			Replace.log.error(SPrinter.err(message));
 			Replace.compiler.shouldStopPolicyIfError = CompileState.INIT;
 		}
 		static void println(Object... objects) {

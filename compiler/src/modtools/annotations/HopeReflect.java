@@ -102,11 +102,23 @@ public class HopeReflect {
 		}
 	}
 
+	/** 字段查询缓存：注解读取路径上每次 getAnnotation 都会走 getAccess */
+	private static final java.util.concurrent.ConcurrentHashMap<Class<?>, java.util.concurrent.ConcurrentHashMap<String, Field>>
+	 DECLARED_FIELDS = new java.util.concurrent.ConcurrentHashMap<>();
+
+	private static Field declaredField(Class<?> cls, String name) throws NoSuchFieldException {
+		var byName = DECLARED_FIELDS.computeIfAbsent(cls, k -> new java.util.concurrent.ConcurrentHashMap<>());
+		Field field = byName.get(name);
+		if (field != null) return field;
+		field = cls.getDeclaredField(name);
+		field.setAccessible(true);
+		byName.putIfAbsent(name, field);
+		return field;
+	}
+
 	public static <T> T getAccess(Class<?> cls, Object obj, String name) {
 		try {
-			Field field = cls.getDeclaredField(name);
-			field.setAccessible(true);
-			return (T) field.get(obj);
+			return (T) declaredField(cls, name).get(obj);
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}

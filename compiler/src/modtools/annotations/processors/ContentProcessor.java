@@ -504,7 +504,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	                                              JCExpression selector) {
 		return mMaker.Exec(mMaker.Assign(access,
 			mMaker.Apply(List.nil(),
-			 mMaker.Select(selector, ns("get" + kebabToBigCamel(classType.selected.toString()))),
+			 mMaker.Select(selector, ns("get" + NameUtils.kebabToBigCamel(classType.selected.toString()))),
 			 List.nil()
 			)
 		 )

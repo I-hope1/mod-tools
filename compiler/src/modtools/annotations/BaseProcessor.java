@@ -50,44 +50,57 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 
 	public static Type stringType;
 
+	/** 只处理前两轮：第一轮改写元素，第二轮处理新生成的源码 */
+	private static final int MAX_ROUNDS = 2;
+
 	private   int              runTimes;
 	protected RoundEnvironment roundEnv;
 	public void process2() { }
 
 	public static final boolean RECORD_TIME = false;
+
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
 		if (!AINIT.hasMindustry) return true;
 		this.roundEnv = roundEnv;
-		runTimes++;
-		// println("-----");
-		// println(runTimes);
-		// println(annotations);
-		// roundEnv.getRootElements().stream().filter(e -> e.getSimpleName().toString().contains("HopeIconsc")).forEach(e -> println(e));
-		if (runTimes > 2) {
-			return true;
-		}
-		if (runTimes > 1) {
-			dealWithRound(annotations, roundEnv);
-			try {
-				process2();
-			} catch (Throwable e) { err(e); }
-			return true;
-		}
-		if (RECORD_TIME) Times.mark();
-		if (!lazyInitial) {
-			lazyInitial = true;
-			try {
-				lazyInit();
-			} catch (Throwable e) { err(e); }
-		}
-		// 第一次
-		dealWithRound(annotations, roundEnv);
-		try {
-			process();
-		} catch (Throwable e) { err(e); }
-		if (RECORD_TIME) Times.printElapsed("@ms for @", this);
 
+		if (++runTimes > MAX_ROUNDS) return true;
+
+		switch (runTimes) {
+			case 1 -> firstRound(annotations, roundEnv);
+			default -> secondRound(annotations, roundEnv);
+		}
 		return true;
+	}
+
+	private void firstRound(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+		if (RECORD_TIME) Times.mark();
+		runGuarded(this::lazyInit, "lazyInit");
+		dealWithRound(annotations, roundEnv);
+		runGuarded(this::process, "process");
+		if (RECORD_TIME) Times.printElapsed("@ms for @", this);
+	}
+
+	private void secondRound(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+		dealWithRound(annotations, roundEnv);
+		runGuarded(this::process2, "process2");
+	}
+
+	/**
+	 * 处理器里的异常统一走 {@link PrintHelper#err(Throwable)}：
+	 * 打印堆栈并按既有策略中止编译，不让 javac 带着半成品继续跑。
+	 */
+	private void runGuarded(ThrowingRunnable action, String phase) {
+		try {
+			action.run();
+		} catch (Throwable e) {
+			PrintHelper.errs("[" + phase + "] processor phase failed:");
+			err(e);
+		}
+	}
+
+	@FunctionalInterface
+	private interface ThrowingRunnable {
+		void run() throws Throwable;
 	}
 	private void dealWithRound(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
 		for (TypeElement annotation : annotations) {
@@ -101,7 +114,8 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 					dealElement((T) element);
 				} catch (Throwable e) {
 					err(e);
-					log.error(SPrinter.err(e.getMessage()));
+					// getMessage() 可能为 null，直接塞进诊断会让 javac 的格式化出问题
+					log.error(SPrinter.err(e.getMessage() != null ? e.getMessage() : e.toString()));
 				} finally {
 					mMaker.toplevel = null;
 					log.useSource(null);
@@ -111,17 +125,6 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	}
 	/** 在{@link #dealElement(Element)}之后执行 */
 	public void process() throws Throwable { }
-	protected static StringBuilder getUnderlineName(String fieldName) {
-		StringBuilder underlineName = new StringBuilder();
-		underlineName.append(Character.toLowerCase(fieldName.charAt(0)));
-		for (int i = 1, len = fieldName.length(); i < len; i++) {
-			if (Character.isUpperCase(fieldName.charAt(i)) && !Character.isUpperCase(fieldName.charAt(i + 1))) {
-				underlineName.append("_");
-			}
-			underlineName.append(Character.toLowerCase(fieldName.charAt(i)));
-		}
-		return underlineName;
-	}
 
 	public abstract void dealElement(T element) throws Throwable;
 
@@ -138,9 +141,14 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	}
 
 	public final void initConst(ProcessingEnvironment env) {
-		if (_context != null) return;
+		// 同一 JVM 内可能连续跑多轮编译（Gradle daemon / IDE 会复用处理器类加载器）。
+		// 必须按 Context 身份判断，否则第二轮会继续沿用上一轮已失效的 Context 与符号。
+		Context ctx = Replace.getContextFor(env);
+		if (ctx == _context) return;
 
-		_context = Replace.getContextFor(processingEnv);
+		_context = ctx;
+		// 换 Context 意味着上一轮的所有符号都作废，先清掉跨轮静态缓存
+		resetCrossCompilationCaches();
 
 		elements = JavacElements.instance(_context);
 		trees = JavacTrees.instance(_context);
@@ -162,9 +170,18 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 
 		stringType = mSymtab.stringType;
 	}
+
+	/** 清理绑定在旧 {@link Context} 上的静态缓存，避免跨编译轮次持有失效符号 */
+	private static void resetCrossCompilationCaches() {
+		try {
+			DataUtils.resetSymbols();
+		} catch (Throwable e) { PrintHelper.errs(e); }
+		try {
+			Replace.resetContextCaches();
+		} catch (Throwable e) { PrintHelper.errs(e); }
+	}
 	public void init() throws Throwable { }
 
-	boolean lazyInitial;
 	public void lazyInit() throws Throwable { }
 
 
@@ -214,23 +231,6 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		return null;
 	}
 
-	/** test_ui -> TestUI */
-	public static String kebabToBigCamel(CharSequence kebab) {
-		StringBuilder sb = new StringBuilder();
-		sb.append(Character.toUpperCase(kebab.charAt(0)));
-		boolean isUpper = false;
-		for (int i = 1, len = kebab.length(); i < len; i++) {
-			if (kebab.charAt(i) == '_') {
-				isUpper = true;
-				continue;
-			}
-			// test_ui_
-			if (kebab.charAt(i - 1) != '_' && isUpper && (i + 1 < len && kebab.charAt(i + 1) != '_')) isUpper = false;
-			sb.append(isUpper ? Character.toUpperCase(kebab.charAt(i)) : kebab.charAt(i));
-		}
-		return sb.toString();
-	}
-
 	public static Class<?> classOrThrow(String name) {
 		try {
 			return Class.forName(name);
@@ -261,37 +261,5 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 		return trees.getElement(path);
 	}
 
-	public static String kebabToCamel(String s) {
-		StringBuilder result = new StringBuilder(s.length());
-
-		for (int i = 0; i < s.length(); i++) {
-			char c = s.charAt(i);
-			if (c != '_' && c != '-') {
-				if (i != 0 && (s.charAt(i - 1) == '_' || s.charAt(i - 1) == '-')) {
-					result.append(Character.toUpperCase(c));
-				} else {
-					result.append(c);
-				}
-			}
-		}
-
-		return result.toString();
-	}
-	public static String capitalize(String s) {
-		StringBuilder result = new StringBuilder(s.length());
-
-		for (int i = 0; i < s.length(); i++) {
-			char c = s.charAt(i);
-			if (c == '_' || c == '-') {
-				result.append(" ");
-			} else if (i == 0 || s.charAt(i - 1) == '_' || s.charAt(i - 1) == '-') {
-				result.append(Character.toUpperCase(c));
-			} else {
-				result.append(c);
-			}
-		}
-
-		return result.toString();
-	}
 	// endregion utils
 }

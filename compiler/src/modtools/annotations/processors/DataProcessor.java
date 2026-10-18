@@ -39,7 +39,7 @@ public class DataProcessor extends BaseProcessor<Element> {
 			ListBuffer<JCStatement> buffer = new ListBuffer<>();
 			selves.forEach(self -> {
 				String fieldName     = self.getSimpleName() + "";
-				String underlineName = getUnderlineName(fieldName).toString();
+				String underlineName = NameUtils.toUnderlineName(fieldName);
 
 				mMaker.at(method);
 				JCVariableDecl t = makeVar0(Flags.PARAMETER, null, "t", null, method.sym);

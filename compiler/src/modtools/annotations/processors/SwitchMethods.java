@@ -6,6 +6,7 @@ import com.sun.tools.javac.code.Symbol.MethodSymbol;
 import com.sun.tools.javac.code.Symbol.VarSymbol;
 import com.sun.tools.javac.code.Symtab;
 import com.sun.tools.javac.code.Type;
+import com.sun.tools.javac.code.Type.ArrayType;
 import com.sun.tools.javac.code.Type.MethodType;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.tree.TreeMaker;
@@ -19,7 +20,7 @@ import java.util.Map;
 import static modtools.annotations.NameString.ns0;
 
 /**
- * 把 Settings 里标了 {@link Switch} 的字段翻译成两个覆写方法：
+ * 把 Settings 里标了 {@link Switch} 的字段翻译成三个覆写方法：
  *
  * <pre>
  * public boolean hasSwitch() {
@@ -32,7 +33,16 @@ import static modtools.annotations.NameString.ns0;
  *   ...
  *   return ISettings.super.switchKey();
  * }
+ * public String[] switchKeys() {
+ *   if (this == ccc) return new String[]{"a", "b"};
+ *   ...
+ *   return ISettings.super.switchKeys();
+ * }
  * </pre>
+ * <p>
+ * {@code @Switch(dependency = {...})} 里的依赖是「与」关系：{@code ISettings.isSwitchOn()}
+ * 会遍历 {@code switchKeys()}，任何一个为 false 就整体关闭。{@code switchKey()} 只有一个键，
+ * 多依赖时取第一个当代表（UI 判断要不要画开关用的是它）。
  * <p>
  * {@link #collect} 在遍历字段时逐条调用（只读注解，不碰 AST），
  * {@link #build} 在字段全部收集完之后调用一次，负责生成 AST。
@@ -63,7 +73,7 @@ public final class SwitchMethods {
 
 	/**
 	 * @param classDecl 方法挂到哪个类上（通常就是 settings 的 tree）
-	 * @param settings  两个新方法的 owner
+	 * @param settings  三个新方法的 owner
 	 * @param iSettings 用于生成 {@code ISettings.super.switchKey()}
 	 */
 	public void build(JCClassDecl classDecl, ClassSymbol settings, ClassSymbol iSettings,
@@ -71,6 +81,7 @@ public final class SwitchMethods {
 		if (switches.isEmpty()) return;
 		appendHasSwitch(classDecl, settings, maker, symtab);
 		appendSwitchKey(classDecl, settings, iSettings, maker, symtab);
+		appendSwitchKeys(classDecl, settings, iSettings, maker, symtab);
 	}
 
 	private void appendHasSwitch(JCClassDecl classDecl, ClassSymbol settings,
@@ -89,14 +100,44 @@ public final class SwitchMethods {
 		ListBuffer<JCStatement> body = new ListBuffer<>();
 		switches.forEach((symbol, aSwitch) -> {
 			// 没写 dependency 的字段不生成分支，落到 ISettings 的默认实现（name() + "$enabled"）
-			if (aSwitch.dependency().isEmpty()) return;
+			String[] deps = aSwitch.dependency();
+			if (deps.length == 0) return;
+			// switchKey() 只有一个键，多依赖时取第一个当代表（全部依赖见 switchKeys()）
 			body.append(maker.If(isSelf(symbol, settings, maker),
-			 maker.Return(maker.Literal(aSwitch.dependency())), null));
+			 maker.Return(maker.Literal(deps[0])), null));
 		});
 		body.append(maker.Return(maker.Apply(List.nil(),
 		 maker.Select(maker.Select(maker.Type(iSettings.type), ns0("super")), ns0("switchKey")),
 		 List.nil())));
 		append(classDecl, settings, "switchKey", symtab.stringType, body.toList(), maker);
+	}
+
+	/** {@code String[] switchKeys()}：isSwitchOn() 要求这里面每个键都是 true。 */
+	private void appendSwitchKeys(JCClassDecl classDecl, ClassSymbol settings, ClassSymbol iSettings,
+	                              TreeMaker maker, Symtab symtab) {
+		maker.at(classDecl.defs.last());
+		ListBuffer<JCStatement> body = new ListBuffer<>();
+		switches.forEach((symbol, aSwitch) -> {
+			String[] deps = aSwitch.dependency();
+			if (deps.length == 0) return;
+			body.append(maker.If(isSelf(symbol, settings, maker),
+			 maker.Return(stringArray(maker, symtab, deps)), null));
+		});
+		body.append(maker.Return(maker.Apply(List.nil(),
+		 maker.Select(maker.Select(maker.Type(iSettings.type), ns0("super")), ns0("switchKeys")),
+		 List.nil())));
+		append(classDecl, settings, "switchKeys", arrayOf(symtab, symtab.stringType), body.toList(), maker);
+	}
+
+	/** {@code new String[]{a, b, ...}} */
+	private static JCExpression stringArray(TreeMaker maker, Symtab symtab, String[] values) {
+		ListBuffer<JCExpression> elems = new ListBuffer<>();
+		for (String value : values) elems.append(maker.Literal(value));
+		return maker.NewArray(maker.Type(symtab.stringType), List.nil(), elems.toList());
+	}
+
+	private static ArrayType arrayOf(Symtab symtab, Type elemtype) {
+		return new ArrayType(elemtype, symtab.arrayClass);
 	}
 
 	/** {@code this == %symbol%} */
@@ -113,9 +154,15 @@ public final class SwitchMethods {
 		 new MethodType(List.nil(), restype, List.nil(), settings), settings);
 
 		JCMethodDecl method = maker.MethodDef(ms, maker.Block(0, body));
-		method.restype = maker.Type(restype);
+		method.restype = typeTree(maker, restype);
 
 		settings.members().enter(ms);
 		classDecl.defs = classDecl.defs.append(method);
+	}
+
+	/** 数组类型要用 {@code JCArrayTypeTree}，直接塞 {@code TypeTree} 打印出来是怪东西。 */
+	private static JCExpression typeTree(TreeMaker maker, Type type) {
+		if (type instanceof ArrayType array) return maker.TypeArray(typeTree(maker, array.elemtype));
+		return maker.Type(type);
 	}
 }

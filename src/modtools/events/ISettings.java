@@ -97,7 +97,11 @@ public interface ISettings extends E_DataInterface {
 
 	/** 是否为开关，用于某一个设置的开启/关闭 */
 	default boolean isSwitchOn() {
-		return !hasSwitch() || data().getBool(switchKey(), true);
+		if (!hasSwitch()) return true;
+		for (String key : switchKeys()) {
+			if (!data().getBool(key, true)) return false;
+		}
+		return true;
 	}
 	default void defSwitchOn(boolean b) {
 		data().setDef(switchKey(), b);
@@ -112,6 +116,13 @@ public interface ISettings extends E_DataInterface {
 	/** it will be overrided by compiler. */
 	default String switchKey() {
 		return name() + SUFFIX_ENABLED;
+	}
+	/**
+	 * 全部依赖键，由编译器按 {@code @Switch(dependency = ...)} 生成；默认只有 {@link #switchKey()} 一个。
+	 * <p>{@link #isSwitchOn()} 要求这里每个键都是 true。
+	 */
+	default String[] switchKeys() {
+		return new String[]{switchKey()};
 	}
 
 	default Cons<ISettings> builder() { return null; }

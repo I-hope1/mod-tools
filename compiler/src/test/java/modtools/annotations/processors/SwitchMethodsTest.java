@@ -6,6 +6,7 @@ import com.sun.tools.javac.code.Symbol.MethodSymbol;
 import com.sun.tools.javac.code.Symbol.VarSymbol;
 import com.sun.tools.javac.code.Symtab;
 import com.sun.tools.javac.code.Type;
+import com.sun.tools.javac.code.Type.ArrayType;
 import com.sun.tools.javac.code.Type.MethodType;
 import com.sun.tools.javac.code.TypeTag;
 import com.sun.tools.javac.tree.JCTree;
@@ -37,11 +38,13 @@ class SwitchMethodsTest {
 	 interface I {
 	   default boolean hasSwitch() { return false; }
 	   default String switchKey() { return "d"; }
+	   default String[] switchKeys() { return new String[]{switchKey()}; }
 	 }
 
 	 enum S implements I {
 	   @Switch aaa(int.class),
 	   @Switch(dependency = "bbb$enabled") bbb(int.class),
+	   @Switch(dependency = {"ccc$enabled", "profile"}) ddd(int.class),
 	   ccc(int.class);
 
 	   S(Class<?> c) { }
@@ -53,7 +56,7 @@ class SwitchMethodsTest {
 		try (JavacFixture fx = fixture()) {
 			SwitchMethods methods = collectAll(fx);
 			assertFalse(methods.isEmpty());
-			assertEquals(2, methods.size(), "aaa/bbb 有 @Switch，ccc 没有");
+			assertEquals(3, methods.size(), "aaa/bbb/ddd 有 @Switch，ccc 没有");
 		}
 	}
 
@@ -98,8 +101,8 @@ class SwitchMethodsTest {
 			JCMethodDecl hasSwitch = method(s.decl, "hasSwitch");
 			assertTrue((hasSwitch.mods.flags & Flags.PUBLIC) != 0);
 
-			// 两个 if + 兜底 return false
-			assertEquals(3, hasSwitch.body.stats.size());
+			// 三个 if + 兜底 return false
+			assertEquals(4, hasSwitch.body.stats.size());
 			JCReturn  fallback = (JCReturn) hasSwitch.body.stats.last();
 			JCLiteral literal  = (JCLiteral) fallback.expr;
 			// TreeMaker.Literal(false) 存的是 int 0，靠 typetag 区分 boolean / int
@@ -115,11 +118,15 @@ class SwitchMethodsTest {
 			build(fx, s);
 
 			JCMethodDecl switchKey = method(s.decl, "switchKey");
-			// 只有 bbb 写了 dependency → 一个 if + 兜底
-			assertEquals(2, switchKey.body.stats.size());
+			// bbb + ddd 写了 dependency（aaa 没有）→ 两个 if + 兜底
+			assertEquals(3, switchKey.body.stats.size());
 
 			JCIf first = (JCIf) switchKey.body.stats.head;
 			assertEquals("bbb$enabled", ((JCLiteral) ((JCReturn) first.thenpart).expr).value);
+
+			// 多依赖时 switchKey() 取第一个当代表
+			JCIf second = (JCIf) switchKey.body.stats.get(1);
+			assertEquals("ccc$enabled", ((JCLiteral) ((JCReturn) second.thenpart).expr).value);
 
 			// 兜底必须是 ISettings.super.switchKey()：返回 null 会让 isSwitchOn() 永远 NPE/失效
 			JCReturn         fallback = (JCReturn) switchKey.body.stats.last();
@@ -133,6 +140,43 @@ class SwitchMethodsTest {
 	}
 
 	@Test
+	void switchKeysReturnsEveryDependencyInOrder() throws Exception {
+		try (JavacFixture fx = fixture()) {
+			ClassDecl s = findClass(fx, "S");
+			build(fx, s);
+
+			JCMethodDecl switchKeys = method(s.decl, "switchKeys");
+			// bbb（1 个依赖）+ ddd（2 个依赖）→ 两个 if + 兜底
+			assertEquals(3, switchKeys.body.stats.size());
+
+			JCNewArray bbb = (JCNewArray) ((JCReturn) ((JCIf) switchKeys.body.stats.head).thenpart).expr;
+			assertEquals(1, bbb.elems.size());
+			assertEquals("bbb$enabled", ((JCLiteral) bbb.elems.head).value);
+
+			JCNewArray ddd = (JCNewArray) ((JCReturn) ((JCIf) switchKeys.body.stats.get(1)).thenpart).expr;
+			assertEquals(2, ddd.elems.size());
+			assertEquals("ccc$enabled", ((JCLiteral) ddd.elems.get(0)).value);
+			assertEquals("profile", ((JCLiteral) ddd.elems.get(1)).value);
+			assertTrue(ddd.elemtype.toString().endsWith("String"), "实际是: " + ddd.elemtype);
+		}
+	}
+
+	@Test
+	void switchKeysFallsBackToSuperForFieldsWithoutDependencies() throws Exception {
+		try (JavacFixture fx = fixture()) {
+			ClassDecl s = findClass(fx, "S");
+			build(fx, s);
+
+			JCMethodDecl switchKeys = method(s.decl, "switchKeys");
+			JCReturn      fallback = (JCReturn) switchKeys.body.stats.last();
+			JCFieldAccess outer    = (JCFieldAccess) ((JCMethodInvocation) fallback.expr).meth;
+			// aaa 没有 dependency → 不生成分支，落到 ISettings.super.switchKeys()（= 自身的 $enabled）
+			assertEquals("switchKeys", outer.name.toString());
+			assertEquals("super", ((JCFieldAccess) outer.selected).name.toString());
+		}
+	}
+
+	@Test
 	void synthesizedMethodsCarryARealMethodType() throws Exception {
 		try (JavacFixture fx = fixture()) {
 			ClassDecl s = findClass(fx, "S");
@@ -141,6 +185,12 @@ class SwitchMethodsTest {
 			Symtab symtab = symtab(fx);
 			assertMethodType(method(s.decl, "hasSwitch").sym, symtab.booleanType);
 			assertMethodType(method(s.decl, "switchKey").sym, symtab.stringType);
+
+			MethodSymbol switchKeys = method(s.decl, "switchKeys").sym;
+			assertInstanceOf(MethodType.class, switchKeys.type);
+			Type ret = ((MethodType) switchKeys.type).getReturnType();
+			assertInstanceOf(ArrayType.class, ret, "switchKeys() 必须返回 String[]");
+			assertEquals(symtab.stringType, ((ArrayType) ret).elemtype);
 		}
 	}
 
@@ -153,6 +203,7 @@ class SwitchMethodsTest {
 			// 只挂进 defs、不进 members()，之后 Attr 解析 this.hasSwitch() 时会找不到符号
 			assertNotNull(s.sym.members().findFirst(Names.instance(fx.context).fromString("hasSwitch")));
 			assertNotNull(s.sym.members().findFirst(Names.instance(fx.context).fromString("switchKey")));
+			assertNotNull(s.sym.members().findFirst(Names.instance(fx.context).fromString("switchKeys")));
 		}
 	}
 

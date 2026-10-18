@@ -21,7 +21,6 @@ import javax.tools.JavaFileObject;
 import java.io.*;
 import java.util.*;
 import java.util.function.*;
-import java.util.stream.Collectors;
 
 import static modtools.annotations.NameString.ns0;
 
@@ -196,30 +195,10 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			// 生成对应的字段 enum_name(Type, ...) -> public static Type enumx = 默认值（ 0 / false / null）
 			Name pkgName = settings.packge().fullname;
 			try {
-				JavaFileObject file   = mFiler.createSourceFile(pkgName + "." + RefRewriter.REF_PREFIX + literalName, settings);
-				Writer         writer = file.openWriter();
-				StringBuilder  body   = new StringBuilder();
-
-				writer.write(String.valueOf(unit.getPackage()));
-				writer.write(unit.getImports().stream().map(String::valueOf).collect(Collectors.joining("", "\n", "\n")));
-				// 导入原本类的所有子类
-				var curr = settings;
-				while (true) {
-					writer.write("import " + curr.getQualifiedName() + ".*;\n");
-					if (!(curr.owner instanceof ClassSymbol classSymbol)) break;
-					curr = classSymbol;
+				JavaFileObject file = mFiler.createSourceFile(pkgName + "." + RefRewriter.REF_PREFIX + literalName, settings);
+				try (Writer writer = file.openWriter()) {
+					writer.write(RefSourceGenerator.render(unit, settings, literalName, allEnumFields));
 				}
-				writer.write("/** @see " + settings.getQualifiedName() + "*/\n");
-				writer.write("@" + RefRewriter.REF_OF_ANNO + "(" + settings.getQualifiedName() + ".class)\n"); // ← 加这行
-				writer.write("public class " + RefRewriter.REF_PREFIX + literalName + " {\n");
-				// writer.write(allEnumFields.entrySet().stream().reduce("\n",
-				//  (a, b) -> a + "\npublic static " + b.getValue() + " " + b.getKey().getSimpleName() + ";", (a, b) -> a + b));
-				allEnumFields.forEach((symbol, type) -> {
-					body.append("\tpublic static ").append(type).append(' ').append(symbol.getSimpleName()).append(";\n");
-				});
-				writer.write(body.toString());
-				writer.write("\n}");
-				writer.close();
 			} catch (FilerException e) {
 				println(pkgName + " has been created.");
 			}

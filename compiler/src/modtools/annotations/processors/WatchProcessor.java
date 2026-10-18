@@ -126,6 +126,12 @@ public class WatchProcessor extends BaseProcessor<Element> {
 		classFields.clear();
 	}
 
+	/** @return 外层类声明；已经是顶层类（owner 是包）或拿不到声明就返回 {@code null} */
+	private JCClassDecl enclosingClass(JCClassDecl decl) {
+		if (decl.sym == null || !(decl.sym.owner instanceof ClassSymbol owner)) return null;
+		return trees.getTree(owner) instanceof JCClassDecl outer ? outer : null;
+	}
+
 	private void buildVar(Element dcls, JCClassDecl classDecl) {
 		CompilationUnitTree unit = trees.getPath(dcls).getCompilationUnit();
 
@@ -151,13 +157,17 @@ public class WatchProcessor extends BaseProcessor<Element> {
 				// Log.info(watchVar.classes()[0].getDeclaredMethods());
 
 				String      fieldName = watchVar.group() + WATCH_SIG;
+				JCClassDecl owner     = classDecl;
 				boolean     valid     = false;
-				JCClassDecl classDecl2      = classDecl;
-				while (classDecl2 != null) {
-					valid |= checkField(dcls, classDecl2, fieldName, watchVar.group());
-					classDecl2 = (JCClassDecl) trees.getTree(classDecl2.sym.owner);
+				while (owner != null && !valid) {
+					valid = findField(owner, fieldName) != null;
+					owner = enclosingClass(owner);
 				}
-				if (!valid) return super.visitVariable(node, parent);
+				if (!valid) {
+					// 整条外层链都没有这个字段，才是真的没标注；只报一次，别每层都喊
+					checkField(dcls, classDecl, fieldName, watchVar.group());
+					return super.visitVariable(node, parent);
+				}
 				var list = new ArrayList<>(block.stats);
 				// StringBuilder sb = new StringBuilder();
 				// sb.append('{');

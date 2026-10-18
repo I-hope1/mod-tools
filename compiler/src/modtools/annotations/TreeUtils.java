@@ -16,6 +16,18 @@ import static modtools.annotations.BaseProcessor.*;
 @SuppressWarnings("UnusedReturnValue")
 public interface TreeUtils extends ParseUtils, NameString {
 	/**
+	 * 只探测字段是否存在，不报错。
+	 * <p>
+	 * “往上找外层类”这类场景里，外层没有这个字段是<b>正常</b>的，
+	 * 不能用 {@link #checkField} 去喊——那会为每一个没有该字段的外层类记一条编译错误。
+	 *
+	 * @return 找到的字段声明；没有则 {@code null}
+	 */
+	default JCVariableDecl findField(JCClassDecl classDecl, String fieldName) {
+		return findChild(classDecl, Tag.VARDEF, var -> var.name.toString().equals(fieldName));
+	}
+
+	/**
 	 * 检测字段是否存在
 	 *
 	 * @return {@code true} if element is present.
@@ -23,16 +35,14 @@ public interface TreeUtils extends ParseUtils, NameString {
 	default boolean checkField(
 	 Element element, JCClassDecl classDecl, String fieldName, String group
 	) {
-		JCVariableDecl fieldElem = findChild(classDecl, Tag.VARDEF, var -> var.name.toString().equals(fieldName));
-		if (fieldElem == null) {
-			log.useSource(classDecl.sym != null ? classDecl.sym.sourcefile : trees.getPath(element).getCompilationUnit().getSourceFile());
-			String s = "You don't mark class (" + classDecl.getSimpleName() + ") or mark it group (" + group + ")." + "\n(debug)Needed (" + fieldName + ") element.";
-			log.error(classDecl, SPrinter.err(s));
-			new IllegalStateException(s)
-			 .printStackTrace();
-			return false;
-		}
-		return true;
+		if (findField(classDecl, fieldName) != null) return true;
+
+		log.useSource(classDecl.sym != null ? classDecl.sym.sourcefile : trees.getPath(element).getCompilationUnit().getSourceFile());
+		String s = "You don't mark class (" + classDecl.getSimpleName() + ") or mark it group (" + group + ")." + "\n(debug)Needed (" + fieldName + ") element.";
+		log.error(classDecl, SPrinter.err(s));
+		new IllegalStateException(s)
+		 .printStackTrace();
+		return false;
 	}
 	default JCVariableDecl addField(JCClassDecl classDecl, int flags, Type type, String name, String init) {
 		JCVariableDecl x = makeVar(flags, type, name, init, classDecl.sym);

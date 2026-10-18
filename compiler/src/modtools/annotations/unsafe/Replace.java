@@ -198,7 +198,10 @@ public class Replace {
 
 		try {
 			return new MyResolve(context, predicate);
-		} catch (Exception ignored) { }
+		} catch (Exception e) {
+			// 退回原生 Resolve：@NoAccessCheck 会失效，但不至于让编译停下
+			errs("[MISC]: MyResolve unavailable, @NoAccessCheck is disabled: " + e);
+		}
 
 		return resolve;
 	}

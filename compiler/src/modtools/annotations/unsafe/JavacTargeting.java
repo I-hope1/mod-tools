@@ -91,11 +91,20 @@ public final class JavacTargeting {
 		}
 	}
 
-	/** 打开预览特性，并屏蔽预览相关的检查与告警。 */
+	/**
+	 * 打开预览特性，并屏蔽预览相关的检查与告警。
+	 * <p>
+	 * 尽力而为：这个补丁依赖 {@code Preview} 的私有字段名，换 JDK 版本就可能变。
+	 * 失败只打一行日志、不往上抛——否则一个可选优化会把整轮编译带走。
+	 * 只吞 {@link Exception} 和 {@link LinkageError}（字段/方法不存在都是它），
+	 * OOM、StackOverflowError 这类还是让它正常冒出来。
+	 */
 	public static void forcePreview(Context context) {
 		try {
 			forcePreview0(context);
-		} catch (NoClassDefFoundError | NoSuchMethodError _) { }
+		} catch (Exception | LinkageError e) {
+			errs("[MISC]: failed to enable preview features, ignored: " + e);
+		}
 	}
 
 	private static void forcePreview0(Context context) {

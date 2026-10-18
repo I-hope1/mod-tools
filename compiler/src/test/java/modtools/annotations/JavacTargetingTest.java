@@ -99,6 +99,18 @@ class JavacTargetingTest {
 		}
 	}
 
+	/** 预览开关是“尽力而为”的补丁，绝不能抛；跑两遍也得是幂等的 */
+	@Test
+	void forcePreviewEnablesPreviewAndIsIdempotent() throws Exception {
+		try (JavacFixture fx = JavacFixture.parseOnly("P", "class P {}")) {
+			assertDoesNotThrow(() -> JavacTargeting.forcePreview(fx.context));
+			assertTrue(Preview.instance(fx.context).isEnabled());
+
+			assertDoesNotThrow(() -> JavacTargeting.forcePreview(fx.context));
+			assertTrue(Preview.instance(fx.context).isEnabled());
+		}
+	}
+
 	static Stream<Arguments> contextComponents() {
 		return Stream.of(
 		 arguments(Resolve.class, "resolveKey"),

@@ -117,7 +117,9 @@ public final class JavacTargeting {
 		removeKey(context, Target.class, () -> target);
 		println("targetVersion: @ (@)", target.ordinal() + 1, target);
 
-		// jdk9 才有 StringConcat，低版本上下文里没有这个键
+		// 删除旧实例让 StringConcat 按新 Target 重建：
+		// target < 9 → Inline，>= 9 → indy（依赖 javac 内部的 makeConcat 逻辑）
+		// 不删的话，下面 setAccess(Gen, "concat", ...) 拿到的还是按旧 Target 造出来的那个实例。
 		removeKey(context, "concatKey", StringConcat.class, null);
 
 		// 下面几项都是为了让产出能被低版本的 d8 / ART 接受

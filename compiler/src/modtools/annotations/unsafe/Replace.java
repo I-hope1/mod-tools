@@ -19,7 +19,7 @@ import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Log.DeferredDiagnosticHandler;
 import modtools.annotations.*;
 import modtools.annotations.PrintHelper.SPrinter;
-import modtools.annotations.processors.ContentProcessor;
+import modtools.annotations.processors.RefRewriter;
 import modtools.annotations.unsafe.TopTranslator.CheckException;
 
 import javax.annotation.processing.*;
@@ -129,7 +129,7 @@ public class Replace {
 		other();
 
 		try {
-			ContentProcessor.registerTodos(context);
+			RefRewriter.register(context);
 		} catch (NoClassDefFoundError | NoSuchFieldError _) { }
 	}
 

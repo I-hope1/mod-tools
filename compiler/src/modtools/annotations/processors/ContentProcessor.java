@@ -3,7 +3,6 @@ package modtools.annotations.processors;
 
 import com.google.auto.service.AutoService;
 import com.sun.tools.javac.code.*;
-import com.sun.tools.javac.code.Attribute.Compound;
 import com.sun.tools.javac.code.Kinds.Kind;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.*;
@@ -14,8 +13,6 @@ import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Name;
 import modtools.annotations.*;
 import modtools.annotations.settings.*;
-import modtools.annotations.unsafe.TopTranslator;
-import modtools.annotations.unsafe.TopTranslator.ToTranslate;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import javax.annotation.processing.*;
@@ -34,91 +31,12 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
  implements DataUtils {
 	public static final  String SETTING_PREFIX = "E_";
 	private static final String FIELD_PREFIX   = "f_";
-	public static final  String REF_PREFIX     = "R_";
-	public static final  String REF_OF_ANNO    = RefOf.class.getName();
 
 	private Name        nameSetting;
 	private ClassType   consType;
 	private ClassSymbol dataClass, mySettingsClass,
 	 iSettings, myEvents, settingsImpl, contentClass;
 	private Name prefix_underline;
-
-	public static void registerTodos(Context context) {
-		// 懒加载符号：第一次匹配时才 resolve
-		ClassSymbol[] iSettingsRef = {null};
-
-		Supplier<ClassSymbol> getISettings = () -> {
-			if (iSettingsRef[0] == null) {
-				iSettingsRef[0] = mSymtab.enterClass(
-				 mSymtab.unnamedModule, ns0("modtools.events.ISettings"));
-			}
-			return iSettingsRef[0];
-		};
-		var translator = TopTranslator.instance(context);
-
-		// R_XXX.field 读取 -> E_XXX.field.getXxx()
-		translator.addToDo(new ToTranslate(JCFieldAccess.class, access -> {
-			if (!(access.selected instanceof JCIdent i
-			      && i.name.toString().startsWith("R_"))) { return null; }
-			ClassSymbol iSettings = getISettings.get();
-			if (iSettings == null) return null;
-
-			ClassSymbol symbol = topGetClassSymbol(i);
-			if (symbol == null) return null;
-
-			JCFieldAccess enumField = translator.makeSelect(
-			 mMaker.QualIdent(symbol), ns0(access.name.toString()), symbol);
-			String s = "" + access.type.tsym.getSimpleName();
-			String getter = switch (s) {
-				case "boolean" -> "enabled";
-				default -> access.type.tsym.isEnum()
-				 ? "getEnum"
-				 : "get" + s.substring(0, 1).toUpperCase() + s.substring(1);
-			};
-			JCFieldAccess fn = translator.makeSelect(enumField, ns0(getter), iSettings);
-			MethodSymbol  ms = (MethodSymbol) fn.sym;
-			return mMaker.Apply(List.nil(), fn,
-			 ms.params.isEmpty() ? List.nil() : List.of(mMaker.ClassLiteral(access.type))
-			).setType(access.type);
-		}));
-
-		// R_XXX.field = val -> E_XXX.field.set(val)
-		translator.addToDo(new ToTranslate(JCAssign.class, tree -> {
-			if (!(tree.lhs instanceof JCFieldAccess access
-			      && access.selected instanceof JCIdent i
-			      && i.name.toString().startsWith("R_"))) { return null; }
-			ClassSymbol iSettings = getISettings.get();
-			if (iSettings == null) return null;
-
-			ClassSymbol symbol = topGetClassSymbol(i);
-			if (symbol == null) return null;
-			JCFieldAccess enumField = translator.makeSelect(
-			 mMaker.QualIdent(symbol), access.name, symbol);
-			JCFieldAccess fn = translator.makeSelect(
-			 enumField, ns0("set"), iSettings);
-			return mMaker.Apply(List.nil(), fn, List.of(tree.rhs)).setType(tree.type);
-		}));
-	}
-	private static @Nullable ClassSymbol topGetClassSymbol(JCIdent i) {
-		ClassSymbol rSym = (ClassSymbol) i.sym;
-
-		// 先补全符号（增量时可能只有存根）
-		if (rSym.members_field == null) {
-			classFinder.loadClass(mSymtab.unnamedModule, rSym.flatname);
-		}
-
-		// 读 @RefOf 注解 —— 在 .class 里也能拿到
-		Compound refOf = rSym.getAnnotationMirrors().stream()
-		 .filter(a -> a.type.tsym.getQualifiedName().toString()
-			.equals(REF_OF_ANNO))
-		 .findFirst().orElse(null);
-		if (refOf == null) return null;
-
-		// value() 是 Class，对应的 Attribute 是 Attribute.Class
-		ClassType   targetType = (ClassType) ((Attribute.Class) refOf.member(ns0("value"))).classType;
-		ClassSymbol symbol     = (ClassSymbol) targetType.tsym;
-		return symbol;
-	}
 
 	/** 用于ModTools调用forName(设置类) */
 	public ArrayList<ClassSymbol> settingsClasses   = new ArrayList<>();
@@ -278,7 +196,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			// 生成对应的字段 enum_name(Type, ...) -> public static Type enumx = 默认值（ 0 / false / null）
 			Name pkgName = settings.packge().fullname;
 			try {
-				JavaFileObject file   = mFiler.createSourceFile(pkgName + "." + REF_PREFIX + literalName, settings);
+				JavaFileObject file   = mFiler.createSourceFile(pkgName + "." + RefRewriter.REF_PREFIX + literalName, settings);
 				Writer         writer = file.openWriter();
 				StringBuilder  body   = new StringBuilder();
 
@@ -292,8 +210,8 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 					curr = classSymbol;
 				}
 				writer.write("/** @see " + settings.getQualifiedName() + "*/\n");
-				writer.write("@" + REF_OF_ANNO + "(" + settings.getQualifiedName() + ".class)\n"); // ← 加这行
-				writer.write("public class " + REF_PREFIX + literalName + " {\n");
+				writer.write("@" + RefRewriter.REF_OF_ANNO + "(" + settings.getQualifiedName() + ".class)\n"); // ← 加这行
+				writer.write("public class " + RefRewriter.REF_PREFIX + literalName + " {\n");
 				// writer.write(allEnumFields.entrySet().stream().reduce("\n",
 				//  (a, b) -> a + "\npublic static " + b.getValue() + " " + b.getKey().getSimpleName() + ";", (a, b) -> a + b));
 				allEnumFields.forEach((symbol, type) -> {

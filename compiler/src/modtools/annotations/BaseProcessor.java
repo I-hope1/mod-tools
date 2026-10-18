@@ -14,6 +14,7 @@ import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
 import modtools.annotations.processors.AINIT;
+import modtools.annotations.unsafe.ProcessingEnvContext;
 import modtools.annotations.unsafe.Replace;
 
 import javax.annotation.processing.*;
@@ -143,7 +144,7 @@ public abstract class BaseProcessor<T extends Element> extends AbstractProcessor
 	public final void initConst(ProcessingEnvironment env) {
 		// 同一 JVM 内可能连续跑多轮编译（Gradle daemon / IDE 会复用处理器类加载器）。
 		// 必须按 Context 身份判断，否则第二轮会继续沿用上一轮已失效的 Context 与符号。
-		Context ctx = Replace.getContextFor(env);
+		Context ctx = ProcessingEnvContext.of(env);
 		if (ctx == _context) return;
 
 		_context = ctx;

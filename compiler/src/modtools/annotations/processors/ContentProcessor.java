@@ -152,7 +152,9 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 		switchMethods.clear();
 		allEnumFields.clear();
-		flushAssignment.clear();
+
+		SettingsMethods settingsMethods = new SettingsMethods(classDecl, settings, iSettings, myEvents,
+		 mMaker, mSymtab);
 
 		ListBuffer<JCStatement> defList = new ListBuffer<>();
 		// ↑ 初始化结束 ↑
@@ -186,7 +188,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 							if (!(method.args.size() >= 2 && newClass.args.get(0) instanceof JCFieldAccess classType
 							      && method.args.get(0) instanceof JCFieldAccess access)) { return; }
 
-							buildFlushField(classType, access, symbol);
+							settingsMethods.flushField(classType, access, symbol);
 						}
 					});
 				}
@@ -213,9 +215,9 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 				defBuilder.append(mMaker.Block(Flags.STATIC, defList.toList()));
 			}
 			// 添加flushAssignment
-			if (!flushAssignment.isEmpty()) {
+			if (settingsMethods.hasFlushAssignments()) {
 				mMaker.at(def);
-				defBuilder.append(mMaker.Block(Flags.STATIC, flushAssignment.toList()));
+				defBuilder.append(mMaker.Block(Flags.STATIC, settingsMethods.flushAssignments()));
 			}
 		};
 		for (JCTree def : classDecl.defs) {
@@ -251,26 +253,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 		if (fireEvents) {
 			addImport(settings, myEvents);
-			JCMethodDecl put = mMaker.MethodDef(mMaker.Modifiers(Flags.PUBLIC),
-			 ns("set"), mMaker.TypeIdent(TypeTag.VOID), List.nil(),
-			 List.of(mMaker.Param(ns("val"), mSymtab.objectType, null)),
-			 List.nil(),
-			 PBlock(
-				mMaker.Exec(mMaker.Apply(
-				 List.nil(), mMaker.Select(
-					mMaker.Select(mMaker.Ident(iSettings), ns("super")),
-					ns("set")
-				 ), List.of(mMaker.Ident(ns("val")))
-				)),
-				mMaker.Exec(mMaker.Apply(
-				 List.nil(), mMaker.Select(
-					mMaker.Ident(myEvents),
-					ns("fire")
-				 ), List.of(mMaker.This(settings.type))
-				))
-			 ), null);
-			// print(put);
-			classDecl.defs = classDecl.defs.append(put);
+			settingsMethods.fireEvent();
 		}
 
 
@@ -309,55 +292,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		// println("------------------------------");
 		// println(classDecl);
 	}
-	// 初始化值的block
-	ListBuffer<JCStatement> flushAssignment = new ListBuffer<>();
-	private void buildFlushField(JCFieldAccess classType, JCFieldAccess access, VarSymbol symbol) {
-		if (symbol.getAnnotation(FlushField.class) == null) return;
-
-		mMaker.at(currentClassDecl.defs.last());
-		flushAssignment.add(buildAssignment(classType, access, mMaker.Ident(symbol)));
-		JCMethodDecl existingSet = findChild(currentClassDecl, Tag.METHODDEF,
-		 (JCMethodDecl m) -> m.name.contentEquals("set")
-		                     && m.params.size() == 1
-		                     && m.params.get(0).vartype.type.equals(mSymtab.objectType));
-		MethodSymbol ms;
-
-		if (existingSet == null) {
-			mMaker.at(currentClassDecl.defs.last());
-			int flags = Flags.PUBLIC;
-			ms = new MethodSymbol(flags, ns("set"),
-			 new MethodType(List.of(mSymtab.objectType), mSymtab.voidType, List.nil(), currentSettings),
-			 currentSettings);
-
-			JCVariableDecl val = mMaker.Param(ns("val"), mSymtab.objectType, ms);
-			JCBlock body = PBlock(mMaker.Exec(mMaker.Apply(List.nil(),
-			 mMaker.Select(mMaker.Select(mMaker.Ident(iSettings), ns("super")), ns("set")),
-			 List.of(mMaker.Ident(val)))));
-			ms.params = List.of(val.sym);
-
-			JCMethodDecl method = mMaker.MethodDef(ms, body);
-			currentSettings.members().enter(ms);
-			currentClassDecl.defs = currentClassDecl.defs.append(method);
-			existingSet = method;
-		}
-
-		existingSet.body.stats = existingSet.body.stats.append(
-		 mMaker.If(mMaker.Binary(Tag.EQ, mMaker.Ident(symbol),
-			 mMaker.This(currentSettings.type)),
-			buildAssignment(classType, access, mMaker.This(currentSettings.type)), null)
-		);
-	}
 	Map<VarSymbol, String> allEnumFields = new LinkedHashMap<>();
-	private JCExpressionStatement buildAssignment(JCFieldAccess classType, JCFieldAccess access,
-	                                              JCExpression selector) {
-		return mMaker.Exec(mMaker.Assign(access,
-			mMaker.Apply(List.nil(),
-			 mMaker.Select(selector, ns("get" + NameUtils.kebabToBigCamel(classType.selected.toString()))),
-			 List.nil()
-			)
-		 )
-		);
-	}
 
 	private JCMethodInvocation createInitValue(String parent, Object literalName) {
 		JCMethodInvocation initValue;

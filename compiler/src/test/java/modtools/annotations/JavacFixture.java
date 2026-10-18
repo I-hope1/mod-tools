@@ -58,11 +58,16 @@ public final class JavacFixture implements AutoCloseable {
 		return new JavacFixture(className, source, false);
 	}
 
-	public void assertNoCompileErrors() {
-		List<String> errors = diagnostics.getDiagnostics().stream()
+	/** 收集到的全部 error 诊断（格式化后的文本） */
+	public List<String> errors() {
+		return diagnostics.getDiagnostics().stream()
 		 .filter(d -> d.getKind() == Diagnostic.Kind.ERROR)
 		 .map(Object::toString)
 		 .toList();
+	}
+
+	public void assertNoCompileErrors() {
+		List<String> errors = errors();
 		if (!errors.isEmpty()) {
 			throw new AssertionError("fixture 本身编译失败: " + errors);
 		}

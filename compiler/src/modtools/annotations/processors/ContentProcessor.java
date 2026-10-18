@@ -244,6 +244,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 		// println(classDecl);
 
+		switchMethods.validate(classDecl, settings, log, trees);
 		switchMethods.build(classDecl, settings, iSettings, mMaker, mSymtab);
 		addImport(settings, dataClass);
 

@@ -1,5 +1,6 @@
 package modtools.annotations.processors;
 
+import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.code.Symbol.ClassSymbol;
 import com.sun.tools.javac.code.Symbol.MethodSymbol;
@@ -8,14 +9,19 @@ import com.sun.tools.javac.code.Symtab;
 import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.code.Type.ArrayType;
 import com.sun.tools.javac.code.Type.MethodType;
+import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.tree.TreeMaker;
 import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.ListBuffer;
+import com.sun.tools.javac.util.Log;
+import modtools.annotations.PrintHelper.SPrinter;
 import modtools.annotations.settings.Switch;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 import static modtools.annotations.NameString.ns0;
 
@@ -49,6 +55,12 @@ import static modtools.annotations.NameString.ns0;
  * 拆开的原因是前者依赖“字段还没被改过”，后者依赖“类里的方法已经就位”。
  */
 public final class SwitchMethods {
+	/**
+	 * 必须与 {@code ISettings.SUFFIX_ENABLED} 一致。
+	 * compiler 模块看不到主工程，只能各写一份。
+	 */
+	public static final String SWITCH_SUFFIX = "$enabled";
+
 	private final Map<VarSymbol, Switch> switches = new LinkedHashMap<>();
 
 	/** 处理器实例跨多个 Settings 类复用，换类时必须清空，否则上一类的开关会漏到下一类。 */
@@ -69,6 +81,77 @@ public final class SwitchMethods {
 		Switch aSwitch = symbol.getAnnotation(Switch.class);
 		if (aSwitch == null) return;
 		switches.put(symbol, aSwitch);
+	}
+
+	/**
+	 * 校验每个 dependency 指向的字段确实存在。
+	 * <p>
+	 * 写错名字的代价是静默的：{@code data().getBool("typo", true)} 永远返回默认值 true，
+	 * 于是这个开关永远不会把它控制的那一项关掉，查起来毫无线索。所以在编译期直接报错。
+	 * <p>
+	 * {@code "xxx$enabled"} 视为「xxx 这个开关自己的开启键」，只校验前缀 {@code xxx}。
+	 *
+	 * @return 报出的错误条数
+	 */
+	public int validate(JCClassDecl classDecl, ClassSymbol settings, Log log, JavacTrees trees) {
+		if (switches.isEmpty()) return 0;
+
+		Set<String> fields = fieldNames(classDecl);
+
+		int errors = 0;
+		for (Map.Entry<VarSymbol, Switch> entry : switches.entrySet()) {
+			VarSymbol symbol = entry.getKey();
+			for (String dependency : entry.getValue().dependency()) {
+				String message = checkDependency(dependency, fields, settings);
+				if (message == null) continue;
+
+				report(log, settings, trees.getTree(symbol), message);
+				errors++;
+			}
+		}
+		return errors;
+	}
+
+	private static void report(Log log, ClassSymbol settings, JCTree pos, String message) {
+		// 增量编译时可能既拿不到 tree 也没有 sourcefile：这时退回不带位置的诊断。
+		// 硬带上位置的话，javac 在算行号时会因为没有 source 而 NPE。
+		if (settings.sourcefile != null) {
+			log.useSource(settings.sourcefile);
+			if (pos != null) {
+				log.error(pos, SPrinter.err(message));
+				return;
+			}
+		}
+		log.error(SPrinter.err(message));
+	}
+
+	/** @return 有问题就返回错误信息，没问题返回 null */
+	private static String checkDependency(String dependency, Set<String> fields, ClassSymbol settings) {
+		if (dependency.isBlank()) {
+			return "@Switch 的 dependency 不能是空字符串；不需要依赖请直接省略这个属性";
+		}
+
+		String base = dependency.endsWith(SWITCH_SUFFIX)
+		 ? dependency.substring(0, dependency.length() - SWITCH_SUFFIX.length())
+		 : dependency;
+		if (fields.contains(base)) return null;
+
+		String owner = settings.getSimpleName().toString();
+		if (base.equals(dependency)) {
+			return "@Switch(dependency = \"" + dependency + "\") 找不到对应字段：" + owner
+			       + " 里没有叫 \"" + base + "\" 的枚举常量或字段";
+		}
+		return "@Switch(dependency = \"" + dependency + "\") 的前缀 \"" + base + "\" 不是 " + owner
+		       + " 的字段（\"" + SWITCH_SUFFIX + "\" 后缀表示「那个开关自己的开启键」）";
+	}
+
+	/** 枚举常量和普通字段都算；这里是纯 AST 扫描，不依赖 symbols 是否已 complete。 */
+	private static Set<String> fieldNames(JCClassDecl classDecl) {
+		Set<String> names = new LinkedHashSet<>();
+		for (JCTree def : classDecl.defs) {
+			if (def instanceof JCVariableDecl variable) names.add(variable.name.toString());
+		}
+		return names;
 	}
 
 	/**

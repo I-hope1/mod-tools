@@ -1,5 +1,6 @@
 package modtools.annotations.processors;
 
+import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.code.Symbol.ClassSymbol;
 import com.sun.tools.javac.code.Symbol.MethodSymbol;
@@ -12,6 +13,7 @@ import com.sun.tools.javac.code.TypeTag;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.tree.TreeMaker;
+import com.sun.tools.javac.util.Log;
 import com.sun.tools.javac.util.Names;
 import modtools.annotations.JavacFixture;
 import modtools.annotations.ProbeProcessor;
@@ -44,7 +46,7 @@ class SwitchMethodsTest {
 	 enum S implements I {
 	   @Switch aaa(int.class),
 	   @Switch(dependency = "bbb$enabled") bbb(int.class),
-	   @Switch(dependency = {"ccc$enabled", "profile"}) ddd(int.class),
+	   @Switch(dependency = {"ccc$enabled", "aaa"}) ddd(int.class),
 	   ccc(int.class);
 
 	   S(Class<?> c) { }
@@ -156,7 +158,7 @@ class SwitchMethodsTest {
 			JCNewArray ddd = (JCNewArray) ((JCReturn) ((JCIf) switchKeys.body.stats.get(1)).thenpart).expr;
 			assertEquals(2, ddd.elems.size());
 			assertEquals("ccc$enabled", ((JCLiteral) ddd.elems.get(0)).value);
-			assertEquals("profile", ((JCLiteral) ddd.elems.get(1)).value);
+			assertEquals("aaa", ((JCLiteral) ddd.elems.get(1)).value);
 			assertTrue(ddd.elemtype.toString().endsWith("String"), "实际是: " + ddd.elemtype);
 		}
 	}
@@ -204,6 +206,76 @@ class SwitchMethodsTest {
 			assertNotNull(s.sym.members().findFirst(Names.instance(fx.context).fromString("hasSwitch")));
 			assertNotNull(s.sym.members().findFirst(Names.instance(fx.context).fromString("switchKey")));
 			assertNotNull(s.sym.members().findFirst(Names.instance(fx.context).fromString("switchKeys")));
+		}
+	}
+
+	/* ---------- validate ---------- */
+
+	@Test
+	void validateAcceptsExistingDependencies() throws Exception {
+		try (JavacFixture fx = fixture()) {
+			ClassDecl s = findClass(fx, "S");
+			// bbb$enabled → bbb；ccc$enabled → ccc；aaa 是普通常量名
+			assertEquals(0, collectAll(fx).validate(s.decl, s.sym, log(fx), trees(fx)));
+			assertTrue(fx.errors().isEmpty(), fx.errors().toString());
+		}
+	}
+
+	@Test
+	void validateRejectsUnknownDependency() throws Exception {
+		assertSingleError("""
+		 @Switch(dependency = "nope") aaa(int.class);
+		 """, "nope");
+	}
+
+	@Test
+	void validateRejectsUnknownDependencyWithEnabledSuffix() throws Exception {
+		assertSingleError("""
+		 @Switch(dependency = "nope$enabled") aaa(int.class);
+		 """, "nope");
+	}
+
+	@Test
+	void validateRejectsEmptyDependency() throws Exception {
+		assertSingleError("""
+		 @Switch(dependency = "") aaa(int.class);
+		 """, "空字符串");
+	}
+
+	@Test
+	void validateIsANoOpWhenNothingWasCollected() throws Exception {
+		try (JavacFixture fx = fixture()) {
+			ClassDecl s = findClass(fx, "S");
+			assertEquals(0, new SwitchMethods().validate(s.decl, s.sym, log(fx), trees(fx)));
+			assertTrue(fx.errors().isEmpty(), fx.errors().toString());
+		}
+	}
+
+	/** 一个只含该枚举常量的 Settings，校验应当报出一条错误并带上关键字 */
+	private static void assertSingleError(String constant, String keyword) throws Exception {
+		String source = """
+		 package p;
+
+		 import modtools.annotations.settings.Switch;
+
+		 interface I { default boolean hasSwitch() { return false; } }
+
+		 enum S implements I {
+		 %s
+		   S(Class<?> c) { }
+		 }
+		 """.formatted(constant);
+
+		try (JavacFixture fx = JavacFixture.of("p.S", source)) {
+			fx.assertNoCompileErrors();
+			new ProbeProcessor().initConst(fx.processingEnv);
+
+			ClassDecl s = findClass(fx, "S");
+			assertEquals(1, collectAll(fx).validate(s.decl, s.sym, log(fx), trees(fx)));
+
+			List<String> errors = fx.errors();
+			assertEquals(1, errors.size(), errors.toString());
+			assertTrue(errors.get(0).contains(keyword), "错误信息里应当提到 " + keyword + "，实际是: " + errors.get(0));
 		}
 	}
 
@@ -280,5 +352,13 @@ class SwitchMethodsTest {
 
 	private static Symtab symtab(JavacFixture fx) {
 		return Symtab.instance(fx.context);
+	}
+
+	private static Log log(JavacFixture fx) {
+		return Log.instance(fx.context);
+	}
+
+	private static JavacTrees trees(JavacFixture fx) {
+		return JavacTrees.instance(fx.context);
 	}
 }

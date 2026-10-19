@@ -140,9 +140,9 @@ public final class SwitchMethods {
 		 ? dependency.substring(0, dependency.length() - SWITCH_SUFFIX.length())
 		 : dependency;
 
-		// 不带后缀地依赖自己：isSwitchOn() 会退化成读它自己的值，@Switch 等于没写。
-		// 而 "self$enabled" 正好等于默认的 switchKey()，只是冗余，不算错。
-		if (!dependency.endsWith(SWITCH_SUFFIX) && base.equals(self)) {
+		// 依赖自己：isSwitchOn() 会退化成读它自己的值，@Switch 等于没写。
+		// "aaa$enabled" 虽然看起来有后缀，但前缀还是 aaa，结果一样。
+		if (base.equals(self)) {
 			return "@Switch(dependency = \"" + dependency + "\") 指向字段自己；"
 			       + "开关状态不能依赖 " + self + " 自身的值";
 		}

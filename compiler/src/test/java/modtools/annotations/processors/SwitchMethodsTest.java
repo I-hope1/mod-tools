@@ -45,7 +45,7 @@ class SwitchMethodsTest {
 
 	 enum S implements I {
 	   @Switch aaa(int.class),
-	   @Switch(dependency = "bbb$enabled") bbb(int.class),
+	   @Switch(dependency = "ccc$enabled") bbb(int.class),
 	   @Switch(dependency = {"ccc$enabled", "aaa"}) ddd(int.class),
 	   ccc(int.class);
 
@@ -124,7 +124,7 @@ class SwitchMethodsTest {
 			assertEquals(3, switchKey.body.stats.size());
 
 			JCIf first = (JCIf) switchKey.body.stats.head;
-			assertEquals("bbb$enabled", ((JCLiteral) ((JCReturn) first.thenpart).expr).value);
+			assertEquals("ccc$enabled", ((JCLiteral) ((JCReturn) first.thenpart).expr).value);
 
 			// 多依赖时 switchKey() 取第一个当代表
 			JCIf second = (JCIf) switchKey.body.stats.get(1);
@@ -153,7 +153,7 @@ class SwitchMethodsTest {
 
 			JCNewArray bbb = (JCNewArray) ((JCReturn) ((JCIf) switchKeys.body.stats.head).thenpart).expr;
 			assertEquals(1, bbb.elems.size());
-			assertEquals("bbb$enabled", ((JCLiteral) bbb.elems.head).value);
+			assertEquals("ccc$enabled", ((JCLiteral) bbb.elems.head).value);
 
 			JCNewArray ddd = (JCNewArray) ((JCReturn) ((JCIf) switchKeys.body.stats.get(1)).thenpart).expr;
 			assertEquals(2, ddd.elems.size());
@@ -215,7 +215,7 @@ class SwitchMethodsTest {
 	void validateAcceptsExistingDependencies() throws Exception {
 		try (JavacFixture fx = fixture()) {
 			ClassDecl s = findClass(fx, "S");
-			// bbb$enabled → bbb；ccc$enabled → ccc；aaa 是普通常量名
+			// bbb 依赖 ccc；ccc$enabled → ccc；aaa 是普通常量名
 			assertEquals(0, collectAll(fx).validate(s.decl, s.sym, log(fx), trees(fx)));
 			assertTrue(fx.errors().isEmpty(), fx.errors().toString());
 		}
@@ -250,28 +250,11 @@ class SwitchMethodsTest {
 	}
 
 	@Test
-	void validateAllowsSelfEnabledSuffixBecauseItIsJustTheDefaultKey() throws Exception {
-		// aaa$enabled 正好等于 aaa 默认的 switchKey()，写出来只是冗余，不是错
-		try (JavacFixture fx = JavacFixture.of("p.S", """
-		 package p;
-
-		 import modtools.annotations.settings.Switch;
-
-		 interface I { default boolean hasSwitch() { return false; } }
-
-		 enum S implements I {
-		   @Switch(dependency = "aaa$enabled") aaa(int.class);
-
-		   S(Class<?> c) { }
-		 }
-		 """)) {
-			fx.assertNoCompileErrors();
-			new ProbeProcessor().initConst(fx.processingEnv);
-
-			ClassDecl s = findClass(fx, "S");
-			assertEquals(0, collectAll(fx).validate(s.decl, s.sym, log(fx), trees(fx)));
-			assertTrue(fx.errors().isEmpty(), fx.errors().toString());
-		}
+	void validateRejectsSelfDependencyWithEnabledSuffix() throws Exception {
+		// aaa$enabled 虽然带后缀，但前缀还是 aaa，等于依赖自己
+		assertSingleError("""
+		 @Switch(dependency = "aaa$enabled") aaa(int.class);
+		 """, "指向字段自己");
 	}
 
 	@Test

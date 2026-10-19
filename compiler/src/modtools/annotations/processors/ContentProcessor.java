@@ -119,8 +119,10 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			writer.write("public class SettingsLoader {\n");
 			writer.write("  public static void load() {\n");
 
+			// 每段以 \n 结尾，trim() 去掉最后多余的一个换行，避免多出一个空白行；
+			// 再把行首统一缩进到 load() 方法体内。
 			writer.write("    ");
-			writer.write(loadMethodBuilder.toString().replace("\n", "\n    "));
+			writer.write(loadMethodBuilder.toString().trim().replace("\n", "\n    "));
 			writer.write("\n");
 
 			writer.write("  }\n");
@@ -233,14 +235,13 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		classDecl.defs = defBuilder.toList();
 		// println(classDecl);
 
-		// 在ModTools里加载Class.forName(
-		loadMethodBuilder.append(
-		 mMaker.Try(PBlock(
-			 mMaker.Exec(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Ident(mSymtab.classType.tsym), ns("forName")),
-				List.of(mMaker.Literal(settings.flatname.toString()))))),
-			List.of(mMaker.Catch(mMaker.VarDef(mMaker.Modifiers(Flags.FINAL), ns("e"), mMaker.Ident(mSymtab.classNotFoundExceptionType.tsym), null), PBlock())),
-			null)
-		).append('\n');
+		// 在 ModTools 运行时通过 Class.forName 强制加载该 Settings 类，
+		// 触发其静态初始化以完成注册。
+		// 直接拼接源码文本即可：SettingsLoader 本就以纯文本写出，
+		// 没必要再绕一道「构造 JCTry AST -> toString()」——那依赖 TreePrinter 的格式且毫无收益。
+		loadMethodBuilder.append("try { Class.forName(\"")
+		 .append(settings.flatname.toString())
+		 .append("\"); } catch (ClassNotFoundException ignored) {}\n");
 
 		// println(classDecl);
 

@@ -90,6 +90,9 @@ public final class SwitchMethods {
 	 * 于是这个开关永远不会把它控制的那一项关掉，查起来毫无线索。所以在编译期直接报错。
 	 * <p>
 	 * {@code "xxx$enabled"} 视为「xxx 这个开关自己的开启键」，只校验前缀 {@code xxx}。
+	 * <p>
+	 * 另外拦两种笔误：空字符串，以及不带 {@code $enabled} 后缀地依赖自己
+	 * （那会让 {@code isSwitchOn()} 退化成读自身的值）。
 	 *
 	 * @return 报出的错误条数
 	 */
@@ -101,8 +104,9 @@ public final class SwitchMethods {
 		int errors = 0;
 		for (Map.Entry<VarSymbol, Switch> entry : switches.entrySet()) {
 			VarSymbol symbol = entry.getKey();
+			String    self   = symbol.name.toString();
 			for (String dependency : entry.getValue().dependency()) {
-				String message = checkDependency(dependency, fields, settings);
+				String message = checkDependency(dependency, self, fields, settings);
 				if (message == null) continue;
 
 				report(log, settings, trees.getTree(symbol), message);
@@ -126,7 +130,8 @@ public final class SwitchMethods {
 	}
 
 	/** @return 有问题就返回错误信息，没问题返回 null */
-	private static String checkDependency(String dependency, Set<String> fields, ClassSymbol settings) {
+	private static String checkDependency(String dependency, String self,
+	                                      Set<String> fields, ClassSymbol settings) {
 		if (dependency.isBlank()) {
 			return "@Switch 的 dependency 不能是空字符串；不需要依赖请直接省略这个属性";
 		}
@@ -134,6 +139,14 @@ public final class SwitchMethods {
 		String base = dependency.endsWith(SWITCH_SUFFIX)
 		 ? dependency.substring(0, dependency.length() - SWITCH_SUFFIX.length())
 		 : dependency;
+
+		// 不带后缀地依赖自己：isSwitchOn() 会退化成读它自己的值，@Switch 等于没写。
+		// 而 "self$enabled" 正好等于默认的 switchKey()，只是冗余，不算错。
+		if (!dependency.endsWith(SWITCH_SUFFIX) && base.equals(self)) {
+			return "@Switch(dependency = \"" + dependency + "\") 指向字段自己；"
+			       + "开关状态不能依赖 " + self + " 自身的值";
+		}
+
 		if (fields.contains(base)) return null;
 
 		String owner = settings.getSimpleName().toString();

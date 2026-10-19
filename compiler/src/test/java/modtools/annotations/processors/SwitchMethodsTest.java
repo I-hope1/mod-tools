@@ -243,6 +243,64 @@ class SwitchMethodsTest {
 	}
 
 	@Test
+	void validateRejectsSelfDependency() throws Exception {
+		assertSingleError("""
+		 @Switch(dependency = "aaa") aaa(int.class);
+		 """, "指向字段自己");
+	}
+
+	@Test
+	void validateAllowsSelfEnabledSuffixBecauseItIsJustTheDefaultKey() throws Exception {
+		// aaa$enabled 正好等于 aaa 默认的 switchKey()，写出来只是冗余，不是错
+		try (JavacFixture fx = JavacFixture.of("p.S", """
+		 package p;
+
+		 import modtools.annotations.settings.Switch;
+
+		 interface I { default boolean hasSwitch() { return false; } }
+
+		 enum S implements I {
+		   @Switch(dependency = "aaa$enabled") aaa(int.class);
+
+		   S(Class<?> c) { }
+		 }
+		 """)) {
+			fx.assertNoCompileErrors();
+			new ProbeProcessor().initConst(fx.processingEnv);
+
+			ClassDecl s = findClass(fx, "S");
+			assertEquals(0, collectAll(fx).validate(s.decl, s.sym, log(fx), trees(fx)));
+			assertTrue(fx.errors().isEmpty(), fx.errors().toString());
+		}
+	}
+
+	@Test
+	void validateAllowsDependencyOnASibling() throws Exception {
+		try (JavacFixture fx = JavacFixture.of("p.S", """
+		 package p;
+
+		 import modtools.annotations.settings.Switch;
+
+		 interface I { default boolean hasSwitch() { return false; } }
+
+		 enum S implements I {
+		   bbb,
+		   @Switch(dependency = "bbb") aaa(int.class);
+
+		   S() { }
+		   S(Class<?> c) { }
+		 }
+		 """)) {
+			fx.assertNoCompileErrors();
+			new ProbeProcessor().initConst(fx.processingEnv);
+
+			ClassDecl s = findClass(fx, "S");
+			assertEquals(0, collectAll(fx).validate(s.decl, s.sym, log(fx), trees(fx)));
+			assertTrue(fx.errors().isEmpty(), fx.errors().toString());
+		}
+	}
+
+	@Test
 	void validateIsANoOpWhenNothingWasCollected() throws Exception {
 		try (JavacFixture fx = fixture()) {
 			ClassDecl s = findClass(fx, "S");

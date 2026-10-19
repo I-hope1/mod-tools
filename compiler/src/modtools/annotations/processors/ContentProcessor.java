@@ -38,8 +38,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	private Name prefix_underline;
 
 	/** 用于ModTools调用forName(设置类) */
-	public ArrayList<ClassSymbol> settingsClasses   = new ArrayList<>();
-	public StringBuilder          loadMethodBuilder = new StringBuilder();
+	public StringBuilder loadMethodBuilder = new StringBuilder();
 	public void lazyInit() throws Throwable {
 		nameSetting = ns("Settings");
 		mySettingsClass = C_MySettings();
@@ -131,16 +130,11 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		loadMethodBuilder.setLength(0);
 	}
 
-	ClassSymbol currentSettings;
-	JCClassDecl currentClassDecl;
 	private final SwitchMethods switchMethods = new SwitchMethods();
 
 	private void processSetting(ClassSymbol settings, JCClassDecl classDecl,
 	                            Object literalName, String parent, boolean fireEvents) throws IOException {
 		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(settings).getCompilationUnit();
-		this.currentSettings = settings;
-		this.currentClassDecl = classDecl;
-		settingsClasses.add(settings);
 
 		// trees.getTree(settingsImpl).mods.flags &= ~Flags.FINAL;
 		// settingsImpl.flags_field &= ~Flags.FINAL;

@@ -160,100 +160,24 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 	private void processSetting(ClassSymbol settings, JCClassDecl classDecl,
 	                            Object literalName, String parent, boolean fireEvents) throws IOException {
-		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(settings).getCompilationUnit();
+		var path = trees.getPath(settings);
+		// 增量编译时这个类可能不在当前 round 的源码里，拿不到 path 就不能改。
+		if (path == null) return;
+		JCCompilationUnit unit = (JCCompilationUnit) path.getCompilationUnit();
 
 		switchMethods.clear();
 		// 每个 Settings 类独立的收集结果；做成局部变量，省掉「换类时记得 clear」这条隐式约定。
 		Map<VarSymbol, String> allEnumFields = new LinkedHashMap<>();
-
 		SettingsMethods settingsMethods = new SettingsMethods(classDecl, settings, iSettings, myEvents,
 		 mMaker, mSymtab);
-
 		ListBuffer<JCStatement> defList = new ListBuffer<>();
-		// ↑ 初始化结束 ↑
 
-
-		classDecl.accept(new TreeScanner() {
-			public void visitVarDef(JCVariableDecl tree) {
-				// TreeScanner 会深入方法体和嵌套类：方法里的 `Foo x = new Foo()`、
-				// 嵌套类的字段都会被扫到，从而被当成 Settings 常量写进 Ref 类。
-				// 只有 classDecl 的直接成员才是真正的枚举常量 / 字段。
-				if (!classDecl.defs.contains(tree)) return;
-				if (tree.name.startsWith(prefix_underline)) return;
-				if (!(tree.init instanceof JCNewClass newClass)) return;
-				VarSymbol symbol = getSymbol(unit, tree);
-
-				allEnumFields.put(symbol, "boolean");
-				switchMethods.collect(symbol);
-
-				// %name%.def(%args%[0])
-				Name name = tree.name;
-				// enumx(float.class, it -> it.$(...))
-				if (newClass.args.size() >= 1 && newClass.args.get(0) instanceof JCFieldAccess classType) {
-					allEnumFields.put(symbol, "" + classType.selected);
-					// flushInitList.add(mMaker.Exec(mMaker.Assign(classType.selected, mMaker.Apply(mMaker.Select(name, ns("get")))));
-				}
-				if (newClass.args.size() == 2 && newClass.args.get(1) instanceof JCLambda lambda) {
-					lambda.accept(new TreeScanner() {
-						public void visitApply(JCMethodInvocation method) {
-							mMaker.at(classDecl.defs.last());
-							if (method.args.isEmpty()) return;
-							defList.add(mMaker.Exec(mMaker.Apply(List.nil(),
-							 mMaker.Select(mMaker.Ident(name),
-								ns("def")),
-							 List.of(method.args.get(0)))));
-							if (!(method.args.size() >= 2 && newClass.args.get(0) instanceof JCFieldAccess classType
-							      && method.args.get(0) instanceof JCFieldAccess access)) { return; }
-
-							settingsMethods.flushField(classType, access, symbol);
-						}
-					});
-				}
-			}
-		});
-		if (!allEnumFields.isEmpty()) {
-			// 生成对应的字段 enum_name(Type, ...) -> public static Type enumx = 默认值（ 0 / false / null）
-			Name pkgName = settings.packge().fullname;
-			try {
-				JavaFileObject file = mFiler.createSourceFile(pkgName + "." + RefRewriter.REF_PREFIX + literalName, settings);
-				try (Writer writer = file.openWriter()) {
-					writer.write(RefSourceGenerator.render(unit, settings, literalName, allEnumFields));
-				}
-			} catch (FilerException e) {
-				println(pkgName + " has been created.");
-			}
-		}
-
-		ListBuffer<JCTree> defBuilder = new ListBuffer<>();
-		boolean            append     = false;
-		Consumer<JCTree> consumer = def -> {
-			if (!defList.isEmpty()) {
-				mMaker.at(def);
-				defBuilder.append(mMaker.Block(Flags.STATIC, defList.toList()));
-			}
-			// 添加flushAssignment
-			if (settingsMethods.hasFlushAssignments()) {
-				mMaker.at(def);
-				defBuilder.append(mMaker.Block(Flags.STATIC, settingsMethods.flushAssignments()));
-			}
-		};
-		for (JCTree def : classDecl.defs) {
-			// 如果是合成的字段，则忽略
-			defBuilder.append(def);
-			if (append || (def instanceof JCVariableDecl vari && vari.sym.isStatic())) {
-				continue;
-			}
-			append = true;
-			consumer.accept(def);
-		}
-		if (!append) consumer.accept(classDecl.defs.last());
-		classDecl.defs = defBuilder.toList();
-		// println(classDecl);
+		collectMembers(classDecl, unit, allEnumFields, defList, settingsMethods);
+		writeRefSource(settings, literalName, allEnumFields, unit);
+		insertStaticBlocks(classDecl, defList, settingsMethods);
 
 		// 在 ModTools 运行时强制加载该 Settings 类，触发其静态初始化以完成注册。
 		SettingsLoaderSource.appendLoad(loadMethodBuilder, settings.flatname);
-
-		// println(classDecl);
 
 		switchMethods.validate(classDecl, settings, log, trees);
 		switchMethods.build(classDecl, settings, iSettings, mMaker, mSymtab);
@@ -268,13 +192,113 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			settingsMethods.fireEvent();
 		}
 
+		addDataField(classDecl, parent, literalName);
+		addTypeAndBuilderMembers(classDecl);
+	}
 
-		if (findChild(classDecl, Tag.VARDEF,
-		 (JCVariableDecl t) -> t.name.contentEquals("data")) == null) {
-			addConstantField(Flags.PUBLIC, classDecl, dataClass.type,
-			 "data", createInitValue(parent, literalName));
+	/**
+	 * 扫描枚举常量：收集 Ref 字段、{@code def(...)} 调用和 {@code @FlushField} 写回。
+	 */
+	private void collectMembers(JCClassDecl classDecl, JCCompilationUnit unit,
+	                            Map<VarSymbol, String> allEnumFields,
+	                            ListBuffer<JCStatement> defList,
+	                            SettingsMethods settingsMethods) {
+		classDecl.accept(new TreeScanner() {
+			public void visitVarDef(JCVariableDecl tree) {
+				// TreeScanner 会深入方法体和嵌套类：方法里的 `Foo x = new Foo()`、
+				// 嵌套类的字段都会被扫到，从而被当成 Settings 常量写进 Ref 类。
+				// 只有 classDecl 的直接成员才是真正的枚举常量 / 字段。
+				if (!classDecl.defs.contains(tree)) return;
+				if (tree.name.startsWith(prefix_underline)) return;
+				if (!(tree.init instanceof JCNewClass newClass)) return;
+				VarSymbol symbol = getSymbol(unit, tree);
+
+				allEnumFields.put(symbol, "boolean");
+				switchMethods.collect(symbol);
+
+				Name name = tree.name;
+				// enumx(float.class, it -> it.$(...))
+				if (newClass.args.size() >= 1 && newClass.args.get(0) instanceof JCFieldAccess classType) {
+					allEnumFields.put(symbol, "" + classType.selected);
+				}
+				if (newClass.args.size() == 2 && newClass.args.get(1) instanceof JCLambda lambda) {
+					lambda.accept(new TreeScanner() {
+						public void visitApply(JCMethodInvocation method) {
+							mMaker.at(classDecl.defs.last());
+							if (method.args.isEmpty()) return;
+							// %name%.def(%args%[0])
+							defList.add(mMaker.Exec(mMaker.Apply(List.nil(),
+							 mMaker.Select(mMaker.Ident(name), ns("def")),
+							 List.of(method.args.get(0)))));
+							if (!(method.args.size() >= 2 && newClass.args.get(0) instanceof JCFieldAccess classType
+							      && method.args.get(0) instanceof JCFieldAccess access)) { return; }
+
+							settingsMethods.flushField(classType, access, symbol);
+						}
+					});
+				}
+			}
+		});
+	}
+
+	/** 生成 {@code R_<name>} 中间类：枚举常量名 → 默认值类型，供 {@code @RefOf} 引用。 */
+	private void writeRefSource(ClassSymbol settings, Object literalName,
+	                            Map<VarSymbol, String> allEnumFields,
+	                            JCCompilationUnit unit) throws IOException {
+		if (allEnumFields.isEmpty()) return;
+
+		Name pkgName = settings.packge().fullname;
+		try {
+			JavaFileObject file = mFiler.createSourceFile(pkgName + "." + RefRewriter.REF_PREFIX + literalName, settings);
+			try (Writer writer = file.openWriter()) {
+				writer.write(RefSourceGenerator.render(unit, settings, literalName, allEnumFields));
+			}
+		} catch (FilerException e) {
+			println(pkgName + " has been created.");
 		}
+	}
 
+	/**
+	 * 把 {@code def(...)} 和 {@code @FlushField} 的写回语句插进静态初始化块。
+	 * <p>
+	 * 位置取「第一个非静态成员之后」：枚举常量本身是静态的，跳过它们，
+	 * 保证块在常量都构造完之后才执行。
+	 */
+	private void insertStaticBlocks(JCClassDecl classDecl, ListBuffer<JCStatement> defList,
+	                                SettingsMethods settingsMethods) {
+		ListBuffer<JCTree> defBuilder = new ListBuffer<>();
+		boolean            append     = false;
+		Consumer<JCTree> consumer = def -> {
+			if (!defList.isEmpty()) {
+				mMaker.at(def);
+				defBuilder.append(mMaker.Block(Flags.STATIC, defList.toList()));
+			}
+			if (settingsMethods.hasFlushAssignments()) {
+				mMaker.at(def);
+				defBuilder.append(mMaker.Block(Flags.STATIC, settingsMethods.flushAssignments()));
+			}
+		};
+		for (JCTree def : classDecl.defs) {
+			defBuilder.append(def);
+			if (append || (def instanceof JCVariableDecl vari && vari.sym.isStatic())) continue;
+			append = true;
+			consumer.accept(def);
+		}
+		if (!append) consumer.accept(classDecl.defs.last());
+		classDecl.defs = defBuilder.toList();
+	}
+
+	/** 没有 {@code data} 字段就补一个，值取自父 Settings 或全局 {@code SETTINGS}。 */
+	private void addDataField(JCClassDecl classDecl, String parent, Object literalName) {
+		if (findChild(classDecl, Tag.VARDEF, (JCVariableDecl t) -> t.name.contentEquals("data")) != null) return;
+		addConstantField(Flags.PUBLIC, classDecl, dataClass.type, "data", createInitValue(parent, literalName));
+	}
+
+	/**
+	 * 生成 {@code type()} / {@code builder()} 两个 getter 及背后的字段，
+	 * 并让两参构造器把实参存进去。
+	 */
+	private void addTypeAndBuilderMembers(JCClassDecl classDecl) {
 		var allInit = classDecl.defs.stream()
 		 .filter(t -> t instanceof JCMethodDecl)
 		 .map(t -> (JCMethodDecl) t)

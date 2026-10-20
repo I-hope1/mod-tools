@@ -18,6 +18,7 @@ import com.sun.tools.javac.util.Log;
 import modtools.annotations.PrintHelper.SPrinter;
 import modtools.annotations.settings.Switch;
 
+import javax.tools.JavaFileObject;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -119,14 +120,19 @@ public final class SwitchMethods {
 	private static void report(Log log, ClassSymbol settings, JCTree pos, String message) {
 		// 增量编译时可能既拿不到 tree 也没有 sourcefile：这时退回不带位置的诊断。
 		// 硬带上位置的话，javac 在算行号时会因为没有 source 而 NPE。
-		if (settings.sourcefile != null) {
-			log.useSource(settings.sourcefile);
-			if (pos != null) {
-				log.error(pos, SPrinter.err(message));
-				return;
-			}
+		if (settings.sourcefile == null) {
+			log.error(SPrinter.err(message));
+			return;
 		}
-		log.error(SPrinter.err(message));
+
+		// useSource 改的是全局状态，报完必须还原，否则后续诊断会记到错误的文件上。
+		JavaFileObject prev = log.useSource(settings.sourcefile);
+		try {
+			if (pos != null) log.error(pos, SPrinter.err(message));
+			else log.error(SPrinter.err(message));
+		} finally {
+			log.useSource(prev);
+		}
 	}
 
 	/** @return 有问题就返回错误信息，没问题返回 null */

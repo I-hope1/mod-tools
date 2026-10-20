@@ -13,7 +13,6 @@ import com.sun.tools.javac.util.List;
 import com.sun.tools.javac.util.Name;
 import modtools.annotations.*;
 import modtools.annotations.settings.*;
-import org.checkerframework.checker.nullness.qual.Nullable;
 
 import javax.annotation.processing.*;
 import javax.lang.model.element.*;
@@ -38,7 +37,7 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	private Name prefix_underline;
 
 	/** 用于ModTools调用forName(设置类) */
-	public StringBuilder loadMethodBuilder = new StringBuilder();
+	private final StringBuilder loadMethodBuilder = new StringBuilder();
 	public void lazyInit() throws Throwable {
 		nameSetting = ns("Settings");
 		mySettingsClass = C_MySettings();
@@ -52,11 +51,19 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	}
 
 	public void contentLoad(ClassSymbol element) throws IOException {
-		JCMethodDecl            loadMethod = trees.getTree((ExecutableElement) findChild(element, "load", ElementKind.METHOD));
-		ListBuffer<JCStatement> statements = new ListBuffer<>();
+		Element load = findChild(element, "load", ElementKind.METHOD);
+		// 没有 load() 就没有生成目标；直接 getTree(null) 会 NPE。
+		if (load == null) return;
 
+		JCMethodDecl loadMethod = trees.getTree((ExecutableElement) load);
+		// 增量编译时这个类可能不在当前 round 的源码里，拿不到 tree 也不能改。
+		if (loadMethod == null || loadMethod.body == null) return;
+
+		ListBuffer<JCStatement> statements = new ListBuffer<>();
 		for (Element field : findAllChild(element, null, ElementKind.FIELD)) {
 			JCVariableDecl variableTree = (JCVariableDecl) trees.getTree(field);
+			if (variableTree == null) continue;
+
 			statements.add(
 			 mMaker.Exec(mMaker.Assign(
 				mMaker.Ident((Name) field.getSimpleName()),
@@ -65,7 +72,6 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		}
 
 		loadMethod.body.stats = statements.toList();
-		// print(loadMethod);
 	}
 
 	public void dealElement(ClassSymbol element) throws IOException {
@@ -76,14 +82,20 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			SettingsInit annotation = element.getAnnotation(SettingsInit.class);
 			String       value      = annotation.value();
 			if (element.owner instanceof ClassSymbol contentOwner && contentOwner.isSubClass(contentClass, types)) {
-				JCMethodDecl initMethod = (JCMethodDecl) trees.getTree(contentOwner.members().findFirst(names.init));
+				// 先判空再 getTree：findFirst 找不到构造器时直接 getTree(null) 会 NPE。
+				Element      initElement = contentOwner.members().findFirst(names.init);
+				JCMethodDecl initMethod  = initElement == null ? null : (JCMethodDecl) trees.getTree(initElement);
 				if (initMethod == null) return;
-				Object literalName;
-				try {
-					literalName = ((JCLiteral) ((JCMethodInvocation) ((JCExpressionStatement) initMethod.body.stats.get(0)).expr).args.get(0)).value;
-				} catch (Throwable e) {
-					log.useSource(element.sourcefile);
-					log.error(initMethod, SPrinter.err("Cannot load content data for: " + element));
+
+				Object literalName = firstLiteralArg(initMethod);
+				if (literalName == null) {
+					// useSource 改的是全局状态，必须还原，否则后续诊断会记到错误的文件上。
+					JavaFileObject prev = log.useSource(element.sourcefile);
+					try {
+						log.error(initMethod, SPrinter.err("Cannot load content data for: " + element));
+					} finally {
+						log.useSource(prev);
+					}
 					return;
 				}
 
@@ -104,10 +116,28 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 			}
 			if (value.equals(".")) {
 				value = element.getSimpleName().toString();
-				if (value.startsWith(SETTING_PREFIX)) value = value.substring(2);
+				if (value.startsWith(SETTING_PREFIX)) value = value.substring(SETTING_PREFIX.length());
 			}
 			processSetting(element, trees.getTree(element), value, annotation.parent(), annotation.fireEvent());
 		}
+	}
+
+	/**
+	 * 取出构造器首句 {@code super("name")} 里的字面量名字。
+	 * <p>
+	 * 用 {@code instanceof} 逐层判断，而不是强转 + {@code catch (Throwable)}：
+	 * 后者会把 {@link OutOfMemoryError}、{@link StackOverflowError} 也一并吞掉，
+	 * 变成一条“Cannot load content data”的误导性错误。
+	 *
+	 * @return 拿不到字面量时返回 {@code null}
+	 */
+	private static Object firstLiteralArg(JCMethodDecl initMethod) {
+		if (initMethod.body == null || initMethod.body.stats.isEmpty()) return null;
+		if (!(initMethod.body.stats.get(0) instanceof JCExpressionStatement statement)) return null;
+		if (!(statement.expr instanceof JCMethodInvocation invocation)) return null;
+		if (invocation.args.isEmpty()) return null;
+		if (!(invocation.args.get(0) instanceof JCLiteral literal)) return null;
+		return literal.value;
 	}
 	public void process() throws Throwable {
 		ClassSymbol    typeElement = elements.getTypeElement("modtools.SettingsLoader");
@@ -132,18 +162,9 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	                            Object literalName, String parent, boolean fireEvents) throws IOException {
 		JCCompilationUnit unit = (JCCompilationUnit) trees.getPath(settings).getCompilationUnit();
 
-		// trees.getTree(settingsImpl).mods.flags &= ~Flags.FINAL;
-		// settingsImpl.flags_field &= ~Flags.FINAL;
-		// settingsImpl.type.tsym.flags_field &= ~Flags.FINAL;
-		// mMaker.at(classDecl.extending);
-		// classDecl.extending = mMaker.QualIdent(settingsImpl);
-
-		// addImport(unit, settingsImpl);
-		// mMaker.at(classDecl.defs.get(0));
-		// classDecl.extending = mMaker.Ident(settingsImpl);
-
 		switchMethods.clear();
-		allEnumFields.clear();
+		// 每个 Settings 类独立的收集结果；做成局部变量，省掉「换类时记得 clear」这条隐式约定。
+		Map<VarSymbol, String> allEnumFields = new LinkedHashMap<>();
 
 		SettingsMethods settingsMethods = new SettingsMethods(classDecl, settings, iSettings, myEvents,
 		 mMaker, mSymtab);
@@ -154,6 +175,10 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 
 		classDecl.accept(new TreeScanner() {
 			public void visitVarDef(JCVariableDecl tree) {
+				// TreeScanner 会深入方法体和嵌套类：方法里的 `Foo x = new Foo()`、
+				// 嵌套类的字段都会被扫到，从而被当成 Settings 常量写进 Ref 类。
+				// 只有 classDecl 的直接成员才是真正的枚举常量 / 字段。
+				if (!classDecl.defs.contains(tree)) return;
 				if (tree.name.startsWith(prefix_underline)) return;
 				if (!(tree.init instanceof JCNewClass newClass)) return;
 				VarSymbol symbol = getSymbol(unit, tree);
@@ -258,28 +283,28 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		String f_typeName = FIELD_PREFIX + "type";
 		addMethod(classDecl, f_typeName, mSymtab.classType, "type");
 		var f_type = addField(classDecl, mSymtab.classType, f_typeName, mMaker.ClassLiteral(mSymtab.booleanType));
-		allInit.stream().filter(m1 -> m1.params.size() == 2).forEach(init -> {
-			String f_builderName = FIELD_PREFIX + "builder";
-			addMethod(classDecl, f_builderName, consType, "builder");
-			var f_builder = addField(classDecl, consType, f_builderName, null);
+
+		// 两参构造器：第 0 个参数是枚举常量的 type，第 1 个是 UI builder。
+		// f_builder 只在存在这种构造器时才需要；而且必须只加一次——
+		// 之前每个构造器都 add 一遍，遇到两个 (Class, Cons) 构造器就会生成重复的 builder()。
+		JCVariableDecl f_builder = null;
+		for (JCMethodDecl init : allInit) {
+			if (init.params.size() != 2) continue;
+			if (f_builder == null) {
+				String f_builderName = FIELD_PREFIX + "builder";
+				addMethod(classDecl, f_builderName, consType, "builder");
+				f_builder = addField(classDecl, consType, f_builderName, null);
+			}
+
 			init.body.stats = init.body.stats.append(
 			 mMaker.Exec(mMaker.Assign(mMaker.Ident(f_type), mMaker.Ident(init.params.get(0))))
 			);
-
-			JCVariableDecl param = init.params.get(1);
-
-			JCExpression rhs = mMaker.Ident(param);
-			// args = xxx
+			// f_builder = args
 			init.body.stats = init.body.stats.append(
-			 mMaker.Exec(mMaker.Assign(mMaker.Ident(f_builder), rhs))
+			 mMaker.Exec(mMaker.Assign(mMaker.Ident(f_builder), mMaker.Ident(init.params.get(1))))
 			);
-		});
-
-		// if (!settings.getSimpleName().contentEquals("E_JSFuncDisplay")) return;
-		// println("------------------------------");
-		// println(classDecl);
+		}
 	}
-	Map<VarSymbol, String> allEnumFields = new LinkedHashMap<>();
 
 	private JCMethodInvocation createInitValue(String parent, Object literalName) {
 		JCMethodInvocation initValue;
@@ -298,7 +323,9 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	}
 
 	private void addMethod(JCClassDecl settingsTree, String fieldName, Type fieldType, String methodName) {
-		if (findChild(settingsTree, Tag.METHODDEF, (JCMethodDecl t) -> t.name.contentEquals(fieldName)) != null) { return; }
+		// 去重必须看「生成的方法名」，而不是它返回的字段名。
+		// 之前这里误用了 fieldName：f_type / f_builder 永远不会有同名方法，守卫等于没写。
+		if (findChild(settingsTree, Tag.METHODDEF, (JCMethodDecl t) -> t.name.contentEquals(methodName)) != null) { return; }
 		mMaker.at(settingsTree);
 		JCBlock body  = PBlock(List.of(mMaker.Return(mMaker.Ident(ns(fieldName)))));
 		int     flags = Flags.PUBLIC;

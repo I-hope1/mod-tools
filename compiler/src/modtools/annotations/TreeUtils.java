@@ -8,6 +8,7 @@ import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
 
 import javax.lang.model.element.Element;
+import javax.tools.JavaFileObject;
 import java.util.ArrayList;
 import java.util.regex.Pattern;
 
@@ -37,11 +38,19 @@ public interface TreeUtils extends ParseUtils, NameString {
 	) {
 		if (findField(classDecl, fieldName) != null) return true;
 
-		log.useSource(classDecl.sym != null ? classDecl.sym.sourcefile : trees.getPath(element).getCompilationUnit().getSourceFile());
+		JavaFileObject source = classDecl.sym != null
+		 ? classDecl.sym.sourcefile
+		 : trees.getPath(element).getCompilationUnit().getSourceFile();
 		String s = "You don't mark class (" + classDecl.getSimpleName() + ") or mark it group (" + group + ")." + "\n(debug)Needed (" + fieldName + ") element.";
-		log.error(classDecl, SPrinter.err(s));
-		new IllegalStateException(s)
-		 .printStackTrace();
+		// useSource 改的是全局状态，报完必须还原，否则后续诊断会记到错误的文件上。
+		JavaFileObject prev = log.useSource(source);
+		try {
+			log.error(classDecl, SPrinter.err(s));
+			new IllegalStateException(s)
+			 .printStackTrace();
+		} finally {
+			log.useSource(prev);
+		}
 		return false;
 	}
 	default JCVariableDecl addField(JCClassDecl classDecl, int flags, Type type, String name, String init) {

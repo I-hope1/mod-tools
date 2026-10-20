@@ -39,83 +39,20 @@ public class IconsProcessor extends BaseProcessor<ClassSymbol> {
 			return;
 		}
 
-		// 使用 StringBuilder 直接构造新文件的代码文本（完全不修改原 root 和 unit）
-		StringBuilder out = new StringBuilder();
-
-		// 写入包名
-		out.append("package ").append(packageName).append(";\n\n");
-
-		out.append("import ").append(element.getQualifiedName()).append(";\n");
-		// 复制原文件的 imports，但跳过生成类不需要的
-		// for (JCTree def : unit.defs) {
-		// 	if (def instanceof JCImport imp) {
-		// 		// String impStr = imp.qualid.toString();
-		// 		// 跳过只属于源类（HopeIconsc）自身需要的 import
-		// 		// if (impStr.startsWith("modtools.annotations.") ||
-		// 		//     impStr.equals("modtools.ModTools")) { continue; }
-		// 		out.append(def).append("\n");
-		// 	}
-		// }
-		// 添加我们生成的类所需的 imports
-		out.append("import arc.scene.style.TextureRegionDrawable;\n");
-		out.append("import arc.graphics.g2d.TextureRegion;\n");
-		out.append("import arc.graphics.Texture;\n\n");
-
-		// 添加注解
-		// out.append("@").append(IconAnn.class.getName()).append("(mainClass = Object.class, skip = true)\n");
-		// 声明新类 (Public 修饰)
-		out.append("public class ").append(genName).append(" {\n");
-
-		// out.append("    public static ").append(s).append(" pxakajsak;");
-
-		// modName 字段
-		out.append("    public static String modName;\n\n");
-
-		// 准备图片目录
-		File[] pngs = findAll(new File(System.getProperty("user.dir") + "/assets/" + icons.iconDir()))
-		 .stream().filter(f -> extension(f).equalsIgnoreCase("png")).toArray(File[]::new);
-
-		// 生成每个图片的字段，并同时收集 load 方法中需要的赋值逻辑
-		StringBuilder loadBody = new StringBuilder();
-
-		String mainClassName = icons.mainClass().getName();
-
-		loadBody.append("        if (modName == null) modName = mindustry.Vars.mods.getMod(")
-		 .append(mainClassName).append(".class).name;\n");
-
-		for (File fi : pngs) {
-			String f_name = NameUtils.kebabToCamel(nameWithoutExtension(fi));
-			out.append("    public static TextureRegionDrawable ").append(f_name).append(";\n");
-			loadBody.append("        ").append(f_name).append(" = n(\"").append(nameWithoutExtension(fi)).append("\");\n");
+		// 图片名（不含扩展名）决定生成哪些字段
+		List<String> pngNames = new ArrayList<>();
+		for (File file : findAll(new File(System.getProperty("user.dir") + "/assets/" + icons.iconDir()))) {
+			if (extension(file).equalsIgnoreCase("png")) pngNames.add(nameWithoutExtension(file));
 		}
 
-		// 生成 n() 方法
-		out.append("\n    private static TextureRegionDrawable n(String name) {\n");
-		out.append("        return (TextureRegionDrawable) arc.Core.atlas.drawable(modName + \"-\" + name);\n");
-		out.append("    }\n\n");
+		String source = IconsSource.render(packageName, genName,
+		 element.getQualifiedName().toString(), icons.mainClass().getName(), pngNames);
 
-		// 生成 load() 方法
-		out.append("    public static void load() {\n");
-		out.append(loadBody);
-		out.append("    }\n");
-
-		// 结束类
-		out.append("}\n");
-
-		// --写入到新文件中--
-		Writer writer = null;
-		try {
-			var source = mFiler.createSourceFile(flatName, element);
-			writer = source.openWriter();
-			writer.write(out.toString());
-			writer.flush();
+		try (Writer writer = mFiler.createSourceFile(flatName, element).openWriter()) {
+			writer.write(source);
 		} catch (IOException | RuntimeException e) {
 			println("Error when writing file.");
 			err(e);
-		} finally {
-			if (writer != null) {
-				writer.close();
-			}
 		}
 	}
 	ArrayList<File> findAll(File file) {

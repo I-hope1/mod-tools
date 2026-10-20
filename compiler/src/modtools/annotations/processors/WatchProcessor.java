@@ -4,6 +4,7 @@ import com.google.auto.service.AutoService;
 import com.sun.source.tree.*;
 import com.sun.source.util.TreeScanner;
 import com.sun.tools.javac.code.Symbol.ClassSymbol;
+import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.List;
@@ -29,101 +30,106 @@ public class WatchProcessor extends BaseProcessor<Element> {
 	}
 
 	public void process() {
-		// Iterate over each class element
-		classFields.forEach((dcls, fieldSeq) -> {
-			JCClassDecl classDecl = (JCClassDecl) trees.getTree(dcls);
-			// Add a constant element to the class
-			addConstantField(classDecl, mSymtab.stringType.tsym.type.constType(dcls), "NAME", dcls.toString()
-			 .replace('.', '_'));
-
-			// Get the WatchClass annotation for the class
-			WatchClass watchClass = getAnnotationByElement(WatchClass.class, dcls, true);
-			Objects.requireNonNull(watchClass);
-			// Iterate over the groups in the WatchClass annotation
-			for (String s : watchClass.groups()) {
-				boolean isStatic = watchClass._static();
-				// Log.info("s: @" ,s);
-				// Add a element to the class for each group
-				addField(classDecl, isStatic ? STATIC : 0,
-				 findType(WATCH_STRING), s + WATCH_SIG, "new " + WATCH_STRING + "()");
-			}
-			// ------------------------fields--------------------------
-
-			/* group -> element[] */
-			HashMap<String, HashMap<Element, WatchField>> fieldMap = new LinkedHashMap<>();
-			// Iterate over each element in the element sequence
-			fieldSeq.forEach((field) -> {
-				// Get the WatchField annotation for the element
-				WatchField watchField = getAnnotationByElement(WatchField.class, field, true);
-				Objects.requireNonNull(watchField);
-				// Add the element to the element map
-				fieldMap.computeIfAbsent(watchField.group(), k -> new HashMap<>())
-				 .put(field, watchField);
-			});
-			// Iterate over each group in the element map
-			fieldMap.forEach((group, fields) -> {
-				boolean isStatic  = false/* first.getModifiers().contains(Modifier.STATIC) */;
-				String  fieldName = (isStatic ? STATIC_SIG : "") + group + WATCH_SIG;
-				if (!checkField(dcls, classDecl, fieldName, group)) return;
-				// Find the test condition method in the class
-				JCMethodDecl test_con = findChild(classDecl, Tag.METHODDEF,
-				 m -> m.name.toString().equals(TEST_CON));
-				// Check test_con whether is valid
-				if (test_con != null) {
-					if (!test_con.getModifiers().getFlags().contains(Modifier.STATIC)) {
-						err(new IllegalStateException("The method " + classDecl.name + "." + test_con.name + " must be static"));
-						return;
-					}
-					if (test_con.params.length() != 1 || test_con.params.get(0).name.equals(classDecl.name)) {
-						err(new IllegalStateException("The method " + classDecl.name + "." + test_con.name + " sig must be ("
-						                              + classDecl.name + ")Z"));
-						return;
-					}
-				}
-
-				ArrayList<JCStatement> statements = new ArrayList<>();
-				// Iterate over each element in the group
-				fields.forEach((el, field) -> {
-					/* 添加watch监控
-					 * Generate: element.watch("name", () -> element, @interval);
-					 **/
-					JCStatement x = execStatement(PSelect(fieldName, "watch"),
-					 List.of(
-						mMaker.Literal(el.getSimpleName().toString()),
-						PLambda0(PSelect(null, el.getSimpleName().toString())),
-						mMaker.Literal(field.interval())));
-
-					// if (test_con != null) sb.append("if(" + TEST_CON + "(this))");
-					if (test_con != null) x = mMaker.If(mMaker.Apply(
-					 List.nil(), mMaker.QualIdent(test_con.sym),
-					 List.of(mMaker.This(classDecl.sym.type))
-					), x, null);
-					statements.add(x);
-				});
-				// Generate: element.showIfOk();
-				statements.add(execStatement(PSelect(fieldName, "showIfOk"), List.nil()));
-
-				/* Add a block of statements to the class definition
-				 * Time.run(0, () -> {
-				 *   x (above)
-				 * ))
-				 * */
-				classDecl.defs = classDecl.defs.append(PBlock(
-				 execStatement(
-					mMaker.Select(mMaker.Ident(timeSymbol), ns("run")),
-					List.of(mMaker.Literal(0),
-					 PLambda0(mMaker.Block(0, List.from(statements))))
-				 )
-				));
-			});
-
-			try {
-				buildVar(dcls, classDecl);
-			} catch (Throwable e) { err(e); }
-			// Log.info(classDecl);
-		});
-
+		classFields.forEach(this::processClass);
 		classFields.clear();
+	}
+
+	private void processClass(Element dcls, ArrayList<Element> fieldSeq) {
+		JCClassDecl classDecl = (JCClassDecl) trees.getTree(dcls);
+		// 增量编译时这个类可能不在当前 round 的源码里，拿不到 tree 就不能改。
+		if (classDecl == null) return;
+
+		addConstantField(classDecl, mSymtab.stringType.tsym.type.constType(dcls), "NAME",
+		 dcls.toString().replace('.', '_'));
+
+		WatchClass watchClass = getAnnotationByElement(WatchClass.class, dcls, true);
+		Objects.requireNonNull(watchClass);
+
+		addGroupFields(classDecl, watchClass);
+		collectFields(fieldSeq).forEach((group, fields) -> addGroupWatch(dcls, classDecl, group, fields));
+
+		try {
+			buildVar(dcls, classDecl);
+		} catch (Throwable e) { err(e); }
+	}
+
+	/** 每个 group 一个 {@code WatchWindow} 字段。 */
+	private void addGroupFields(JCClassDecl classDecl, WatchClass watchClass) {
+		for (String group : watchClass.groups()) {
+			addField(classDecl, watchClass._static() ? STATIC : 0,
+			 findType(WATCH_STRING), group + WATCH_SIG, "new " + WATCH_STRING + "()");
+		}
+	}
+
+	/** group → (字段, 注解)。 */
+	private Map<String, Map<Element, WatchField>> collectFields(Iterable<Element> fieldSeq) {
+		Map<String, Map<Element, WatchField>> fieldMap = new LinkedHashMap<>();
+		for (Element field : fieldSeq) {
+			WatchField watchField = getAnnotationByElement(WatchField.class, field, true);
+			Objects.requireNonNull(watchField);
+			fieldMap.computeIfAbsent(watchField.group(), k -> new HashMap<>()).put(field, watchField);
+		}
+		return fieldMap;
+	}
+
+	/**
+	 * 为同一个 group 的字段生成一段 {@code Time.run(0, ...)}：
+	 * 逐个 {@code group$W-0.watch(...)}，最后 {@code showIfOk()}。
+	 */
+	private void addGroupWatch(Element dcls, JCClassDecl classDecl, String group,
+	                           Map<Element, WatchField> fields) {
+		String fieldName = group + WATCH_SIG;
+		if (!checkField(dcls, classDecl, fieldName, group)) return;
+
+		JCMethodDecl condition = findChild(classDecl, Tag.METHODDEF,
+		 m -> m.name.toString().equals(TEST_CON));
+		if (condition != null && !isValidConditionMethod(condition, classDecl)) return;
+
+		ArrayList<JCStatement> statements = new ArrayList<>();
+		fields.forEach((el, field) -> {
+			/* element.watch("name", () -> element, @interval) */
+			JCStatement watch = execStatement(PSelect(fieldName, "watch"),
+			 List.of(
+				mMaker.Literal(el.getSimpleName().toString()),
+				PLambda0(PSelect(null, el.getSimpleName().toString())),
+				mMaker.Literal(field.interval())));
+
+			// 有 $condition_test$ 就包一层 if (条件) watch(...)
+			if (condition != null) {
+				watch = mMaker.If(mMaker.Apply(List.nil(), mMaker.QualIdent(condition.sym),
+				 List.of(mMaker.This(classDecl.sym.type))), watch, null);
+			}
+			statements.add(watch);
+		});
+		statements.add(execStatement(PSelect(fieldName, "showIfOk"), List.nil()));
+
+		classDecl.defs = classDecl.defs.append(PBlock(
+		 execStatement(
+			mMaker.Select(mMaker.Ident(timeSymbol), ns("run")),
+			List.of(mMaker.Literal(0),
+			 PLambda0(mMaker.Block(0, List.from(statements))))
+		 )
+		));
+	}
+
+	/**
+	 * {@code $condition_test$} 必须是 {@code static boolean (类名)}。
+	 * <p>
+	 * 参数类型要和类本身相同；只比参数名的话，写错签名永远不会被发现。
+	 */
+	private boolean isValidConditionMethod(JCMethodDecl method, JCClassDecl classDecl) {
+		if (!method.getModifiers().getFlags().contains(Modifier.STATIC)) {
+			err(new IllegalStateException("The method " + classDecl.name + "." + method.name + " must be static"));
+			return false;
+		}
+
+		Type paramType = method.params.size() == 1 ? method.params.get(0).vartype.type : null;
+		if (paramType == null || !types.isSameType(paramType, classDecl.sym.type)) {
+			err(new IllegalStateException("The method " + classDecl.name + "." + method.name + " sig must be ("
+			                              + classDecl.name + ")Z"));
+			return false;
+		}
+		return true;
 	}
 
 	/** @return 外层类声明；已经是顶层类（owner 是包）或拿不到声明就返回 {@code null} */
@@ -137,7 +143,9 @@ public class WatchProcessor extends BaseProcessor<Element> {
 
 		classDecl.accept(new TreeScanner<JCTree, Element>() {
 			public JCTree visitMethod(MethodTree node, Element parent) {
-				return super.visitMethod(node, findChild(parent, node.getName() + "", ElementKind.METHOD));
+				// 匿名类里的方法在 parent 的成员里找不到，继续传 null 会让下一层 findChild NPE
+				Element element = parent == null ? null : findChild(parent, node.getName() + "", ElementKind.METHOD);
+				return super.visitMethod(node, element);
 			}
 			public JCBlock block;
 			public JCTree visitBlock(BlockTree node, Element parent) {
@@ -150,11 +158,8 @@ public class WatchProcessor extends BaseProcessor<Element> {
 				if (block == null) return super.visitVariable(node, parent);
 				var variable = (JCVariableDecl) node;
 
-				// symbol.resetAnnotations();
-				// symbol.apiComplete();
 				WatchVar watchVar = getAnnotationByTree(WatchVar.class, unit, variable, true);
 				if (watchVar == null) return super.visitVariable(variable, parent);
-				// Log.info(watchVar.classes()[0].getDeclaredMethods());
 
 				String      fieldName = watchVar.group() + WATCH_SIG;
 				JCClassDecl owner     = classDecl;
@@ -168,10 +173,9 @@ public class WatchProcessor extends BaseProcessor<Element> {
 					checkField(dcls, classDecl, fieldName, watchVar.group());
 					return super.visitVariable(node, parent);
 				}
-				var list = new ArrayList<>(block.stats);
-				// StringBuilder sb = new StringBuilder();
-				// sb.append('{');
 
+				var list = new ArrayList<>(block.stats);
+				// 在变量声明之后插一句 group$W-0.watch("lc-类名-变量名", () -> 变量, interval).showIfOk();
 				list.add(list.indexOf(variable) + 1, execStatement(
 				 mMaker.Select(
 					mMaker.Apply(List.nil(),
@@ -183,17 +187,7 @@ public class WatchProcessor extends BaseProcessor<Element> {
 					ns("showIfOk")),
 				 List.nil()));
 
-				// sb.append(fieldName).append(".watch(\"lc-%prefix%-%name%\",()->%name%,%interval%);"
-				//  .replace("%prefix%", parent.getSimpleName() + "")
-				//  .replaceAll("%name%", variable.getName() + "")
-				//  .replace("%interval%", watchVar.interval() + "F")
-				// );
-				// sb.append(fieldName).append(".showIfOk();");
-				// sb.append('}');
-				// seq.insert(seq.indexOf((JCStatement) variable) + 1,
-				//  parseBlock(sb));
 				block.stats = List.from(list);
-				// Log.info(block);
 				return super.visitVariable(variable, parent);
 			}
 		}, dcls);

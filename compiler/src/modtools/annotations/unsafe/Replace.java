@@ -288,8 +288,8 @@ public class Replace {
 	 Predicate<S> validate,
 	 Symbol defaultResult) {
 		if (name.toString().startsWith("[")) return defaultResult;
-		// 注意：这里曾经调用过 Times.mark()，但对应的 printElapsed 已被注释掉，
-		// 而 mark() 压入的栈永远没有出栈 —— 每次符号查找都会泄漏一个 Long。计时需要成对使用。
+		// 不要在这里加 Times.mark()：mark() 压栈后必须成对 printElapsed 出栈，
+		// 否则每次符号查找都会泄漏一个 Long。
 		try {
 			//even if a class/package cannot be found in the current module and among packages in modules
 			//it depends on that are exported for any or this module, the class/package may exist internally

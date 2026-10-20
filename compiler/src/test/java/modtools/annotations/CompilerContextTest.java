@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * {@link BaseProcessor#initConst} 必须按 {@link com.sun.tools.javac.util.Context} 身份判断。
  * <p>
- * 原实现是 {@code if (_context != null) return;}：Gradle daemon / IDE 复用处理器类加载器时，
+ * 按“非空即复用”判断的话，Gradle daemon / IDE 复用处理器类加载器时，
  * 第二轮编译会继续沿用上一轮已经失效的 Context 和符号，表现为 javac 各种莫名其妙的崩溃。
  */
 class CompilerContextTest {

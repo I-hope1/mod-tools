@@ -14,8 +14,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * {@link RefRewriter#refTarget} 决定一个以 {@code R_} 开头的标识符算不算 settings 引用。
  * <p>
- * 判错的代价很高：原来直接 {@code (ClassSymbol) i.sym}，用户只要有个叫 {@code R_x} 的变量，
- * 整个编译就会 ClassCastException。
+ * 判错的代价很高：直接把 {@code i.sym} 当成 {@link ClassSymbol}，
+ * 用户只要有个叫 {@code R_x} 的变量，整个编译就会 ClassCastException。
  */
 class RefRewriterTest {
 

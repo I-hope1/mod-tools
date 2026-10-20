@@ -26,9 +26,9 @@ import static modtools.annotations.NameString.ns0;
  * </ul>
  *
  * <p>两者都会往类里塞 {@code public void set(Object)}，所以统一由 {@link #ensureSet()} 负责
- * “有就复用、没有才新建”。之前它们各自 {@code defs.append} 一个新方法：一旦某个 Settings
- * 同时用了 {@code @FlushField} 和 {@code fireEvent = true}，就会生成两个同签名的方法，
- * 等到写 class 文件时才炸，而且报错位置跟真正的原因对不上。
+ * “有就复用、没有才新建”。各写一份的话，某个 Settings 同时用了 {@code @FlushField} 和
+ * {@code fireEvent = true} 就会生成两个同签名的方法，等到写 class 文件时才炸，
+ * 而且报错位置跟真正的原因对不上。
  */
 public final class SettingsMethods {
 	private final JCClassDecl   classDecl;

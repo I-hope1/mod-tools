@@ -250,8 +250,8 @@ public final class SwitchMethods {
 	private static void append(JCClassDecl classDecl, ClassSymbol settings, String name, Type restype,
 	                           List<JCStatement> body, TreeMaker maker) {
 		// MethodSymbol 的 type 必须是真正的 MethodType（owner + 返回类型 + 参数表）。
-		// 之前这里直接把 booleanType 当方法类型塞进去，和 buildFlushField 里 set(Object) 的
-		// 构造方式不一致；javac 目前不读它所以没炸，但属于埋雷。
+		// 直接塞返回类型（如 booleanType）会和 set(Object) 的构造方式不一致；
+		// javac 目前不读它所以不炸，但属于埋雷。
 		MethodSymbol ms = new MethodSymbol(Flags.PUBLIC, ns0(name),
 		 new MethodType(List.nil(), restype, List.nil(), settings), settings);
 

@@ -12,8 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 /**
  * {@link NameUtils} 的行为约束。纯字符串运算，不需要初始化任何 javac 状态。
  * <p>
- * {@code toUnderlineName} 曾经用 {@code charAt(i + 1)} 探测下一个字符，
- * 字段名以大写结尾时会抛 {@link StringIndexOutOfBoundsException}，
+ * {@code toUnderlineName} 不能越界探测下一个字符：字段名以大写结尾时，
+ * {@code charAt(i + 1)} 会抛 {@link StringIndexOutOfBoundsException}，
  * 该异常经 {@code dealElement} 冒泡后被转成编译错误，直接打断整次编译。
  */
 class NameUtilsTest {
@@ -55,7 +55,7 @@ class NameUtilsTest {
 	}
 
 	@Test
-	@DisplayName("旧实现确实会在末尾大写上崩溃（缺陷复现）")
+	@DisplayName("越界探测会在末尾大写上崩溃（对照实现）")
 	void oldImplementationCrashesOnTrailingUppercase() {
 		assertThrows(StringIndexOutOfBoundsException.class, () -> oldUnderlineName("fooX"));
 		assertThrows(StringIndexOutOfBoundsException.class, () -> oldUnderlineName("FOO"));

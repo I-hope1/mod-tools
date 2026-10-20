@@ -21,8 +21,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * {@link SettingsMethods} 负责往 Settings 类里塞 {@code set(Object)}、静态写回块和 fire 调用。
  * <p>
- * 关键约束是「一个类里只能有一个 {@code set(Object)}」：以前 {@code @FlushField} 和
- * {@code fireEvent} 各自 append 一个新方法，两者同时出现时会生成两个同签名方法，
+ * 关键约束是「一个类里只能有一个 {@code set(Object)}」：{@code @FlushField} 和
+ * {@code fireEvent} 若各自 append 一个新方法，两者同时出现就会生成两个同签名方法，
  * 一直到写 class 文件才报错。
  */
 class SettingsMethodsTest {

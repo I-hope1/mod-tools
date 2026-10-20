@@ -285,8 +285,8 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 		var f_type = addField(classDecl, mSymtab.classType, f_typeName, mMaker.ClassLiteral(mSymtab.booleanType));
 
 		// 两参构造器：第 0 个参数是枚举常量的 type，第 1 个是 UI builder。
-		// f_builder 只在存在这种构造器时才需要；而且必须只加一次——
-		// 之前每个构造器都 add 一遍，遇到两个 (Class, Cons) 构造器就会生成重复的 builder()。
+		// f_builder 只在存在这种构造器时才需要，且必须只加一次：
+		// 按构造器逐个添加的话，多个 (Class, Cons) 构造器会生成重复的 builder()。
 		JCVariableDecl f_builder = null;
 		for (JCMethodDecl init : allInit) {
 			if (init.params.size() != 2) continue;
@@ -323,8 +323,8 @@ public class ContentProcessor extends BaseProcessor<ClassSymbol>
 	}
 
 	private void addMethod(JCClassDecl settingsTree, String fieldName, Type fieldType, String methodName) {
-		// 去重必须看「生成的方法名」，而不是它返回的字段名。
-		// 之前这里误用了 fieldName：f_type / f_builder 永远不会有同名方法，守卫等于没写。
+		// 去重看「生成的方法名」，不是它返回的字段名：
+		// f_type / f_builder 这类字段名不会出现在方法表里，按字段名查永远查不到。
 		if (findChild(settingsTree, Tag.METHODDEF, (JCMethodDecl t) -> t.name.contentEquals(methodName)) != null) { return; }
 		mMaker.at(settingsTree);
 		JCBlock body  = PBlock(List.of(mMaker.Return(mMaker.Ident(ns(fieldName)))));

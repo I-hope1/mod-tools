@@ -1,10 +1,14 @@
 package modtools.annotations.unsafe;
 
+import com.sun.source.doctree.*;
 import com.sun.source.tree.ReturnTree;
+import com.sun.source.util.DocTreePath;
+import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.ClassType;
 import com.sun.tools.javac.comp.*;
+import com.sun.tools.javac.tree.DCTree.DCReference;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
@@ -22,17 +26,19 @@ import java.util.function.*;
 import static modtools.annotations.PrintHelper.SPrinter.println;
 
 public class TopTranslator extends TreeTranslator {
-	final Log       log;
-	final Names     names;
-	final Symtab    symtab;
-	final TreeMaker make;
-	final Types     types;
-	final Operators operators;
+	final JavacTrees trees;
+	final Log        log;
+	final Names      names;
+	final Symtab     symtab;
+	final TreeMaker  make;
+	final Types      types;
+	final Operators  operators;
 
 	public static final String LOCAL_PREFIX = "$$letexpr$$";
 
 	private TopTranslator(Context context) {
 		context.put(TopTranslator.class, this);
+		trees = JavacTrees.instance(context);
 		log = Log.instance(context);
 		names = Names.instance(context);
 		symtab = Symtab.instance(context);
@@ -350,6 +356,44 @@ public class TopTranslator extends TreeTranslator {
 	}
 
 	/**
+	 * 用到{@link ToTranslate}时，make.Binary需要改为用这个
+	 */
+	public JCExpression makeStringList(List<String> strings) {
+		return make.App(arraysAsListSelect(), strings.map(this::makeString));
+	}
+
+	public JCExpression makeList(List<JCExpression> trees) {
+		return make.App(arraysAsListSelect(), trees);
+	}
+
+	/**
+	 * {@code Arrays.asList} 的方法选择。
+	 * <p>
+	 * 拼出来的树不会再走 Attr，{@code sym} 和 {@code type} 必须在这里补齐；
+	 * 缺 {@code type} 的节点在后续阶段被解引用时会直接 NPE。
+	 */
+	private JCFieldAccess arraysAsListSelect() {
+		Symbol        asList = symtab.arraysType.tsym.members().findFirst(names.fromString("asList"));
+		JCFieldAccess select = make.Select(make.Ident(symtab.arraysType.tsym), asList);
+		select.type = asList.type;
+		return select;
+	}
+
+	public JCExpression concatExpression(List<String> fragments, List<JCExpression> expressions) {
+		JCExpression           expr     = null;
+		Iterator<JCExpression> iterator = expressions.iterator();
+		for (String fragment : fragments) {
+			expr = expr == null ? makeString(fragment)
+			 : makeBinary(Tag.PLUS, expr, makeString(fragment));
+			if (iterator.hasNext()) {
+				JCExpression expression = iterator.next();
+				expr = makeBinary(Tag.PLUS, expr, expression);
+			}
+		}
+		return expr;
+	}
+
+	/**
 	 * {@code Operators.resolveBinary} 不是公开 API，只能反射拿。
 	 * <p>
 	 * 构造出来的 {@link JCBinary} 不会再走 Attr，{@code operator} 字段得自己填，
@@ -471,6 +515,23 @@ public class TopTranslator extends TreeTranslator {
 		LetExpr letExpr = make.LetExpr(defs.toList(), make.Ident(varSymbol));
 		letExpr.type = returnType;
 		return letExpr;
+	}
+
+	/**
+	 * 从 {@code @see} 标签里取被引用的类。
+	 * <p>
+	 * 没有 {@code @see}、或者 {@code @see} 指的不是类型（方法、常量）时返回 {@code null}：
+	 * 这是调用方要处理的正常情况，不该用异常表达。
+	 */
+	public ClassSymbol getClassSymbolByDoc(JCIdent i) {
+		DocCommentTree doc = trees.getDocCommentTree(i.sym);
+		if (doc == null) return null;
+		SeeTree seeTag = (SeeTree) doc.getBlockTags().stream()
+		 .filter(t -> t instanceof SeeTree).findFirst().orElse(null);
+		if (seeTag == null || seeTag.getReference().isEmpty()) return null;
+		if (!(seeTag.getReference().get(0) instanceof DCReference reference)) return null;
+
+		return (ClassSymbol) trees.getElement(new DocTreePath(new DocTreePath(trees.getPath(i.sym), doc), reference));
 	}
 
 	public static class CheckException extends RuntimeException {

@@ -1,15 +1,10 @@
 package modtools.annotations.unsafe;
 
-import com.sun.source.doctree.*;
 import com.sun.source.tree.ReturnTree;
-import com.sun.source.util.DocTreePath;
-import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.*;
 import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.ClassType;
 import com.sun.tools.javac.comp.*;
-import com.sun.tools.javac.jvm.Target;
-import com.sun.tools.javac.tree.DCTree.DCReference;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
@@ -18,6 +13,7 @@ import com.sun.tools.javac.util.List;
 import modtools.annotations.HopeReflect;
 import modtools.annotations.PrintHelper.SPrinter;
 
+import javax.tools.JavaFileObject;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.util.*;
@@ -26,56 +22,42 @@ import java.util.function.*;
 import static modtools.annotations.PrintHelper.SPrinter.println;
 
 public class TopTranslator extends TreeTranslator {
-	final JavacTrees trees;
-	final Log        log;
-	final Names      names;
-	final Symtab     symtab;
-	final TreeMaker  make;
-	final Resolve    resolve;
-	final Types      types;
-	final Operators  operators;
-	final Target     target;
+	final Log       log;
+	final Names     names;
+	final Symtab    symtab;
+	final TreeMaker make;
+	final Types     types;
+	final Operators operators;
 
 	public static final String LOCAL_PREFIX = "$$letexpr$$";
 
-	static final boolean DEBUG_LOG = false;
-
-
-	final String errorKey = "default.method.call";
-
 	private TopTranslator(Context context) {
 		context.put(TopTranslator.class, this);
-		trees = JavacTrees.instance(context);
 		log = Log.instance(context);
 		names = Names.instance(context);
 		symtab = Symtab.instance(context);
 		make = TreeMaker.instance(context);
-		resolve = Resolve.instance(context);
 		types = Types.instance(context);
 		operators = Operators.instance(context);
-		target = Target.instance(context);
 
 		addDefaultTodo();
-		Replace.bundles.put("compiler.err." + errorKey, "Default method call: {0}#{1}");
 	}
 
-	public void addDefaultTodo() {
-		// 你的旧方法，现在可能可以简化或移除
+	/**
+	 * 注册内置的兼容性改写：这些 API 在新版 JDK 里签名变了，但 mod 源码仍按旧签名调用。
+	 */
+	private void addDefaultTodo() {
 		replaceMethod(symtab.classType.tsym, "componentType", "getComponentType");
 
-		// List.of
-		MethodSymbol listOfMethod       = findMethodSymbol(symtab.listType.tsym, names.fromString("of"), -1, true); // -1 for varargs
-		// Arrays.asList
-		MethodSymbol arraysAsListMethod = findMethodSymbol(symtab.arraysType.tsym, names.fromString("asList"), -1, true);
+		MethodSymbol listOfMethod       = findMethodSymbol(symtab.listType.tsym, names.fromString("of"), true);
+		MethodSymbol arraysAsListMethod = findMethodSymbol(symtab.arraysType.tsym, names.fromString("asList"), true);
 
 		if (listOfMethod != null && arraysAsListMethod != null) {
 			replaceMethod(listOfMethod, arraysAsListMethod,
 			 (originalInvocation, originalSym, targetSym) -> {
-				 // List.of(args) -> Arrays.asList(args)
-				 // 参数列表保持不变
+				 // List.of(args) -> Arrays.asList(args)：参数列表原样搬过去
 				 List<JCExpression> newArgs = List.of(
 					make.NewArray(make.Ident(symtab.objectType.tsym), List.nil(), originalInvocation.args).setType(types.makeArrayType(symtab.objectType)));
-				 // 方法选择表达式：Arrays.asList
 				 JCExpression newMethodSelect = makeSelect(make.QualIdent(targetSym.owner), targetSym.name, targetSym);
 				 return make.at(originalInvocation.pos).App(
 					newMethodSelect, newArgs
@@ -85,78 +67,17 @@ public class TopTranslator extends TreeTranslator {
 		} else {
 			println("Warning: Could not find List.of or Arrays.asList for replacement.");
 		}
-
-
-		/* // 查找 String.repeat(int)
-		MethodSymbol stringRepeatMethod = findMethodSymbol(symtab.stringType.tsym, names.fromString("repeat"), 1, false);
-		// 查找 Strings.repeat(String, int)
-		MethodSymbol stringsRepeatMethod = findMethodSymbol(symtab.enterClass(symtab.unnamedModule, names.fromString("arc.util.Strings")), names.fromString("repeat"), 2, true); // True for static
-
-		if (stringRepeatMethod != null && stringsRepeatMethod != null) {
-			replaceMethod(stringRepeatMethod, stringsRepeatMethod,
-			 (originalInvocation, originalSym, targetSym) -> {
-				 // Original: "ap".repeat(13) -> JCMethodInvocation (meth=JCFieldAccess("ap".repeat), args=[13])
-				 // Target:   Strings.repeat("ap", 13) -> JCMethodInvocation (meth=JCFieldAccess(Strings.repeat), args=["ap", 13])
-
-				 // 1. 获取原始调用的接收者 ("ap")
-				 JCExpression originalReceiver = null;
-				 if (originalInvocation.meth instanceof JCFieldAccess originalFieldAccess) {
-					 originalReceiver = originalFieldAccess.selected;
-				 } else if (originalInvocation.meth instanceof JCIdent) {
-					 // This case means it's a direct call on 'this' or a static import, less common for 'string.repeat'
-					 // If 'repeat' was called like 'repeat(13)' without receiver, it implies 'this.repeat(13)'
-					 // We would need 'maker.This(currentClass.sym.type)' as receiver.
-					 originalReceiver = maker.This(currentClass.sym.type); // Or whatever 'this' refers to
-				 }
-
-				 // 2. 构造新的参数列表，将原始接收者作为第一个参数
-				 ListBuffer<JCExpression> newArgsBuffer = new ListBuffer<>();
-				 if (originalReceiver != null) {
-					 newArgsBuffer.add(originalReceiver);
-				 }
-				 newArgsBuffer.appendList(originalInvocation.args);
-				 List<JCExpression> newArgs = newArgsBuffer.toList();
-
-				 // 3. 构造新的方法选择表达式 (Strings.repeat)
-				 JCExpression newMethodSelect = maker.Select(maker.QualIdent(targetSym.owner), targetSym.name);
-
-				 // 4. 创建新的方法调用
-				 return maker.at(originalInvocation.pos).Apply(
-					List.nil(), // 泛型参数
-					newMethodSelect,
-					newArgs
-				 );
-			 }
-			);
-		} else {
-			println("Warning: Could not find String.repeat or arc.util.Strings.repeat for replacement.");
-		} */
 	}
 
 	/**
-	 * 辅助方法：根据方法名、参数数量和是否静态查找MethodSymbol。
-	 * 优化了根据参数数量查找特定重载。
-	 * @param ownerSym   方法的拥有者 TypeSymbol
-	 * @param methodName 方法名
-	 * @param paramCount 期望的参数数量，-1 表示不关心数量或变长参数
-	 * @param isStatic   是否期望是静态方法
-	 * @return 匹配的 MethodSymbol，如果找不到则为 null
+	 * 按名字找第一个 public 的（静态/实例）方法。
+	 * <p>
+	 * 重载之间不做区分：{@link #isEquals} 只比 owner 和限定名，
+	 * 所以拿到哪个重载对后续匹配没有影响。
 	 */
-	private MethodSymbol findMethodSymbol(TypeSymbol ownerSym, Name methodName, int paramCount, boolean isStatic) {
+	private MethodSymbol findMethodSymbol(TypeSymbol ownerSym, Name methodName, boolean isStatic) {
 		return (MethodSymbol) ownerSym.members().findFirst(methodName,
-		 s -> s.isPublic() && s instanceof MethodSymbol ms && (isStatic == ms.isStatic()) && ((BooleanSupplier) () -> {
-			 if (paramCount == -1) { // 变长参数或不关心参数数量
-				 return true;
-			 }
-			 // 对于精确参数数量匹配，考虑变长参数的实际参数数量。
-			 // Javac在解析时会把变长参数的多个实参包装成一个数组实参。
-			 // 但在这里我们看的是方法的定义，所以直接比较params.size()
-			 // 或者检查 isVarArgs 并比较除最后一个（数组）参数外的参数数量
-			 if (ms.isVarArgs() && paramCount >= ms.params.size() - 1) { // if varargs, allow more params
-				 return true;
-			 }
-			 return ms.params.size() == paramCount;
-		 }).getAsBoolean());
+		 s -> s.isPublic() && s instanceof MethodSymbol ms && ms.isStatic() == isStatic);
 	}
 
 
@@ -181,25 +102,18 @@ public class TopTranslator extends TreeTranslator {
 			 return methodSym != null && isEquals(methodSym, originalMethodSymbol);
 		 },
 		 (methodInvocation) -> {
-			 // 使用传入的transformer函数进行转换
 			 JCMethodInvocation newMethodInvocation = transformer.apply(
 				methodInvocation, originalMethodSymbol, targetMethodSymbol
 			 );
 
-			 // 更新类型信息（非常重要！）
-			 // 这里我们假设 transformer 已经构建了一个有效的 JCMethodInvocation，
-			 // 其内部的 `meth` 和 `args` 已经正确设置。
-			 // 此时，需要确保新生成的方法调用及其子节点拥有正确的类型信息。
+			 // 这棵树不再经过 Attr：类型必须在这里补齐，否则后续 Check/Lower 读到 null type。
 			 newMethodInvocation.type = targetMethodSymbol.type.getReturnType();
 			 newMethodInvocation.meth.type = targetMethodSymbol.type;
 
-			 // 对于 maker.Select 或 maker.Ident，其 sym 字段的 type 也需要更新
 			 Symbol newMethodSelectSym = TreeInfo.symbolFor(newMethodInvocation.meth);
 			 if (newMethodSelectSym != null) {
 				 newMethodSelectSym.type = targetMethodSymbol.type;
 			 }
-
-			 if (DEBUG_LOG) println("Transformed: " + methodInvocation + " to " + newMethodInvocation);
 			 return newMethodInvocation;
 		 }
 		));
@@ -212,8 +126,7 @@ public class TopTranslator extends TreeTranslator {
 		 s -> s.isPublic() && s instanceof MethodSymbol ms && ms.params.isEmpty());
 		if (originalSymbol != null && targetSymbol != null) {
 			replaceMethod(originalSymbol, targetSymbol, (originalInvocation, originalSym, targetSym) -> {
-				// 这是一个简单的替换，只改方法名和符号，参数不变
-				// 类似于你旧方法中的逻辑，但现在由lambda处理
+				// 只改方法名和符号，参数不变
 				JCExpression meth = originalInvocation.meth;
 				if (meth instanceof JCFieldAccess access) {
 					access.name = targetSym.name;
@@ -224,7 +137,7 @@ public class TopTranslator extends TreeTranslator {
 					ident.sym = targetSym;
 					meth.type = targetSym.type; // 重要
 				}
-				return originalInvocation; // 返回修改后的原invocation
+				return originalInvocation;
 			});
 		} else {
 			println("Warning: Old replaceMethod could not find symbols for " + originalMethodName + " or " + targetMethodName);
@@ -244,26 +157,26 @@ public class TopTranslator extends TreeTranslator {
 	}
 
 	public boolean inAnnotation(Class<? extends Annotation> annoType) {
-		return currentMethod != null && currentMethod.sym.getAnnotation(annoType) != null
-		       || currentClass != null && currentClass.sym.getAnnotation(annoType) != null;
+		return (currentMethod != null && currentMethod.sym.getAnnotation(annoType) != null)
+		       || (currentClass != null && currentClass.sym.getAnnotation(annoType) != null);
 	}
 
 	public JCExpression makeClassExpr(ClassSymbol classSymbol, Symbol owner) {
 		if (classSymbol.isPublic()) return make.ClassLiteral(classSymbol);
 
-		// loadClass(String)
 		MethodSymbol forName = (MethodSymbol) symtab.classType.tsym.members().findFirst(names.fromString("forName"),
 		 s -> s.isPublic() && s instanceof MethodSymbol ms && ms.params.size() == 1 && ms.params.get(0).type.tsym == symtab.stringType.tsym);
 		JCMethodInvocation apply = make.App(
 		 makeSelect(make.Ident(symtab.classType.tsym),
 			names.fromString("forName"), forName), List.of(makeString(classSymbol.flatName().toString()))
 		);
-		// 创建一个局部变量 %LOCAL_PREFIX%
+		// 局部变量名带上类名，同一个方法里多次调用不会撞名
 		VarSymbol localSym = new VarSymbol(0, names.fromString(LOCAL_PREFIX + classSymbol.name), symtab.classType, owner);
 		localSym.flags_field |= Flags.LocalVarFlags;
 		JCVariableDecl local = make.VarDef(localSym, apply);
 
-		// let (local = %moduleRep[0]%.class.getClassLoader().loadClass("%classSymbol.name%");) in local
+		// 非 public 的类拿不到 ClassLiteral（常量池里的类引用会被访问检查拦下），
+		// 所以退化成 Class.forName，用 let 表达式把结果塞进一个局部变量里用。
 		return make.LetExpr(List.of(local), make.Ident(local)).setType(symtab.classType);
 	}
 
@@ -281,7 +194,7 @@ public class TopTranslator extends TreeTranslator {
 			this(tree -> cls.isInstance(tree) && predicate.test((T) tree), treeTrans);
 		}
 
-		/** 此时tree的symbol都是有的，不能用{@link #getSymbol(JCTree)}，要用{@link TreeInfo#symbolFor(JCTree)} */
+		/** 此时tree的symbol都是有的，不能用符号表查找，要用{@link TreeInfo#symbolFor(JCTree)} */
 		public <T extends JCTree> ToTranslate(Class<T> cls, Function<T, JCTree> treeTrans) {
 			this(cls::isInstance, treeTrans);
 		}
@@ -432,42 +345,24 @@ public class TopTranslator extends TreeTranslator {
 	public JCExpression makeLit(Type type, Object value) {
 		return make.Literal(type.getTag(), value).setType(type.constType(value));
 	}
-	/**
-	 * 用到{@link ToTranslate}时，make.Binary需要改为用这个
-	 */
-	public JCExpression makeStringList(List<String> strings) {
-		Symbol list = symtab.arraysType.tsym.members().findFirst(names.fromString("asList"));
-		// code: Arrays.asList(trees)
-		return make.App(make.Select(make.Ident(symtab.arraysType.tsym), list), strings.map(this::makeString));
-	}
-	public JCExpression makeList(List<JCExpression> trees) {
-		Symbol list = symtab.arraysType.tsym.members().findFirst(names.fromString("asList"));
-		// code: Arrays.asList(trees)
-		return make.App(make.Select(make.Ident(symtab.arraysType.tsym), list), trees);
-	}
 	public JCExpression makeString(String s) {
 		return makeLit(symtab.stringType, s);
 	}
 
-	static Method operatorMethod = HopeReflect.nl(() -> Operators.class.getDeclaredMethod("resolveBinary", DiagnosticPosition.class, Tag.class, Type.class, Type.class));
+	/**
+	 * {@code Operators.resolveBinary} 不是公开 API，只能反射拿。
+	 * <p>
+	 * 构造出来的 {@link JCBinary} 不会再走 Attr，{@code operator} 字段得自己填，
+	 * 否则 Lower 阶段读到 null 直接崩。
+	 */
+	private static final Method OPERATOR_METHOD = HopeReflect.nl(
+	 () -> Operators.class.getDeclaredMethod("resolveBinary", DiagnosticPosition.class, Tag.class, Type.class, Type.class));
+
 	public JCBinary makeBinary(Tag tag, JCExpression lhs, JCExpression rhs) {
 		JCBinary tree = make.Binary(tag, lhs, rhs);
-		tree.operator = HopeReflect.iv(operatorMethod, operators, tree, tag, lhs.type, rhs.type);
+		tree.operator = HopeReflect.iv(OPERATOR_METHOD, operators, tree, tag, lhs.type, rhs.type);
 		tree.type = tree.operator.type.getReturnType();
 		return tree;
-	}
-	public JCExpression concatExpression(List<String> fragments, List<JCExpression> expressions) {
-		JCExpression           expr     = null;
-		Iterator<JCExpression> iterator = expressions.iterator();
-		for (String fragment : fragments) {
-			expr = expr == null ? makeString(fragment)
-			 : makeBinary(Tag.PLUS, expr, makeString(fragment));
-			if (iterator.hasNext()) {
-				JCExpression expression = iterator.next();
-				expr = makeBinary(Tag.PLUS, expr, expression);
-			}
-		}
-		return expr;
 	}
 
 	public JCFieldAccess makeSelect(ClassType owner, Name name) {
@@ -485,18 +380,14 @@ public class TopTranslator extends TreeTranslator {
 		JCFieldAccess select  = make.Select(selected, name);
 		var           symbols = List.from(owner.members().getSymbolsByName(name));
 		if (symbols.size() > 1) {
-			log.useSource(toplevel.sourcefile);
-			log.error(selected, SPrinter.err("Find more than one symbol for " + owner + "." + name + ": " + symbols));
-			// throw new CheckException(""); // 生产环境不应抛出，而是更优雅地处理
-			// 为避免编译中断，这里尝试选择一个，但应警告开发者
-			select.sym = (Symbol) symbols.head; // 尝试选择第一个，可能不准确
+			errorAtToplevel(selected, "Find more than one symbol for " + owner + "." + name + ": " + symbols);
+			// 重载之间无法从名字判断意图，先取第一个让编译继续，错误已经报出去了
+			select.sym = symbols.head;
 		} else if (symbols.head == null) {
-			log.useSource(toplevel.sourcefile);
-			log.error(selected, SPrinter.err("can't resolve symbol for " + owner + "." + name + ":" + selected));
-			// throw new CheckException(""); // 生产环境不应抛出
-			select.sym = symtab.errSymbol; // 设置为错误符号
+			errorAtToplevel(selected, "can't resolve symbol for " + owner + "." + name + ":" + selected);
+			select.sym = symtab.errSymbol;
 		} else {
-			select.sym = (Symbol) symbols.head;
+			select.sym = symbols.head;
 		}
 		select.type = select.sym.type;
 		return select;
@@ -508,15 +399,28 @@ public class TopTranslator extends TreeTranslator {
 	public JCFieldAccess makeSelect(JCExpression selected, Name name, MethodSymbol ms) {
 		JCFieldAccess select = make.Select(selected, name);
 		if (ms == null) {
-			log.useSource(toplevel.sourcefile);
-			log.error(SPrinter.err("can't resolve method symbol for " + name + ":" + selected));
-			// throw new CheckException("");
+			errorAtToplevel(selected, "can't resolve method symbol for " + name + ":" + selected);
 			select.sym = symtab.errSymbol;
 		} else {
 			select.sym = ms;
 		}
 		select.type = select.sym.type;
 		return select;
+	}
+
+	/**
+	 * 在源码位置上报错。
+	 * <p>
+	 * {@code Log.source} 是全局可变状态：不还原的话，后面所有诊断都会被记到这个文件上，
+	 * 真实出错的位置就再也看不到了。
+	 */
+	private void errorAtToplevel(DiagnosticPosition pos, String message) {
+		JavaFileObject prev = log.useSource(toplevel == null ? null : toplevel.sourcefile);
+		try {
+			log.error(pos, SPrinter.err(message));
+		} finally {
+			log.useSource(prev);
+		}
 	}
 
 	public JCExpression defaultValue(Type type) {
@@ -569,38 +473,6 @@ public class TopTranslator extends TreeTranslator {
 		return letExpr;
 	}
 
-	public ClassSymbol getClassSymbolByDoc(JCIdent i) {
-		DocCommentTree doc = trees.getDocCommentTree(i.sym);
-		if (doc == null) return null;
-		SeeTree seeTag = (SeeTree) doc.getBlockTags().stream().filter(t -> t instanceof SeeTree).findFirst().orElseThrow();
-		if (!(seeTag.getReference().get(0) instanceof DCReference reference)) { return null; }
-
-		return (ClassSymbol) trees.getElement(new DocTreePath(new DocTreePath(trees.getPath(i.sym), doc), reference));
-	}
-
-	private void checkDefault(JCMethodInvocation tree) {
-		// 检查没有实现默认方法却调用了默认方法
-		MethodSymbol method = (MethodSymbol) getSymbol(tree);
-		l:
-		if (method.isDefault() && method.owner.isInterface() /* && ((ClassSymbol) method.owner).sourcefile == null */) {
-			ClassSymbol owner = (ClassSymbol) method.owner;
-			if (owner.classfile == owner.sourcefile) break l;
-			// DocCommentTree doc = trees.getDocCommentTree(method);
-			// if (doc == null) break l;
-			// SinceTree since = (SinceTree) doc.getBlockTags().stream().filter(t -> t.getKind() == Kind.SINCE).findFirst().orElse(null);
-			// if (since == null || Source.lookup(since.getBody().toString()).compareTo(Source.JDK8) < 0) break l;
-			// DocTreePath path = treesDocTreePath.getPath(trees.getPath(method), doc, since);/
-			log.useSource(toplevel.sourcefile);
-			log.error(tree.pos, errorKey, method.owner.name, method);
-			throw new CheckException(errorKey);
-		}
-	}
-
-	private Symbol getSymbol(JCTree tree) {
-		if (tree instanceof LetExpr) return null;
-		return trees.getElement(trees.getPath(toplevel, tree));
-	}
-
 	public static class CheckException extends RuntimeException {
 		public CheckException(String message) {
 			super(message);
@@ -608,7 +480,6 @@ public class TopTranslator extends TreeTranslator {
 	}
 }
 
-// 定义一个三元函数式接口
 @FunctionalInterface
 interface TriFunction<T, U, V, R> {
 	R apply(T t, U u, V v);

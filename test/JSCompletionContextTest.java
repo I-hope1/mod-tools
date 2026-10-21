@@ -158,6 +158,49 @@ class JSCompletionContextTest {
 		assertEquals(expected, baseOf(marked), "base object");
 	}
 
+	/**
+	 * 解构声明里的名字：状态机只看「声明中的标识符」，和外面的括号无关，所以数组/对象
+	 * 解构的名字都能进 locals（补全候选、高亮都对）。
+	 */
+	@Test
+	@DisplayName("array destructuring declares its names")
+	void arrayDestructuringDeclaresNames() {
+		Set<String> names = localNamesOf("let [a, b] = [left, right];\n‸");
+		assertTrue(names.containsAll(Set.of("a", "b")), "locals = " + names);
+	}
+
+	@Test
+	@DisplayName("object destructuring declares its names")
+	void objectDestructuringDeclaresNames() {
+		Set<String> names = localNamesOf("let {xxx, yy} = left;\n‸");
+		assertTrue(names.containsAll(Set.of("xxx", "yy")), "locals = " + names);
+	}
+
+	/** 对象解构的每个名字就是右值的同名属性，这个能推出来 */
+	@Test
+	@DisplayName("object destructuring binds each name to the same-named member")
+	void objectDestructuringBindsMembers() {
+		assertBase("let {xxx, yy} = left;\nxxx.‸", (Scriptable) left.get("xxx", left));
+		assertBase("let {xxx, yy} = left;\nyy.‸", (Scriptable) left.get("yy", left));
+	}
+
+	/** 数组解构的元素类型取决于运行时数组，类型占位上取不到，宁可不绑 */
+	@Test
+	@DisplayName("array destructuring does not bind element types")
+	void arrayDestructuringDoesNotBind() {
+		Scriptable base = baseOf("let [a, b] = [left, right];\na.‸");
+		assertNotEquals(left, base, "bound to the first element");
+		assertNotEquals(right, base, "bound to the second element");
+	}
+
+	/** `{xxx: z}` 的 key 和名字对不上，绑 z 到 left.xxx 是猜的，不做 */
+	@Test
+	@DisplayName("renamed destructuring is not bound")
+	void renamedDestructuringIsNotBound() {
+		Scriptable base = baseOf("let {xxx: z} = left;\nz.‸");
+		assertNotEquals(left.get("xxx", left), base, "guessed the renamed key");
+	}
+
 	/** 补全实际看到的候选名：基对象是 Scriptable 时走 getPropertyIds */
 	private static Set<String> idsOf(Scriptable base) {
 		if (base == null) return Set.of();
@@ -169,6 +212,11 @@ class JSCompletionContextTest {
 
 	/** 光标停在 '.' 之前跑一遍高亮，取补全会用的基对象 */
 	private static Scriptable baseOf(String marked) {
+		return syntaxOf(marked).cursorObj;
+	}
+
+	/** 光标停在 '.' 之前跑一遍高亮 */
+	private static JSSyntax syntaxOf(String marked) {
 		int cursor = marked.indexOf(CARET);
 		assertTrue(cursor >= 0, "case without a caret");
 		String text = marked.replace(String.valueOf(CARET), "");
@@ -181,7 +229,14 @@ class JSCompletionContextTest {
 		// auto_complement 依赖 js_prop，真实补全时这个开关是开的，属性链才会解析
 		syntax.js_prop = true;
 		syntax.highlightingDraw(text);
-		return syntax.cursorObj;
+		return syntax;
+	}
+
+	/** 高亮过程中认出来的本地名，也就是补全候选里的那部分 */
+	private static Set<String> localNamesOf(String marked) {
+		Set<String> names = new HashSet<>();
+		syntaxOf(marked).eachLocalName(names::add);
+		return names;
 	}
 
 	/** 光标前那个词左边是否是 '.'，是就返回点的下标——和 Tester 补全时的光标位置一致 */

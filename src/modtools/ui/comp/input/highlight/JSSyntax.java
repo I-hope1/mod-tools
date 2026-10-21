@@ -135,6 +135,12 @@ public class JSSyntax extends Syntax {
 	int     declDepth;
 	/** 右值里出现过数组/对象字面量，值不是单个对象，不绑 */
 	boolean declValueNested;
+	/** 当前声明是解构模式：`let [a, b] = ...` 是 '[', `let {x, y} = ...` 是 '{'，否则 '\0' */
+	char  destructureKind;
+	/** 解构目标里的名字，按出现顺序 */
+	final Seq<String> destructureNames = new Seq<>();
+	/** 解构目标里出现过 `{a: alias}` 这种重命名，绑定时一律跳过（key 对不上） */
+	boolean destructureRenamed;
 
 	public enum DeclType { NONE, VAR, CONST }
 	public enum DeclPhase { ID, VALUE }
@@ -205,15 +211,20 @@ public class JSSyntax extends Syntax {
 
 	/**
 	 * 声明结束时，把 `let v = <expr>` 里已经解析出来的右值绑到 v 上，`v.` 才有基对象。
+	 * 解构声明的右值只绑一次，名字取自 {@link #destructureNames}。
 	 * <p>
 	 * 只绑 Scriptable：数字、未定义这类值没有可补的成员，绑上去反而让基对象变成 null，
 	 * 比退化成作用域更糟。右值是 customScope 说明这一步什么也没查到，同样不绑。
 	 */
 	void bindDeclValue() {
-		String name = pendingDeclName;
+		String  name  = pendingDeclName;
+		char    kind  = destructureKind;
+		boolean alias = destructureRenamed;
 		pendingDeclName = null;
-		if (name == null || currentDeclType == DeclType.NONE || currentDeclPhase != DeclPhase.VALUE) return;
-		if (declValueNested) return;
+		destructureKind = '\0';
+		destructureRenamed = false;
+
+		if (currentDeclType == DeclType.NONE || currentDeclPhase != DeclPhase.VALUE) return;
 
 		Object value = currentObject;
 		// receiver 是调用返回值的复用槽位，下一次调用会把它改掉；绑定前先复制一份类型
@@ -223,7 +234,32 @@ public class JSSyntax extends Syntax {
 		}
 		if (!(value instanceof Scriptable) || value == customScope) return;
 
+		// 对象解构：`let {xxx, yy} = obj` 里每个名字就是 obj 的同名属性
+		if (kind == '{') {
+			if (alias) return;
+			for (String n : destructureNames) {
+				Object member = getPropOrNotFound((Scriptable) value, n);
+				if (member instanceof Scriptable) addLocalBound(n, member);
+			}
+			return;
+		}
+		// 数组解构：元素类型取决于运行时数组，从类型占位上取不到，不绑
+		if (kind == '[') return;
+
+		if (name == null || declValueNested) return;
 		addLocalBound(name, value);
+	}
+
+	/** 开始一条新的声明语句，把上一条残留的状态清干净 */
+	void beginDecl(DeclType type) {
+		currentDeclType = type;
+		currentDeclPhase = DeclPhase.ID;
+		pendingDeclName = null;
+		declDepth = bracketDepth();
+		declValueNested = false;
+		destructureKind = '\0';
+		destructureNames.clear();
+		destructureRenamed = false;
 	}
 
 	final ObjectSet<String> localKeywords = ObjectSet.with("let", "var");
@@ -322,19 +358,11 @@ public class JSSyntax extends Syntax {
 
 		 // 2. Declaration keywords
 		 if (localKeywords.contains(token)) {
-			 currentDeclType = DeclType.VAR;
-			 currentDeclPhase = DeclPhase.ID;
-			 pendingDeclName = null;
-			 declDepth = bracketDepth();
-			 declValueNested = false;
+			 beginDecl(DeclType.VAR);
 			 return null;
 		 }
 		 if (constKeywords.contains(token)) {
-			 currentDeclType = DeclType.CONST;
-			 currentDeclPhase = DeclPhase.ID;
-			 pendingDeclName = null;
-			 declDepth = bracketDepth();
-			 declValueNested = false;
+			 beginDecl(DeclType.CONST);
 			 return null;
 		 }
 		 if ("function".equals(token)) {
@@ -359,10 +387,13 @@ public class JSSyntax extends Syntax {
 		 if (currentDeclType != DeclType.NONE && currentDeclPhase == DeclPhase.ID) {
 			 if (!token.isEmpty() && Character.isJavaIdentifierStart(token.charAt(0))) {
 				 if (getNextNonWhitespaceChar(task) == ':') {
+					 // `let {xxx: alias} = obj`：绑定要的 key 和名字对不上，放弃
+					 if (destructureKind != '\0') destructureRenamed = true;
 					 return c_objects;
 				 }
 				 // 记住名字，等右值解析出来后绑上去（见 bindDeclValue）
 				 pendingDeclName = token;
+				 if (destructureKind != '\0') destructureNames.add(token);
 				 if (currentDeclType == DeclType.CONST) {
 					 addLocalConst(token);
 					 return c_constants;
@@ -569,6 +600,9 @@ public class JSSyntax extends Syntax {
 			pendingFunctionParams.clear();
 			pendingArrowParams.clear();
 			pendingDeclName = null;
+			destructureKind = '\0';
+			destructureNames.clear();
+			destructureRenamed = false;
 
 			currentDeclType = DeclType.NONE;
 			currentDeclPhase = DeclPhase.ID;
@@ -631,8 +665,17 @@ public class JSSyntax extends Syntax {
 			if (lastTask.lastIndex != i) return;
 			char c = lastTask == operatesSymbol ? operatesSymbol.lastSymbol : bracketsSymbol.lastSymbol;
 
-			// 右值里出现数组/对象字面量时，currentObject 只是里面最后一个元素，不能当成整个值
-			if (currentDeclType != DeclType.NONE && (c == '[' || c == '{')) declValueNested = true;
+			// 右值里出现数组/对象字面量时，currentObject 只是里面最后一个元素，不能当成整个值。
+			// 只有 VALUE 阶段才算右值：`let {a} = obj` 里的 '{' 是解构目标，不是字面量。
+			if (currentDeclType != DeclType.NONE && currentDeclPhase == DeclPhase.VALUE
+			    && (c == '[' || c == '{')) declValueNested = true;
+			// 声明目标位置上的 '['/'{' 是解构模式
+			if (currentDeclType != DeclType.NONE && currentDeclPhase == DeclPhase.ID
+			    && (c == '[' || c == '{')) {
+				destructureKind = c;
+				destructureNames.clear();
+				destructureRenamed = false;
+			}
 
 			switch (state) {
 				case AWAITING_PARAMS_START:

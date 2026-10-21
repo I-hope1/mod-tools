@@ -45,6 +45,7 @@ import modtools.struct.v6.AThreads;
 import modtools.ui.*;
 import modtools.ui.comp.Window;
 import modtools.ui.comp.buttons.FoldedImageButton;
+import modtools.ui.comp.completion.Completion;
 import modtools.ui.comp.completion.CompletionPopup;
 import modtools.ui.comp.input.*;
 import modtools.ui.comp.input.area.TextAreaTab;
@@ -229,6 +230,7 @@ public class Tester extends Content {
 		area = textarea.getArea();
 
 		if (area != null && ui != null) { // Added ui null check
+			if (completionPopup != null) completionPopup.remove(); // 重建时丢掉旧弹窗，它绑的是旧编辑区
 			completionPopup = new CompletionPopup(area);
 			topGroup.addChild(completionPopup); // Add it to the Tester's window
 		} else {
@@ -364,9 +366,12 @@ public class Tester extends Content {
 	}
 	boolean stopEvent = false;
 	private void addListenerToArea(TextAreaTab textarea) {
+		ComplementListener complementListener = new ComplementListener();
 		textarea.keyDownBlock = (_, keycode) -> {
 			stopEvent = false;
-			if (rollAndExec() || detailsListener(keycode)) {
+			// 手动补全要排在别的快捷键前面：Ctrl+Space 的 space 不能落进文本
+			if (completeKeyCode.isPressThen(() -> complementListener.complement(true))
+			    || rollAndExec() || detailsListener(keycode)) {
 				stopEvent = true;
 				return true;
 			}
@@ -374,7 +379,7 @@ public class Tester extends Content {
 		};
 		textarea.keyTypedBlock = (_, _) -> stopEvent;
 		textarea.keyUpBlock = (_, _) -> stopEvent;
-		area.addCaptureListener(new ComplementListener());
+		area.addCaptureListener(complementListener);
 	}
 	static boolean hasFunctionKey() {
 		return Core.input.shift() || Core.input.ctrl() || Core.input.alt();
@@ -476,6 +481,8 @@ public class Tester extends Content {
 
 	public HKeyCode detailKeyCode = keyCodeData().dynamicKeyCode("detail", () -> new HKeyCode(KeyCode.d).ctrl().shift());
 	public HKeyCode viewKeyCode   = keyCodeData().dynamicKeyCode("view", () -> new HKeyCode(KeyCode.v).alt());
+	/** 手动唤出补全。自动补全关掉时，这是唯一入口 */
+	public HKeyCode completeKeyCode = keyCodeData().dynamicKeyCode("complete", () -> new HKeyCode(KeyCode.space).ctrl());
 	public boolean detailsListener(KeyCode keycode) {
 		if (detailKeyCode.isPress()) {
 			showDetails();
@@ -710,6 +717,8 @@ public class Tester extends Content {
 
 	public void _load() {
 		ui = new IconWindow(0, 100, true);
+		// 补全弹窗挂在 topGroup 上，不会随窗口一起隐藏，得手动收
+		ui.hidden(() -> { if (completionPopup != null) completionPopup.hide(); });
 		// JSFunc.watch("times", () -> ui.times);
 
 		/*ui.update(() -> {
@@ -952,148 +961,113 @@ public class Tester extends Content {
 
 		@Override
 		public boolean keyDown(InputEvent event, KeyCode keycode) {
-			if (completionPopup != null && completionPopup.isShown()) {
-				if (completionPopup.handleKeyDown(keycode)) {
-					event.stop();
-					stopEvent = true;
-					return true;
-				}
+			if (completionPopup == null || !completionPopup.isShown()) return false;
 
-				// If the popup is visible, and the user presses backspace or delete,
-				// we want to update the completion list on the next frame, *after*
-				// the character has been deleted from the text area.
-				if (keycode == KeyCode.backspace || keycode == KeyCode.del) {
-					postCompletion();
-					// Return false to allow the key press to be processed by the text area.
-					return false;
-				}
-				if (keycode == KeyCode.escape) {
-					hideCompletion();
-					event.stop();
-					stopEvent = true;
-					return true;
-				}
+			if (completionPopup.handleKeyDown(keycode)) {
+				event.stop();
+				stopEvent = true;
+				return true;
+			}
+
+			// 删字符后候选要跟着变：等编辑区把字符真正删掉，下一帧再重新过滤
+			if (keycode == KeyCode.backspace || keycode == KeyCode.del) {
+				postCompletion();
+				return false; // 让编辑区照常处理删除
+			}
+			if (keycode == KeyCode.escape) {
+				hideCompletion();
+				event.stop();
+				stopEvent = true;
+				return true;
 			}
 
 			return false;
 		}
 
 
-		private void complement() {
+		private void complement() { complement(false); }
+		/** @param manual 手动触发：不受 auto_complement 限制，且允许空前缀（光标紧跟 '.' 时列出全部成员） */
+		void complement(boolean manual) {
 			if (completionPopup == null || syntax == null) return; // Ensure dependencies are ready
 
-			int originalCursor = area.getCursorPosition();
-			// String textContent    = area.getText();
-
-			// Determine prefix
-
-			area.selectForward();
-			int    start         = area.getSelectionStart();
-			String currentPrefix = area.getSelection();
-			area.clearSelection();
-
-			int i = start;
-			while (i > 0 && !area.isCharCheck(i, '.')) i--;
-			completionPopup.cursorBeforeDot = i;
-
 			try {
-				complement0(currentPrefix, originalCursor, area.isCharCheck(i, '.'), start);
+				String text   = area.getText();
+				int    cursor = Math.min(area.getCursorPosition(), text.length());
+				Completion.Context ctx = Completion.contextAt(text, cursor);
+				// 字符串、注释里的内容不是代码，补出来只会打断输入
+				if (!ctx.inCode) { hideCompletion(); return; }
+
+				int     start  = ctx.start;
+				String  prefix = ctx.prefix;
+				boolean member = ctx.member;
+
+				// 高亮按 '.' 截止：Vars.ma 里 cursorObj 要停在 Vars，不能解析到 Vars.map 上
+				completionPopup.cursorBeforeDot = member ? ctx.dot : cursor;
+
+				Scriptable obj = member ? syntax.cursorObj : customScope;
+				if (obj == null || obj == Undefined.SCRIPTABLE_UNDEFINED) {
+					if (member || prefix.isEmpty()) { hideCompletion(); return; }
+					obj = customScope; // 没有基对象时退化成当前作用域的名字补全
+				}
+
+				Vec2 pos = caretPosition(start);
+				// 同一个基对象上继续敲：过滤已有候选就够，重新向 Rhino 取 id 在大类上是纯浪费
+				if (!manual && completionPopup.isSession(obj, member)) {
+					completionPopup.narrow(prefix, pos);
+					return;
+				}
+
+				keys.clear();
+				addIds(keys, obj);
+				if (!member) {
+					JSSyntax.varSet.each(keys::add);
+					JSSyntax.constantSet.each(keys::add);
+					syntax.eachLocalName(keys::add);
+					// 类名本身还能补出 javaClass 这类属性
+					if (obj instanceof NativeJavaClass || (obj instanceof NativeJavaObject njo && njo.unwrap() instanceof Class)) {
+						keys.add(RHINO.javaClassPropertyName);
+					}
+				}
+
+				Completion.collect(complements, prefix, keys);
+				if (complements.isEmpty()) { hideCompletion(); return; }
+				completionPopup.show(complements, prefix, obj, member, this::apply, pos);
 			} catch (Throwable err) {
 				Log.err("Completion error", err);
 				hideCompletion();
-				// area.setCursorPosition(originalCursor); // Cursor might have moved
 			}
 		}
 
-		private final Seq<String> complements = new Seq<>();
-		private final Seq<Object> keys        = new Seq<>();
+		/** 选中候选：替换光标所在的词。位置按当前文本重算，不依赖弹窗打开时的快照 */
+		private void apply(String selected) {
+			String text   = area.getText();
+			int    cursor = Math.min(area.getCursorPosition(), text.length());
+			int    start  = Completion.prefixStart(text, cursor);
+
+			lookupKey.setLength(0);
+			lookupKey.append(text, 0, start).append(selected).append(text, cursor, text.length());
+			area.setText(lookupKey.toString());
+			area.setCursorPosition(start + selected.length());
+			area.clearSelection();
+		}
+
+		private final Vec2 caretPos = new Vec2();
+		/** 弹窗锚点：正在输入的词的首字符，坐标相对 topGroup */
+		private Vec2 caretPosition(int index) {
+			return area.localToAscendantCoordinates(topGroup,
+			 caretPos.set(area.getRelativeX(index), area.getRelativeY(index)));
+		}
+
+		private final Seq<String>     complements = new Seq<>();
+		private final Seq<String>     keys        = new Seq<>();
 		private final StringBuilder   lookupKey   = new StringBuilder();
 
-		private void complement0(String prefix, int originalCursor, boolean afterDot, int actualPrefixStart) {
-			if (completionPopup == null || syntax == null) return;
-
-			Scriptable obj;
-			if (afterDot) {
-				obj = syntax.cursorObj; // cursorObj should be updated by JSSyntax when '.' is typed
-			} else {
-				obj = customScope; // Or a more specific scope if available
-			}
-
-			if (obj == null || obj == Undefined.SCRIPTABLE_UNDEFINED) {
-				// If after a dot and obj is null, no completions.
-				// If not after a dot (word completion) and obj is null, might still try globals if prefix is short.
-				if (afterDot || prefix.length() == 0) {
-					hideCompletion();
-					return;
-				}
-				obj = customScope; // Fallback to custom scope for word completion
-			}
-
-
-			keys.clear().addAll(getAllIds(prefix, obj));
-			// For non-dot completion, also add global/scope vars
-			int prefixLen = prefix.length();
-			if (!afterDot) {
-				if (obj == customScope) { // Only add these if we're in the global-like scope
-					JSSyntax.varSet.each(s -> {
-						if (s.regionMatches(true, 0, prefix, 0, prefixLen)) keys.addUnique(s);
-					});
-					JSSyntax.constantSet.each(s -> {
-						if (s.regionMatches(true, 0, prefix, 0, prefixLen)) keys.addUnique(s);
-					});
-					if (syntax != null) {
-						syntax.eachLocalName(s -> {
-							if (s.regionMatches(true, 0, prefix, 0, prefixLen)) keys.addUnique(s);
-						});
-					}
-				}
-				if (obj instanceof NativeJavaClass || (obj instanceof NativeJavaObject njo && njo.unwrap() instanceof Class)) { // if completing on a class name itself
-					if (RHINO.javaClassPropertyName.regionMatches(true, 0, prefix, 0, prefixLen)) {
-						keys.addUnique(RHINO.javaClassPropertyName);
-					}
-				}
-			}
-
-
-			complements.clear();
-			keys.each(o -> {
-				String key = String.valueOf(o);
-				if (key.regionMatches(true, 0, prefix, 0, prefixLen) && !key.equals(prefix)) {
-					complements.add(key);
-				}
-			});
-
-			if (complements.isEmpty()) {
-				hideCompletion();
-				return;
-			}
-
-			// Calculate position for the popup
-			// This calculates Y position of the line *below* the cursor line, relative to area's bottom.
-			// For popup above, use Y of current line. For popup below, use Y of line below.
-
-			float cursorLineVisualY = area.getRelativeY(actualPrefixStart);
-			Vec2  uiCoords          = area.localToAscendantCoordinates(topGroup, Tmp.v1.set(area.getRelativeX(actualPrefixStart), cursorLineVisualY));
-
-
-			completionPopup.show(complements, prefix, selectedSuggestion -> {
-				String text = area.getText();
-
-				lookupKey.setLength(0);
-				lookupKey.append(text, 0, actualPrefixStart);
-				lookupKey.append(selectedSuggestion);
-				lookupKey.append(text, originalCursor, text.length());
-
-				area.setText(lookupKey.toString());
-				area.setCursorPosition(actualPrefixStart + selectedSuggestion.length());
-				area.clearSelection();
-			}, uiCoords.x, uiCoords.y);
-		}
-
-		private Object[] getAllIds(String searchingKey, Scriptable obj) {
-			// For NativeJavaObject/Class, getIds() is appropriate. For general ScriptableObject, getPropertyIds might be better.
-			if (obj instanceof ScriptableObject) return ScriptableObject.getPropertyIds(obj);
-			return obj.getIds();
+		/** 只收字符串 id：数组之类的会给出整数 id，列出来没有意义 */
+		private void addIds(Seq<String> out, Scriptable obj) {
+			Object[] ids = obj instanceof ScriptableObject
+			 ? ScriptableObject.getPropertyIds(obj) : obj.getIds();
+			if (ids == null) return;
+			for (Object id : ids) if (id instanceof String s) out.add(s);
 		}
 
 		final Task completionTask = TaskManager.newTask(this::complement);
@@ -1112,26 +1086,23 @@ public class Tester extends Content {
 				event.cancel();
 				return false;
 			}
-			if (completionPopup != null && !completionPopup.isShown() && (Core.input.alt() || Core.input.ctrl())) {
-				return false;
-			}
+			if (completionPopup == null) return false;
+			// 组合键不算输入，别让它触发补全
+			if (!completionPopup.isShown() && (Core.input.alt() || Core.input.ctrl())) return false;
 
-			if (completionPopup != null && completionPopup.isShown() && (character == TAB || character == '\n')) {
+			if (completionPopup.isShown() && (character == TAB || character == '\n')) {
 				completionPopup.handleKeyDown(character == TAB ? KeyCode.tab : KeyCode.enter);
 				event.cancel();
 				return true;
 			}
 
-			// --- The faulty logic for DELETE/BACKSPACE has been REMOVED from here. ---
-
-			boolean isCompletableChar = area.isWordCharacter(character) || character == '.';
-			boolean shouldTriggerCompletion = auto_complement.enabled() && isCompletableChar
-			                                  && ((character != BACKSPACE && character != DELETE) || area.isWordCharacterCheck(area.getCursorPosition()));
-
-			if (!event.stopped && shouldTriggerCompletion) {
+			boolean completable = area.isWordCharacter(character) || character == '.';
+			if (!event.stopped && completable && auto_complement.enabled()) {
 				postCompletion();
-			} else if (completionPopup != null && completionPopup.isShown() && !isCompletableChar) {
-				// Hide the popup if a non-word character (like space, ';', '(') is typed.
+			} else if (completionPopup.isShown() && !completable
+			           // 退格/删除不算「词结束」：keyDown 已经安排重新过滤，这里收起只会闪一下
+			           && character != BACKSPACE && character != DELETE) {
+				// 空格、';'、'(' 这类字符一敲，当前这个词就结束了
 				hideCompletion();
 			}
 			return false;

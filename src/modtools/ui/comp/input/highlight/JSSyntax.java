@@ -213,6 +213,19 @@ public class JSSyntax extends Syntax {
 		return '\0';
 	}
 
+	/**
+	 * token 前面（跳过空白）是不是 '.'。
+	 * <p>
+	 * 用文本判断而不是 {@code operatesSymbol.lastSymbol}：括号字符归 {@code bracketsSymbol} 管，
+	 * 不会清掉 {@code operatesSymbol} 里更早的 '.'，于是 {@code a.b(inner.c)} 的 {@code inner}
+	 * 会被误当成属性名跳过。
+	 */
+	private boolean precededByDot(int index) {
+		int i = index;
+		while (i > 0 && Character.isWhitespace(displayText.charAt(i - 1))) i--;
+		return i > 0 && displayText.charAt(i - 1) == '.';
+	}
+
 	// --- Unified Identifier Handling Logic ---
 	public TokenDraw[] tokenDraws = {
 	 // Rule 1: The "Brain". Handles all identifier logic: declaration, parameters, and usage.
@@ -287,8 +300,12 @@ public class JSSyntax extends Syntax {
 		 for (Entry<ObjectSet<String>, Color> entry : TOKEN_MAP) {
 			 if (entry.key.contains(task.token)) {
 				 if (userVarSets.contains(entry.key)) {
-					 if (currentObject != customScope && currentObject != null && operatesSymbol.lastSymbol != '\0') { continue; }
-					 currentObject = getNextObject(task.token);
+					 // '.' 之后的 token 是属性名，要沿当前对象解析，交给下面的 dealJSProp
+					 if (precededByDot(task.lastIndex)) continue;
+					 // 其余位置（语句开头、'(' ',' '=' 之后）都是从作用域重新开始一个表达式。
+					 // 不能沿用 currentObject：call(a.b, c.d) 里 c 会被拿到 a.b 里面去找，
+					 // 而 let v = 之后 currentObject 是 null，连作用域都不查。
+					 currentObject = getPropOrNotFound(customScope, task.token);
 				 } else {
 					 currentObject = null;
 				 }

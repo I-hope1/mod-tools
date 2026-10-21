@@ -7,6 +7,7 @@ import com.sun.tools.javac.code.Symbol.*;
 import com.sun.tools.javac.code.Type.*;
 import com.sun.tools.javac.tree.JCTree.*;
 import com.sun.tools.javac.util.*;
+import com.sun.tools.javac.util.JCDiagnostic.DiagnosticPosition;
 import com.sun.tools.javac.util.List;
 import modtools.annotations.linker.*;
 import modtools.annotations.processors.asm.BaseASMProc;
@@ -20,7 +21,7 @@ import java.util.*;
 @AutoService(Processor.class)
 public class LinkFieldProcessor extends BaseASMProc<VarSymbol> {
 
-	public static String FIELD_PREFIX = "f$";
+	public static final String FIELD_PREFIX = "f$";
 
 	ClassType     reflectFieldType;
 	private final Map<ClassSymbol, Set<Pair<VarSymbol, VarSymbol>>> classFields = new LinkedHashMap<>();
@@ -35,10 +36,8 @@ public class LinkFieldProcessor extends BaseASMProc<VarSymbol> {
 		LinkFieldToField  linkToField = getAnnotationByElement(LinkFieldToField.class, sourceField, true);
 		LinkFieldToMethod linkMethod  = getAnnotationByElement(LinkFieldToMethod.class, sourceField, true);
 
-		JCClassDecl classDecl = (JCClassDecl) trees.getTree(sourceField.owner);
-
 		if (linkToField != null) {
-			handleLinkToField(classDecl, sourceField);
+			handleLinkToField(sourceField);
 		}
 
 		if (linkMethod != null) {
@@ -46,15 +45,29 @@ public class LinkFieldProcessor extends BaseASMProc<VarSymbol> {
 		}
 	}
 
-	private void handleLinkToField(JCClassDecl classDecl, VarSymbol sourceField) {
+	/**
+	 * 报错位置。
+	 * <p>
+	 * 符号可能来自 class 文件而没有对应的树，这时返回 {@code null}：
+	 * javac 允许「没有位置」的诊断，但把错误的节点当位置传进去会让诊断本身崩掉。
+	 */
+	private DiagnosticPosition posOf(Symbol sym) {
+		var tree = trees.getTree(sym);
+		return tree instanceof DiagnosticPosition pos ? pos : null;
+	}
+
+	private void handleLinkToField(VarSymbol sourceField) {
 		DocReference docRef = getSeeReference(LinkFieldToField.class, sourceField, ElementKind.FIELD);
 		if (docRef == null) {
-			log.error(trees.getTree(sourceField), SPrinter.err("@LinkToField requires a valid @see tag pointing to a field."));
+			log.error(posOf(sourceField), SPrinter.err("@LinkToField requires a valid @see tag pointing to a field."));
 			return;
 		}
 
-		if (!(docRef.element() instanceof VarSymbol targetField)) {
-			log.error(trees.getTree(sourceField), SPrinter.err("@LinkToField @see tag must point to a field, but found " + docRef.element().getKind() + " for " + docRef.reference()));
+		var referenced = docRef.element();
+		if (!(referenced instanceof VarSymbol targetField)) {
+			log.error(posOf(sourceField), SPrinter.err("@LinkToField @see tag must point to a field, but found " +
+			                                           (referenced == null ? "unresolved reference" : referenced.getKind()) +
+			                                           " for " + docRef.reference()));
 			return;
 		}
 
@@ -65,13 +78,13 @@ public class LinkFieldProcessor extends BaseASMProc<VarSymbol> {
 		boolean isSourceStatic = sourceField.isStatic();
 
 		if (!isTargetStatic && isSourceStatic) {
-			log.error(trees.getTree(sourceField), SPrinter.err("@LinkToField: Static field '" + sourceField.name + "' cannot link to non-static field '" + targetField.name + "' in '" + targetOwnerClass.getSimpleName() + "'. An instance of the target class would be required."));
+			log.error(posOf(sourceField), SPrinter.err("@LinkToField: Static field '" + sourceField.name + "' cannot link to non-static field '" + targetField.name + "' in '" + targetOwnerClass.getSimpleName() + "'. An instance of the target class would be required."));
 			return;
 		}
 
 		// MANDATE PUBLIC TARGET FIELD
 		// if ((targetField.flags_field & Flags.PUBLIC) == 0) {
-		// 	log.error(trees.getTree(sourceField), SPrinter.err("@LinkToField: Target field '" + targetField.name + "' in '" + targetOwnerClass.getSimpleName() + "' must be public."));
+		// 	log.error(posOf(sourceField), SPrinter.err("@LinkToField: Target field '" + targetField.name + "' in '" + targetOwnerClass.getSimpleName() + "' must be public."));
 		// 	return;
 		// }
 		// 如果是非public，添加field到target class，
@@ -172,44 +185,45 @@ public class LinkFieldProcessor extends BaseASMProc<VarSymbol> {
 
 	private void handleLinkMethod(VarSymbol sourceField, LinkFieldToMethod linkMethodAnnon) {
 		var links = getLinkReference(LinkFieldToMethod.class, sourceField, ElementKind.METHOD);
-		if (links == null || links.isEmpty() || links.stream().noneMatch(p -> "GETTER".equals(p.fst)) || links.stream().noneMatch(p -> "SETTER".equals(p.fst))) {
-			log.error(trees.getTree(sourceField), SPrinter.err("@LinkMethod requires both {@link ... GETTER} and {@link ... SETTER} tags."));
+		if (links == null || links.isEmpty()) {
+			log.error(posOf(sourceField), SPrinter.err("@LinkMethod requires both {@link ... GETTER} and {@link ... SETTER} tags."));
 			return;
 		}
 
 		DocReference getterRef = links.stream().filter(p -> "GETTER".equals(p.fst)).map(p -> p.snd).findFirst().orElse(null);
 		DocReference setterRef = links.stream().filter(p -> "SETTER".equals(p.fst)).map(p -> p.snd).findFirst().orElse(null);
 
+		// 缺哪个标签报哪条：上面那条「requires both」只在一条链接都没有时才有意义
 		if (getterRef == null || !(getterRef.element() instanceof MethodSymbol getterMethod)) {
-			log.error(trees.getTree(sourceField), SPrinter.err("@LinkMethod: Valid GETTER link not found or not a method."));
+			log.error(posOf(sourceField), SPrinter.err("@LinkMethod: Valid GETTER link not found or not a method."));
 			return;
 		}
 		if (setterRef == null || !(setterRef.element() instanceof MethodSymbol setterMethod)) {
-			log.error(trees.getTree(sourceField), SPrinter.err("@LinkMethod: Valid SETTER link not found or not a method."));
+			log.error(posOf(sourceField), SPrinter.err("@LinkMethod: Valid SETTER link not found or not a method."));
 			return;
 		}
 
 		if (!getterMethod.isStatic() || !setterMethod.isStatic()) {
-			log.error(trees.getTree(sourceField), SPrinter.err("@LinkMethod: Getter and Setter utility methods must be static."));
+			log.error(posOf(sourceField), SPrinter.err("@LinkMethod: Getter and Setter utility methods must be static."));
 			return;
 		}
 
 		// Enforce utility methods are public
 		if ((getterMethod.flags() & Flags.PUBLIC) == 0) {
-			log.error(trees.getTree(getterMethod), SPrinter.err("@LinkMethod: Getter utility method " + getterMethod.name + " in " + getterMethod.owner.getQualifiedName() + " must be public."));
+			log.error(posOf(getterMethod), SPrinter.err("@LinkMethod: Getter utility method " + getterMethod.name + " in " + getterMethod.owner.getQualifiedName() + " must be public."));
 			return;
 		}
 		if ((setterMethod.flags() & Flags.PUBLIC) == 0) {
-			log.error(trees.getTree(setterMethod), SPrinter.err("@LinkMethod: Setter utility method " + setterMethod.name + " in " + setterMethod.owner.getQualifiedName() + " must be public."));
+			log.error(posOf(setterMethod), SPrinter.err("@LinkMethod: Setter utility method " + setterMethod.name + " in " + setterMethod.owner.getQualifiedName() + " must be public."));
 			return;
 		}
 
 		if (getterMethod.params.size() != 3) {
-			log.error(trees.getTree(getterMethod), SPrinter.err("@LinkMethod: Getter method " + getterMethod.name + " must have 3 parameters: Class<?>, String, Object. Found: " + getterMethod.params.size()));
+			log.error(posOf(getterMethod), SPrinter.err("@LinkMethod: Getter method " + getterMethod.name + " must have 3 parameters: Class<?>, String, Object. Found: " + getterMethod.params.size()));
 			return;
 		}
 		if (setterMethod.params.size() != 4) {
-			log.error(trees.getTree(setterMethod), SPrinter.err("@LinkMethod: Setter method " + setterMethod.name + " must have 4 parameters: Class<?>, String, Object, ValueType. Found: " + setterMethod.params.size()));
+			log.error(posOf(setterMethod), SPrinter.err("@LinkMethod: Setter method " + setterMethod.name + " must have 4 parameters: Class<?>, String, Object, ValueType. Found: " + setterMethod.params.size()));
 			return;
 		}
 
@@ -226,7 +240,7 @@ public class LinkFieldProcessor extends BaseASMProc<VarSymbol> {
 			if (ts == null || ts.kind == Kind.ERR) {
 				Type foundType = typeFromString(annonClazzValue.getName());
 				if (foundType == null || foundType.getTag() == TypeTag.ERROR) {
-					log.error(trees.getTree(sourceField), SPrinter.err("@LinkMethod: Could not resolve class specified in clazz(): " + annonClazzValue.getName()));
+					log.error(posOf(sourceField), SPrinter.err("@LinkMethod: Could not resolve class specified in clazz(): " + annonClazzValue.getName()));
 					return;
 				}
 				targetClassForCallType = foundType;
@@ -338,6 +352,8 @@ public class LinkFieldProcessor extends BaseASMProc<VarSymbol> {
 				arrayDepth++;
 				i++;
 			}
+			// 全是 '[' 的畸形描述符没有组件类型，别让 charAt 越界
+			if (i >= className.length()) return mSymtab.errType;
 			String componentTypeName;
 			if (className.charAt(i) == 'L' && className.endsWith(";")) {
 				componentTypeName = className.substring(i + 1, className.length() - 1);
@@ -397,10 +413,10 @@ public class LinkFieldProcessor extends BaseASMProc<VarSymbol> {
 				VarSymbol reflectField = pair.fst;
 				VarSymbol targetField  = pair.snd;
 				// 添加static初始化
-				JCExpressionStatement exec = mMaker.Exec(mMaker.Assign(mMaker.Ident(reflectField.name), mMaker.Apply(List.nil(), mMaker.Select(
+				JCExpressionStatement exec = mMaker.Exec(mMaker.Assign(mMaker.Ident(reflectField), mMaker.Apply(List.nil(), mMaker.Select(
 				 mMaker.ClassLiteral(targetOwnerClass),
 				 ns("getDeclaredField")), List.of(mMaker.Literal(targetField.name.toString())))));
-				JCExpressionStatement setAccess = mMaker.Exec(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Ident(reflectField.name), ns("setAccessible")), List.of(mMaker.Literal(true))));
+				JCExpressionStatement setAccess = mMaker.Exec(mMaker.Apply(List.nil(), mMaker.Select(mMaker.Ident(reflectField), ns("setAccessible")), List.of(mMaker.Literal(true))));
 
 				JCBlock clinit = LinkMethodProcessor.getOrCreateClinit((ClassSymbol) reflectField.owner);
 				mMaker.at(clinit);

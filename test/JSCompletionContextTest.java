@@ -9,6 +9,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import rhino.*;
 
+import java.util.HashSet;
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -99,8 +102,41 @@ class JSCompletionContextTest {
 		assertNotNull(base, "local var base is not null either");
 	}
 
+	/** 箭头函数参数的类型只能从被调方法的泛型实参推出来：dialog(Cons<Thing>) → Thing */
+	@Test
+	@DisplayName("arrow parameter takes its type from the callee's generic argument")
+	void arrowParameter() {
+		Set<String> ids = idsOf(baseOf("$.dialog(d => {\n\td.‸\n})"));
+		assertTrue(ids.contains("heal"), "expected members of Thing, got " + ids);
+	}
+
+	/** 参数位置要对上：第一个实参是 int，回调在第二个位置 */
+	@Test
+	@DisplayName("arrow parameter in a later argument position")
+	void arrowParameterSecondArgument() {
+		Set<String> ids = idsOf(baseOf("$.both(1, d => {\n\td.‸\n})"));
+		assertTrue(ids.contains("heal"), "expected members of Thing, got " + ids);
+	}
+
+	/** 被调对象不是 Java 方法时推不出类型，宁可补不出成员，也不要补出别人的成员 */
+	@Test
+	@DisplayName("arrow parameter without an inferable type stays unresolved")
+	void arrowParameterWithoutType() {
+		Set<String> ids = idsOf(baseOf("fn(d => {\n\td.‸\n})"));
+		assertFalse(ids.contains("heal"), "resolved a type out of a JS function, got " + ids);
+	}
+
 	private static void assertBase(String marked, Scriptable expected) {
 		assertEquals(expected, baseOf(marked), "base object");
+	}
+
+	/** 补全实际看到的候选名：基对象是 Scriptable 时走 getPropertyIds */
+	private static Set<String> idsOf(Scriptable base) {
+		if (base == null) return Set.of();
+		Object[] ids = base instanceof ScriptableObject ? ScriptableObject.getPropertyIds(base) : base.getIds();
+		Set<String> names = new HashSet<>();
+		for (Object id : ids) names.add(String.valueOf(id));
+		return names;
 	}
 
 	/** 光标停在 '.' 之前跑一遍高亮，取补全会用的基对象 */
@@ -114,6 +150,8 @@ class JSCompletionContextTest {
 		drawable.cursor = dotBefore(text, cursor);
 
 		JSSyntax syntax = new JSSyntax(drawable, scope);
+		// auto_complement 依赖 js_prop，真实补全时这个开关是开的，属性链才会解析
+		syntax.js_prop = true;
 		syntax.highlightingDraw(text);
 		return syntax.cursorObj;
 	}
@@ -146,6 +184,19 @@ class JSCompletionContextTest {
 		scope.put("g", scope, new BaseFunction() {
 			public Object call(Context c, Scriptable s, Scriptable t, Object[] a) { return Undefined.instance; }
 		});
+		// $.dialog(d => {...}) 的形状：Java 方法 + 泛型回调参数
+		scope.put("$", scope, Context.javaToJS(new Api(), scope));
+	}
+
+	/** 回调参数的类型只出现在泛型实参里，运行时对象根本不存在 */
+	public static class Thing {
+		public int  health = 1;
+		public void heal() {}
+	}
+
+	public static class Api {
+		public void dialog(arc.func.Cons<Thing> cons) {}
+		public void both(int n, arc.func.Cons<Thing> cons) {}
 	}
 
 	private static void initMindustryEnv() {

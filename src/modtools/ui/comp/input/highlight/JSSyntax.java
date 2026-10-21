@@ -14,7 +14,11 @@ import modtools.jsfunc.IScript;
 import modtools.jsfunc.reflect.UNSAFE;
 import rhino.*;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Member;
 import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.Stack;
 
 import static rhino.Scriptable.NOT_FOUND;
@@ -109,17 +113,22 @@ public class JSSyntax extends Syntax {
 		public final ObjectSet<String> vars      = new ObjectSet<>();
 		public final ObjectSet<String> constants = new ObjectSet<>();
 		public final ObjectSet<String> functions = new ObjectSet<>();
+		/** 名字绑定的运行时对象：目前只有箭头函数参数能从被调方法的泛型实参推出来 */
+		public final ObjectMap<String, Object> bound = new ObjectMap<>();
 
 		public void clear() {
 			vars.clear();
 			constants.clear();
 			functions.clear();
+			bound.clear();
 		}
 	}
 
 	final Seq<LocalScope> scopeStack            = new Seq<>();
 	final LocalScope      rootScope             = new LocalScope();
 	final Seq<String>     pendingFunctionParams = new Seq<>();
+	/** 等待 '{' 的箭头函数参数：名字 → 从被调方法泛型实参推出来的类型对象 */
+	final ObjectMap<String, Object> pendingArrowParams = new ObjectMap<>();
 
 	public enum DeclType { NONE, VAR, CONST }
 	public enum DeclPhase { ID, VALUE }
@@ -173,6 +182,15 @@ public class JSSyntax extends Syntax {
 		}
 	}
 
+	/** 名字在某一层作用域里绑定的对象；没有绑定时返回 null */
+	Object findBoundLocal(String token) {
+		for (int j = scopeStack.size - 1; j >= 0; j--) {
+			Object o = scopeStack.get(j).bound.get(token);
+			if (o != null) return o;
+		}
+		return null;
+	}
+
 	final ObjectSet<String> localKeywords = ObjectSet.with("let", "var");
 	final ObjectSet<String> constKeywords = ObjectSet.with("const");
 
@@ -224,6 +242,19 @@ public class JSSyntax extends Syntax {
 		int i = index;
 		while (i > 0 && Character.isWhitespace(displayText.charAt(i - 1))) i--;
 		return i > 0 && displayText.charAt(i - 1) == '.';
+	}
+
+	/** token 后面（允许空白）是不是 {@code =>}，即它是箭头函数的参数 */
+	private boolean followedByArrow(DrawToken task) {
+		int i = skipWhitespace(task.lastIndex + task.token.length());
+		if (i >= displayText.length() || displayText.charAt(i) != '=') return false;
+		i = skipWhitespace(i + 1);
+		return i < displayText.length() && displayText.charAt(i) == '>';
+	}
+
+	private int skipWhitespace(int i) {
+		while (i < displayText.length() && Character.isWhitespace(displayText.charAt(i))) i++;
+		return i;
 	}
 
 	// --- Unified Identifier Handling Logic ---
@@ -286,7 +317,20 @@ public class JSSyntax extends Syntax {
 			 }
 		 }
 
-		 // 5. Usage of defined local identifiers
+		 // 5. Arrow parameter: `d => ...`。类型只能从被调方法的泛型实参推出来
+		 if (followedByArrow(task)) {
+			 Object type = completion.arrowParamObject();
+			 if (type != null) pendingArrowParams.put(token, type);
+			 return c_localvar;
+		 }
+
+		 // 6. Usage of defined local identifiers
+		 Object bound = findBoundLocal(token);
+		 if (bound != null) {
+			 currentObject = bound;
+			 updateCursorObj();
+			 return c_localvar;
+		 }
 		 if (isLocalFunction(token)) return c_functions;
 		 if (isLocalVar(token)) return c_localvar;
 		 if (isLocalConst(token)) return c_constants;
@@ -466,6 +510,7 @@ public class JSSyntax extends Syntax {
 			rootScope.clear();
 			scopeStack.add(rootScope);
 			pendingFunctionParams.clear();
+			pendingArrowParams.clear();
 
 			currentDeclType = DeclType.NONE;
 			currentDeclPhase = DeclPhase.ID;
@@ -488,10 +533,45 @@ public class JSSyntax extends Syntax {
 			}
 		}
 		public boolean inFunction() { return !stack.isEmpty(); }
+
+		/**
+		 * 当前调用正在接收的下一个实参如果是回调，从被调方法的泛型实参推出它的参数类型。
+		 * <p>
+		 * {@code dialog(Cons<Table>)} 的运行时值只有在回调被调用时才存在，所以类型只能从
+		 * 签名里拿。推不出来（不是 Java 方法、泛型是类型变量、重载给出了不同类型）就返回
+		 * null——宁可补不出成员，也不要补出另一个对象的成员。
+		 */
+		Object arrowParamObject() {
+			if (stack.isEmpty()) return null;
+			RMethod frame = stack.lastElement();
+			if (!(frame.base instanceof NativeJavaMethod m)) return null;
+
+			int      argIndex = frame.args.size;
+			Class<?> found    = null;
+			for (Method method : JavaMethods.of(m)) {
+				if (method == null || method.getParameterCount() <= argIndex) continue;
+				Class<?> type = callbackTypeOf(method.getGenericParameterTypes()[argIndex]);
+				if (type == null) continue;
+				if (found != null && found != type) return null;
+				found = type;
+			}
+			return found == null ? null : new NativeJavaObject(customScope, null, found);
+		}
+
+		/** 泛型实参是具体类时返回它：{@code Cons<Table>} → {@code Table} */
+		private static Class<?> callbackTypeOf(Type type) {
+			if (!(type instanceof ParameterizedType p)) return null;
+			Type[] args = p.getActualTypeArguments();
+			return args.length == 1 && args[0] instanceof Class<?> c ? c : null;
+		}
 		private final NativeJavaObject receiver = new NativeJavaObject();
 		private       int              lastTokenStackSize;
 		private void forToken(int i) {
 			if (!(lastTask == operatesSymbol || lastTask == bracketsSymbol)) return;
+			// lastTask 是「上一个被吃掉的字符」，drawText 把它的 lastIndex 停在字符后一位，
+			// 所以只在紧邻的下一格算一次。符号后面跟空白时 lastTask 不会变，重复处理会把
+			// `{\n\t` 压成三层作用域，`}` 只弹一层就泄漏了。
+			if (lastTask.lastIndex != i) return;
 			char c = lastTask == operatesSymbol ? operatesSymbol.lastSymbol : bracketsSymbol.lastSymbol;
 
 			switch (state) {
@@ -517,6 +597,14 @@ public class JSSyntax extends Syntax {
 					fnScope.vars.addAll(pendingFunctionParams);
 					pendingFunctionParams.clear();
 					scopeStack.add(fnScope);
+				} else if (!pendingArrowParams.isEmpty()) {
+					LocalScope arrowScope = new LocalScope();
+					for (String name : pendingArrowParams.keys()) {
+						arrowScope.vars.add(name);
+						arrowScope.bound.put(name, pendingArrowParams.get(name));
+					}
+					pendingArrowParams.clear();
+					scopeStack.add(arrowScope);
 				} else if (currentDeclType == DeclType.NONE || currentDeclPhase != DeclPhase.ID) {
 					scopeStack.add(new LocalScope());
 				}
@@ -598,6 +686,48 @@ public class JSSyntax extends Syntax {
 			return false;
 		}
 	}
+	/**
+	 * 取出 {@link NativeJavaMethod} 承载的 Java 方法。
+	 * <p>
+	 * {@code methods} 和 {@code MemberBox.memberObject} 都不在公开 API 里。不用
+	 * {@code Constants.RHINO} 的那套偏移量：它依赖 IntVars 的静态初始化（需要 Core），
+	 * 在没有游戏环境的测试里起不来。这里用普通反射，Field 只查一次；查不到就退化成
+	 * 空数组，补全只是少一个类型来源，不影响高亮。
+	 * <p>
+	 * {@code memberObject} 的声明类型是 {@link Member}（构造器也在里面），所以按
+	 * {@link Method} 取不到的地方留 null，由调用方跳过。
+	 */
+	static final class JavaMethods {
+		private static final Field BOXES  = field(NativeJavaMethod.class, "methods");
+		private static final Field MEMBER = BOXES == null ? null
+		 : field(BOXES.getType().getComponentType(), "memberObject");
+
+		static Method[] of(NativeJavaMethod method) {
+			if (BOXES == null || MEMBER == null) return new Method[0];
+			try {
+				Object[] boxes = (Object[]) BOXES.get(method);
+				Method[] out   = new Method[boxes.length];
+				for (int i = 0; i < boxes.length; i++) {
+					Object member = MEMBER.get(boxes[i]);
+					out[i] = member instanceof Method m ? m : null;
+				}
+				return out;
+			} catch (ReflectiveOperationException | RuntimeException e) {
+				return new Method[0];
+			}
+		}
+
+		private static Field field(Class<?> owner, String name) {
+			try {
+				Field f = owner.getDeclaredField(name);
+				f.setAccessible(true);
+				return f;
+			} catch (ReflectiveOperationException | RuntimeException e) {
+				return null;
+			}
+		}
+	}
+
 	private class DrawBracket extends DrawSymbol {
 		static final IntIntMap leftBracket = IntIntMap.of('(', ')', '[', ']', '{', '}');
 		final        Color     textColor   = c_brackets;

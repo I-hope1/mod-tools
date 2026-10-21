@@ -129,6 +129,12 @@ public class JSSyntax extends Syntax {
 	final Seq<String>     pendingFunctionParams = new Seq<>();
 	/** 等待 '{' 的箭头函数参数：名字 → 从被调方法泛型实参推出来的类型对象 */
 	final ObjectMap<String, Object> pendingArrowParams = new ObjectMap<>();
+	/** `let v = ...` 里刚声明、还没等到右值的名字 */
+	String  pendingDeclName;
+	/** 声明语句开始时的括号深度：区分「声明项之间的逗号」和「调用/字面量里的逗号」 */
+	int     declDepth;
+	/** 右值里出现过数组/对象字面量，值不是单个对象，不绑 */
+	boolean declValueNested;
 
 	public enum DeclType { NONE, VAR, CONST }
 	public enum DeclPhase { ID, VALUE }
@@ -173,6 +179,12 @@ public class JSSyntax extends Syntax {
 		scopeStack.peek().functions.add(token);
 	}
 
+	/** 名字绑到一个已解析出来的运行时对象，供 `v.xxx` 取基对象 */
+	void addLocalBound(String token, Object value) {
+		if (scopeStack.isEmpty()) scopeStack.add(rootScope);
+		scopeStack.peek().bound.put(token, value);
+	}
+
 	public void eachLocalName(Cons<String> cons) {
 		for (int j = scopeStack.size - 1; j >= 0; j--) {
 			LocalScope scope = scopeStack.get(j);
@@ -191,12 +203,40 @@ public class JSSyntax extends Syntax {
 		return null;
 	}
 
+	/**
+	 * 声明结束时，把 `let v = <expr>` 里已经解析出来的右值绑到 v 上，`v.` 才有基对象。
+	 * <p>
+	 * 只绑 Scriptable：数字、未定义这类值没有可补的成员，绑上去反而让基对象变成 null，
+	 * 比退化成作用域更糟。右值是 customScope 说明这一步什么也没查到，同样不绑。
+	 */
+	void bindDeclValue() {
+		String name = pendingDeclName;
+		pendingDeclName = null;
+		if (name == null || currentDeclType == DeclType.NONE || currentDeclPhase != DeclPhase.VALUE) return;
+		if (declValueNested) return;
+
+		Object value = currentObject;
+		// receiver 是调用返回值的复用槽位，下一次调用会把它改掉；绑定前先复制一份类型
+		if (value == receiver) {
+			if (receiverType == null) return;
+			value = new NativeJavaObject(customScope, null, receiverType);
+		}
+		if (!(value instanceof Scriptable) || value == customScope) return;
+
+		addLocalBound(name, value);
+	}
+
 	final ObjectSet<String> localKeywords = ObjectSet.with("let", "var");
 	final ObjectSet<String> constKeywords = ObjectSet.with("const");
 
 	private final ObjectMap<ObjectSet<String>, Color> TOKEN_MAP = new OrderedMap<>();
 
 	protected final DrawSymbol operatesSymbol = new JSDrawSymbol(), bracketsSymbol = new DrawBracket();
+
+	/** 当前还没闭合的括号层数，用来区分「声明项之间的逗号」和「调用/字面量里的逗号」 */
+	int bracketDepth() {
+		return ((DrawBracket) bracketsSymbol).stack.size;
+	}
 
 	public static Object getPropOrNotFound(Scriptable scope, String key) {
 		Object o;
@@ -215,6 +255,13 @@ public class JSSyntax extends Syntax {
 	public        NativeJavaPackage pkg        = null;
 	public        Object            currentObject;
 	public        boolean           js_prop    = false;
+	/**
+	 * 调用返回值的复用槽位：只知道类型、没有实例。每次调用都会重置它，
+	 * 所以任何要长期持有的引用都得先复制（见 {@link #bindDeclValue()}）。
+	 */
+	final NativeJavaObject receiver     = new NativeJavaObject();
+	/** {@link #receiver} 当前代表的类型 */
+	Class<?>              receiverType;
 	private final Integer           OBJ_NUMBER = -189021039;
 
 
@@ -277,16 +324,23 @@ public class JSSyntax extends Syntax {
 		 if (localKeywords.contains(token)) {
 			 currentDeclType = DeclType.VAR;
 			 currentDeclPhase = DeclPhase.ID;
+			 pendingDeclName = null;
+			 declDepth = bracketDepth();
+			 declValueNested = false;
 			 return null;
 		 }
 		 if (constKeywords.contains(token)) {
 			 currentDeclType = DeclType.CONST;
 			 currentDeclPhase = DeclPhase.ID;
+			 pendingDeclName = null;
+			 declDepth = bracketDepth();
+			 declValueNested = false;
 			 return null;
 		 }
 		 if ("function".equals(token)) {
 			 completion.state = DrawCompletion.ParseState.AWAITING_PARAMS_START;
 			 currentDeclType = DeclType.NONE;
+			 pendingDeclName = null;
 			 return null;
 		 }
 
@@ -307,6 +361,8 @@ public class JSSyntax extends Syntax {
 				 if (getNextNonWhitespaceChar(task) == ':') {
 					 return c_objects;
 				 }
+				 // 记住名字，等右值解析出来后绑上去（见 bindDeclValue）
+				 pendingDeclName = token;
 				 if (currentDeclType == DeclType.CONST) {
 					 addLocalConst(token);
 					 return c_constants;
@@ -501,6 +557,7 @@ public class JSSyntax extends Syntax {
 		void init() {
 			stack.clear();
 			pkg = null;
+			receiverType = null;
 			currentObject = customScope;
 			lastCursorObjIndex = -1;
 			cursorObj = null;
@@ -511,6 +568,7 @@ public class JSSyntax extends Syntax {
 			scopeStack.add(rootScope);
 			pendingFunctionParams.clear();
 			pendingArrowParams.clear();
+			pendingDeclName = null;
 
 			currentDeclType = DeclType.NONE;
 			currentDeclPhase = DeclPhase.ID;
@@ -564,7 +622,6 @@ public class JSSyntax extends Syntax {
 			Type[] args = p.getActualTypeArguments();
 			return args.length == 1 && args[0] instanceof Class<?> c ? c : null;
 		}
-		private final NativeJavaObject receiver = new NativeJavaObject();
 		private       int              lastTokenStackSize;
 		private void forToken(int i) {
 			if (!(lastTask == operatesSymbol || lastTask == bracketsSymbol)) return;
@@ -573,6 +630,9 @@ public class JSSyntax extends Syntax {
 			// `{\n\t` 压成三层作用域，`}` 只弹一层就泄漏了。
 			if (lastTask.lastIndex != i) return;
 			char c = lastTask == operatesSymbol ? operatesSymbol.lastSymbol : bracketsSymbol.lastSymbol;
+
+			// 右值里出现数组/对象字面量时，currentObject 只是里面最后一个元素，不能当成整个值
+			if (currentDeclType != DeclType.NONE && (c == '[' || c == '{')) declValueNested = true;
 
 			switch (state) {
 				case AWAITING_PARAMS_START:
@@ -626,12 +686,18 @@ public class JSSyntax extends Syntax {
 				if (state == ParseState.INSIDE_PARAMS) {
 					paramPhase = DeclPhase.ID;
 				} else if (currentDeclType != DeclType.NONE) {
+					// `let v = a, w = b`：逗号前那一项的右值已经解析完了。
+					// 只认和声明同一层的逗号，`f(a, b)` 里的逗号不是声明项分隔符。
+					// ':' 也不能绑，三元表达式里 `a ? b : c` 的 b 不是声明的右值
+					if (c == ',' && bracketDepth() == declDepth) bindDeclValue();
 					currentDeclPhase = DeclPhase.ID;
 				}
 			}
 
 			if (c == ';' || (c == '=' && lastTokenStackSize == stack.size())
 			    || ((currentObject == NOT_FOUND || currentObject == Undefined.SCRIPTABLE_UNDEFINED) && c == '\n')) {
+				// 必须在 currentObject 被重置成作用域之前绑
+				if (c == ';') bindDeclValue();
 				currentObject = customScope;
 				updateCursorObj();
 				operatesSymbol.lastSymbol = '\0';
@@ -660,6 +726,7 @@ public class JSSyntax extends Syntax {
 					if (index >= 0) method = (Method) UNSAFE.getObject(allMethods[index], RHINO.memberObject);
 					if (method == null || method.getReturnType() == void.class) break l;
 					Constants.iv(RHINO.initNativeJavaObject, receiver, customScope, null, method.getReturnType());
+					receiverType = method.getReturnType();
 					currentObject = receiver;
 				} else if (pop.base instanceof NativeJavaClass njc) {
 					// 处理 Java 类作为构造函数调用的情况 (例如 Fi("...") 或 new Fi("..."))
@@ -667,6 +734,7 @@ public class JSSyntax extends Syntax {
 					if (javaClass != null) {
 						// 将 currentObject 模拟为该类的实例，以便后续补全
 						Constants.iv(RHINO.initNativeJavaObject, receiver, customScope, null, javaClass);
+						receiverType = javaClass;
 						currentObject = receiver;
 					} else {
 						currentObject = customScope;

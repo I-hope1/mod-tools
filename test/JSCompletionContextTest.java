@@ -90,16 +90,44 @@ class JSCompletionContextTest {
 		assertBase("fn(a ? left.xxx‸ : right.yy)", left);
 	}
 
+	/** 局部变量没有运行时对象，但右值是能解析出来的，声明时记下来即可 */
+	@Test
+	@DisplayName("local variable takes its base object from the initializer")
+	void localVariableBase() {
+		assertBase("let v = left;\nv.xxx‸", left);
+	}
+
+	@Test
+	@DisplayName("const takes its base object from the initializer")
+	void constBase() {
+		assertBase("const v = right;\nv.xxx‸", right);
+	}
+
+	/** 一个声明里多个变量，各绑各的右值 */
+	@Test
+	@DisplayName("multiple declarators bind their own initializers")
+	void multipleDeclarators() {
+		assertBase("let v = left, w = right;\nw.xxx‸", right);
+		assertBase("let v = left, w = right;\nv.xxx‸", left);
+	}
+
+	/** 绑的是右值最终解析出来的对象，不是表达式开头的那个 */
+	@Test
+	@DisplayName("initializer binds the final object of the expression")
+	void initializerBindsFinalObject() {
+		assertBase("let v = left.xxx;\nv.yy‸", (Scriptable) left.get("xxx", left));
+	}
+
 	/**
-	 * 局部变量没有运行时对象，{@code let v = left; v.xxx} 的基对象退化成作用域本身
-	 * （补全会列出全局名）。要修得从声明处推断类型，是另一件事，这里只钉住现状。
+	 * 数组字面量里 currentObject 只是最后一个元素，不是数组本身；逗号也不是声明项分隔符。
+	 * 这种情况宁可不绑（补全退回作用域），也不要绑成 right。
 	 */
 	@Test
-	@DisplayName("known gap: local variable base is not the declared object")
-	void knownGapLocalVariable() {
-		Scriptable base = baseOf("let v = left;\nv.xxx‸");
-		assertNotEquals(left, base, "local var base resolved to left, gap is gone");
-		assertNotNull(base, "local var base is not null either");
+	@DisplayName("array initializer does not bind one of its elements")
+	void arrayInitializerDoesNotBind() {
+		Scriptable base = baseOf("let v = [left, right];\nv.xxx‸");
+		assertNotEquals(right, base, "bound to the last element of the array");
+		assertNotEquals(left, base, "bound to the first element of the array");
 	}
 
 	/** 箭头函数参数的类型只能从被调方法的泛型实参推出来：dialog(Cons<Thing>) → Thing */

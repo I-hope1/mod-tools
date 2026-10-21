@@ -166,6 +166,8 @@ dependencies {
 	desugarLib 'com.android.tools:desugar_jdk_libs:2.1.5'
 	implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
 	testImplementation project(":annotations")
+	testImplementation "org.junit.jupiter:junit-jupiter:5.11.4"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.11.4"
 }
 
 configurations {
@@ -178,10 +180,14 @@ task runTest(type: JavaExec) {
 	mainClass = project.findProperty("mainClass") ?: "JSSyntaxTest"
 }
 
-// 根项目的 test/ 下有 5 个 main 程序（非 JUnit），`check` 里默认的 `:test` 会因
-// "有测试源但没发现测试"而失败 —— 既有问题，与对齐器改动无关，但会让 `check` 永远红。
-// 这些入口由 `runTest` 显式运行，因此关掉这个检查。
-tasks.named("test") { failOnNoDiscoveredTests = false }
+// 根项目的 test/ 同时放两种东西：JUnit 用例（Completion*Test / JSCompletionContextTest）
+// 和几个带 main 的手动入口（JSSyntaxTest、ColorTest、DeadlockTest……）。后者不是 JUnit 用例，
+// 由 `runTest -PmainClass=...` 单独跑；关掉「没发现测试就报错」只是给这些入口留的余量，
+// 不影响 `test` 正常发现并执行 JUnit 用例。
+tasks.named("test") {
+	useJUnitPlatform()
+	failOnNoDiscoveredTests = false
+}
 
 task jarAndroid(type: JavaExec) {
 	dependsOn "jar"

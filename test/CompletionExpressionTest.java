@@ -1,5 +1,9 @@
 import arc.struct.Seq;
 import modtools.ui.comp.completion.Completion;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Completion behaviour on realistic JS expressions: strings, comments, template literals,
@@ -8,25 +12,10 @@ import modtools.ui.comp.completion.Completion;
  * The caret is written as {@code ‸} inside the snippet so each case reads like the code
  * the user actually typed.
  * <p>
- * Run with: gradlew runTest -PmainClass=CompletionExpressionTest
+ * Run with: gradlew test --tests CompletionExpressionTest
  */
-public class CompletionExpressionTest {
+class CompletionExpressionTest {
 	private static final char CARET = '‸';
-
-	private static int passed, failed;
-
-	public static void main(String[] args) {
-		run("word boundary and member access on real snippets", CompletionExpressionTest::snippetCases);
-		run("real member names sort into predictable buckets", CompletionExpressionTest::rankingOnRealNames);
-		run("collect is deterministic regardless of source order", CompletionExpressionTest::determinism);
-		run("known gaps stay visible", CompletionExpressionTest::knownGaps);
-
-		System.out.println("============================================");
-		System.out.printf("TEST RESULTS: %d Passed, %d Failed%n", passed, failed);
-		System.out.println("============================================");
-
-		if (failed > 0) System.exit(1);
-	}
 
 	/**
 	 * {snippet, expected prefix left of the caret, member access, in code, what}
@@ -67,7 +56,9 @@ public class CompletionExpressionTest {
 	 {"Vars.\r\n\t.ma‸", "ma", true, true, "CRLF chain continuation"},
 	};
 
-	private static void snippetCases() {
+	@Test
+	@DisplayName("word boundary and member access on real snippets")
+	void snippets() {
 		for (Object[] c : CASES) {
 			String snippet = (String) c[0];
 			String expectPrefix = (String) c[1];
@@ -81,50 +72,54 @@ public class CompletionExpressionTest {
 
 			Completion.Context ctx = Completion.contextAt(text, cursor);
 
-			assertEq(expectPrefix, ctx.prefix, what + " (prefix)");
-			assertEq(expectMember, ctx.member, what + " (member access)");
-			assertEq(expectCode, ctx.inCode, what + " (code context)");
-			assertEq(cursor - expectPrefix.length(), ctx.start, what + " (prefix start)");
+			assertEquals(expectPrefix, ctx.prefix, what + " (prefix)");
+			assertEquals(expectMember, ctx.member, what + " (member access)");
+			assertEquals(expectCode, ctx.inCode, what + " (code context)");
+			assertEquals(cursor - expectPrefix.length(), ctx.start, what + " (prefix start)");
 			// 点号下标供高亮截止用，必须真的指向 '.'，不能是前缀前的空白
-			assertEq(expectMember, ctx.dot >= 0 && text.charAt(ctx.dot) == '.', what + " (dot index)");
+			assertEquals(expectMember, ctx.dot >= 0 && text.charAt(ctx.dot) == '.', what + " (dot index)");
 		}
 	}
 
-	private static void rankingOnRealNames() {
+	@Test
+	@DisplayName("real member names sort into predictable buckets")
+	void rankingOnRealNames() {
 		Seq<String> ids = Seq.with(
 		 "getX", "getY", "getClass", "getName", "getMod", "Globals",
 		 "getWidth", "getHeight", "getHealth", "getCursorPosition", "grab", "gravity");
 
 		Seq<String> out = new Seq<>();
 		Completion.collect(out, "getH", ids);
-		assertEq(Seq.with("getHealth", "getHeight").toString(), out.toString(),
+		assertEquals(Seq.with("getHealth", "getHeight").toString(), out.toString(),
 		 "exact-case prefix first, alphabetical inside the bucket");
 
 		Completion.collect(out, "gc", ids);
-		assertEq(Seq.with("getClass", "getCursorPosition").toString(), out.toString(),
+		assertEquals(Seq.with("getClass", "getCursorPosition").toString(), out.toString(),
 		 "hump abbreviations land in the last bucket, still alphabetical");
 
 		Completion.collect(out, "g", ids);
-		assertEq(Seq.with("getClass", "getCursorPosition", "getHealth", "getHeight", "getMod",
+		assertEquals(Seq.with("getClass", "getCursorPosition", "getHealth", "getHeight", "getMod",
 		 "getName", "getWidth", "getX", "getY", "grab", "gravity", "Globals").toString(),
 		 out.toString(), "single letter keeps every name, exact case before Globals");
 
 		// 整段小写也能命中：走的是忽略大小写前缀，不是驼峰
 		Completion.collect(out, "getcursor", ids);
-		assertEq(Seq.with("getCursorPosition").toString(), out.toString(), "lowercased camel name");
+		assertEquals(Seq.with("getCursorPosition").toString(), out.toString(), "lowercased camel name");
 
 		Completion.collect(out, "Vars", ids);
 		assertTrue(out.isEmpty(), "no candidate when nothing matches");
 	}
 
-	private static void determinism() {
+	@Test
+	@DisplayName("collect is deterministic regardless of source order")
+	void determinism() {
 		Seq<String> a = new Seq<>(), b = new Seq<>();
 		Completion.collect(a, "g", Seq.with("getX", "getY", "Grab", "getMod"));
 		Completion.collect(b, "g", Seq.with("getMod", "Grab", "getY", "getX"));
-		assertEq(a.toString(), b.toString(), "same set, different order, same result");
+		assertEquals(a.toString(), b.toString(), "same set, different order, same result");
 
 		Completion.collect(a, "get", Seq.with("getX", "GetX", "gEtX", "getX"));
-		assertEq(Seq.with("getX", "GetX", "gEtX").toString(), a.toString(),
+		assertEquals(Seq.with("getX", "GetX", "gEtX").toString(), a.toString(),
 		 "case-only differences are distinct candidates, exact case first");
 	}
 
@@ -132,34 +127,14 @@ public class CompletionExpressionTest {
 	 * Current, imperfect behaviour. Kept as an assertion so a change shows up as a failure
 	 * instead of passing silently.
 	 */
-	private static void knownGaps() {
+	@Test
+	@DisplayName("known gaps stay visible")
+	void knownGaps() {
 		// 前缀必须连续命中或按词首缩写：跳过中间一个词再接着敲，匹配不上
-		assertEq(Completion.NO_MATCH, Completion.rank("getCursorPosition", "getpos"),
+		assertEquals(Completion.NO_MATCH, Completion.rank("getCursorPosition", "getpos"),
 		 "skipping a word in the middle");
 		// 词首之后的数字不是 word start，所以 gx2 匹配不到 getX2
-		assertEq(Completion.NO_MATCH, Completion.rank("getX2", "gx2"),
+		assertEquals(Completion.NO_MATCH, Completion.rank("getX2", "gx2"),
 		 "digit after a hump");
-	}
-
-	private static void run(String name, Runnable body) {
-		System.out.print(name + "... ");
-		try {
-			body.run();
-			System.out.println("PASSED");
-			passed++;
-		} catch (Throwable t) {
-			System.out.println("FAILED: " + t.getMessage());
-			failed++;
-		}
-	}
-
-	private static void assertEq(Object expected, Object actual, String what) {
-		if (expected == null ? actual != null : !expected.equals(actual)) {
-			throw new AssertionError(what + ": expected <" + expected + "> but was <" + actual + ">");
-		}
-	}
-
-	private static void assertTrue(boolean value, String what) {
-		if (!value) throw new AssertionError(what + ": expected true");
 	}
 }

@@ -4,7 +4,12 @@ import mindustry.core.Version;
 import mindustry.mod.Mods;
 import mindustry.mod.Scripts;
 import modtools.ui.comp.input.highlight.JSSyntax;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import rhino.*;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * What {@code JSSyntax.cursorObj} resolves to for member access in different expression shapes.
@@ -13,70 +18,89 @@ import rhino.*;
  * members. The caret is written as {@code ‸} and is moved to just before the '.' the way
  * {@code Tester} does while the popup is open.
  * <p>
- * Run with: gradlew runTest -PmainClass=JSCompletionContextTest
+ * Run with: gradlew test --tests JSCompletionContextTest
  */
-public class JSCompletionContextTest {
+class JSCompletionContextTest {
 	private static final char CARET = '‸';
-
-	private static int passed, failed;
 
 	private static Context    cx;
 	private static Scriptable scope;
 	private static Scriptable left, right, inner;
 
-	public static void main(String[] args) {
+	@BeforeAll
+	static void setUp() {
 		initMindustryEnv();
 		buildScope();
+	}
 
-		run("statement start: let v = left.xxx", "let v = left.xxx‸;", left);
-		run("single argument: fn(left.xxx)", "fn(left.xxx‸)", left);
-		run("second argument: fn(left.xxx, right.yy)", "fn(left.xxx, right.yy‸)", right);
-		run("first argument: fn(left.xxx‸, right.yy)", "fn(left.xxx‸, right.yy)", left);
-		run("dot with empty prefix: fn(left.xxx, right.‸)", "fn(left.xxx, right.‸)", right);
-		run("nested call: fn(g(left.xxx‸), right.yy)", "fn(g(left.xxx‸), right.yy)", left);
-		run("member of a call result: fn(left.xxx(inner.yy‸))", "fn(left.xxx(inner.yy‸))", inner);
-		run("array literal argument: fn([left.xxx‸, right.yy])", "fn([left.xxx‸, right.yy])", left);
-		run("ternary argument: fn(a ? left.xxx‸ : right.yy)", "fn(a ? left.xxx‸ : right.yy)", left);
-		knownGaps();
+	@Test
+	@DisplayName("statement start: let v = left.xxx")
+	void statementStart() {
+		assertBase("let v = left.xxx‸;", left);
+	}
 
-		System.out.println("============================================");
-		System.out.printf("TEST RESULTS: %d Passed, %d Failed%n", passed, failed);
-		System.out.println("============================================");
+	@Test
+	@DisplayName("single argument: fn(left.xxx)")
+	void singleArgument() {
+		assertBase("fn(left.xxx‸)", left);
+	}
 
-		if (failed > 0) System.exit(1);
+	@Test
+	@DisplayName("second argument: fn(left.xxx, right.yy)")
+	void secondArgument() {
+		assertBase("fn(left.xxx, right.yy‸)", right);
+	}
+
+	@Test
+	@DisplayName("first argument: fn(left.xxx, right.yy)")
+	void firstArgument() {
+		assertBase("fn(left.xxx‸, right.yy)", left);
+	}
+
+	@Test
+	@DisplayName("dot with empty prefix: fn(left.xxx, right.)")
+	void emptyPrefix() {
+		assertBase("fn(left.xxx, right.‸)", right);
+	}
+
+	@Test
+	@DisplayName("nested call: fn(g(left.xxx), right.yy)")
+	void nestedCall() {
+		assertBase("fn(g(left.xxx‸), right.yy)", left);
+	}
+
+	@Test
+	@DisplayName("member of a call result: fn(left.xxx(inner.yy))")
+	void memberOfCallResult() {
+		assertBase("fn(left.xxx(inner.yy‸))", inner);
+	}
+
+	@Test
+	@DisplayName("array literal argument: fn([left.xxx, right.yy])")
+	void arrayLiteralArgument() {
+		assertBase("fn([left.xxx‸, right.yy])", left);
+	}
+
+	@Test
+	@DisplayName("ternary argument: fn(a ? left.xxx : right.yy)")
+	void ternaryArgument() {
+		assertBase("fn(a ? left.xxx‸ : right.yy)", left);
 	}
 
 	/**
 	 * 局部变量没有运行时对象，{@code let v = left; v.xxx} 的基对象退化成作用域本身
 	 * （补全会列出全局名）。要修得从声明处推断类型，是另一件事，这里只钉住现状。
 	 */
-	private static void knownGaps() {
-		System.out.print("known gap: local variable base is not the declared object... ");
-		try {
-			Scriptable base = baseOf("let v = left;\nv.xxx‸");
-			if (base == left) throw new AssertionError("local var base resolved to left, gap is gone");
-			assertTrue(base != null, "local var base is not null either");
-			System.out.println("PASSED (base = " + name(base) + ")");
-			passed++;
-		} catch (Throwable t) {
-			System.out.println("FAILED: " + t.getMessage());
-			failed++;
-		}
+	@Test
+	@DisplayName("known gap: local variable base is not the declared object")
+	void knownGapLocalVariable() {
+		Scriptable base = baseOf("let v = left;\nv.xxx‸");
+		assertNotEquals(left, base, "local var base resolved to left, gap is gone");
+		assertNotNull(base, "local var base is not null either");
 	}
 
-	private static void run(String name, String marked, Scriptable expected) {
-		System.out.print(name + "... ");
-		try {
-			Scriptable actual = baseOf(marked);
-			if (actual != expected) {
-				throw new AssertionError("base object: expected " + name(expected) + " but was " + name(actual));
-			}
-			System.out.println("PASSED");
-			passed++;
-		} catch (Throwable t) {
-			System.out.println("FAILED: " + t.getMessage());
-			failed++;
-		}
+	private static void assertBase(String marked, Scriptable expected) {
+		assertEquals(expected, baseOf(marked), "base object");
 	}
 
 	/** 光标停在 '.' 之前跑一遍高亮，取补全会用的基对象 */
@@ -99,15 +123,6 @@ public class JSCompletionContextTest {
 		int i = cursor;
 		while (i > 0 && Character.isJavaIdentifierPart(text.charAt(i - 1))) i--;
 		return i > 0 && text.charAt(i - 1) == '.' ? i - 1 : cursor;
-	}
-
-	private static String name(Scriptable s) {
-		if (s == null) return "null";
-		for (String n : new String[]{"left", "right", "inner"}) {
-			Object o = scope.get(n, scope);
-			if (o == s) return n;
-		}
-		return s.getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(s));
 	}
 
 	private static void buildScope() {
@@ -136,8 +151,7 @@ public class JSCompletionContextTest {
 	private static void initMindustryEnv() {
 		Version.number = 159;
 		cx = Context.enter();
-		ImporterTopLevel top = new ImporterTopLevel(cx);
-		scope = top;
+		scope = new ImporterTopLevel(cx);
 		try {
 			Vars.mods = (Mods) ihope_lib.MyReflect.unsafe.allocateInstance(Mods.class);
 			Scripts scripts = (Scripts) ihope_lib.MyReflect.unsafe.allocateInstance(Scripts.class);
@@ -145,11 +159,7 @@ public class JSCompletionContextTest {
 			Reflect.set(Scripts.class, scripts, "scope", scope);
 			Reflect.set(Mods.class, Vars.mods, "scripts", scripts);
 		} catch (Throwable t) {
-			t.printStackTrace();
+			throw new IllegalStateException("Mindustry env setup failed", t);
 		}
-	}
-
-	private static void assertTrue(boolean value, String what) {
-		if (!value) throw new AssertionError(what);
 	}
 }

@@ -139,8 +139,16 @@ public class JSSyntax extends Syntax {
 	char  destructureKind;
 	/** 解构目标里的名字，按出现顺序 */
 	final Seq<String> destructureNames = new Seq<>();
+	/** 解构目标里的第几个位置，用来对齐数组字面量的元素（空位会跳号） */
+	int destructurePos;
+	/** 解构目标里有空位（`let [a, , c]`），位置对不上元素，绑定时一律跳过 */
+	boolean destructureHole;
 	/** 解构目标里出现过 `{a: alias}` 这种重命名，绑定时一律跳过（key 对不上） */
 	boolean destructureRenamed;
+	/** 右值是数组字面量时，按顺序收集到的元素 */
+	final Seq<Object> declElements = new Seq<>();
+	/** 正在收集数组字面量的元素 */
+	boolean collectingElements;
 
 	public enum DeclType { NONE, VAR, CONST }
 	public enum DeclPhase { ID, VALUE }
@@ -220,9 +228,11 @@ public class JSSyntax extends Syntax {
 		String  name  = pendingDeclName;
 		char    kind  = destructureKind;
 		boolean alias = destructureRenamed;
+		boolean hole  = destructureHole;
 		pendingDeclName = null;
 		destructureKind = '\0';
 		destructureRenamed = false;
+		destructureHole = false;
 
 		if (currentDeclType == DeclType.NONE || currentDeclPhase != DeclPhase.VALUE) return;
 
@@ -243,8 +253,17 @@ public class JSSyntax extends Syntax {
 			}
 			return;
 		}
-		// 数组解构：元素类型取决于运行时数组，从类型占位上取不到，不绑
-		if (kind == '[') return;
+		// 数组解构：只有右值也是数组字面量时才知道每个位置是什么，
+		// 空位和重命名会让位置和名字错位，直接放弃
+		if (kind == '[') {
+			if (hole || alias) return;
+			int n = Math.min(destructureNames.size, declElements.size);
+			for (int i = 0; i < n; i++) {
+				Object el = declElements.get(i);
+				if (el instanceof Scriptable) addLocalBound(destructureNames.get(i), el);
+			}
+			return;
+		}
 
 		if (name == null || declValueNested) return;
 		addLocalBound(name, value);
@@ -259,7 +278,11 @@ public class JSSyntax extends Syntax {
 		declValueNested = false;
 		destructureKind = '\0';
 		destructureNames.clear();
+		destructurePos = 0;
+		destructureHole = false;
 		destructureRenamed = false;
+		declElements.clear();
+		collectingElements = false;
 	}
 
 	final ObjectSet<String> localKeywords = ObjectSet.with("let", "var");
@@ -321,10 +344,11 @@ public class JSSyntax extends Syntax {
 	 * 不会清掉 {@code operatesSymbol} 里更早的 '.'，于是 {@code a.b(inner.c)} 的 {@code inner}
 	 * 会被误当成属性名跳过。
 	 */
-	private boolean precededByDot(int index) {
+	/** index 之前（跳过空白）是不是字符 ch */
+	private boolean precededBy(int index, char ch) {
 		int i = index;
 		while (i > 0 && Character.isWhitespace(displayText.charAt(i - 1))) i--;
-		return i > 0 && displayText.charAt(i - 1) == '.';
+		return i > 0 && displayText.charAt(i - 1) == ch;
 	}
 
 	/** token 后面（允许空白）是不是 {@code =>}，即它是箭头函数的参数 */
@@ -432,7 +456,7 @@ public class JSSyntax extends Syntax {
 			 if (entry.key.contains(task.token)) {
 				 if (userVarSets.contains(entry.key)) {
 					 // '.' 之后的 token 是属性名，要沿当前对象解析，交给下面的 dealJSProp
-					 if (precededByDot(task.lastIndex)) continue;
+					 if (precededBy(task.lastIndex, '.')) continue;
 					 // 其余位置（语句开头、'(' ',' '=' 之后）都是从作用域重新开始一个表达式。
 					 // 不能沿用 currentObject：call(a.b, c.d) 里 c 会被拿到 a.b 里面去找，
 					 // 而 let v = 之后 currentObject 是 null，连作用域都不查。
@@ -599,13 +623,8 @@ public class JSSyntax extends Syntax {
 			scopeStack.add(rootScope);
 			pendingFunctionParams.clear();
 			pendingArrowParams.clear();
-			pendingDeclName = null;
-			destructureKind = '\0';
-			destructureNames.clear();
-			destructureRenamed = false;
+			beginDecl(DeclType.NONE);
 
-			currentDeclType = DeclType.NONE;
-			currentDeclPhase = DeclPhase.ID;
 			paramPhase = DeclPhase.ID;
 
 			state = ParseState.DEFAULT;
@@ -674,7 +693,19 @@ public class JSSyntax extends Syntax {
 			    && (c == '[' || c == '{')) {
 				destructureKind = c;
 				destructureNames.clear();
+				destructurePos = 0;
+				destructureHole = false;
 				destructureRenamed = false;
+			}
+			// 右值以数组字面量开头：按位置收集元素，`let [a, b] = [x, y]` 才能对上
+			if (currentDeclType != DeclType.NONE && currentDeclPhase == DeclPhase.VALUE
+			    && c == '[' && precededBy(lastTask.lastIndex - 1, '=')) {
+				collectingElements = true;
+				declElements.clear();
+			}
+			if (c == ']' && collectingElements && bracketDepth() == declDepth) {
+				declElements.add(currentObject);
+				collectingElements = false;
 			}
 
 			switch (state) {
@@ -723,17 +754,34 @@ public class JSSyntax extends Syntax {
 					paramPhase = DeclPhase.VALUE;
 				} else if (currentDeclType != DeclType.NONE) {
 					currentDeclPhase = DeclPhase.VALUE;
+					// 右值从这里重新开始，上一条的收集结果作废
+					collectingElements = false;
+					declElements.clear();
 				}
 			}
 			if (c == ',' || c == ':') {
 				if (state == ParseState.INSIDE_PARAMS) {
 					paramPhase = DeclPhase.ID;
 				} else if (currentDeclType != DeclType.NONE) {
-					// `let v = a, w = b`：逗号前那一项的右值已经解析完了。
-					// 只认和声明同一层的逗号，`f(a, b)` 里的逗号不是声明项分隔符。
-					// ':' 也不能绑，三元表达式里 `a ? b : c` 的 b 不是声明的右值
-					if (c == ',' && bracketDepth() == declDepth) bindDeclValue();
-					currentDeclPhase = DeclPhase.ID;
+					boolean sameLevel = bracketDepth() == declDepth;
+					if (c == ',') {
+						if (sameLevel) {
+							// `let v = a, w = b`：逗号前那一项的右值已经解析完了。
+							// 只有和声明同一层的逗号才是声明项分隔符，`f(a, b)` 里的不是
+							bindDeclValue();
+							currentDeclPhase = DeclPhase.ID;
+						} else if (currentDeclPhase == DeclPhase.VALUE) {
+							// 数组字面量这一层的元素分隔符
+							if (collectingElements && bracketDepth() == declDepth + 1) declElements.add(currentObject);
+						} else if (destructureKind != '\0') {
+							// 解构目标里的逗号：推进位置。上一位置没名字说明是空位
+							if (destructureNames.size != destructurePos + 1) destructureHole = true;
+							destructurePos++;
+						}
+					} else if (sameLevel) {
+						// 三元表达式里 `a ? b : c` 的 b 不是声明的右值，只改阶段不绑
+						currentDeclPhase = DeclPhase.ID;
+					}
 				}
 			}
 
@@ -793,8 +841,23 @@ public class JSSyntax extends Syntax {
 		public void after(int i) { }
 
 		public boolean draw(int i) {
+			// 无分号的声明靠换行结束，这时才拿得到「换行」这个信号（forToken 里只有符号）
+			if (newLine) endDeclAtNewLine(i);
 			forToken(i);
 			return false;
+		}
+
+		/**
+		 * {@code let v = left} 换行就是语句结束（ASI）。下一行以运算符或点开头说明表达式
+		 * 还在继续，这时不能结束——否则 `let v = left\n.xxx` 会被当成两条语句。
+		 */
+		private void endDeclAtNewLine(int i) {
+			if (currentDeclType == DeclType.NONE || currentDeclPhase != DeclPhase.VALUE) return;
+			int j = skipWhitespace(i + 1);
+			if (j < displayText.length() && ".,+-*/%&|^?:<>=!".indexOf(displayText.charAt(j)) >= 0) return;
+			bindDeclValue();
+			currentDeclType = DeclType.NONE;
+			currentDeclPhase = DeclPhase.ID;
 		}
 	}
 	/**

@@ -184,13 +184,60 @@ class JSCompletionContextTest {
 		assertBase("let {xxx, yy} = left;\nyy.‸", (Scriptable) left.get("yy", left));
 	}
 
-	/** 数组解构的元素类型取决于运行时数组，类型占位上取不到，宁可不绑 */
+	/** 右值是数组字面量时，按位置把元素绑给对应的名字 */
 	@Test
-	@DisplayName("array destructuring does not bind element types")
-	void arrayDestructuringDoesNotBind() {
-		Scriptable base = baseOf("let [a, b] = [left, right];\na.‸");
-		assertNotEquals(left, base, "bound to the first element");
-		assertNotEquals(right, base, "bound to the second element");
+	@DisplayName("array destructuring binds an array literal by position")
+	void arrayDestructuringBindsLiterals() {
+		assertBase("let [a, b] = [left, right];\na.‸", left);
+		assertBase("let [a, b] = [left, right];\nb.‸", right);
+	}
+
+	/** 右值不是字面量就没有位置信息，宁可不绑 */
+	@Test
+	@DisplayName("array destructuring of a non-literal stays unbound")
+	void arrayDestructuringOfNonLiteral() {
+		Scriptable base = baseOf("let [a, b] = left;\na.‸");
+		assertNotEquals(left, base, "bound the whole initializer to the first name");
+	}
+
+	/** 元素比名字少时只绑对得上的那几个，多余的保持不绑 */
+	@Test
+	@DisplayName("array destructuring stops at the shorter side")
+	void arrayDestructuringStopsAtShorterSide() {
+		assertBase("let [a, b] = [left];\na.‸", left);
+		Scriptable base = baseOf("let [a, b] = [left];\nb.‸");
+		assertNotEquals(left, base, "bound a missing element");
+	}
+
+	/** `let [a, , c]` 的位置和名字错开一位，按位置绑就会绑错，直接放弃 */
+	@Test
+	@DisplayName("array destructuring with a hole is not bound")
+	void arrayDestructuringWithHole() {
+		Scriptable base = baseOf("let [a, , c] = [left, right, inner];\nc.‸");
+		assertNotEquals(right, base, "shifted by the hole");
+		assertNotEquals(inner, base, "bound anyway");
+	}
+
+	/** 字面量里的逗号属于调用，不是声明项分隔符，不能把 right 当成新声明名 */
+	@Test
+	@DisplayName("commas inside an array literal are not declarators")
+	void arrayLiteralCommasAreNotDeclarators() {
+		Set<String> names = localNamesOf("let v = [left, right];\n‸");
+		assertFalse(names.contains("right"), "right was taken as a declared name: " + names);
+	}
+
+	/** 没有分号时靠换行结束声明 */
+	@Test
+	@DisplayName("a declaration without a semicolon ends at the newline")
+	void declarationWithoutSemicolon() {
+		assertBase("let v = left\nv.‸", left);
+	}
+
+	/** 下一行以点开头说明表达式还在继续，这时换行不是语句结束 */
+	@Test
+	@DisplayName("a line starting with a dot continues the expression")
+	void continuationLine() {
+		assertBase("let v = left\n.xxx\nv.‸", (Scriptable) left.get("xxx", left));
 	}
 
 	/** `{xxx: z}` 的 key 和名字对不上，绑 z 到 left.xxx 是猜的，不做 */

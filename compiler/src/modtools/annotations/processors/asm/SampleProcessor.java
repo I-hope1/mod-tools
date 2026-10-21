@@ -41,14 +41,19 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 	@Override
 	public void dealElement(Symbol element) throws Throwable {
 		if (!(element instanceof MethodSymbol methodSym && methodSym.owner instanceof ClassSymbol owner)) return;
+
+		JCMethodDecl methodTree = trees.getTree(methodSym);
+		// 拿不到树就什么都改不了；这里也不能把 null 当位置传给 log，诊断本身会崩
+		if (methodTree == null) return;
+
 		if (trees.getTree(owner) == null) {
-			log.warning(trees.getTree(owner), SPrinter.warn("Cannot get tree of " + owner));
+			log.warning(methodTree.pos, SPrinter.warn("Cannot get tree of " + owner));
 			return;
 		}
 
 		Sample sample = owner.getAnnotation(Sample.class);
 		if (sample == null) {
-			log.error(trees.getTree(methodSym).mods, SPrinter.err(
+			log.error(methodTree.mods, SPrinter.err(
 			 "@SampleForMethod / @SampleForInitializer is only allowed on methods within a class annotated with @Sample"
 			));
 			return;
@@ -69,7 +74,10 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 	 */
 	private void transformMethodBody(MethodSymbol methodSym, ClassSymbol interfaceSym, JCCompilationUnit unit) {
 		JCMethodDecl methodDecl = trees.getTree(methodSym);
-		VarSymbol    selfParam  = methodSym.params.head;
+		// 空参数列表的方法已经在生成接口时报过错，这里没有 self 可强转
+		if (methodDecl == null || methodSym.params.isEmpty()) return;
+
+		VarSymbol selfParam = methodSym.params.head;
 
 		new TreeTranslator() {
 			private JCMethodInvocation currentSuperContext;
@@ -83,8 +91,11 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 				// 处理 _super(self) 的替换
 				if (tree == currentSuperContext) {
 					currentSuperContext = null;
-					if (!(tree.args.get(0) instanceof JCIdent ident && ident.name.contentEquals(selfParam.name))) {
+					if (tree.args.isEmpty() ||
+					    !(tree.args.get(0) instanceof JCIdent ident && ident.name.contentEquals(selfParam.name))) {
 						log.error(tree.pos, SPrinter.err("_super 必须以 '_super(" + selfParam.name + ")' 形式使用"));
+						// 保持原调用不变：result 留着上一次的结果会被父节点当成替换值收走
+						this.result = tree;
 						return;
 					}
 					this.result = castSelf();
@@ -92,21 +103,18 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 				}
 
 				// 识别形如 _super(self).method() 的调用
-				if (tree.meth instanceof JCFieldAccess fieldAccess &&
-				    fieldAccess.selected instanceof JCMethodInvocation subInvoke &&
-				    _SUPER.equals("" + subInvoke.meth) &&
-				    getSymbol(unit, subInvoke) == superCallSymbol) {
+				if (isSuperCall(tree, unit)) {
+					JCMethodInvocation subInvoke = (JCMethodInvocation) ((JCFieldAccess) tree.meth).selected;
 
 					currentSuperContext = subInvoke;
 					super.visitApply(tree);
 
 					// 修正方法名为 super$$Name
+					JCFieldAccess fieldAccess = (JCFieldAccess) tree.meth;
 					fieldAccess.selected = castSelf();
 					fieldAccess.name = names.fromString(AConstants.SUPER_METHOD_PREFIX + fieldAccess.name);
 					fieldAccess.sym = interfaceSym.members().findFirst(fieldAccess.name);
 					// 添加super接口方法
-
-					// println(fieldAccess);
 				} else {
 					super.visitApply(tree);
 				}
@@ -134,6 +142,18 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 	}
 
 	/**
+	 * 判断是不是 {@code _super(self).method()} 里的外层调用。
+	 * <p>
+	 * 改写和扫描两处都靠这个判定，写岔一处就会漏改或漏生成桥接方法。
+	 */
+	private boolean isSuperCall(JCMethodInvocation call, JCCompilationUnit unit) {
+		if (!(call.meth instanceof JCFieldAccess fieldAccess)) return false;
+		if (!(fieldAccess.selected instanceof JCMethodInvocation subInvoke)) return false;
+		if (!_SUPER.equals("" + subInvoke.meth)) return false;
+		return getSymbol(unit, subInvoke) == superCallSymbol;
+	}
+
+	/**
 	 * 生成接口源码及其对应的 ClassSymbol
 	 */
 	private ClassSymbol makeInterface(ClassSymbol owner, boolean openPkgPriv, JCCompilationUnit unit, Sample sample) {
@@ -152,7 +172,7 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 		ClassSymbol interfaceSym = new ClassSymbol(Flags.PUBLIC | Flags.INTERFACE, names.fromString(interfaceName), owner.owner);
 		interfaceSym.members_field = WriteableScope.create(interfaceSym);
 
-		CodeBuffer buffer = new CodeBuffer(ownerName);
+		CodeBuffer buffer = new CodeBuffer();
 
 		Set<MethodSymbol> superMethodsToBridge = new LinkedHashSet<>();
 		for (Symbol s : owner.members().getSymbols()) {
@@ -164,13 +184,6 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 		for (Symbol member : owner.members().getSymbols()) {
 			processMember(member, interfaceSym, buffer, sampleMethods, openPkgPriv);
 		}
-		/* Set<MethodType> methodTypes =  new LinkedHashSet<>();
-		for (MethodSymbol symbol : superMethodsToBridge) {
-			methodTypes.add((MethodType) symbol.type);
-		}
-		for (MethodSymbol symbol : sampleMethods) {
-			methodTypes.add(new MethodType(symbol.params.tail.map(p -> p.type), symbol.getReceiverType(), symbol.getThrownTypes(), mSymtab.methodClass));
-		} */
 
 		for (MethodSymbol superMethod : superMethodsToBridge) {
 			boolean isEssentiallySample = sampleMethods.stream()
@@ -226,14 +239,14 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 		if (sm == null && si == null && sa == null) return;
 
 		if (member instanceof MethodSymbol methodSym) {
-			handleMethodMember(methodSym, interfaceSym, buffer, sm, si, openPkgPriv);
+			handleMethodMember(methodSym, buffer, sm, si, openPkgPriv);
 			sampleMethods.add(methodSym);
 		} else if (member instanceof VarSymbol varSym) {
 			handleFieldMember(varSym, interfaceSym, buffer);
 		}
 	}
 
-	private void handleMethodMember(MethodSymbol methodSym, ClassSymbol interfaceSym, CodeBuffer buffer,
+	private void handleMethodMember(MethodSymbol methodSym, CodeBuffer buffer,
 	                                SampleForMethod sm, SampleForInitializer si, boolean openPkgPriv) {
 		if (methodSym.params.isEmpty()) {
 			log.error(trees.getTree(methodSym).mods, SPrinter.err("方法的参数列表不能为空"));
@@ -242,19 +255,27 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 
 		JCMethodDecl tree = trees.getTree(methodSym);
 
-		// 临时修改 AST 以便利用 tree.toString() 生成接口方法签名
-		List<JCVariableDecl> oldParams      = tree.params;
-		JCBlock              oldBody        = tree.body;
-		var                  oldAnnotations = tree.mods.annotations;
-		tree.mods.flags &= ~Flags.STATIC; // 移除 static
-		tree.params = tree.params.tail; // 移除第一个参数 (self)
-		tree.body = null; // 移除方法体
-		tree.mods.annotations = List.nil(); // 移除注解
-		buffer.interfaceMethods.append("    ").append(tree.toString().replace(";", "")).append(";\n");
-		tree.mods.flags |= Flags.STATIC;
-		tree.params = oldParams;
-		tree.body = oldBody;
-		tree.mods.annotations = oldAnnotations;
+		// 临时把方法改成「非 static、去掉 self 参数、无方法体、无注解」的形状，
+		// 借 tree.toString() 打印出接口里要声明的签名。
+		// 这段改写必须保证还原：漏还原会把方法体从树上抹掉，后续所有处理都拿到一个空方法。
+		var oldParams      = tree.params;
+		var oldBody        = tree.body;
+		var oldAnnotations = tree.mods.annotations;
+		long oldFlags      = tree.mods.flags;
+		String signature;
+		try {
+			tree.mods.flags &= ~Flags.STATIC;
+			tree.params = tree.params.tail;
+			tree.body = null;
+			tree.mods.annotations = List.nil();
+			signature = tree.toString().replace(";", "");
+		} finally {
+			tree.mods.flags = oldFlags;
+			tree.params = oldParams;
+			tree.body = oldBody;
+			tree.mods.annotations = oldAnnotations;
+		}
+		buffer.interfaceMethods.append("    ").append(signature).append(";\n");
 
 		// 生成访问代码 (Visit Code)
 		String firstParamType = BaseASMProc.classAccess(methodSym.params.head.type);
@@ -262,8 +283,9 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 
 		Class<?>[] bounds = (sm != null) ? sm.upperBoundClasses() : si.upperBoundClasses();
 		if (bounds.length > 0) {
+			// 用 canonical name：生成文件里不保证 import 了这些类，嵌套类的 simple name 也解析不了
 			String check = Arrays.stream(bounds)
-			 .map(c -> "clazz.isAssignable(" + c.getSimpleName() + ".class)")
+			 .map(c -> "clazz.isAssignable(" + c.getCanonicalName() + ".class)")
 			 .collect(Collectors.joining(" || ", "if (", ") "));
 			buffer.visitLogic.append(check);
 		}
@@ -358,14 +380,9 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 		tree.accept(new TreeScanner() {
 			@Override
 			public void visitApply(JCMethodInvocation tree) {
-				if (tree.meth instanceof JCFieldAccess fieldAccess &&
-				    fieldAccess.selected instanceof JCMethodInvocation subInvoke &&
-				    _SUPER.equals("" + subInvoke.meth) &&
-				    getSymbol(unit, subInvoke) == superCallSymbol) {
-
-					if (fieldAccess.sym instanceof MethodSymbol targetMethod) {
-						results.add(targetMethod);
-					}
+				if (isSuperCall(tree, unit)
+				    && ((JCFieldAccess) tree.meth).sym instanceof MethodSymbol targetMethod) {
+					results.add(targetMethod);
 				}
 				super.visitApply(tree);
 			}
@@ -460,10 +477,6 @@ public class SampleProcessor extends BaseProcessor<Symbol> {
 		final StringBuilder interfaceMethods    = new StringBuilder();
 		final StringBuilder packagePrivateLogic = new StringBuilder();
 		final StringBuilder visitLogic          = new StringBuilder();
-
-		CodeBuffer(String ownerName) {
-			// 初始化 visit 逻辑
-		}
 	}
 
 	@Override

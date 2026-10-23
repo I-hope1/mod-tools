@@ -11,6 +11,8 @@ import arc.util.Tmp;
  * 或**完全**被兄弟覆盖这类确定的情况，部分超出只字不提。
  * <p>没有面积（宽高为 0）和不可见的元素一律不审：未布局的子树（折叠的 Fragment、
  * 还没显示过的窗口）里每个元素都是 0×0，把它们算成问题是纯粹的噪音。
+ * 祖先链上任何一层没有面积或不可见时也整棵跳过——子元素身上的宽高只是上次布局的残留，
+ * 拿它跟 0×0 的父级比会一律判成「超出父级」。
  * <p>「被遮挡」只在 {@link Table} 内部判断：顶层 actor（scene.root / TopGroup）之间
  * 按 z 序重叠是正常现象，全屏的拾取层会把底下的元素一律判成被完全覆盖。
  */
@@ -51,6 +53,15 @@ public final class LayoutIssues {
 		int     mask   = NONE;
 		Element parent = e.parent;
 		if (parent == null) return mask;
+
+		/*
+		 * 祖先链上只要有一层没有面积或不可见，这棵子树就是「还没布局」：
+		 * 子元素身上的宽高是上一次布局留下的，拿它跟 0×0 的父级比必然判成「超出父级」。
+		 * 必须整条链一起看——父级自己可能是被更上层压成 0 的，它的值同样是残留。
+		 */
+		for (Element p = parent; p != null; p = p.parent) {
+			if (!p.visible || p.getWidth() <= 0f || p.getHeight() <= 0f) return NONE;
+		}
 
 		// 父级 ScrollPane 的「溢出」是正常的（widget 本来就可能比可视区大），交给 CLIPPED 判断
 		if (!(parent instanceof ScrollPane) && !rectInside(e, parent, 0, 0, parent.getWidth(), parent.getHeight())) {

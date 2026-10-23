@@ -51,7 +51,6 @@ public class CompletionPopup extends Table {
 	/** 供 JSSyntax 用：补全期间把高亮解析截止到 '.' 之前 */
 	public  int     cursorBeforeDot;
 	private String  currentPrefix = "";
-	private boolean shown         = false;
 	private boolean scrollPending = false;
 
 	public CompletionPopup(TextField area) {
@@ -77,7 +76,7 @@ public class CompletionPopup extends Table {
 		@Override
 		public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
 			Element target = event.targetActor;
-			if (shown && target != CompletionPopup.this
+			if (isShown() && target != CompletionPopup.this
 			    && (target == null || !target.isDescendantOf(CompletionPopup.this))) {
 				hide();
 			}
@@ -94,8 +93,7 @@ public class CompletionPopup extends Table {
 		this.currentPrefix = prefix;
 		this.selectedIndex = -1;
 
-		rebuildList();
-		if (!shown) return; // 没有候选，rebuildList 已经收起
+		if (!rebuildList()) return; // 没有候选，rebuildList 已经收起
 
 		place(pos);
 		visible = true;
@@ -111,32 +109,36 @@ public class CompletionPopup extends Table {
 	 */
 	public void narrow(String prefix, Vec2 pos) {
 		currentPrefix = prefix;
-		rebuildList();
-		if (shown) place(pos);
+		if (!rebuildList()) return; // 过滤到空，已经收起
+		place(pos);
 	}
 
 	/** 基对象没变才能复用候选：换对象（含成员访问与普通名字补全之间的切换）必须重新收集 */
 	public boolean isSession(Object base, boolean memberAccess) {
-		return shown && this.base == base && this.memberAccess == memberAccess;
+		return isShown() && this.base == base && this.memberAccess == memberAccess;
 	}
 
+	/**
+	 * 是否正在显示。
+	 * <p>
+	 * 直接用 {@link #visible} 而不是另设一个标记位：两者必须同步时，漏写一处就会「有候选
+	 * 却什么都不显示」，而且看不出是哪里少了。
+	 */
 	public boolean isShown() {
-		return shown;
+		return visible;
 	}
 
 	public void hide() {
-		if (!shown) return;
-		shown = false;
 		visible = false;
 		touchable = Touchable.disabled; // 隐藏时不吃触摸
 		base = null;
 		onSelect = null;
 		candidates.clear();
-		Core.scene.removeCaptureListener(outsideListener);
+		if (Core.scene != null) Core.scene.removeCaptureListener(outsideListener);
 	}
 
 	public boolean handleKeyDown(KeyCode keycode) {
-		if (!shown || suggestionButtons.isEmpty()) return false;
+		if (!isShown() || suggestionButtons.isEmpty()) return false;
 
 		if (keycode == KeyCode.escape) {
 			hide();
@@ -182,7 +184,8 @@ public class CompletionPopup extends Table {
 		setPosition(popupX, popupY);
 	}
 
-	private void rebuildList() {
+	/** 按当前前缀重建候选行；一行都排不出来时自行收起并返回 false */
+	private boolean rebuildList() {
 		filtered.clear();
 		for (String name : candidates) {
 			if (Completion.rank(name, currentPrefix) != Completion.NO_MATCH) filtered.add(name);
@@ -208,7 +211,7 @@ public class CompletionPopup extends Table {
 
 		if (suggestionButtons.isEmpty()) {
 			hide();
-			return;
+			return false;
 		}
 
 		selectedIndex = Mathf.clamp(selectedIndex, 0, suggestionButtons.size - 1);
@@ -217,6 +220,7 @@ public class CompletionPopup extends Table {
 		listTable.layout();
 		listTable.invalidateHierarchy();
 		pack();
+		return true;
 	}
 
 	private TextButton button(int index) {
@@ -262,7 +266,7 @@ public class CompletionPopup extends Table {
 		scrollPending = true;
 		Core.app.post(() -> {
 			scrollPending = false;
-			if (!shown || selectedIndex < 0 || selectedIndex >= suggestionButtons.size) return;
+			if (!isShown() || selectedIndex < 0 || selectedIndex >= suggestionButtons.size) return;
 			Element selected = suggestionButtons.get(selectedIndex);
 			scrollPane.scrollTo(0, selected.y, selected.getWidth(), selected.getHeight(), false, true);
 		});

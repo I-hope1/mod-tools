@@ -19,6 +19,7 @@ public class LimitLabel extends Label implements Limit {
 	@Override
 	public void updateVisibility() {
 		super.updateVisibility();
-		visible = isVisible(this);
+		/* visibility 供应器判 false 时不能被视口裁剪「救」回来 */
+		if (visibility == null || visible) visible = isVisible(this);
 	}
 }

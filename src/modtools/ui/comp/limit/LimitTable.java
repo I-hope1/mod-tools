@@ -6,7 +6,7 @@ import arc.scene.ui.*;
 import arc.scene.ui.ImageButton.ImageButtonStyle;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.*;
-import modtools.utils.Tools;
+import arc.util.Log;
 
 import static modtools.ui.comp.limit.Limit.isVisible;
 
@@ -23,7 +23,13 @@ public class LimitTable extends Table implements Limit {
 		super(cons);
 	}
 	public void act(float delta) {
-		Tools.runLoggedException(() -> super.act(delta));
+		// 直接内联 try/catch：本方法每帧对每个实例都会执行，
+		// 交给 Tools.runLoggedException 会多出一层闭包捕获
+		try {
+			super.act(delta);
+		} catch (Throwable e) {
+			Log.err(e);
+		}
 	}
 
 	/* @Override
@@ -89,11 +95,7 @@ public class LimitTable extends Table implements Limit {
 
 	public void updateVisibility() {
 		super.updateVisibility();
-
-		visible = isVisible(this);
-		children.each(t -> {
-			if (t instanceof Limit) return;
-			t.updateVisibility();
-		});
+		/* visibility 供应器判 false 时不能被视口裁剪「救」回来 */
+		if (visibility == null || visible) visible = isVisible(this);
 	}
 }

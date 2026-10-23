@@ -308,7 +308,7 @@ public class ShowUIList extends Content {
 					case ScrollPaneStyle style -> Builder.build(style, t);
 					case DialogStyle style -> Builder.build(style, t);
 					case LabelStyle style -> Builder.build(style, t);
-					case SliderStyle style -> Builder.build(style, t);
+						case SliderStyle style -> Builder.build(style, t);
 					case TextFieldStyle style -> Builder.build(style, t);
 					case CheckBoxStyle style -> Builder.build(style, t);
 					case TextButtonStyle style -> Builder.build(style, t);

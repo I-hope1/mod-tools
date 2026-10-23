@@ -27,6 +27,8 @@ public class SearchedLabel extends InlineLabel {
 	public Color normalColor    = Pal.accent;
 	public Color highlightColor = Color.sky;
 	private Color bgColor = Color.brick;
+	/** 上次 layout 是否命中过高亮，用于跳过无意义的逐帧背景遍历 */
+	private boolean highlighted;
 
 	public void initColor(Color normalColor, Color highlightColor) {
 		this.normalColor    = normalColor;
@@ -35,6 +37,7 @@ public class SearchedLabel extends InlineLabel {
 	}
 	public void layout() {
 		pattern = patternProv.get();
+		highlighted = false;
 
 		colorMap.clear();
 		colorMap.put(0, normalColor);
@@ -49,6 +52,7 @@ public class SearchedLabel extends InlineLabel {
 		Matcher matcher = pattern.matcher(text);
 		while (matcher.find()) {
 			if (matcher.start() == matcher.end()) break;
+			highlighted = true;
 			colorMap.put(matcher.start(), highlightColor);
 			colorMap.put(matcher.end(), normalColor);
 		}
@@ -56,7 +60,8 @@ public class SearchedLabel extends InlineLabel {
 	}
 	public void draw() {
 		if (cache == null) return;
-		drawHighlightBackground();
+		// 没有命中高亮时 runs 里不会有 highlightColor，逐帧遍历一遍再全部跳过是白跑
+		if (highlighted) drawHighlightBackground();
 
 		super.draw();
 	}

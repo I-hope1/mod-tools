@@ -21,6 +21,7 @@ public class LimitButton extends Button implements Limit {
 
 	public void updateVisibility() {
 		super.updateVisibility();
-		visible = Limit.isVisible(this);
+		/* visibility 供应器判 false 时不能被视口裁剪「救」回来 */
+		if (visibility == null || visible) visible = Limit.isVisible(this);
 	}
 }

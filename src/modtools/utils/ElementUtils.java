@@ -9,7 +9,10 @@ import arc.math.Mathf;
 import arc.math.geom.Vec2;
 import arc.scene.*;
 import arc.scene.style.Style;
+import arc.scene.ui.Label;
 import arc.scene.ui.ScrollPane;
+import arc.scene.ui.TextButton;
+import arc.struct.Seq;
 import arc.util.*;
 import modtools.content.ui.ShowUIList;
 import modtools.jsfunc.INFO_DIALOG;
@@ -70,17 +73,65 @@ public interface ElementUtils {
 		}
 		return element.getScene() != null ? "Core.scene.root" + sb : sb.delete(0, 0);
 	}
+	/**
+	 * 人类可读的元素路径（从 scene.root 往下），用于在日志/对话里指认某个元素，
+	 * 例如 {@code Window#0 > Table#1 > Label:"ReviewElement"}。
+	 * <p>与 {@link #getPath(Element)} 的区别：那个产出可直接执行的 Java 表达式，这个只求一眼能看懂。
+	 */
+	static CharSequence getDisplayPath(Element element) {
+		if (element == null) return "null";
+		Seq<String> parts = new Seq<>();
+		for (Element el = element; el != null; el = el.parent) {
+			StringBuilder sb = new StringBuilder(32).append(el.getClass().getSimpleName());
+			// root 没有兄弟，索引无意义
+			if (el.parent != null) sb.append('#').append(el.getZIndex());
+			if (el.name != null) sb.append('"').append(el.name).append('"');
+			CharSequence text = el instanceof Label l ? l.getText() :
+			 el instanceof TextButton tb ? tb.getText() : null;
+			if (text != null && text.length() > 0) {
+				sb.append(":\"");
+				// 文本可能很长（整段说明文字），只留开头够定位就行
+				sb.append(text.length() > 16 ? text.subSequence(0, 16) + "…" : text);
+				sb.append('"');
+			}
+			parts.add(sb.toString());
+		}
+		return parts.reverse().toString(" > ");
+	}
 
+	/** 把 {@code target} 平滑滚到最近一层 {@link ScrollPane} 的正中间，滑到位后再闪一下。 */
 	static void scrollTo(Element actor, Element target) {
+		if (target == null) return;
 		ScrollPane pane = findClosestPane(actor);
-		Time.runTask(5, () -> HopeFx.changedFx(target));
-		pane.setSmoothScrolling(false);
-		pane.scrollTo(0, target.localToAscendantCoordinates(pane.getWidget(),
-			Tmp.v1.set(target.getWidth() / 2, target.getHeight() / 2)).y,
-		 target.getWidth(), target.getHeight(),
+		if (pane == null) return;
+		Element widget = pane.getWidget();
+		if (widget == null || !target.isDescendantOf(widget)) return;
+
+		pane.validate();
+
+		float w = target.getWidth(), h = target.getHeight();
+		pane.scrollTo(0, target.localToAscendantCoordinates(widget,
+			Tmp.v1.set(w / 2, h / 2)).y,
+		 w, h,
 		 false, true);
-		pane.act(1);
-		pane.setSmoothScrolling(true);
+
+		flashWhenScrolled(pane, target, Math.max(h, 40f), 60);
+	}
+
+	/**
+	 * 平滑滚动的耗时取决于滚动距离，必须等视觉位置真的接近目标再闪，否则距离一远，
+	 * 元素还没滑进屏幕闪光就结束了。
+	 *
+	 * @param tolerance 允许的视觉/逻辑滚动量差
+	 * @param tries     最多再等多少帧
+	 */
+	static void flashWhenScrolled(ScrollPane pane, Element target, float tolerance, int tries) {
+		if (target.getScene() != null
+		    && Mathf.equal(pane.getVisualScrollY(), pane.getScrollY(), tolerance)) {
+			HopeFx.changedFx(target);
+		} else if (tries > 0) {
+			Time.runTask(1f, () -> flashWhenScrolled(pane, target, tolerance, tries - 1));
+		}
 	}
 	static boolean checkInStage(Vec2 pos) {
 		return Tmp.r1.set(0, 0, graphics.getWidth(), graphics.getHeight()).contains(pos);

@@ -9,13 +9,16 @@ import arc.math.Mathf;
 import arc.math.geom.*;
 import arc.scene.*;
 import arc.scene.event.*;
+import arc.scene.style.Drawable;
 import arc.scene.style.Style;
+import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
 import mindustry.gen.*;
 import mindustry.graphics.*;
+import mindustry.ui.Fonts;
 import mindustry.ui.Styles;
 import modtools.Constants.TABLE;
 import modtools.IntVars;
@@ -38,7 +41,7 @@ import modtools.ui.comp.input.*;
 import modtools.ui.comp.input.area.AutoTextField;
 import modtools.ui.comp.limit.LimitTable;
 import modtools.ui.comp.linstener.FocusSearchListener;
-import modtools.ui.comp.review.CellDetailsWindow;
+import modtools.ui.comp.review.*;
 import modtools.ui.comp.utils.ValueLabel;
 import modtools.ui.control.HKeyCode;
 import modtools.ui.effect.*;
@@ -85,6 +88,8 @@ public class ReviewElement extends Content {
 	}
 
 	public static final boolean DEBUG = false;
+	/** 搜索过滤时判断「子树里有没有命中」的递归深度上限，防止异常深的 UI 把栈打穿 */
+	private static final int MAX_FILTER_DEPTH = 64;
 
 
 	public static Element FOCUS;
@@ -115,17 +120,47 @@ public class ReviewElement extends Content {
 	public static final Color FOCUS_COLOR = DEF_FOCUS_COLOR;
 	public static final Color MASK_COLOR  = DEF_MASK_COLOR;
 
-	@SuppressWarnings("StringTemplateMigration")
 	public static String getElementName(Element element) {
-		if (element == scene.root) { return "ROOT"; }
-		if (anonymousInsteadSuper.enabled()) {
-			return element.getClass().getSimpleName()
-			       + (element instanceof TextButton tb && tb.getText().length() > 0 ? ": " + tb.getText() : "")
-			       + (element.name != null ? " ★" + element.name + "★" : "");
-		}
-		return ReflectTools.getSimpleNameNotAnonymous(element.getClass())
-		       + (element instanceof TextButton tb && tb.getText().length() > 0 ? ": " + tb.getText() : "")
-		       + (element.name != null ? " ★" + element.name + "★" : "");
+		return buildElementName(new StringBuilder(32), element, simpleName(element)).toString();
+	}
+	/** 元素名里的类名部分。{@code Class#getSimpleName} 每次调用都会重新计算，需要复用的调用方自行缓存返回值 */
+	private static String simpleName(Element element) {
+		return anonymousInsteadSuper.enabled()
+		 ? element.getClass().getSimpleName()
+		 : ReflectTools.getSimpleNameNotAnonymous(element.getClass());
+	}
+	/** 把元素名写进调用方提供的缓冲，使逐帧求值的调用方可以复用同一个 StringBuilder */
+	private static StringBuilder buildElementName(StringBuilder sb, Element element, String simpleName) {
+		if (element == scene.root) return sb.append("ROOT");
+		sb.append(simpleName);
+		if (element instanceof TextButton tb && tb.getText().length() > 0) sb.append(": ").append(tb.getText());
+		if (element.name != null) sb.append(" ★").append(element.name).append('★');
+		return sb;
+	}
+	/**
+	 * 逐帧求值的元素名供给。
+	 * <p>{@link Label} 用 {@code Prov} 构造时会挂一个每帧执行的动作，因此这里把类名反射按元素类型缓存、
+	 * 把拼接结果写进复用缓冲：类名不变时每帧只做一次缓冲重置与字符拷贝，不产生字符串分配。
+	 */
+	private static Prov<CharSequence> elementNameProv(Element element) {
+		return new Prov<CharSequence>() {
+			final StringBuilder buf = new StringBuilder(32);
+			Class<?> lastClass;
+			String   lastName;
+			boolean  lastAnonymous;
+
+			public CharSequence get() {
+				boolean  anonymous = anonymousInsteadSuper.enabled();
+				Class<?> clazz     = element.getClass();
+				if (clazz != lastClass || anonymous != lastAnonymous) {
+					lastClass = clazz;
+					lastAnonymous = anonymous;
+					lastName = anonymous ? clazz.getSimpleName() : ReflectTools.getSimpleNameNotAnonymous(clazz);
+				}
+				buf.setLength(0);
+				return buildElementName(buf, element, lastName);
+			}
+		};
 	}
 
 	public void loadSettings(Data settings) {
@@ -166,7 +201,7 @@ public class ReviewElement extends Content {
 	public HKeyCode prevSearchKeyCode =
 	 keyCodeData().dynamicKeyCode("prevSearch", () -> new HKeyCode(KeyCode.f3).shift())
 		.applyToScene(true, () -> {
-			if (FOCUS_WINDOW instanceof ReviewElementWindow window) window.nextSearch();
+			if (FOCUS_WINDOW instanceof ReviewElementWindow window) window.prevSearch();
 		});
 
 	ReviewFocusTask task;
@@ -185,22 +220,10 @@ public class ReviewElement extends Content {
 	}
 	//region draw
 	public static void drawPadding(Element elem, Vec2 vec2, Table table) {
-		/* 如果a = 0就返回 */
-		if (checkA(padColor)) return;
-		Draw.color(padColor);
-		Cell<?> cl = table.getCell(elem);
-		if (cl != null) {
-			drawPadding(elem, vec2, cl);
-		}
-		Draw.color();
+		MyDraw.fontScaleDraw(() -> drawPadding0(elem, vec2, table));
 	}
 	public static void drawPadding(Element elem, Vec2 vec2, Cell<?> cl) {
-		float padLeft = CellTools.padLeft(cl),
-		 padTop = CellTools.padTop(cl),
-		 padBottom = CellTools.padBottom(cl),
-		 padRight = CellTools.padRight(cl);
-
-		drawMarginOrPad(vec2, elem, true, padLeft, padTop, padRight, padBottom);
+		MyDraw.fontScaleDraw(() -> drawPadding0(elem, vec2, cl));
 	}
 	/** 检查a(后两位)是否为0 */
 	static boolean checkA(int color) {
@@ -209,6 +232,30 @@ public class ReviewElement extends Content {
 
 	/** arc的margin与web的语义相反 */
 	public static void drawMargin(Vec2 vec2, Table table) {
+		MyDraw.fontScaleDraw(() -> drawMargin0(vec2, table));
+	}
+
+	/* 下面三个 draw*0 是 drawPadding/drawMargin 的主体，自身不切换字体缩放：
+	   公开入口各自包一次 fontScaleDraw，逐帧的 drawElemPad 复用外层那一次。 */
+	private static void drawPadding0(Element elem, Vec2 vec2, Table table) {
+		/* 如果a = 0就返回 */
+		if (checkA(padColor)) return;
+		Draw.color(padColor);
+		Cell<?> cl = table.getCell(elem);
+		if (cl != null) {
+			drawPadding0(elem, vec2, cl);
+		}
+		Draw.color();
+	}
+	private static void drawPadding0(Element elem, Vec2 vec2, Cell<?> cl) {
+		float padLeft = CellTools.padLeft(cl),
+		 padTop = CellTools.padTop(cl),
+		 padBottom = CellTools.padBottom(cl),
+		 padRight = CellTools.padRight(cl);
+
+		drawMarginOrPad(vec2, elem, true, padLeft, padTop, padRight, padBottom);
+	}
+	private static void drawMargin0(Vec2 vec2, Table table) {
 		if (checkA(marginColor)) return;
 		Draw.color(marginColor);
 
@@ -297,7 +344,23 @@ public class ReviewElement extends Content {
 		}
 
 		Fill.crect(rectX, rectY, rectW, rectH);
-		MyDraw.drawTextFixedValue(value * textMultiplier, textX, textY, color);
+		drawFixedValue(value * textMultiplier, textX, textY, color);
+	}
+	/** 数值文本的复用缓冲（绘制只在主线程进行） */
+	private static final StringBuilder TEXT_BUF = new StringBuilder(24);
+	/**
+	 * 绘制数值文本。
+	 * <p>调用方必须已处于 {@link MyDraw#fontScaleDraw(Runnable)} 内：这里直接按当前字体缩放绘制，
+	 * 不再像 {@link MyDraw#drawTextFixedValue} 那样每次单独切换一次缩放。
+	 */
+	private static void drawFixedValue(float value, float x, float y, Color color) {
+		drawFixedValue(value, x, y, color, Align.center);
+	}
+	/** @see #drawFixedValue(float, float, float, Color) */
+	private static void drawFixedValue(float value, float x, float y, Color color, int align) {
+		TEXT_BUF.setLength(0);
+		FormatHelper.fixedBuilder(TEXT_BUF, value, 1);
+		MyDraw.drawText(TEXT_BUF, x, y, color, align);
 	}
 	/** 从元素到hover的元素的连线 */
 	public static void drawLine() {
@@ -337,6 +400,15 @@ public class ReviewElement extends Content {
 		Table   pane = new LimitTable();
 		Element element;
 		Pattern pattern;
+
+		/** 搜索过滤：类名子串（小写，逗号分隔）与可见性；null 表示不过滤 */
+		String[]  typeFilter;
+		Boolean   visibleFilter;
+		/** 当前命中项下标（0 起） */
+		int       searchIndex;
+		/** 树结构变化后需要重新统计命中数 */
+		boolean   hitsDirty;
+		Label     hitsLabel;
 
 		ElementElem fixedFocus;
 
@@ -408,6 +480,15 @@ public class ReviewElement extends Content {
 					 }))
 					 .with(f -> ReviewElementWindow.this.addCaptureListener(new FocusSearchListener(f)))
 					 .growX();
+					hitsLabel = search.add("").fontScale(0.75f).color(Color.lightGray).padLeft(4f).get();
+					// 语法说明放 tooltip：搜索框位置紧张，常驻提示会挤掉输入区
+					addTooltipListener(hitsLabel, () -> "type:Table,Label\nvis:on / vis:off\n其余为正则高亮");
+					// 命中数只在树结构变化后重算，避免逐帧遍历整棵树
+					hitsLabel.update(() -> {
+						if (!hitsDirty) return;
+						hitsDirty = false;
+						updateHits();
+					});
 				}).growX();
 			}).growX().row();
 
@@ -485,6 +566,9 @@ public class ReviewElement extends Content {
 					drawablePicker().show(img.getDrawable(), true, img::setDrawable);
 				}
 			});
+			keyMap.put(KeyCode.e, e -> new ElementEditorWindow(e.getElement()));
+			keyMap.put(KeyCode.y, e -> JSFunc.copyText(ElementUtils.getDisplayPath(e.getElement()), e));
+			keyMap.put(KeyCode.l, e -> LayoutReportWindow.show(e.getElement(), this::focusElement));
 			keyMap.put(KeyCode.c, e -> {
 				Element elem = e.getElement();
 				if (CellDetailsWindow.valid(elem)) {
@@ -503,43 +587,176 @@ public class ReviewElement extends Content {
 		public void rebuild(Element element, String text) {
 			rebuild(element, text, 0);
 		}
-		private Runnable nextSearch;
-		public void nextSearch() {
-			if (nextSearch != null) nextSearch.run();
-		}
 		public void rebuild(Element element, String text, int searchIndex) {
-			pattern = PatternUtils.compileRegExpOrNull(text);
-			if (element == this.element) {
-				scrollToSearch(text, searchIndex);
+			String lastFilter = filterKey();
+			parseQuery(text);
+			this.searchIndex = searchIndex;
+
+			// 过滤条件变了才需要重建整棵树；单纯改高亮词时，SearchedLabel 自己会跟着 pattern 重排
+			if (element == this.element && filterKey().equals(lastFilter)) {
+				hitsDirty = true;
 				return;
 			}
 			if (element == null) return;
 
 			rebuild(element);
 		}
-		private void scrollToSearch(String text, int searchIndex) {
-			if (autoScrollToSearch.enabled() && pattern != null) {
-				nextSearch = () -> rebuild(element, text, searchIndex - Mathf.sign(Core.input.shift()));
-				int[]   ints   = {searchIndex};
-				Element target = find(e -> e instanceof SearchedLabel l && l.hasHighlight(pattern) && ints[0]-- == 0);
-				if (target != null) ElementUtils.scrollTo(pane, target);
+
+		/**
+		 * 解析搜索串。语法：
+		 * <ul>
+		 * <li>{@code type:Table,Label} —— 只显示类名含这些子串的元素（逗号分隔）</li>
+		 * <li>{@code vis:on} / {@code vis:off} —— 只显示可见 / 不可见的元素</li>
+		 * <li>其余部分当作正则做高亮（编译失败时退化成普通子串）</li>
+		 * </ul>
+		 */
+		private void parseQuery(String text) {
+			typeFilter = null;
+			visibleFilter = null;
+			if (text == null || text.isEmpty()) {
+				pattern = PatternUtils.ANY;
+				return;
 			}
+
+			StringBuilder rest = new StringBuilder(text.length());
+			for (String token : text.trim().split("\\s+")) {
+				if (token.startsWith("type:")) {
+					typeFilter = token.substring(5).toLowerCase().split(",");
+				} else if (token.equals("vis:on") || token.equals("vis:true")) {
+					visibleFilter = true;
+				} else if (token.equals("vis:off") || token.equals("vis:false")) {
+					visibleFilter = false;
+				} else {
+					if (rest.length() > 0) rest.append(' ');
+					rest.append(token);
+				}
+			}
+
+			String expr = rest.toString();
+			pattern = PatternUtils.compileRegExpOrNull(expr);
+			if (pattern == null && !expr.isEmpty()) {
+				// 正则写坏了不该变成「什么都搜不到」
+				pattern = Pattern.compile(Pattern.quote(expr), Pattern.CASE_INSENSITIVE);
+			}
+		}
+
+		/** 过滤条件的字符串形式，用于判断「这次搜索是否改变了树的结构」 */
+		private String filterKey() {
+			return (typeFilter == null ? "" : String.join(",", typeFilter)) + '|' + visibleFilter;
+		}
+
+		public boolean hasFilter() {
+			return typeFilter != null || visibleFilter != null;
+		}
+
+		boolean matchesFilter(Element element) {
+			if (typeFilter != null) {
+				String  name = element.getClass().getSimpleName().toLowerCase();
+				boolean ok   = false;
+				for (String type : typeFilter) {
+					if (name.contains(type)) { ok = true; break; }
+				}
+				if (!ok) return false;
+			}
+			return visibleFilter == null || element.visible == visibleFilter;
+		}
+
+		/** 元素自身或其子孙命中过滤条件：容器即使自己不匹配，也要保留才能看到命中的子元素 */
+		boolean matchesOrHasMatch(Element element, int depth) {
+			if (matchesFilter(element)) return true;
+			if (depth <= 0 || !(element instanceof Group group)) return false;
+			for (Element child : group.getChildren()) {
+				if (matchesOrHasMatch(child, depth - 1)) return true;
+			}
+			return false;
+		}
+
+		/** 树结构变了：下一帧再统计命中数（此时异步构建的行已经挂上去了） */
+		private void markHitsDirty() {
+			hitsDirty = true;
+		}
+
+		private int countHits(Element element) {
+			if (pattern == null || pattern == PatternUtils.ANY) return 0;
+			int count = 0;
+			if (element instanceof SearchedLabel label && label.hasHighlight(pattern)) count++;
+			if (element instanceof Group group) {
+				for (Element child : group.getChildren()) count += countHits(child);
+			}
+			return count;
+		}
+
+		/** 重算命中数并滚到当前命中项 */
+		private void updateHits() {
+			int total = countHits(pane);
+			if (total == 0) {
+				searchIndex = 0;
+				hitsLabel.setText("");
+				return;
+			}
+			searchIndex = Mathf.clamp(searchIndex, 0, total - 1);
+			hitsLabel.setText((searchIndex + 1) + "/" + total);
+			scrollToHit(searchIndex);
+		}
+
+		private void scrollToHit(int index) {
+			if (!autoScrollToSearch.enabled()) return;
+			int[]   counter = {index};
+			Element target  = find(e -> e instanceof SearchedLabel l && l.hasHighlight(pattern) && counter[0]-- == 0);
+			if (target != null) ElementUtils.scrollTo(pane, target);
+		}
+
+		public void nextSearch() {
+			stepSearch(1);
+		}
+		public void prevSearch() {
+			stepSearch(-1);
+		}
+		private void stepSearch(int dir) {
+			int total = countHits(pane);
+			if (total == 0) return;
+			// 回绕：最后一个之后回到第一个，反之亦然
+			searchIndex = Math.floorMod(searchIndex + dir, total);
+			hitsLabel.setText((searchIndex + 1) + "/" + total);
+			scrollToHit(searchIndex);
 		}
 
 		public void rebuild(Element element) {
 			pane.clearChildren();
 			pane.left().defaults().left().growX();
+			hitsDirty = true;
 
 			if (element == null) return;
 			build(element, pane);
 		}
 
-		/** 结构： Label，Image（下划线） */
-		public void addMultiRowWithPos(MyWrapTable table, Element element) {
-			elementElem(table, element, () -> Tmp.v1.set(element.x, element.y),
-			 t -> t.add(new SearchedLabel(() -> getElementName(element),
-				() -> pattern)).style(defaultLabel));
+		/** 从别处（布局报告等）定位到树里的某个元素：能定位到行就固定高亮它 */
+		public void focusElement(Element element) {
+			Element found = find(e -> e instanceof ElementElem ee && ee.getElement() == element);
+			if (found instanceof ElementElem elem) {
+				fixedFocus = elem;
+				ElementUtils.scrollTo(pane, elem);
+				return;
+			}
+			// 所在分组还没展开时找不到行，至少让焦点框落在它身上
+			fixedFocus = null;
+			FOCUS = element;
+			FOCUS_WINDOW = this;
+			FOCUS_FROM = null;
 		}
+
+	/** 结构： Label，Image（下划线） */
+	public void addMultiRowWithPos(MyWrapTable table, Element element) {
+		elementElem(table, element, () -> Tmp.v1.set(element.x, element.y), t -> {
+			t.add(new SearchedLabel(elementNameProv(element), () -> pattern)).style(defaultLabel);
+			// 图标放在名字之后：buildForGroup 用 children.first() 取名字标签做闪烁，前面插东西会取错
+			if (layoutCheck.enabled()) {
+				int issues = LayoutIssues.check(element);
+				// 和 InfoDetails 里的 eyeOffSmall 一样用小号图标；图标按 glyph 原始像素绘制，size 只影响占位
+				if (issues != 0) t.image(Icon.warningSmall).size(16f).color(issueColor(issues)).padLeft(3f);
+			}
+		});
+	}
 
 		public void build(Element element, Table table) {
 			if (element == null) throw new IllegalArgumentException("element is null");
@@ -666,34 +883,25 @@ public class ReviewElement extends Content {
 			}
 			touchable = Touchable.enabled;
 		}
+		/** 上一帧写入的背景，用于跳过逐帧的重复赋值 */
+		private Drawable lastBackground;
 		public void act(float delta) {
 			super.act(delta);
 			if (!parentValid(getElement(), window)) remove();
-			background(FOCUS_FROM == this ? Styles.flatDown : noneui);
+			Drawable bg = FOCUS_FROM == this ? Styles.flatDown : noneui;
+			if (bg != lastBackground) {
+				lastBackground = bg;
+				background(bg);
+			}
 		}
-		public static final Vec2 bgVec = new Vec2();
 		/**
 		 * TODO: 位置bug
 		 * @see Table#drawBackground(float, float)
 		 */
 		protected void drawBackground(float x, float y) {
-			ScrollPane pane = ElementUtils.findClosestPane(this);
-			if (pane == null || true) {
-				super.drawBackground(x, y);
-				return;
-			}
-			// pane的左下角坐标
-			pane.localToDescendantCoordinates(this, bgVec.set(0, 0));
-			float lastW = width, lastH = height;
-			float x1    = Mathf.clamp(x, bgVec.x, bgVec.x + pane.getWidth());
-			float y1    = Mathf.clamp(y, bgVec.y, bgVec.y + pane.getHeight());
-			float x2    = Mathf.clamp(x + width, bgVec.x, bgVec.x + pane.getWidth());
-			float y2    = Mathf.clamp(y + height, bgVec.y, bgVec.y + pane.getHeight());
-			width = x2 - x1;
-			height -= y2 - y1;
-			super.drawBackground(x1, y1);
-			width = lastW;
-			height = lastH;
+			// 裁剪到 ScrollPane 可视区的推导尚未修好（见上方 TODO），所以这里不能做父级查找：
+			// 本方法每帧对每一行都会调用一次，而查到的 pane 目前会被直接丢弃。
+			super.drawBackground(x, y);
 		}
 		public int getDepth() {
 			Element actor = getElement();
@@ -756,11 +964,11 @@ public class ReviewElement extends Content {
 
 				if (!group.needsLayout() || !parentValid(group, window)) return;
 
-				ElementUtils.findParent(this, ancestor -> {
+				// 与 ElementUtils.findParent(Element, Boolf) 等价，但省掉每次调用新建的谓词闭包
+				for (Element ancestor = this; ancestor != null; ancestor = ancestor.parent) {
 					if (ancestor instanceof MyWrapTable wrapTable) wrapTable.stopEvent = true;
-					if (ancestor instanceof Window) return true;
-					return false;
-				});
+					if (ancestor instanceof Window) break;
+				}
 				button.rebuild.run();
 			});
 			button.rebuild = () -> {
@@ -803,8 +1011,13 @@ public class ReviewElement extends Content {
 	Prov<Seq<MenuItem>> getContextMenu(ElementElem self, Element element) {
 		return () -> ArrayUtils.seq(
 		 MenuItem.with("path.copy", Icon.copySmall, "@copy.path", () -> {
-			 JSFunc.copyText(ElementUtils.getPath(element));
+			 JSFunc.copyText(ElementUtils.getPath(element), element);
 		 }),
+		 MenuItem.with("path.copyTree", Icon.copySmall, "Copy Path (tree)",
+			() -> JSFunc.copyText(ElementUtils.getDisplayPath(element), element)),
+		 MenuItem.with("edit", Icon.settingsSmall, "Edit Element", () -> new ElementEditorWindow(element)),
+		 MenuItem.with("layoutCheck", Icon.warningSmall, "Layout Check",
+			() -> LayoutReportWindow.show(element, FOCUS_WINDOW instanceof ReviewElementWindow w ? w::focusElement : null)),
 		 MenuItem.with("screenshot", Icon.fileImageSmall, "@reviewElement.screenshot", () -> {
 			 Time.runTask(2, () -> ElementUtils.quietScreenshot(element));
 		 }),
@@ -902,12 +1115,22 @@ public class ReviewElement extends Content {
 	                                  SnapshotSeq<Element> children) {
 		if (!container.hasChildren()) {
 			for (Element child : children) {
+				if (!window.matchesOrHasMatch(child, MAX_FILTER_DEPTH)) continue;
 				if (window.wrapCache != null && window.wrapCache.getElement() == child) {
 					container.add(window.wrapCache).row();
 					continue;
 				}
 				window.build(child, container);
 			}
+			return;
+		}
+		// 有过滤时行数是变的，增量更新那套下标映射会错位，直接整体重建
+		if (window.hasFilter()) {
+			container.clearChildren();
+			for (Element child : children) {
+				if (window.matchesOrHasMatch(child, MAX_FILTER_DEPTH)) window.build(child, container);
+			}
+			window.markHitsDirty();
 			return;
 		}
 		Cell<?>[] cells = new Cell<?>[children.size];
@@ -962,11 +1185,14 @@ public class ReviewElement extends Content {
 
 		/** 自动滚动到搜索位置 */
 		autoScrollToSearch,
+		/** 在元素树/信息面板上标出布局异常（见 {@link LayoutIssues}） */
+		layoutCheck,
 		//
 		;
 		static {
 			anonymousInsteadSuper.defTrue();
 			hoverInfoWindow.defTrue();
+			layoutCheck.defTrue();
 		}
 
 		Settings() { }
@@ -1004,6 +1230,7 @@ public class ReviewElement extends Content {
 			// 按顺序创建和注册所有信息条目
 			// 这种方式使得添加、删除或重新排序条目变得非常简单。
 			entries.add(new HeaderEntry());
+			entries.add(new LayoutEntry());
 			entries.add(new SimpleEntry("Touchable", e -> FormatHelper.touchable(e.touchable), e -> touchableToColor(e.touchable)));
 			entries.add(new ColorEntry());
 			entries.add(new BoolEntry("Transform", e -> e instanceof Group g && g.isTransform()));
@@ -1046,6 +1273,7 @@ public class ReviewElement extends Content {
 			);
 			entries.add(new LabelWrapEntry());
 			entries.add(new ScalingEntry());
+			entries.add(new DrawSizeEntry());
 
 			// ScrollPane 相关条目
 			entries.add(new SeparatorEntry(4, 2, 4, 2));
@@ -1108,6 +1336,18 @@ public class ReviewElement extends Content {
 		final   Table       table              = new Table();
 		private Element     lastFocusedElement = null;
 
+		/* 逐帧绘制闭包：提前建好复用，避免每帧为 drawFocus 重新捕获 elem/pos 生成 lambda */
+		private final Vec2       padPos       = new Vec2(), genericPos = new Vec2();
+		private       Element    drawnElem;
+		private final Runnable   padRunner     = this::drawDrawnPad;
+		private final Runnable   genericRunner = this::drawDrawnGeneric;
+		private final Cons<Vec2> padDrawer     = pos -> {
+			padPos.set(pos);
+			MyDraw.fontScaleDraw(padRunner);
+		};
+		private void drawDrawnPad() { drawElemPad(drawnElem, padPos); }
+		private void drawDrawnGeneric() { drawGeneric(drawnElem, genericPos); }
+
 		{
 			// 构建UI的操作只在初始化时执行一次
 			info.build(table.table().pad(4).get());
@@ -1138,8 +1378,10 @@ public class ReviewElement extends Content {
 					CellView.drawFocusStatic(t0.getCell(elem), elem);
 				}
 			} else {
-				TopGroup.drawFocus(elem, pos, focusColor, pos2 -> MyDraw.fontScaleDraw(() -> drawElemPad(elem, pos2)));
-				MyDraw.fontScaleDraw(() -> drawGeneric(elem, pos));
+				drawnElem = elem;
+				genericPos.set(pos);
+				TopGroup.drawFocus(elem, pos, focusColor, padDrawer);
+				MyDraw.fontScaleDraw(genericRunner);
 			}
 
 			if (!hoverInfoWindow.enabled()) return;
@@ -1187,12 +1429,12 @@ public class ReviewElement extends Content {
 				// 绝对坐标
 				// x: 0 -> x
 				if (pos.x != 0) {
-					MyDraw.drawTextFixedValue(pos.x,
+					drawFixedValue(pos.x,
 					 pos.x / 2f, pos.y, Tmp.c1.set(posTextColor));
 				}
 				// y: 0 -> y
 				if (pos.y != 0) {
-					MyDraw.drawTextFixedValue(pos.y,
+					drawFixedValue(pos.y,
 					 pos.x, pos.y / 2f, Tmp.c1.set(posTextColor));
 				}
 			}
@@ -1215,7 +1457,7 @@ public class ReviewElement extends Content {
 				// width
 				boolean flipX = pos.x < 32, flipY = pos.y < 32;
 				if (w != 0) {
-					MyDraw.drawTextFixedValue(w,
+					drawFixedValue(w,
 					 pos.x + w / 2f,
 					 (flipY ? Core.graphics.getHeight() - MyDraw.fontHeight() : MyDraw.fontHeight()),
 					 color);
@@ -1223,7 +1465,7 @@ public class ReviewElement extends Content {
 
 				// height
 				if (h != 0) {
-					MyDraw.drawTextFixedValue(h,
+					drawFixedValue(h,
 					 flipX ? Core.graphics.getWidth() : 0,
 					 pos.y + (h + MyDraw.fontHeight()) / 2f,
 					 color, flipX ? Align.right : Align.left);
@@ -1231,17 +1473,17 @@ public class ReviewElement extends Content {
 			}
 		}
 
-		/** 绘制padding和margin */
+		/** 绘制padding和margin。调用方必须已处于 {@link MyDraw#fontScaleDraw(Runnable)} 内 */
 		private void drawElemPad(Element elem, Vec2 pos) {
 			if (elem instanceof Table) {
-				drawMargin(pos, (Table) elem);
+				drawMargin0(pos, (Table) elem);
 			}
 
 			if (elem.parent instanceof Table parent) {
 				// 太难了
-				drawMargin(elem.parentToLocalCoordinates(Tmp.v1.set(pos)), parent);
+				drawMargin0(elem.parentToLocalCoordinates(Tmp.v1.set(pos)), parent);
 
-				drawPadding(elem, pos, parent);
+				drawPadding0(elem, pos, parent);
 			}
 		}
 
@@ -1337,6 +1579,27 @@ public class ReviewElement extends Content {
 			nameLabel.setText(getElementName(element));
 			sizeVec.set(element.getWidth(), element.getHeight());
 			visibleCell.toggle(!element.visible);
+		}
+	}
+
+	/** 布局体检结果：没问题时整行隐藏 */
+	private static class LayoutEntry extends BaseEntry {
+		private Label label;
+
+		@Override
+		public void build(Table table) {
+			label = new NoMarkupLabel(valueScale);
+			buildRow(table, "Layout", label);
+		}
+
+		@Override
+		public void update(Element element) {
+			int mask = layoutCheck.enabled() ? LayoutIssues.check(element) : 0;
+			setVisible(mask != 0);
+			if (mask != 0) {
+				label.setText(LayoutIssues.describe(mask));
+				label.setColor(issueColor(mask));
+			}
 		}
 	}
 
@@ -1501,6 +1764,49 @@ public class ReviewElement extends Content {
 				imgVisible = true;
 			}
 			setVisible(imgVisible);
+		}
+	}
+
+	/**
+	 * 图标的**实际绘制尺寸**。
+	 * <p>{@code Fonts.getGlyph} 返回的是 {@link TextureRegionDrawable} 的匿名子类，它的
+	 * {@code draw(x, y, width, height)} 里按字形原始像素绘制，单元格尺寸只用来居中：
+	 * <pre>
+	 * float cx = x + width/2f - g.width/2f;   // width/height 只影响居中
+	 * Draw.rect(region, cx + g.width/2f, cy + g.height/2f, g.width, g.height);
+	 * </pre>
+	 * 于是 {@code size()}、{@code Scaling} 全都管不到它：面板上 Min/MaxSize 写着 10×10，
+	 * 肉眼看到的却还是 30px（{@code Icon.xxx}）或 18px（{@code Icon.xxxSmall}）。
+	 * 只有命中这种 drawable 时才显示，普通图片不占位。
+	 */
+	private static class DrawSizeEntry extends BaseEntry {
+		private VLabel label;
+
+		@Override
+		public void build(Table table) {
+			label = new VLabel("", valueScale, Color.orange);
+			buildRow(table, "DrawSize", label);
+			addTooltipListener(label, () -> "该 drawable 按字形像素绘制，size() 与 Scaling 都不生效\n"
+			 + "ImageButton 需要 resizeImage(...) 或 margin(...) 才能改内部 Image 的单元格");
+		}
+
+		@Override
+		public void update(Element element) {
+			Drawable drawable = null;
+			if (element instanceof Image image) {
+				drawable = image.getDrawable();
+			} else if (element instanceof ImageButton button && button.getImage() != null) {
+				// 按钮里的图标是子 Image，同一个坑
+				drawable = button.getImage().getDrawable();
+			}
+
+			if (!isFixedGlyph(drawable)) {
+				setVisible(false);
+				return;
+			}
+			TextureRegion region = ((TextureRegionDrawable) drawable).getRegion();
+			label.setText(region.width + " × " + region.height + " (fixed)");
+			setVisible(true);
 		}
 	}
 	private static class RotationEntry extends BaseEntry {
@@ -1770,6 +2076,26 @@ public class ReviewElement extends Content {
 			case disabled -> DISABLED_COLOR;
 			case childrenOnly -> Pal.accent;
 		};
+	}
+	/** 布局异常的提示色：结构性错误用红色，其余用橙色 */
+	static Color issueColor(int mask) {
+		if (LayoutIssues.has(mask, LayoutIssues.INVALID_SIZE) || LayoutIssues.has(mask, LayoutIssues.OUT_OF_PARENT)) {
+			return Pal.remove;
+		}
+		return Color.orange;
+	}
+
+	/**
+	 * 是否为「固定尺寸」的图标 drawable（{@code Fonts.getGlyph} 的产物）。
+	 * <p>判据：类型是 {@link TextureRegionDrawable}、不是它本身，且**声明在 {@link Fonts} 内部**——
+	 * 普通图片用的都是原类，只有 glyph 图标会返回匿名子类并在 {@code draw()} 里锁死绘制尺寸；
+	 * 加上封闭类判断是为了排除别处自定义的 TextureRegionDrawable 匿名子类。
+	 */
+	static boolean isFixedGlyph(Drawable drawable) {
+		return drawable instanceof TextureRegionDrawable trd
+		 && drawable.getClass() != TextureRegionDrawable.class
+		 && drawable.getClass().getEnclosingClass() == Fonts.class
+		 && trd.getRegion() != null;
 	}
 
 	/** @see Align */

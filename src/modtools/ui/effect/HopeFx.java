@@ -82,32 +82,18 @@ public class HopeFx {
 			 Draw.color(Color.sky, fin * 0.5f);
 			 Lines.stroke(3f - fin * 2f);
 			 ScrollPane   pane     = ElementUtils.findClosestPane(element);
-			 Vec2         position;// left-bottom
 			 float        width    = element.getWidth();
 			 float        height   = element.getHeight();
 			 float x = 0, y = 0;
 			 if (pane != null) {
-				 position = Tmp.v1;
-				 float maxX, maxY;
-				 maxX = pane.getWidth();
-				 maxY = pane.getHeight();
-				 element.localToAscendantCoordinates(pane, position.set(0, 0));
-				 if (position.x > maxX || position.y > maxY) return;
-
-				 float lx = position.x, ly = position.y;
-				 position.clamp(0, 0, maxX, maxY);
-				 if (lx < 0) {
-					 x -= lx;
-					 width += lx;
-				 }
-				 if (ly < 0) {
-					 y -= lx;
-					 height += ly;
-				 }
-				 if (position.x + width > maxX) width = maxX - position.x;
-				 if (position.y + height > maxY) height = maxY - position.y;
-
-				 pane.localToStageCoordinates(position);
+				 /* 投影已经移到元素左下角，所以这里算的是元素局部坐标下的可视区裁剪 */
+				 float maxX = pane.getWidth(), maxY = pane.getHeight();
+				 element.localToAscendantCoordinates(pane, Tmp.v1.set(0, 0));
+				 x = Math.max(0, -Tmp.v1.x);
+				 y = Math.max(0, -Tmp.v1.y);
+				 width = Math.min(width, maxX - Tmp.v1.x) - x;
+				 height = Math.min(height, maxY - Tmp.v1.y) - y;
+				 if (width <= 0 || height <= 0) return;
 			 }
 			 // float fout = 1 - fin;
 			 Fill.crect(x, y, width, height);

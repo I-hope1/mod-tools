@@ -166,3 +166,21 @@ a.txt
 .vscode/
 
 **/build
+
+## 本地环境与生成物（不进版本库）
+/.sources/
+/.workbuddy-ai/
+/.zig-cache/
+/.zed/
+hstest-reports.zip
+# magic-accessor 的反汇编导出
+magic-accessor/magic-js/*poly_disasm.txt
+# IDEA 的模块输出目录
+/annotations/bin/
+/compiler/bin/
+# _libs 下手工复制/编译出来的副本，正式依赖是 compiler.jar 等已跟踪的那几个
+/_libs/*副本*.jar
+/_libs/compiler[-_]*.jar
+/_libs/Override.jar
+/_libs/incremental.annotation.processors
+scratch/layoutprobe/layout-agent.jar

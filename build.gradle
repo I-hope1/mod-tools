@@ -112,7 +112,33 @@ def extractHiddenApiBypass = tasks.register('extractHiddenApiBypass', Jar) {
 }
 
 configurations {
+	/**
+	 * core 的 shadow 变体，也就是真正的 agent jar（remold-agent.jar）：
+	 * ASM 已重定位到 remold.internal.asm、natives 打进 libs/。
+	 * 默认变体是 raw 瘦 jar，直接当 agent 挂上去会因为缺 ASM 而跑不起来。
+	 */
 	remoldAgentLib {
+		canBeResolved = true
+		canBeConsumed = false
+		transitive = false
+		attributes {
+			attribute(org.gradle.api.attributes.Bundling.BUNDLING_ATTRIBUTE,
+					objects.named(org.gradle.api.attributes.Bundling, org.gradle.api.attributes.Bundling.SHADOWED))
+		}
+	}
+	/** plugin-arc：remold/arc、remold/ref、remold/profiler、remold/uihook，mod 自己也要链接它们 */
+	remoldPluginArcLib {
+		canBeResolved = true
+		canBeConsumed = false
+		transitive = false
+	}
+	/** plugin-arc 里 Injector/CellPropertyRef 用的是未重定位的 org.objectweb.asm */
+	remoldAsmLib {
+		canBeResolved = true
+		canBeConsumed = false
+	}
+	/** 单独的 panama 后端，JDK22+ 才由 UtilsAgentManager 挂到 bootstrap */
+	remoldPanamaLib {
 		canBeResolved = true
 		canBeConsumed = false
 		transitive = false
@@ -129,7 +155,13 @@ dependencies {
 	compileOnly project(":utils-agent")
 
 	remoldAgentLib "io.github.i-hope1.remold:core:0.1.0"
-	remoldAgentLib "io.github.i-hope1.remold:panama:0.1.0"
+	remoldPluginArcLib "io.github.i-hope1.remold:plugin-arc:0.1.0"
+	remoldAsmLib "org.ow2.asm:asm:9.11"
+	remoldAsmLib "org.ow2.asm:asm-commons:9.11"
+	remoldAsmLib "org.ow2.asm:asm-analysis:9.11"
+	remoldAsmLib "org.ow2.asm:asm-util:9.11"
+	remoldAsmLib "org.ow2.asm:asm-tree:9.11"
+	remoldPanamaLib "io.github.i-hope1.remold:panama:0.1.0"
 
 //	println "AndroidHome: $sdkRoot"
 	compileOnly files(
@@ -237,6 +269,35 @@ task jarAndroid(type: JavaExec) {
 	]
 }
 
+/*
+ * remold 的 agent 必须是一个自包含的 jar：
+ * 1) HotSwapManager.getAgentPath() 只认 libs/remold-agent.jar；
+ * 2) agent jar 由 system classloader 加载，拆成多个 jar 时 plugin-arc 里的
+ *    remold/arc、remold/ref、remold/profiler 在 agent 侧不可见（NoClassDefFoundError）。
+ * core 与 plugin-arc 的类不重叠，直接合并即可；清单里的 Agent-Class 显式写死。
+ */
+def remoldAgentJar = tasks.register("remoldAgentJar", Jar) {
+	archiveFileName = "remold-agent.jar"
+	destinationDirectory = layout.buildDirectory.dir("remold")
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	dependsOn configurations.remoldAgentLib, configurations.remoldPluginArcLib, configurations.remoldAsmLib
+	// zipTree 会让 Gradle 丢失产物间的任务依赖，所以上面显式 dependsOn
+	from({ configurations.remoldAgentLib.collect { zipTree(it) } })
+	from({ configurations.remoldPluginArcLib.collect { zipTree(it) } })
+	from({ configurations.remoldAsmLib.collect { zipTree(it) } })
+	exclude "META-INF/MANIFEST.MF"
+	exclude "META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA"
+	exclude "**/module-info.class"
+	manifest {
+		attributes(
+				"Agent-Class"            : "remold.RemoldAgent",
+				"Premain-Class"          : "remold.RemoldAgent",
+				"Can-Retransform-Classes": "true",
+				"Can-Redefine-Classes"   : "true"
+		)
+	}
+}
+
 jar {
 	archiveFileName = "${archivesName}-${version}.jar"
 
@@ -257,13 +318,10 @@ jar {
 	}
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 	includeLib.accept("utils-agent")
-	from(configurations.remoldAgentLib) {
+	from(remoldAgentJar) { into "libs" }
+	from(configurations.remoldPanamaLib) {
 		into "libs"
-		rename { String name ->
-			if (name.startsWith("remold-agent") || name.startsWith("core-")) return "remold-agent.jar"
-			if (name.startsWith("remold-panama") || name.startsWith("panama-")) return "remold-panama.jar"
-			return name
-		}
+		rename { String name -> "remold-panama.jar" }
 	}
 }
 // 定义发送指令的辅助方法

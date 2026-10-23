@@ -23,6 +23,14 @@ public class UtilsAgentManager {
 	private static       String  agentPathCache      = null;
 	private static       boolean initialized         = false;
 
+	/**
+	 * panama 后端（{@code remold-panama.jar}，清单里 {@code Agent-Class} 为 {@code remold.JNIAgent}）
+	 * 依赖 JDK 22 才定稿的 {@code java.lang.foreign} FFM API。
+	 * 在更低的 JDK 上这些类无法链接（UnsupportedClassVersionError / NoClassDefFoundError），
+	 * 因此必须先判版本再决定是否加载。
+	 */
+	public static final boolean JNI_AGENT_SUPPORTED = IntVars.javaVersion >= 22;
+
 	public static String getAgentPath() {
 		if (agentPathCache != null && new File(agentPathCache).exists()) {
 			return agentPathCache;
@@ -87,7 +95,16 @@ public class UtilsAgentManager {
 		if (initialized) return; // 避免重复
 		initialized = true;
 		attachAgent(getAgentPath(), true, "");
+		// utils-agent 与 JDK 版本无关，必须挂；panama 后端只有 22+ 才链接得上
+		if (!JNI_AGENT_SUPPORTED) {
+			Log.info("[Agent] JNI backend needs JDK 22+, current is @. Skipped.", IntVars.javaVersion);
+			return;
+		}
 		Fi fi = IntVars.libs.child("remold-panama.jar");
+		if (!fi.exists()) {
+			Log.warn("[Agent] @ not found. JNI backend disabled.", fi);
+			return;
+		}
 		Fi dest = Vars.tmpDirectory.child("remold-panama.jar");
 		fi.copyTo(dest);
 		appendToBootstrap(dest.absolutePath());

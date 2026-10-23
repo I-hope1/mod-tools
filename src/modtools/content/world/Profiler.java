@@ -20,6 +20,7 @@ import modtools.ui.comp.Window;
 import modtools.ui.gen.HopeIcons;
 import modtools.ui.windows.profile.FlameGraphWindow;
 import modtools.unsupported.HotSwapManager;
+import modtools.unsupported.RemoldBootstrap;
 import modtools.utils.*;
 import modtools.utils.MySettings.Data;
 import modtools.utils.profiler.DeadlockDetector;
@@ -356,7 +357,7 @@ public class Profiler extends Content {
 		static {
 			if (!OS.isAndroid) {
 				Runnable r = () -> {
-					TaskManager.runWhen(HotSwapManager::loaded, () -> {
+					TaskManager.runWhen(RemoldBootstrap::loaded, () -> {
 						SamplingProfiler.toggleSampling(R_profiler.mode == Mode.sample);
 						Tools.TASKS.add(() -> GlTimerProfiler.enabled = sample_gpu_time.enabled());
 					});
@@ -364,7 +365,7 @@ public class Profiler extends Content {
 				capture_method_signature.def(isPanama());
 
 				/* 不用@FlushField是因为SamplingProfiler可能还未加载  */
-				TaskManager.runWhen(HotSwapManager::loaded, () -> {
+				TaskManager.runWhen(RemoldBootstrap::loaded, () -> {
 					SamplingProfiler.intervalMs = sample_freq.getInt();
 					DeadlockDetector.setEnabled(dead_lock_detection.enabled());
 					SamplingProfiler.includePackages = include_packages.getArray().map(Jval::toString).toArray(String.class);
@@ -374,17 +375,17 @@ public class Profiler extends Content {
 					DeadlockDetector.setEnabled(dead_lock_detection.enabled());
 				});
 				sample_freq.onChange(() -> {
-					TaskManager.runWhen(HotSwapManager::loaded, () -> {
+					TaskManager.runWhen(RemoldBootstrap::loaded, () -> {
 						SamplingProfiler.intervalMs = sample_freq.getInt();
 					});
 				});
 				sample_gpu_time.onChange(() -> {
-					TaskManager.runWhen(HotSwapManager::loaded, () -> {
+					TaskManager.runWhen(RemoldBootstrap::loaded, () -> {
 						GlTimerProfiler.enabled = sample_gpu_time.enabled();
 					});
 				});
 				capture_method_signature.onChange(() -> {
-					TaskManager.runWhen(HotSwapManager::loaded, () -> {
+					TaskManager.runWhen(RemoldBootstrap::loaded, () -> {
 						SamplingProfiler.captureMethodSignature = capture_method_signature.enabled();
 						ProfilerData.clear();
 					});

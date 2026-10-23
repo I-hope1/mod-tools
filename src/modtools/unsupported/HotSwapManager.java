@@ -3,6 +3,7 @@ package modtools.unsupported;
 import arc.Core;
 import arc.Events;
 import arc.files.Fi;
+import arc.util.Log;
 import arc.util.OS;
 import mindustry.game.EventType.ClientLoadEvent;
 import modtools.IntVars;
@@ -80,11 +81,16 @@ public class HotSwapManager {
 	public static void hotswap(String watchPaths) {
 		try {
 			// 参数是类目录，Agent会自行处理
-			String agentPath = getAgentPath();
-			// UtilsAgentManager.appendToBootstrap(agentPath);
-			UtilsAgentManager.attachAgent(agentPath, true, watchPaths);
+			if (loaded()) {
+				// agent 已经在 RemoldBootstrap 里挂上（为了让设置类能链接 remold.*），
+				// 同一个 VM 不能再 loadAgent 一次，只能显式初始化
+				RemoldAgent.init(watchPaths, true);
+			} else {
+				UtilsAgentManager.attachAgent(getAgentPath(), true, watchPaths);
+			}
 		} catch (Throwable e) {
-			RemoldAgent.error("[HotSwapManager] An error occurred during the hotswap process.", e);
+			// 挂载失败时 RemoldAgent 本身不可用，不能用它记日志
+			Log.err("[HotSwapManager] An error occurred during the hotswap process.", e);
 		}
 	}
 
@@ -103,6 +109,9 @@ public class HotSwapManager {
 		return E_Hook.hot_swap.enabled();
 	}
 	public static boolean jniValid() {
+		// 低于 22 时 panama 后端根本没被加载（见 UtilsAgentManager.init），
+		// 此时连 MasterKey 都不存在，不要再去碰它
+		if (!UtilsAgentManager.JNI_AGENT_SUPPORTED) return false;
 		try {
 			return MasterKey.isPanamaBackend();
 		} catch (NoClassDefFoundError e) {

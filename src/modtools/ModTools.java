@@ -111,6 +111,9 @@ public class ModTools extends Mod {
 		}
 
 		resolveLibsCatch();
+		// 设置类的静态块会链接 HotSwapManager，进而引用 remold.*；
+		// agent 必须先挂上，否则加载阶段就会 NoClassDefFoundError
+		if (!OS.isAndroid) RemoldBootstrap.attach();
 		MySettings.load();
 		SettingsLoader.load();
 

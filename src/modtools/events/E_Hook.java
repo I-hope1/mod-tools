@@ -72,6 +72,14 @@ public enum E_Hook implements ISettings {
 	E_Hook(Class<?> type, Cons<ISettings> builder) { }
 	E_Hook() { }
 
+	/**
+	 * 启动阶段批量写属性，期间不调 {@code initConfig()}。
+	 * 下面 9 个设置各自 {@code runAndOnChange} 会立刻执行一次，若每次都 init，
+	 * 整套配置（每次 11 行）会被原样打印 9 遍；真正的 init 由
+	 * {@code HotSwapManager.start()} 统一做一次。
+	 */
+	private static boolean batchApplying = true;
+
 	static {
 		init();
 	}
@@ -93,6 +101,8 @@ public enum E_Hook implements ISettings {
 		setProperty(capture_locals);
 		setProperty(capture_exceptions);
 		hotswapOnChange(capture_all_exceptions, func);
+
+		batchApplying = false;
 	}
 	private static void setProperty(E_Hook _enum) {
 		System.setProperty("remold.agent." + _enum.name(), _enum.getString());
@@ -101,6 +111,7 @@ public enum E_Hook implements ISettings {
 	static void hotswapOnChange(ISettings setting, Func<ISettings, String> func) {
 		setting.runAndOnChange(() -> {
 			System.setProperty("remold.agent." + setting.name(), func.get(setting));
+			if (batchApplying) return;
 			try {
 				RemoldAgent.initConfig();
 			} catch (NoClassDefFoundError _) { }

@@ -23,6 +23,7 @@ import static modtools.annotations.unsafe.ContextPatcher.runIgnoredException;
  * 所以得在处理器里把 {@link Target}、{@link Lower}、{@link Gen} 这些组件的字段改掉，
  * 并且把高版本才有的语法特性提前“解锁”。
  */
+@SuppressWarnings("removal")
 public final class JavacTargeting {
 	/** 本处理器自己的选项名，命令行上是 {@code -AtargetVersion=<n>} */
 	public static final String FORCE_JAVA_VERSION_ORI = "targetVersion";

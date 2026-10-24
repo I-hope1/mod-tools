@@ -35,14 +35,10 @@ public class HotSwapManager {
 			UNSAFE.addExports(Object.class, "jdk.internal.misc");
 			UNSAFE.addExports(Object.class, "jdk.internal.reflect");
 			UNSAFE.addExports(Object.class, "jdk.internal.loader");
-			if (loaded()) {
-				RemoldAgent.setMainThreadDispatcher(Core.app::post);
-				RemoldAgent.registerPlugin(new remold.arc.ArcHotswapPlugin());
-			}
+			if (loaded()) setupAgent();
 			E_Hook.hot_swap_watch_paths.onChange(() -> {
 				if (loaded()) {
-					RemoldAgent.setMainThreadDispatcher(Core.app::post);
-					RemoldAgent.registerPlugin(new remold.arc.ArcHotswapPlugin());
+					setupAgent();
 					RemoldAgent.init(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator), true);
 				}
 			});
@@ -51,12 +47,9 @@ public class HotSwapManager {
 			initialized = true;
 		}
 		hotswap(E_Hook.hot_swap_watch_paths.getArray().toString(File.pathSeparator));
-		if (loaded()) {
-			RemoldAgent.setMainThreadDispatcher(Core.app::post);
-			RemoldAgent.registerPlugin(new remold.arc.ArcHotswapPlugin());
-		}
-		UpdateRef.flushDeferredRemovals();
-		Events.on(ClientLoadEvent.class, _ -> UpdateRef.flushDeferredRemovals());
+		if (loaded()) setupAgent();
+		flushDeferredRemovals();
+		Events.on(ClientLoadEvent.class, _ -> flushDeferredRemovals());
 		try {
 			Fi lib = IntVars.libs.child(mapLibraryName("tool"));
 			System.setProperty("remold.path.libtool", FileUtils.copyToTmp(lib).absolutePath());
@@ -77,6 +70,28 @@ public class HotSwapManager {
 	}
 	public static boolean loaded() {
 		return ClassUtils.exists("remold.RemoldAgent");
+	}
+
+	/**
+	 * 挂 dispatcher 与 arc 插件。
+	 *
+	 * <p>plugin-arc 缺失时（第三方 {@code -javaagent} 只带 core）只保留 core 能力：
+	 * {@code ArcHotswapPlugin} 属于 plugin-arc，直接 new 会以 NoClassDefFoundError
+	 * 打断整个 {@link #start()}，连带后面的 libtool 初始化也跑不到。
+	 */
+	private static void setupAgent() {
+		RemoldAgent.setMainThreadDispatcher(Core.app::post);
+		if (!RemoldBootstrap.pluginLoaded()) {
+			RemoldBootstrap.warnMissingPluginOnce();
+			return;
+		}
+		RemoldAgent.registerPlugin(new remold.arc.ArcHotswapPlugin());
+	}
+
+	/** UpdateRef 属于 plugin-arc；缺插件时它没有被注册，也就没有待处理项 */
+	private static void flushDeferredRemovals() {
+		if (!RemoldBootstrap.pluginLoaded()) return;
+		UpdateRef.flushDeferredRemovals();
 	}
 	public static void hotswap(String watchPaths) {
 		try {

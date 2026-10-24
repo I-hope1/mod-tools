@@ -359,7 +359,7 @@ public class Profiler extends Content {
 				Runnable r = () -> {
 					TaskManager.runWhen(RemoldBootstrap::loaded, () -> {
 						SamplingProfiler.toggleSampling(R_profiler.mode == Mode.sample);
-						Tools.TASKS.add(() -> GlTimerProfiler.enabled = sample_gpu_time.enabled());
+						Tools.TASKS.add(() -> applyGpuTimerSetting());
 					});
 				};
 				capture_method_signature.def(isPanama());
@@ -380,9 +380,7 @@ public class Profiler extends Content {
 					});
 				});
 				sample_gpu_time.onChange(() -> {
-					TaskManager.runWhen(RemoldBootstrap::loaded, () -> {
-						GlTimerProfiler.enabled = sample_gpu_time.enabled();
-					});
+					TaskManager.runWhen(RemoldBootstrap::loaded, Profiler.Settings::applyGpuTimerSetting);
 				});
 				capture_method_signature.onChange(() -> {
 					TaskManager.runWhen(RemoldBootstrap::loaded, () -> {
@@ -393,6 +391,15 @@ public class Profiler extends Content {
 				mode.onChange(r);
 				r.run();
 			}
+		}
+
+		/**
+		 * GlTimerProfiler 属于 plugin-arc。第三方 {@code -javaagent} 只带 core 时它不可见，
+		 * 这里静默跳过；缺插件的提示由 {@link RemoldBootstrap#warnMissingPluginOnce()} 统一发一次。
+		 */
+		static void applyGpuTimerSetting() {
+			if (!RemoldBootstrap.pluginLoaded()) return;
+			GlTimerProfiler.enabled = sample_gpu_time.enabled();
 		}
 	}
 	private static boolean isPanama() {

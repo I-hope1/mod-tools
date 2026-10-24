@@ -6,15 +6,37 @@ A mod provides various tools for modding.
 Version 1.7.0
 
 ## Highlight
-1. Hot swap runs on a self-contained Remold agent, attached before settings load.
-2. Tester completion rewritten: member completion, destructuring bindings, arrow generics; covered by JUnit 5.
-3. New element editor and layout check in Review, with path copy and search filters.
-4. Compiler hardened: @Switch dependency checks, SettingsLoader generation, safer javac interaction.
-5. Split the hotswap_plus switch into init_fix and force_static_lambda.
-6. Fixes:
-	- Completion popup not showing and candidates beyond the first page being unreachable.
+
+## New
+1. Deadlock detection watchdog: divergence heuristics for platform and virtual threads, JSON thread dumps, and a directed-graph cycle analysis that names the lock ring. Runs separately from the 5 ms CPU sampler so it cannot skew it.
+2. Review element editor: edit Element fields live to see the effect, no recompile needed.
+3. Layout check: LayoutIssues collects layout problems and LayoutReportWindow renders the report; cells also get a details window.
+4. Tester completion rewritten: member completion, array and object destructuring bindings, arrow parameter types from generic arguments; covered by JUnit 5.
+5. JS syntax highlighting for the Rhino editor, resolving members and generic types for accurate colouring.
+6. Zero-allocation float formatting: Schubfach shortest round-trip conversion, DoubleConversion and FastFormat, replacing Double.toString in Vec2/Vec3/Rect/Color formatting.
+
+## Hot swap
+7. Hot swap runs on a self-contained Remold agent, attached before settings load; a -javaagent setup that lacks plugin-arc now degrades with one warning instead of failing.
+8. UI hot swap: Table creator and Cell property chains are tracked, so a redefined builder rebuilds only the affected cells.
+9. Lambda and anonymous class alignment: LambdaAligner, AnonClassAligner and content-hash fingerprints keep anonymous classes paired across redefinition.
+10. Redefinition is gated on instance field-layout compatibility, and slot numbers held by pending aligned classes are not reused.
+11. The hotswap_plus switch is split into init_fix and force_static_lambda.
+
+## Performance
+12. ValueLabel, FieldValueLabel and InlineLabel format without boxing; PairProv shares one buffer and compares content before rebuilding.
+13. Flame graph: canvas clipping and culling, zero-allocation map lookups, spatial depth bucketing.
+14. Fewer per-frame allocations in LimitTable, SearchedLabel and completion prefix matching.
+15. Selection panel: dynamic region scanning is throttled to every 10 frames instead of running on a background executor; unit and bullet sets are cached between scans; tile and building icons are cached per block size.
+
+## Fixes
+	- Completion popup not showing, and candidates beyond the first page being unreachable.
+	- Completion popup covering the line being typed on.
 	- changedFx flash overflowing the scroll pane viewport.
-7. Dependencies: ASM 9.11 (security advisories), Remold 0.1.2.
+	- Viewers: Mat and Affine2 support, opening brace alignment in pretty print, and label markup state preserved across appends.
+	- Android: HiddenApi trimmed in favour of the bundled bypass.
+
+## Dependencies
+	- ASM 9.11 (security advisories), Remold 0.1.2.
 
 -----------------
 WIKI: https://i-hope1.github.io/mod-tools

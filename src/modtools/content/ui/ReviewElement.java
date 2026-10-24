@@ -1777,6 +1777,9 @@ public class ReviewElement extends Content {
 	 * </pre>
 	 * 于是 {@code size()}、{@code Scaling} 全都管不到它：面板上 Min/MaxSize 写着 10×10，
 	 * 肉眼看到的却还是 30px（{@code Icon.xxx}）或 18px（{@code Icon.xxxSmall}）。
+	 * <p>唯一能改的还是 {@code Image.scaleX/scaleY}：它非 1 时 {@code Image.draw()} 会改走
+	 * 9 参数重载，那个重载里 {@code g.width * scaleX} 是乘上去的。所以这里显示的是
+	 * 「内在像素 → 实际绘制像素」，两者相同时只写一个数。
 	 * 只有命中这种 drawable 时才显示，普通图片不占位。
 	 */
 	private static class DrawSizeEntry extends BaseEntry {
@@ -1787,25 +1790,34 @@ public class ReviewElement extends Content {
 			label = new VLabel("", valueScale, Color.orange);
 			buildRow(table, "DrawSize", label);
 			addTooltipListener(label, () -> "该 drawable 按字形像素绘制，size() 与 Scaling 都不生效\n"
-			 + "ImageButton 需要 resizeImage(...) 或 margin(...) 才能改内部 Image 的单元格");
+			 + "ImageButton 需要 resizeImage(...) 或 margin(...) 才能改内部 Image 的单元格\n"
+			 + "只有 scaleX/scaleY 有效（走 9 参数重载）");
 		}
 
 		@Override
 		public void update(Element element) {
-			Drawable drawable = null;
-			if (element instanceof Image image) {
-				drawable = image.getDrawable();
-			} else if (element instanceof ImageButton button && button.getImage() != null) {
+			Image image = null;
+			if (element instanceof Image self) {
+				image = self;
+			} else if (element instanceof ImageButton button) {
 				// 按钮里的图标是子 Image，同一个坑
-				drawable = button.getImage().getDrawable();
+				image = button.getImage();
 			}
 
+			Drawable drawable = image == null ? null : image.getDrawable();
 			if (!isFixedGlyph(drawable)) {
 				setVisible(false);
 				return;
 			}
+
 			TextureRegion region = ((TextureRegionDrawable) drawable).getRegion();
-			label.setText(region.width + " × " + region.height + " (fixed)");
+			float scaleX = image.scaleX, scaleY = image.scaleY;
+			if (Mathf.equal(scaleX, 1f) && Mathf.equal(scaleY, 1f)) {
+				label.setText(region.width + " × " + region.height + " (fixed)");
+			} else {
+				label.setText(region.width + " × " + region.height + " → "
+				 + Math.round(region.width * scaleX) + " × " + Math.round(region.height * scaleY));
+			}
 			setVisible(true);
 		}
 	}

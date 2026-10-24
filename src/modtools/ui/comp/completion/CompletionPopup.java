@@ -266,7 +266,19 @@ public class CompletionPopup extends Table {
 		listTable.invalidateHierarchy();
 
 		pack();
-		// 换了前缀就回到顶部：沿用上一轮的滚动位置会让人以为列表少了内容
+
+		// 高度必须自己压死。listCell.maxHeight 只参与 pref 的计算，内容比可用空间高时
+		// 弹窗照样会长出来；一旦超出光标那一侧的剩余空间，keepInStage 就会把它顶回来，
+		// 于是又压到正在输入的那一行上——正是「位置对了、长列表又挡住了」的原因。
+		if (getHeight() > listHeight) {
+			setHeight(listHeight);
+			invalidate();
+			validate();
+		}
+
+		// ScrollPane 的 maxY/area 要等它自己 layout 过才有意义，之后归零才是「真的到顶」
+		scrollPane.invalidate();
+		scrollPane.validate();
 		scrollToImmediate(0);
 		return true;
 	}

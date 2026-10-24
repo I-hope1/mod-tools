@@ -1,0 +1,7 @@
+modtools.annotations.processors.asm.SampleProcessor,ISOLATING
+modtools.annotations.processors.asm.AccessorProc,ISOLATING
+modtools.annotations.processors.IconsProcessor,ISOLATING
+modtools.annotations.processors.ContentProcessor,ISOLATING
+modtools.annotations.processors.asm.ASMProcessor,ISOLATING
+modtools.annotations.processors.fieldinit.ColorProcessor,ISOLATING
+modtools.annotations.processors.CopyMethodProc,ISOLATING

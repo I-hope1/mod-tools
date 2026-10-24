@@ -28,7 +28,11 @@ public enum E_Hook implements ISettings {
 	@Switch(dependency = "hot_swap")
 	retransform_loaded,
 	@Switch(dependency = "hot_swap")
-	hotswap_plus,
+	// 存量实例初始化：热重载后为新增字段补值
+	init_fix,
+	@Switch(dependency = "hot_swap")
+	// lambda 静态化：保持重定义前后的方法签名稳定
+	force_static_lambda,
 	@Switch(dependency = "hot_swap")
 	hotswap_event,
 	@Switch(dependency = "hot_swap")
@@ -74,8 +78,8 @@ public enum E_Hook implements ISettings {
 
 	/**
 	 * 启动阶段批量写属性，期间不调 {@code initConfig()}。
-	 * 下面 9 个设置各自 {@code runAndOnChange} 会立刻执行一次，若每次都 init，
-	 * 整套配置（每次 11 行）会被原样打印 9 遍；真正的 init 由
+	 * 下面 10 个设置各自 {@code runAndOnChange} 会立刻执行一次，若每次都 init，
+	 * 整套配置（每次 11 行）会被原样打印 10 遍；真正的 init 由
 	 * {@code HotSwapManager.start()} 统一做一次。
 	 */
 	private static boolean batchApplying = true;
@@ -86,11 +90,14 @@ public enum E_Hook implements ISettings {
 
 	static void init() {
 		lambda_align.defTrue();
+		// remold 侧 remold.agent.init_fix 默认为 true，这里必须同默认，否则启动即关掉 InitFix
+		init_fix.defTrue();
 		Func<ISettings, String> func = x -> x.getString().trim();
 
 		hotswapOnChange(redefine_mode, func);
 		hotswapOnChange(hotswap_blacklist, x -> String.join(",", x.getArray().map(Jval::asString)));
-		hotswapOnChange(hotswap_plus, func);
+		hotswapOnChange(init_fix, func);
+		hotswapOnChange(force_static_lambda, func);
 		hotswapOnChange(hotswap_event, func);
 		hotswapOnChange(force_reinit, func);
 		hotswapOnChange(lambda_align, func);

@@ -53,7 +53,8 @@ jobs:
         tag: ${{ env.TAG_NAME }}
         # 核心参数：允许更新现有的 Release
         allowUpdates: true
-        # 核心参数：如果文件已存在，则覆盖它
-        overwrite: true
+        # release-action 已移除 overwrite 参数（传了只会得到 "Unexpected input(s)" 警告且不生效），
+        # 要覆盖同名附件必须用 replacesArtifacts：先清掉旧附件再上传
+        replacesArtifacts: true
         # 权限 Token
         token: ${{ secrets.GITHUB_TOKEN }}

@@ -15,6 +15,10 @@ group 'com.github.I-hope1.' + modName
 ext {
 	sdkRoot = System.getenv("ANDROID_HOME") ?: "/opt/android-sdk-linux"
 	compilerJar = "$rootDir/_libs/compiler.jar"
+	// 本地复合构建会把 remold 依赖替换成 project(':core')，此时 classifier 会被一并带过去
+	// 而找不到 core-all.jar；反过来 JitPack 上 core 的 pom 是 packaging=pom，只有 shadow
+	// 产物才有 jar。所以「用不用 :all」必须跟着有没有复合构建走。
+	compositeRemold = file('../nipx-hotswap').exists() || file('../Remold').exists()
 }
 def archivesName = base.archivesName.get()
 def platformRoot = new File("$sdkRoot/platforms/").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
@@ -149,12 +153,12 @@ dependencies {
 	compileOnly project(":annotations")
 	annotationProcessor project(":compiler")
 	compileOnly "io.github.i-hope1.remold:api:$remoldVersion"
-	compileOnly "io.github.i-hope1.remold:core:$remoldVersion"
+	compileOnly "io.github.i-hope1.remold:core:$remoldVersion" + (compositeRemold ? "" : ":all")
 	compileOnly "io.github.i-hope1.remold:plugin-arc:$remoldVersion"
 	compileOnly "io.github.i-hope1.remold:panama:$remoldVersion"
 	compileOnly project(":utils-agent")
 
-	remoldAgentLib "io.github.i-hope1.remold:core:$remoldVersion"
+	remoldAgentLib "io.github.i-hope1.remold:core:$remoldVersion" + (compositeRemold ? "" : ":all")
 	remoldPluginArcLib "io.github.i-hope1.remold:plugin-arc:$remoldVersion"
 	remoldAsmLib "org.ow2.asm:asm:9.11"
 	remoldAsmLib "org.ow2.asm:asm-commons:9.11"

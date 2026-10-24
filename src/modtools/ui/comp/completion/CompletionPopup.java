@@ -26,36 +26,28 @@ import modtools.ui.control.HopeInput;
  * {@code Tester.ComplementListener} 决定。同一个基对象上连续输入走 {@link #narrow}，
  * 只过滤已经收集到的候选，不再向 Rhino 重新取一遍 id。
  * <p>
- * 候选可能有上千条，所以按滚动位置只渲染视口内的那一段，未渲染的部分用上下两个
- * 占位元素撑出真实高度。这样「每帧要排的行数」与候选总数无关，而滚动又能到最后
- * 一条——两个目标同时成立，不需要在某个行数上截断。
+ * 高度按光标行的另一侧裁（见 {@link #availableHeight()}），候选全部排进列表、由
+ * {@link ScrollPane} 自己滚动。不在这里按滚动位置换窗口：那要求「表格高度」和
+ * 「滚动量」始终同步，而这两者分别由 {@code Table} 和 {@code ScrollPane} 维护，
+ * 一旦有一帧不同步，画面就会停在中段。
  */
 public class CompletionPopup extends Table {
-	/** 单行高度（屏幕像素） */
+	/** 单行高度（未缩放的 UI 单位；{@link Cell} 会再乘一次缩放） */
 	public static final float ROW_HEIGHT        = 24f;
-	/** 视口上下各多渲染几行：滚动时窗口边缘不会先露出空白 */
-	private static final int   OVERSCAN         = 4;
 	/** 弹窗最多占屏幕高度的比例 */
 	private static final float MAX_HEIGHT_RATIO = 0.9f;
 
-	private final TextField  area;
-	private final ScrollPane scrollPane;
-	private final Table      listTable;
+	private final TextField        area;
+	private final ScrollPane       scrollPane;
+	private final Table            listTable;
 	private final Cell<ScrollPane> listCell;
 
 	/** 本次补全会话的全部候选，已按相关性排序 */
 	private final Seq<String> candidates = new Seq<>();
 	/** 按当前前缀过滤后的候选 */
 	private final Seq<String> filtered   = new Seq<>();
-	/** 按钮按窗口内序号复用：每敲一个字符重建一批 TextButton 会持续产生垃圾 */
+	/** 按钮按下标复用：每敲一个字符重建一批 TextButton 会持续产生垃圾 */
 	private final Seq<TextButton> buttonPool = new Seq<>();
-	/** 当前渲染出来的行，对应 {@link #filtered} 的 [windowStart, windowStart + windowCount) */
-	private final Seq<TextButton> suggestionButtons = new Seq<>();
-	/** 窗口上下的占位，撑出未渲染部分的真实高度。用空 Table 是因为 Element 带泛型参数，没法直接 new */
-	private final Table topSpacer = new Table(), bottomSpacer = new Table();
-
-	private int windowStart;
-	private int windowCount;
 
 	/** 光标所在词的首字符位置，决定弹窗放上还是放下 */
 	private final Vec2 anchor     = new Vec2();
@@ -83,8 +75,6 @@ public class CompletionPopup extends Table {
 		scrollPane.setOverscroll(false, false);
 		// 不让弹窗抢走文本区的滚动焦点
 		scrollPane.setCancelTouchFocus(false);
-		// 滚动时换窗口。放在 ScrollPane 上而不是本表上：本表的 update 槽位已经被 keepInStage 占了
-		scrollPane.update(this::syncWindow);
 
 		listCell = add(scrollPane).grow();
 
@@ -236,62 +226,25 @@ public class CompletionPopup extends Table {
 		}
 
 		selectedIndex = Mathf.clamp(selectedIndex, 0, filtered.size - 1);
-		// 高度跟着光标位置走：先定下这次能占多少，再决定渲染几行
+		// 高度跟着光标位置走
 		listHeight = availableHeight();
 		listCell.maxHeight(listHeight);
-		// 换了前缀就回到顶部：沿用上一轮的滚动位置会让人以为列表少了内容
-		scrollToImmediate(0);
-		// 候选变了，窗口内容必须重建，不能因为首行下标没变就跳过
-		windowStart = -1;
-		windowCount = 0;
-		renderWindow();
-
-		listTable.layout();
-		listTable.invalidateHierarchy();
-		pack();
-		return true;
-	}
-
-	/** 滚动时换窗口。每帧都会调用，但只有首行真的变了才重建行 */
-	private void syncWindow() {
-		if (isShown()) renderWindow();
-	}
-
-	/**
-	 * 按滚动位置渲染 [windowStart, windowStart + windowCount) 这一段行。
-	 * <p>
-	 * 未渲染的行由 {@link #topSpacer} / {@link #bottomSpacer} 按行高撑出高度，所以整表高度
-	 * 始终等于全部候选的高度，滚动条和滚动范围都不受「当前渲染了几行」影响。
-	 */
-	private void renderWindow() {
-		float rowH    = ROW_HEIGHT * Scl.scl();
-		int   total   = filtered.size;
-		int   visible = Math.max(1, Math.min(total, (int) Math.ceil(listHeight / rowH)));
-		int   top     = Mathf.clamp((int) (scrollPane.getScrollY() / rowH), 0, Math.max(0, total - 1));
-
-		int start = Math.max(0, top - OVERSCAN);
-		int end   = Math.min(total, top + visible + OVERSCAN);
-		if (start == windowStart && end - start == windowCount) return;
-
-		windowStart = start;
-		windowCount = end - start;
 
 		listTable.clearChildren(); // 会摘掉旧行，按钮仍留在 pool 里
-		suggestionButtons.clear();
-
-		if (start > 0) listTable.add(topSpacer).height(start * rowH).row();
-		for (int i = start; i < end; i++) {
+		for (int i = 0; i < filtered.size; i++) {
 			String     name   = filtered.get(i);
-			TextButton button = button(suggestionButtons.size);
+			TextButton button = button(i);
 			if (!name.contentEquals(button.getText())) button.setText(name);
 			button.userObject = name;
-			listTable.add(button).wrapLabel(false).growX().height(rowH).row();
-			suggestionButtons.add(button);
+			listTable.add(button).wrapLabel(false).growX().height(ROW_HEIGHT).row();
 		}
-		if (end < total) listTable.add(bottomSpacer).height((total - end) * rowH).row();
-
 		highlightSelection();
 		listTable.invalidateHierarchy();
+
+		pack();
+		// 换了前缀就回到顶部：沿用上一轮的滚动位置会让人以为列表少了内容
+		scrollToImmediate(0);
+		return true;
 	}
 
 	private TextButton button(int index) {
@@ -320,10 +273,10 @@ public class CompletionPopup extends Table {
 		if (cons != null) cons.get(suggestion);
 	}
 
-	/** 高亮按 {@link #selectedIndex} 判定，而不是按按钮在窗口里的位置 */
 	private void highlightSelection() {
-		for (int i = 0; i < suggestionButtons.size; i++) {
-			suggestionButtons.get(i).getLabel().setColor(windowStart + i == selectedIndex ? Pal.accent : Color.white);
+		// 只染真正排进列表的那些：pool 里可能还留着上一轮更长的尾巴
+		for (int i = 0; i < filtered.size; i++) {
+			buttonPool.get(i).getLabel().setColor(i == selectedIndex ? Pal.accent : Color.white);
 		}
 	}
 
@@ -346,7 +299,6 @@ public class CompletionPopup extends Table {
 		else if (top + rowH > target + viewH) target = top + rowH - viewH;
 
 		scrollToImmediate(Mathf.clamp(target, 0, maxScroll));
-		renderWindow();
 	}
 
 	/**

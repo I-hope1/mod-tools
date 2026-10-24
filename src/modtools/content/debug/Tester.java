@@ -1052,10 +1052,12 @@ public class Tester extends Content {
 		}
 
 		private final Vec2 caretPos = new Vec2();
-		/** 弹窗锚点：正在输入的词的首字符，坐标相对 topGroup */
+		/** 弹窗锚点：光标位置，坐标相对 topGroup。y 是光标行的下沿（TextArea 画光标用的同一个值） */
 		private Vec2 caretPosition(int index) {
+			// getRelativeX/Y 里已经带了 area 自己在父容器中的位置，而
+			// localToAscendantCoordinates 是从「本地坐标」起步的，会再加一次 area.x/y
 			return area.localToAscendantCoordinates(topGroup,
-			 caretPos.set(area.getRelativeX(index), area.getRelativeY(index)));
+			 caretPos.set(area.getRelativeX(index) - area.x, area.getRelativeY(index) - area.y));
 		}
 
 		private final Seq<String>     complements = new Seq<>();

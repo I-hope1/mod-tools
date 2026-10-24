@@ -34,6 +34,8 @@ import modtools.ui.control.HopeInput;
 public class CompletionPopup extends Table {
 	/** 单行高度（未缩放的 UI 单位；{@link Cell} 会再乘一次缩放） */
 	public static final float ROW_HEIGHT        = 24f;
+	/** 弹窗与光标行之间留的缝（像素）：贴着字看着像压上去了 */
+	private static final float GAP = 4f;
 	/** 弹窗最多占屏幕高度的比例 */
 	private static final float MAX_HEIGHT_RATIO = 0.9f;
 
@@ -49,7 +51,7 @@ public class CompletionPopup extends Table {
 	/** 按钮按下标复用：每敲一个字符重建一批 TextButton 会持续产生垃圾 */
 	private final Seq<TextButton> buttonPool = new Seq<>();
 
-	/** 光标所在词的首字符位置，决定弹窗放上还是放下 */
+	/** 光标位置（topGroup 坐标）：x 是插入点，y 是光标行的**下沿**，决定弹窗放上还是放下 */
 	private final Vec2 anchor     = new Vec2();
 	/** 本次允许占用的最大高度：光标上方或下方的剩余空间，弹窗不会盖住正在输入的那一行 */
 	private float      listHeight;
@@ -180,37 +182,59 @@ public class CompletionPopup extends Table {
 	}
 
 	/**
-	 * 摆到光标那一行的上方或下方，优先空间大的一侧。
+	 * 摆到光标行的上方或下方，优先空间大的一侧。
 	 * <p>
-	 * 高度已经在 {@link #rebuildList()} 里按同一侧的空间裁过，所以弹窗永远落在光标行的
-	 * 另一侧，不会盖住正在输入的那一行——高到占满屏幕的候选列表会挡住输入，看不到自己在打什么。
+	 * 锚点 {@link #anchor} 是 TextArea 给出的**行下沿**（它画光标用的就是同一个 y，
+	 * 见 {@code TextArea.drawCursor}），所以光标行占据 {@code [anchor.y, anchor.y + lineHeight]}。
+	 * 弹窗整个落在这一段的上面或下面，并且留 {@link #GAP} 的缝：压住这段就等于压住正在
+	 * 输入的那一行，看不到自己在打什么。
+	 * <p>
 	 * 具体落点交给 {@link IntUI#positionTooltip(Vec2, int, Table)}，和菜单/浮窗同一套翻转规则。
 	 */
 	private void place() {
-		float lineHeight = area.getStyle().font.getLineHeight();
-		float above      = anchor.y - lineHeight * 0.2f;
-		float below      = Core.scene.getHeight() - anchor.y - lineHeight;
-
-		// 和 availableHeight() 用同一个判据：高度是按更大的一侧裁的，那一侧必然放得下
-		boolean up = above >= below;
+		boolean up = spaceAbove() >= spaceBelow();
 		IntUI.positionTooltip(
-		 up ? Tmp.v1.set(anchor.x, above) : Tmp.v1.set(anchor.x, anchor.y + lineHeight),
+		 up ? Tmp.v1.set(anchor.x, lineTop() + GAP) : Tmp.v1.set(anchor.x, lineBottom() - GAP),
 		 up ? Align.bottomLeft : Align.topLeft, this);
 	}
 
+	private float lineHeight() {
+		return area.getStyle().font.getLineHeight();
+	}
+	/** 光标行下沿，也就是 anchor 本身 */
+	private float lineBottom() {
+		return anchor.y;
+	}
+	/** 光标行上沿 */
+	private float lineTop() {
+		return anchor.y + lineHeight();
+	}
 	/**
-	 * 光标行上方 / 下方能放下多少高度（场景单位）。
+	 * 光标行上方（到屏幕顶）能放下多少高度。
 	 * <p>
-	 * 取更大的一侧，再压到屏幕高度的上限。这样候选再多也只会把列表压短、让它内部滚动，
-	 * 不会把弹窗撑到跨过光标行。
+	 * 两端各让出一个 {@link #GAP}：一侧是贴着光标行的缝，另一侧是离屏幕边缘的余量。
+	 * 后者不是美观问题——高度若正好等于「行到屏幕顶」，{@code positionTooltip} 的越界判断
+	 * 就卡在等号上，浮点误差一多就会被翻转到下方，又压回光标行。
+	 */
+	private float spaceAbove() {
+		return Core.scene.getHeight() - lineTop() - GAP * 2;
+	}
+	/** 光标行下方（到屏幕底）能放下多少高度，同样两端各让一个 {@link #GAP} */
+	private float spaceBelow() {
+		return lineBottom() - GAP * 2;
+	}
+
+	/**
+	 * 弹窗能占的最大高度（场景单位）。
+	 * <p>
+	 * 取光标行两侧里更大的一侧，再压到屏幕高度的上限。这样候选再多也只会把列表压短、
+	 * 让它内部滚动，不会把弹窗撑到跨过光标行。判据必须和 {@link #place()} 用同一对
+	 * {@link #spaceAbove()} / {@link #spaceBelow()}：高度是按更大的一侧裁的，那一侧才放得下。
 	 */
 	private float availableHeight() {
-		float lineHeight = area.getStyle().font.getLineHeight();
-		float screenH    = Core.scene.getHeight();
-
-		float above = anchor.y - lineHeight * 0.2f;          // 光标行下沿往上都是空的
-		float below = screenH - anchor.y - lineHeight;       // 光标行上沿往下
-		return Math.max(lineHeight, Math.min(Math.max(above, below), screenH * MAX_HEIGHT_RATIO));
+		float space = Math.max(spaceAbove(), spaceBelow());
+		return Math.max(lineHeight() + GAP,
+		 Math.min(space, Core.scene.getHeight() * MAX_HEIGHT_RATIO));
 	}
 
 	/** 按当前前缀过滤候选并回到顶部；一条都不剩时收起并返回 false */

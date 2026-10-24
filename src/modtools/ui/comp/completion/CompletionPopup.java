@@ -16,6 +16,7 @@ import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import modtools.ui.HopeStyles;
+import modtools.ui.IntUI;
 import modtools.ui.control.HopeInput;
 
 /**
@@ -40,6 +41,7 @@ public class CompletionPopup extends Table {
 	private final TextField  area;
 	private final ScrollPane scrollPane;
 	private final Table      listTable;
+	private final Cell<ScrollPane> listCell;
 
 	/** 本次补全会话的全部候选，已按相关性排序 */
 	private final Seq<String> candidates = new Seq<>();
@@ -54,6 +56,11 @@ public class CompletionPopup extends Table {
 
 	private int windowStart;
 	private int windowCount;
+
+	/** 光标所在词的首字符位置，决定弹窗放上还是放下 */
+	private final Vec2 anchor     = new Vec2();
+	/** 本次允许占用的最大高度：光标上方或下方的剩余空间，弹窗不会盖住正在输入的那一行 */
+	private float      listHeight;
 
 	private Cons<String> onSelect;
 	/** 候选的基对象，以及它是不是成员访问；会话能否延续靠这两者判定 */
@@ -79,7 +86,7 @@ public class CompletionPopup extends Table {
 		// 滚动时换窗口。放在 ScrollPane 上而不是本表上：本表的 update 槽位已经被 keepInStage 占了
 		scrollPane.update(this::syncWindow);
 
-		add(scrollPane).grow().maxHeight(maxListHeight());
+		listCell = add(scrollPane).grow();
 
 		update(this::keepInStage);
 	}
@@ -105,10 +112,11 @@ public class CompletionPopup extends Table {
 		this.onSelect = onSelect;
 		this.currentPrefix = prefix;
 		this.selectedIndex = -1;
+		this.anchor.set(pos);
 
 		if (!rebuildList()) return; // 没有候选，rebuildList 已经收起
 
-		place(pos);
+		place();
 		visible = true;
 		touchable = Touchable.enabled;
 		Core.scene.removeCaptureListener(outsideListener);
@@ -122,8 +130,9 @@ public class CompletionPopup extends Table {
 	 */
 	public void narrow(String prefix, Vec2 pos) {
 		currentPrefix = prefix;
+		anchor.set(pos);
 		if (!rebuildList()) return; // 过滤到空，已经收起
-		place(pos);
+		place();
 	}
 
 	/** 基对象没变才能复用候选：换对象（含成员访问与普通名字补全之间的切换）必须重新收集 */
@@ -180,26 +189,38 @@ public class CompletionPopup extends Table {
 		return false;
 	}
 
-	private void place(Vec2 pos) {
+	/**
+	 * 摆到光标那一行的上方或下方，优先空间大的一侧。
+	 * <p>
+	 * 高度已经在 {@link #rebuildList()} 里按同一侧的空间裁过，所以弹窗永远落在光标行的
+	 * 另一侧，不会盖住正在输入的那一行——高到占满屏幕的候选列表会挡住输入，看不到自己在打什么。
+	 * 具体落点交给 {@link IntUI#positionTooltip(Vec2, int, Table)}，和菜单/浮窗同一套翻转规则。
+	 */
+	private void place() {
 		float lineHeight = area.getStyle().font.getLineHeight();
+		float above      = anchor.y - lineHeight * 0.2f;
+		float below      = Core.scene.getHeight() - anchor.y - lineHeight;
 
-		// 优先放在光标上一行，放不下再放到下一行
-		float popupY = pos.y - getHeight() - lineHeight * 0.2f;
-		if (popupY < 0) popupY = pos.y + lineHeight;
-
-		float popupX = pos.x;
-		if (popupX + getWidth() > Core.graphics.getWidth()) popupX = Core.graphics.getWidth() - getWidth();
-		popupX = Math.max(0, popupX);
-
-		if (popupY + getHeight() > Core.graphics.getHeight()) popupY = Core.graphics.getHeight() - getHeight();
-		popupY = Math.max(0, popupY);
-
-		setPosition(popupX, popupY);
+		// 和 availableHeight() 用同一个判据：高度是按更大的一侧裁的，那一侧必然放得下
+		boolean up = above >= below;
+		IntUI.positionTooltip(
+		 up ? Tmp.v1.set(anchor.x, above) : Tmp.v1.set(anchor.x, anchor.y + lineHeight),
+		 up ? Align.bottomLeft : Align.topLeft, this);
 	}
 
-	/** 列表最多能占的高度（场景单位），和构造里给 cell 的 maxHeight 是同一个值 */
-	private float maxListHeight() {
-		return Core.graphics.getHeight() / Scl.scl() * MAX_HEIGHT_RATIO;
+	/**
+	 * 光标行上方 / 下方能放下多少高度（场景单位）。
+	 * <p>
+	 * 取更大的一侧，再压到屏幕高度的上限。这样候选再多也只会把列表压短、让它内部滚动，
+	 * 不会把弹窗撑到跨过光标行。
+	 */
+	private float availableHeight() {
+		float lineHeight = area.getStyle().font.getLineHeight();
+		float screenH    = Core.scene.getHeight();
+
+		float above = anchor.y - lineHeight * 0.2f;          // 光标行下沿往上都是空的
+		float below = screenH - anchor.y - lineHeight;       // 光标行上沿往下
+		return Math.max(lineHeight, Math.min(Math.max(above, below), screenH * MAX_HEIGHT_RATIO));
 	}
 
 	/** 按当前前缀过滤候选并回到顶部；一条都不剩时收起并返回 false */
@@ -215,6 +236,9 @@ public class CompletionPopup extends Table {
 		}
 
 		selectedIndex = Mathf.clamp(selectedIndex, 0, filtered.size - 1);
+		// 高度跟着光标位置走：先定下这次能占多少，再决定渲染几行
+		listHeight = availableHeight();
+		listCell.maxHeight(listHeight);
 		// 换了前缀就回到顶部：沿用上一轮的滚动位置会让人以为列表少了内容
 		scrollToImmediate(0);
 		// 候选变了，窗口内容必须重建，不能因为首行下标没变就跳过
@@ -242,7 +266,7 @@ public class CompletionPopup extends Table {
 	private void renderWindow() {
 		float rowH    = ROW_HEIGHT * Scl.scl();
 		int   total   = filtered.size;
-		int   visible = Math.max(1, Math.min(total, (int) Math.ceil(maxListHeight() / rowH)));
+		int   visible = Math.max(1, Math.min(total, (int) Math.ceil(listHeight / rowH)));
 		int   top     = Mathf.clamp((int) (scrollPane.getScrollY() / rowH), 0, Math.max(0, total - 1));
 
 		int start = Math.max(0, top - OVERSCAN);
@@ -313,7 +337,7 @@ public class CompletionPopup extends Table {
 		if (selectedIndex < 0 || selectedIndex >= filtered.size) return;
 
 		float rowH      = ROW_HEIGHT * Scl.scl();
-		float viewH     = Math.min(filtered.size * rowH, maxListHeight());
+		float viewH     = Math.min(filtered.size * rowH, listHeight);
 		float maxScroll = filtered.size * rowH - viewH;
 
 		float top    = selectedIndex * rowH; // 选中行上边缘距列表顶部的距离

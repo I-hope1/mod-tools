@@ -259,6 +259,32 @@ public class IntUI {
 		positionTooltip(lying, Align.bottom, t, Align.top);
 	}
 
+	/**
+	 * 以坐标点定位弹窗：先按 {@code tableAlign} 贴上去，放不下就翻到另一侧，最后钳进舞台。
+	 * <p>
+	 * 和 {@link #positionTooltip(Element, int, Table, int)} 是同一套翻转/收边规则，区别只是
+	 * 锚点不是元素而是坐标——文本光标这类没有元素可指的位置用它。
+	 */
+	public static void positionTooltip(Vec2 anchor, int tableAlign, Table table) {
+		float stageW = Core.scene.getWidth(), stageH = Core.scene.getHeight();
+		int   align  = tableAlign;
+
+		table.setPosition(anchor.x, anchor.y, align);
+
+		// Y 轴放不下就上下翻转
+		if (table.y + table.getHeight() > stageH || table.y < 0) {
+			align = flipV(align);
+			table.setPosition(anchor.x, anchor.y, align);
+		}
+		// X 轴同理（在 Y 已定的基础上）
+		if (table.x + table.getWidth() > stageW || table.x < 0) {
+			align = flipH(align);
+			table.setPosition(anchor.x, anchor.y, align);
+		}
+
+		table.keepInStage();
+	}
+
 	public static void positionTooltip(Element lying, int lyingAlign, Table table, int tableAlign) {
 		float stageW = Core.scene.getWidth(), stageH = Core.scene.getHeight();
 

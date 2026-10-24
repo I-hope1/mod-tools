@@ -289,7 +289,8 @@ public class CompletionPopup extends Table {
 	private void scrollSelectionIntoView() {
 		if (selectedIndex < 0 || selectedIndex >= filtered.size) return;
 
-		float rowH      = ROW_HEIGHT * Scl.scl();
+		// Cell 的尺寸 setter 自带一次 Scl.scl，所以实际行高是 Scl.scl(ROW_HEIGHT)
+		float rowH      = Scl.scl(ROW_HEIGHT);
 		float viewH     = Math.min(filtered.size * rowH, listHeight);
 		float maxScroll = filtered.size * rowH - viewH;
 

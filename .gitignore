@@ -184,3 +184,11 @@ magic-accessor/magic-js/*poly_disasm.txt
 /_libs/Override.jar
 /_libs/incremental.annotation.processors
 scratch/layoutprobe/layout-agent.jar
+
+## 本地草稿与备份（不进版本库）
+/z_backfile/
+/dsh-bundles/
+/dsh-shell-select-report.md
+/extract_java.py
+/annotations/annotations.md
+*.java1

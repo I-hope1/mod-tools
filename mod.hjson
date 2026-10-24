@@ -3,22 +3,25 @@ description: '''
 A mod provides various tools for modding.
 
 -----------------
-Version 1.6.0
+Version 1.7.0
 
 ## Highlight
-1. Support Mindustry 159.2
-2. feat(capture_exceptions): Hook exceptions and print (Desktop Only)
-3. Optimize flame graph performance.
-4. Fix some bugs:
-	- Improve the security check logic for application class loader settings in Tester.
-	- Add text boundary safety checks to TextAreaTab to prevent array out-of-bounds errors.
+1. Hot swap runs on a self-contained Remold agent, attached before settings load.
+2. Tester completion rewritten: member completion, destructuring bindings, arrow generics; covered by JUnit 5.
+3. New element editor and layout check in Review, with path copy and search filters.
+4. Compiler hardened: @Switch dependency checks, SettingsLoader generation, safer javac interaction.
+5. Split the hotswap_plus switch into init_fix and force_static_lambda.
+6. Fixes:
+	- Completion popup not showing and candidates beyond the first page being unreachable.
+	- changedFx flash overflowing the scroll pane viewport.
+7. Dependencies: ASM 9.11 (security advisories), Remold 0.1.2.
 
 -----------------
 WIKI: https://i-hope1.github.io/mod-tools
 '''
 author: "I hope..."
 hidden: true
-version: 1.6.0
+version: 1.7.0
 minGameVersion: "159.2"
 main: "modtools.ModTools"
 repo: "I-hope1/mod-tools"

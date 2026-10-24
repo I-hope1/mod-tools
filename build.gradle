@@ -148,20 +148,20 @@ configurations {
 dependencies {
 	compileOnly project(":annotations")
 	annotationProcessor project(":compiler")
-	compileOnly "io.github.i-hope1.remold:api:0.1.0"
-	compileOnly "io.github.i-hope1.remold:core:0.1.0"
-	compileOnly "io.github.i-hope1.remold:plugin-arc:0.1.0"
-	compileOnly "io.github.i-hope1.remold:panama:0.1.0"
+	compileOnly "io.github.i-hope1.remold:api:$remoldVersion"
+	compileOnly "io.github.i-hope1.remold:core:$remoldVersion"
+	compileOnly "io.github.i-hope1.remold:plugin-arc:$remoldVersion"
+	compileOnly "io.github.i-hope1.remold:panama:$remoldVersion"
 	compileOnly project(":utils-agent")
 
-	remoldAgentLib "io.github.i-hope1.remold:core:0.1.0"
-	remoldPluginArcLib "io.github.i-hope1.remold:plugin-arc:0.1.0"
+	remoldAgentLib "io.github.i-hope1.remold:core:$remoldVersion"
+	remoldPluginArcLib "io.github.i-hope1.remold:plugin-arc:$remoldVersion"
 	remoldAsmLib "org.ow2.asm:asm:9.11"
 	remoldAsmLib "org.ow2.asm:asm-commons:9.11"
 	remoldAsmLib "org.ow2.asm:asm-analysis:9.11"
 	remoldAsmLib "org.ow2.asm:asm-util:9.11"
 	remoldAsmLib "org.ow2.asm:asm-tree:9.11"
-	remoldPanamaLib "io.github.i-hope1.remold:panama:0.1.0"
+	remoldPanamaLib "io.github.i-hope1.remold:panama:$remoldVersion"
 
 //	println "AndroidHome: $sdkRoot"
 	compileOnly files(

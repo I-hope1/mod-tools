@@ -994,8 +994,8 @@ public class Tester extends Content {
 				String text   = area.getText();
 				int    cursor = Math.min(area.getCursorPosition(), text.length());
 				Completion.Context ctx = Completion.contextAt(text, cursor);
-				// 字符串、注释里的内容不是代码，补出来只会打断输入
-				if (!ctx.inCode) { hideCompletion(); return; }
+				// 字符串、注释里的内容不是代码；空前缀（把词删光了）也不弹，否则会列出一整屏全局名
+				if (!ctx.triggersCompletion(manual)) { hideCompletion(); return; }
 
 				int     start  = ctx.start;
 				String  prefix = ctx.prefix;

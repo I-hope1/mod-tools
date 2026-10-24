@@ -46,6 +46,17 @@ public final class Completion {
 			this.member = dot >= 0;
 			this.inCode = inCode;
 		}
+
+		/**
+		 * 是否值得弹出候选。
+		 * <p>
+		 * 空前缀只在两种情况下有意义：刚敲完 {@code '.'}（要看这个对象的全部成员），以及手动
+		 * 触发（明确要求看全部名字）。其余时候空前缀意味着「把词删光了」或者光标停在空白处，
+		 * 这时弹出一整屏全局名只会挡住视线，接着敲还得先把它关掉。
+		 */
+		public boolean triggersCompletion(boolean manual) {
+			return inCode && (manual || member || !prefix.isEmpty());
+		}
 	}
 
 	public static Context contextAt(CharSequence text, int cursor) {

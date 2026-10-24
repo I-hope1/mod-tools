@@ -74,4 +74,20 @@ class CompletionTest {
 		Completion.collect(out, "ma", Seq.with("map"), Seq.with("math"), Seq.with("map"));
 		assertEquals(Seq.with("map", "math").toString(), out.toString(), "merged and deduped across sources");
 	}
+
+	@Test
+	@DisplayName("an empty prefix only triggers completion after a dot or on a manual request")
+	void emptyPrefixNeedsADotOrAManualRequest() {
+		assertFalse(Completion.contextAt("", 0).triggersCompletion(false), "empty text");
+		assertFalse(Completion.contextAt("let a = 1;\n", 11).triggersCompletion(false), "deleted back to a line break");
+		assertFalse(Completion.contextAt("  ", 2).triggersCompletion(false), "spaces only");
+
+		assertTrue(Completion.contextAt("", 0).triggersCompletion(true), "manual request on empty text");
+		assertTrue(Completion.contextAt("Vars.", 5).triggersCompletion(false), "right after a dot");
+		assertTrue(Completion.contextAt("Vars.ma", 7).triggersCompletion(false), "typing a member name");
+		assertTrue(Completion.contextAt("Var", 3).triggersCompletion(false), "typing a name");
+
+		assertFalse(Completion.contextAt("\"a.b", 4).triggersCompletion(false), "inside a string");
+		assertFalse(Completion.contextAt("\"a.b", 4).triggersCompletion(true), "manual request inside a string");
+	}
 }

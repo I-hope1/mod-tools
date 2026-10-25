@@ -75,7 +75,10 @@ public class SearchedLabel extends InlineLabel {
 		Draw.color(bgColor);
 		for (GlyphRun run : runs) {
 			if (!Objects.equals(run.color, highlightColor)) continue;
-			Fill.crect(x + run.xAdvances.first() + run.x, y + run.y, run.width, lineHeight);
+			// run.width 从 run.x 起算，而字形从 run.x + xAdvances[0] 开始画：
+			// 起点右移多少，宽度就要减掉多少，否则右边界会多出一个 advance。
+			float adv0 = run.xAdvances.first();
+			Fill.crect(x + run.x + adv0, y + run.y, run.width - adv0, lineHeight);
 		}
 	}
 }

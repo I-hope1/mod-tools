@@ -161,18 +161,31 @@ public abstract class ValueLabel extends ExtendingLabel {
 				int cursor = getCursor(x, y);
 				if (cursor == UNSET_I || sortedKeys.isEmpty()) return;
 
-				// 直接复用已经排好序的 sortedKeys，开销降到几十纳秒级别
-				for (int i = sortedKeys.size - 1; i >= 0; i--) {
-					int index   = sortedKeys.get(i);
-					int toIndex = endIndexMap.get(index);
+				int left        = 0;
+				int right       = sortedKeys.size - 1;
+				int targetIndex = -1;
 
-					if (index <= cursor && cursor <= toIndex) {
-						hoveredChunk.set(index, toIndex);
-						hoveredLabel = ValueLabel.this;
-						Object obj = startIndexMap.get(index);
-						hoveredValRef = (obj != null) ? new WeakReference<>(obj) : null;
-						return;
+				while (left <= right) {
+					int mid    = left + (right - left) / 2;
+					int midKey = sortedKeys.get(mid);
+
+					if (midKey <= cursor) {
+						targetIndex = mid;
+						left = mid + 1;
+					} else {
+						right = mid - 1;
 					}
+				}
+				if (targetIndex == -1) return;
+
+				int index   = sortedKeys.get(targetIndex);
+				int toIndex = endIndexMap.get(index);
+
+				if (index <= cursor && cursor <= toIndex) {
+					hoveredChunk.set(index, toIndex);
+					hoveredLabel = ValueLabel.this;
+					Object obj = startIndexMap.get(index);
+					hoveredValRef = (obj != null) ? new WeakReference<>(obj) : null;
 				}
 			}
 		});

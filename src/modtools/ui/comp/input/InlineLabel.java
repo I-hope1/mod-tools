@@ -126,8 +126,20 @@ public class InlineLabel extends NoMarkupLabel {
 
 			color = colorMap.get(endIndex);
 		}
-		if (itemIndex < item.glyphs.size) {
-			result.add(InlineLabel.sub(item, itemIndex, item.glyphs.size, color, currentX));
+		// 颜色边界只描述到最后一个 key 为止，其后可能还剩整段 run（换行后的行）。
+		// runs 会被 result 整体替换，这里漏掉的 run 不会报错，只会让那部分文本凭空消失。
+		while (true) {
+			if (itemIndex < item.glyphs.size) {
+				result.add(InlineLabel.sub(item, itemIndex, item.glyphs.size, color, currentX));
+			}
+			if (!iter.hasNext()) break;
+			item = iter.next();
+			itemIndex = 0;
+			currentX = item.x;
+			// 对自动换行/换行符跳过的空白偏移
+			if (!item.glyphs.isEmpty()) {
+				while (currentIndex < text.length() && (char) item.glyphs.first().id != text.charAt(currentIndex)) currentIndex++;
+			}
 		}
 
 		result.removeAll(Objects::isNull);
@@ -140,6 +152,10 @@ public class InlineLabel extends NoMarkupLabel {
 	}
 	private static GlyphRun sub(GlyphRun glyphRun, int startIndex, int endIndex, Color color, float currentX) {
 		if (startIndex < 0) return null;
+		// 越界不会读到脏数据：FloatSeq/Seq 的 addAll 与 get 都有边界检查，会直接抛
+		// IllegalArgumentException。但那是把一个能画出来的 run 整个变成异常，
+		// 按末尾截断更接近调用方的本意。
+		if (endIndex > glyphRun.glyphs.size) endIndex = glyphRun.glyphs.size;
 		if (endIndex <= startIndex) return null;
 		GlyphRun newRun = Pools.obtain(GlyphRun.class, GlyphRun::new);
 		boolean  isSame = startIndex == 0 && endIndex == glyphRun.glyphs.size;
@@ -153,7 +169,10 @@ public class InlineLabel extends NoMarkupLabel {
 		} else {
 			float    width = 0;
 			FloatSeq adv   = glyphRun.xAdvances;
-			for (int k = startIndex + 1; k <= endIndex; k++) {
+			// run.width 与 run.x 同一原点：GlyphLayout 里恒有 run.x + run.width == 右边界，
+			// 而字形从 run.x + xAdvances[0] 开始画。漏掉 xAdvances[startIndex] 会让
+			// run.x + run.width 落在真实右边界左侧一个 advance 处。
+			for (int k = startIndex; k <= endIndex; k++) {
 				width += adv.get(k);
 			}
 			newRun.width = width;
@@ -257,7 +276,9 @@ public class InlineLabel extends NoMarkupLabel {
 			// getRect 用 run.x + xAdvances.first() 作为起点；这里必须一致，
 			// 否则 cursor 检测比实际字形起点早 xAdvances.first() 像素，表现为"偏左"。
 			currentX = labelX + run.x + xAdvances.first();
-			currentY = height + run.y;
+			// run.y 与 getRect/cache 一样以 labelY 为原点；用 height 只在「高度恰好等于文字高」
+			// 时才对得上，标签上下留白时整条命中带会跟着上移。
+			currentY = labelY + run.y;
 			while (index < text.length() && (char) run.glyphs.first().id != text.charAt(index)) index++; // 弥补offset
 			// hit-test 终点用 run.x + run.width（不含 xAdvances.first()，与 libGDX 一致）
 			if (currentY - lineHeight < y && y <= currentY && currentX <= x && x < labelX + run.x + run.width) {

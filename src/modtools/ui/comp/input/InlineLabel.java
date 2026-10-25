@@ -48,7 +48,9 @@ public class InlineLabel extends NoMarkupLabel {
 	public void clear() {
 		super.clear();
 		cache.clear();
-		runIndexDirty = true; // 文本没了，缓存的下标不能再用来查
+		// 文本没了，缓存整个丢掉：下次真被查询时再按需分配
+		hitDirty = true;
+		hit = null;
 	}
 
 	//region 文本染色
@@ -244,7 +246,7 @@ public class InlineLabel extends NoMarkupLabel {
 		layout.setText(font, text, 0, text.length(), Color.white, textWidth, lineAlign, wrap, ellipsis);
 
 		splitAndColorize(layout.runs, colorMap, text);
-		runIndexDirty = true; // runs 刚被重排，缓存的下标作废
+		hitDirty = true; // runs 刚被重排，缓存的下标作废
 		cache.setText(layout, x, y);
 		// Pools.freeAll(layout.runs);
 
@@ -266,73 +268,84 @@ public class InlineLabel extends NoMarkupLabel {
 
 	//region 命中测试缓存
 	/**
-	 * 与 {@code layout.runs} 一一对应的起始字符下标，空 run 为 -1。
-	 * <p>{@link #getCursor}（鼠标事件）和 {@link #getRect}（{@code draw()} 里每帧，只要在悬停）
-	 * 都要把 run 对齐到文本下标。逐 run 用 {@code text.charAt} 扫一遍的代价是 O(字符数)，
-	 * 而后者每帧都跑；缓存一份之后两边都变成一次数组读取。
+	 * {@link #getCursor}（鼠标事件）和 {@link #getRect}（{@code draw()} 里每帧，只要在悬停）都要把
+	 * run 对齐到文本下标。逐 run 用 {@code text.charAt} 扫一遍是 O(字符数)，而后者每帧都跑；
+	 * 缓存一份之后两边都变成一次数组读取，{@code getRect} 还能直接跳到选区所在的 run。
+	 * <p>做成独立对象是为了**按需分配**：代码视图里成千上万个 label，绝大多数从没被悬停过，
+	 * 而一个默认容量的 {@link IntSeq} 就要 104 字节。
 	 */
-	private final IntSeq runStart = new IntSeq();
-	/** {@link #runStart} 需要重建：{@link #layout()} 会重排 runs，{@link #clear()} 会清空文本 */
-	private       boolean runIndexDirty = true;
-	/** 缓存 {@code style.font.getLineHeight()}，它在一次布局内不变 */
-	private       float   cachedLineHeight;
-	/** 文字包围盒（相对 labelX/labelY），鼠标完全不在文字上时一次比较就能退出 */
-	private       float   relMinX, relMaxX, relMinY, relMaxY;
-	/** 上一次 {@link #getCursor} 的入参与结果：一次 mouseMoved 里两个监听器会用同一组坐标各问一次 */
-	private       float   lastCursorX = Float.NaN, lastCursorY = Float.NaN;
-	private       int     lastCursor  = UNSET_I;
+	private static class HitCache {
+		/** 与 {@code layout.runs} 一一对应的起始字符下标，空 run 为 -1 */
+		final IntSeq runStart = new IntSeq();
+		/** 缓存 {@code style.font.getLineHeight()}，它在一次布局内不变 */
+		float lineH;
+		/** 文字包围盒（相对 labelX/labelY），鼠标完全不在文字上时一次比较就能退出 */
+		float relMinX, relMaxX, relMinY, relMaxY;
+		/** 上一次的结果：一次 mouseMoved 里两个监听器会用同一组坐标各问一次 */
+		float lastX = Float.NaN, lastY;
+		int   lastCursor = UNSET_I;
+	}
 
-	private void ensureRunIndex() {
+	/** null = 这个 label 从没被查询过，此时不占任何缓存内存 */
+	private HitCache hit;
+	/** {@link #hit} 需要重建：{@link #layout()} 会重排 runs，{@link #clear()} 会清空文本 */
+	private boolean  hitDirty = true;
+
+	private HitCache hitCache() {
+		HitCache h = hit;
+		if (h == null) hit = h = new HitCache();
+
 		Seq<GlyphRun> runs = layout.runs;
 		// size 校验：getPrefWidth/Height 失效重算时会重新 layout.setText 覆盖 runs
 		//（那时还没做染色拆分），数量可能和缓存对不上
-		if (!runIndexDirty && runStart.size == runs.size) return;
-		runIndexDirty = false;
-		lastCursorX = Float.NaN;
+		if (!hitDirty && h.runStart.size == runs.size) return h;
+		hitDirty = false;
+		h.lastX = Float.NaN;
 
-		cachedLineHeight = style.font.getLineHeight();
-		runStart.clear();
-		relMinX = relMinY = Float.MAX_VALUE;
-		relMaxX = relMaxY = -Float.MAX_VALUE;
+		h.lineH = style.font.getLineHeight();
+		h.runStart.clear();
+		h.relMinX = h.relMinY = Float.MAX_VALUE;
+		h.relMaxX = h.relMaxY = -Float.MAX_VALUE;
 
 		int index = 0, len = text.length();
 		for (int r = 0; r < runs.size; r++) {
 			GlyphRun run = runs.get(r);
 			if (run.glyphs.isEmpty()) {
-				runStart.add(-1);
+				h.runStart.add(-1);
 				continue;
 			}
 			char first = (char) run.glyphs.first().id;
 			while (index < len && first != text.charAt(index)) index++; // 弥补offset
-			runStart.add(index);
+			h.runStart.add(index);
 			index += run.glyphs.size;
 
 			// 包围盒：左边要算上 xAdvances.first()（kerning 可能为负），右边用 run.width
-			relMinX = Math.min(relMinX, run.x + Math.min(0, run.xAdvances.first()));
-			relMaxX = Math.max(relMaxX, run.x + run.width);
-			relMinY = Math.min(relMinY, run.y - cachedLineHeight);
-			relMaxY = Math.max(relMaxY, run.y);
+			h.relMinX = Math.min(h.relMinX, run.x + Math.min(0, run.xAdvances.first()));
+			h.relMaxX = Math.max(h.relMaxX, run.x + run.width);
+			h.relMinY = Math.min(h.relMinY, run.y - h.lineH);
+			h.relMaxY = Math.max(h.relMaxY, run.y);
 		}
+		return h;
 	}
 	//endregion
 
 	/** 获取(x, y)对应的index */
 	public int getCursor(float x, float y) {
-		ensureRunIndex();
-		if (x == lastCursorX && y == lastCursorY) return lastCursor;
-		lastCursorX = x;
-		lastCursorY = y;
-		return lastCursor = computeCursor(x, y);
+		HitCache h = hitCache();
+		if (x == h.lastX && y == h.lastY) return h.lastCursor;
+		h.lastX = x;
+		h.lastY = y;
+		return h.lastCursor = computeCursor(h, x, y);
 	}
 
-	private int computeCursor(float x, float y) {
+	private int computeCursor(HitCache h, float x, float y) {
 		// 鼠标不在文字包围盒里：一次比较就退出（点在标签留白上是很常见的情况）
-		if (x < labelX + relMinX || x >= labelX + relMaxX
-		    || y <= labelY + relMinY || y > labelY + relMaxY) return UNSET_I;
+		if (x < labelX + h.relMinX || x >= labelX + h.relMaxX
+		    || y <= labelY + h.relMinY || y > labelY + h.relMaxY) return UNSET_I;
 
 		Seq<GlyphRun> runs = layout.runs;
 		for (int r = 0, n = runs.size; r < n; r++) {
-			int start = runStart.get(r);
+			int start = h.runStart.get(r);
 			if (start < 0) continue; // 空 run，否则 glyphs.first() 越界
 			GlyphRun run = runs.get(r);
 
@@ -343,7 +356,7 @@ public class InlineLabel extends NoMarkupLabel {
 			float currentY = labelY + run.y;
 			float runX     = labelX + run.x;
 			// hit-test 终点用 run.x + run.width（不含 xAdvances.first()，与 libGDX 一致）
-			if (y > currentY || y <= currentY - cachedLineHeight || x >= runX + run.width) continue;
+			if (y > currentY || y <= currentY - h.lineH || x >= runX + run.width) continue;
 
 			FloatSeq xAdvances = run.xAdvances;
 			// xAdvances[0] 是第一个字形相对 run.x 的初始偏移（kerning/对齐）。
@@ -364,17 +377,17 @@ public class InlineLabel extends NoMarkupLabel {
 
 	/** 遍历指定index区域 */
 	public void getRect(Point2 region, Cons<Rect> callback) {
-		ensureRunIndex();
-		float   lineHeight = cachedLineHeight;
-		float   currentX   = 0, currentY = 0;
-		float   startX     = 0, endX = 0;
-		boolean startFound = false;
+		HitCache h         = hitCache();
+		float    lineHeight = h.lineH;
+		float    currentX   = 0, currentY = 0;
+		float    startX     = 0, endX = 0;
+		boolean  startFound = false;
 
 		int lineStart = 0;
 
 		Seq<GlyphRun> runs = layout.runs;
 		for (int r = 0, n = runs.size; r < n; r++) {
-			int start = runStart.get(r);
+			int start = h.runStart.get(r);
 			if (start < 0) continue;
 			GlyphRun run = runs.get(r);
 			// 整个 run 都在选区之前：直接用缓存的下标跳过，不必扫 text
@@ -467,8 +480,8 @@ public class InlineLabel extends NoMarkupLabel {
 	}
 	public final ObjectMap<Prov<Point2>, Runnable> clicks = new ObjectMap<>();
 	public final ObjectMap<Prov<Point2>, Runnable> hovers = new ObjectMap<>();
-	/** {@link #clicks} 命中的回调：遍历完再执行，因为回调里可能重新注册区域 */
-	private final Seq<Runnable> pendingRuns = new Seq<>();
+	/** {@link #clicks} 命中的回调：遍历完再执行，因为回调里可能重新注册区域。按需分配，通常 0~1 个 */
+	private Seq<Runnable> pendingRuns;
 
 	/** 给指定区域添加点击事件 */
 	public void clickedRegion(Prov<Point2> point2Prov, Runnable runnable) {
@@ -510,6 +523,7 @@ public class InlineLabel extends NoMarkupLabel {
 				int cursor = getCursor(x, y);
 				// 先收集再执行：回调里可能会 clearMouseEvents() 后重新注册区域，
 				// 边遍历 ObjectMap 边改它，行为不可靠
+				if (pendingRuns == null) pendingRuns = new Seq<>();
 				pendingRuns.clear();
 				for (var entry : clicks) {
 					Point2 point2 = entry.key.get();

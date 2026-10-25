@@ -4,13 +4,17 @@ import arc.func.Boolf;
 import arc.scene.Element;
 import arc.scene.ui.layout.*;
 import arc.struct.Seq;
+import modtools.ui.comp.limit.LimitTable;
 
 /**
  * 前台显示「模板里被过滤条件保留的元素」，模板只负责槽位结构。
  * <p>模板与本表共用同一批元素，一个元素只能挂在一个父节点上，所以「谁该出现在哪个槽位」
  * 必须由本表自己记（{@link #order} / {@link #names}），不能回头读模板的 cell。
+ * <p>继承 {@link LimitTable} 而不是 {@link Table}：它给 {@code act} 套了 try/catch
+ * （每帧回调抛出去会顺着 {@code Group.act} 一路炸到主循环），还带上视口裁剪用的
+ * {@code updateVisibility}。
  */
-public class TemplateTable<R> extends Table {
+public class TemplateTable<R> extends LimitTable {
 	/**
 	 * 只存「槽位定义」：每个 cell 的 pad / size / fill / colspan / endRow。
 	 * <p>元素被搬进本表时，{@code Table.removeChild} 会把对应 cell 的 element 置空
@@ -69,16 +73,21 @@ public class TemplateTable<R> extends Table {
 
 		super.update(rebuild = () -> {
 			if (outerUpdater != null) outerUpdater.run();
+			// noFilter 打开时 internalFilter 第一项就短路，validator 根本不会被调用，
+			// Condition 的 last 于是追不上 → needUpdate() 恒真。不排除掉就是每帧空跑一遍 O(N)。
 			boolean re = evalDirty || noFilter != lastNoFilter
-			             || (validator instanceof FilterTable.Condition<?> c && c.needUpdate());
+			             || (!noFilter && validator instanceof FilterTable.Condition<?> c && c.needUpdate());
 			// if (!needFilter()) return;
 			if (!re) return;
 			evalDirty = false;
 			lastNoFilter = noFilter;
-			// 只在可见集合真的翻转时才置脏。这一步顺带把 Condition 的 last 追平，
-			// 免得 needUpdate() 卡在 true 上（见 built 的注释）。
-			// validator 抛异常时 evalDirty 停在 false：持续故障下每帧重试等于每帧抛一次，
-			// 恢复交给调用方的 updateNow()（改输入时本来就会调），界面则停在上一版结果上。
+			// 只在可见集合真的翻转时才置脏。noFilter 从开变关的那一帧会走一次完整求值，
+			// Condition 的 last 在那里追平（见 built 的注释）。
+			// validator 抛异常时 built 保持上一版、dirty 也不置位，界面停在上一版结果上；
+			// 异常由 LimitTable.act 的 try/catch 记一笔，不会炸主循环。
+			// 之后会不会重试由 Condition 自己决定：PatternBoolf.valid 先 last = provider.get()
+			// 再求值，provider 抛时 last 不推进 → needUpdate 恒真 → 每帧重试；求值抛时
+			// last 已推进 → 不再重试。非 Condition 的 validator 只能靠调用方的 updateNow()。
 			if (syncVisible()) dirty = true;
 		});
 		act(0);
@@ -88,9 +97,23 @@ public class TemplateTable<R> extends Table {
 	private boolean syncVisible() {
 		int n = order.size;
 
-		// 阶段一：只求值，不碰 built（validator 可能抛异常，见 pending 的注释）
+		// 阶段一：只求值，不碰 built（validator 可能抛异常，见 pending 的注释）。
+		// 相邻同名共用一次求值：bind 之后连续 add 的几个元素是同一个名字，逐个求值会让
+		// PatternBoolf 这类 validator 多做 K−1 次匹配。只做 == 比较、不做哈希 ——
+		// 名字的类型可能是 OrderedSet，哈希它是 O(元素数)。
+		R       prev    = null;
+		boolean prevNow = false, hasPrev = false;
 		for (int i = 0; i < n; i++) {
-			boolean now = matches(names.get(i));
+			R nm = names.get(i);
+			boolean now;
+			if (hasPrev && nm == prev) {
+				now = prevNow;
+			} else {
+				now = matches(nm);
+				prev = nm;
+				prevNow = now;
+				hasPrev = true;
+			}
 			if (i < pending.size) pending.set(i, now);
 			else pending.add(now);
 		}
@@ -159,27 +182,14 @@ public class TemplateTable<R> extends Table {
 			// 添加可见元素
 			Cell<?> newCell = super.add(el);
 
-			// 越界安全检查：防止可见元素数量超过模板总槽位数
-			if (slotIndex < cells.size) {
-				// 获取当前槽位的原始配置
-				Cell<?> slotCell = cells.get(slotIndex);
-
-				// 复制当前槽位的排版约束（pad, size, fill等），实现无缝紧凑补位
-				newCell.set(slotCell);
-
-				// 如果当前槽位原本是行末，则换行！
-				if (slotCell.isEndRow()) {
-					super.row();
-				}
-				slotIndex++;
-			} else if (i < cells.size) {
-				// 超出槽位数时的保底：使用自身样式
-				Cell<?> own = cells.get(i);
-				newCell.set(own);
-				if (own.isEndRow()) {
-					super.row();
-				}
-			}
+			// 槽位一定够：每次 add 都会给模板添一个 cell，所以
+			// cells.size >= order.size >= 可见元素数
+			Cell<?> slotCell = cells.get(slotIndex);
+			// 复制当前槽位的排版约束（pad, size, fill等），实现无缝紧凑补位
+			newCell.set(slotCell);
+			// 如果当前槽位原本是行末，则换行
+			if (slotCell.isEndRow()) super.row();
+			slotIndex++;
 		}
 		layout();
 		invalidateHierarchy();
@@ -261,6 +271,11 @@ public class TemplateTable<R> extends Table {
 		dirty = true;
 		template.row();
 	}
+	/**
+	 * 结构上有没有条目。
+	 * <p>过滤掉全部可见元素**不算**空 —— 与 {@code FilterTable.isEmpty()} 同义（那里判的是
+	 * 「组有没有被 removeCells 摘掉」，filter 不改它）。唯一调用方是 {@code WatchWindow.showIfOk()}。
+	 */
 	public boolean isEmpty() {
 		return order.size == 0;
 	}

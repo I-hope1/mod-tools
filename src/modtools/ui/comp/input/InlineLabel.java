@@ -252,7 +252,11 @@ public class InlineLabel extends NoMarkupLabel {
 
 		if (fontScaleChanged) font.getData().setScale(oldScaleX, oldScaleY);
 	}
-	public final IntMap<Color> colorMap = new IntMap<>() {
+	/**
+	 * 颜色分段。初始容量给小：默认容量 51（表长 64）要 616 字节，而绝大多数标签只有几种颜色。
+	 * 表只增不减，所以高水位由真实用量决定，不会因为起始小就反复扩容。
+	 */
+	public final IntMap<Color> colorMap = new IntMap<>(4) {
 		public Color put(int key, Color value) {
 			if (value == null) throw new NullPointerException("value is null");
 			return super.put(key, value);
@@ -478,8 +482,10 @@ public class InlineLabel extends NoMarkupLabel {
 		clicks.clear();
 		hovers.clear();
 	}
-	public final ObjectMap<Prov<Point2>, Runnable> clicks = new ObjectMap<>();
-	public final ObjectMap<Prov<Point2>, Runnable> hovers = new ObjectMap<>();
+	/** 可点击区域。初始容量给小：默认容量 51 要 608 字节，而一个标签通常只注册 1~3 个区域 */
+	public final ObjectMap<Prov<Point2>, Runnable> clicks = new ObjectMap<>(4);
+	/** 悬停区域，同上 */
+	public final ObjectMap<Prov<Point2>, Runnable> hovers = new ObjectMap<>(4);
 	/** {@link #clicks} 命中的回调：遍历完再执行，因为回调里可能重新注册区域。按需分配，通常 0~1 个 */
 	private Seq<Runnable> pendingRuns;
 

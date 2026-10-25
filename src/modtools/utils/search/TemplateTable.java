@@ -50,6 +50,13 @@ public class TemplateTable<R> extends Table {
 	 * 直接拿 {@code re} 当重建信号会让重建每帧都跑。
 	 */
 	private final Seq<Boolean> built = new Seq<>();
+	/**
+	 * {@link #syncVisible()} 的暂存区：一整轮先算到这里，再一次性提交给 {@link #built}。
+	 * <p>分两阶段是因为 {@code validator} 是调用方的代码，可能抛异常（比如用户输入的正则编不过）。
+	 * 边算边写 {@link #built} 的话，抛出去时前半截已经落地，下一轮这些槽位会被判成「本来就该这样」，
+	 * 那次没能渲染出去的翻转就永久丢了——界面会一直少几行，且再也补不回来。
+	 */
+	private final Seq<Boolean> pending = new Seq<>();
 	/** {@link #bind} 设的当前名字，{@link #add} 时记进 {@link #names} */
 	private       R            currentName;
 
@@ -70,6 +77,8 @@ public class TemplateTable<R> extends Table {
 			lastNoFilter = noFilter;
 			// 只在可见集合真的翻转时才置脏。这一步顺带把 Condition 的 last 追平，
 			// 免得 needUpdate() 卡在 true 上（见 built 的注释）。
+			// validator 抛异常时 evalDirty 停在 false：持续故障下每帧重试等于每帧抛一次，
+			// 恢复交给调用方的 updateNow()（改输入时本来就会调），界面则停在上一版结果上。
 			if (syncVisible()) dirty = true;
 		});
 		act(0);
@@ -77,9 +86,20 @@ public class TemplateTable<R> extends Table {
 
 	/** 按当前条件重算每个槽位的可见性；返回可见集合是否真的变了 */
 	private boolean syncVisible() {
-		boolean changed = false;
-		for (int i = 0; i < order.size; i++) {
+		int n = order.size;
+
+		// 阶段一：只求值，不碰 built（validator 可能抛异常，见 pending 的注释）
+		for (int i = 0; i < n; i++) {
 			boolean now = matches(names.get(i));
+			if (i < pending.size) pending.set(i, now);
+			else pending.add(now);
+		}
+		pending.truncate(n);
+
+		// 阶段二：纯字段写入，不会抛，可以放心提交
+		boolean changed = false;
+		for (int i = 0; i < n; i++) {
+			boolean now = pending.get(i);
 			if (i < built.size) {
 				if (built.get(i) != now) {
 					built.set(i, now);
@@ -126,6 +146,9 @@ public class TemplateTable<R> extends Table {
 		template.getChildren().clear();
 		var cells = template.getCells();
 		for (int i = 0; i < cells.size; i++) cells.get(i).clearElement();
+		// 清 element 不会让 Table 的尺寸失效（Cell.setElement 只做 element.remove()），
+		// 模板的 tablePrefWidth 会停在清空前的值；getPrefWidth() 里取大时整张表就再也缩不回去。
+		template.invalidate();
 
 		int slotIndex = 0; // 当前前台填充到的“槽位”下标
 
@@ -199,11 +222,20 @@ public class TemplateTable<R> extends Table {
 
 	@Override
 	public void clear() {
+		// 与 act() 里的清空同构：先解绑父指针，让 Table.clearChildren 里逐个 actor.remove()
+		// 短路成 O(1)（Element.remove 是 `parent != null && ...`，Element.java:200），
+		// 否则这里是 O(K²)。收尾动作不会少：Table.clearChildren 末尾一定调
+		// Group.clearChildren（Table.java:629），unfocus / setScene(null) 都在那里。
+		detachAll(this);
 		super.clear();
+
+		detachAll(template);
 		template.clear();
+
 		order.clear();
 		names.clear();
 		built.clear();
+		pending.clear();
 		currentName = null;
 		dirty = true;
 	}

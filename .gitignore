@@ -184,6 +184,8 @@ magic-accessor/magic-js/*poly_disasm.txt
 /_libs/Override.jar
 /_libs/incremental.annotation.processors
 scratch/layoutprobe/layout-agent.jar
+# 嵌套的独立仓库，直接 add 会变成 gitlink
+/scratch/android-bridge/
 
 ## 本地草稿与备份（不进版本库）
 /z_backfile/

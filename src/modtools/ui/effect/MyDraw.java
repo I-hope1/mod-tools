@@ -60,11 +60,14 @@ public class MyDraw {
 
 	// static ObjectMap<String, Seq<Runnable>> draws = new ObjectMap<>();
 	public static void blurRect(float x, float y, float w, float h) {
-		if (!isBlurEnable()) return;
+		blurRect(x, y, w, h, Draw.getColor().a);
+	}
+	public static void blurRect(float x, float y, float w, float h, float alpha) {
+		if (!isBlurEnable() || w <= 0f || h <= 0f || alpha <= 0f) return;
 		// draws.get("blur", Seq::new).add(draw);
 		EBBlur blur1 = blur.get();
 		blur1.resize(w, h);
-		blur1.capture(x, y, w, h);
+		blur1.capture(x, y, w, h, alpha);
 		blur1.render();
 		Draw.flush();
 	}
@@ -180,7 +183,7 @@ public class MyDraw {
 	public interface DrawEffect {
 		void resize(float width, float height);
 
-		void capture(float x, float y, float w, float h);
+		void capture(float x, float y, float w, float h, float alpha);
 
 		void render();
 	}

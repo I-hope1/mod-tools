@@ -631,7 +631,8 @@ public final class TopGroup extends WidgetGroup implements Disposable {
 		}
 
 		public void draw() {
-			MyDraw.blurRect(x, y, width, height);
+			Vec2 stagePos = localToStageCoordinates(Tmp.v1.set(0, 0));
+			MyDraw.blurRect(stagePos.x, stagePos.y, width, height, parentAlpha * color.a);
 			drawBack();
 			Tools.runLoggedException(super::draw);
 		}

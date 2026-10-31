@@ -22,10 +22,16 @@ public class LanguageSwitcher {
 		Locale.setDefault(locale);
 		I18NBundle newBundle = I18NBundle.createBundle(handle, locale);
 		addKeyToBundle(newBundle);
-		for (var k : origin.getKeys()) {
+		// 解析 bundle 是 IO，留在调用线程；但「改写存量 String」必须和逐帧读文本的渲染线程串行，
+		// 所以只有这一段挪到主线程（调用方普遍是 async 出来的后台线程）。
+		if (Core.app.isOnMainThread()) copyContent(newBundle);
+		else Core.app.post(() -> copyContent(newBundle));
+		// Core.bundle = newBundle;
+	}
+	private static void copyContent(I18NBundle newBundle) {
+		for (String k : origin.getKeys()) {
 			StringUtils.copyByte(origin.get(k), newBundle.get(k));
 		}
-		// Core.bundle = newBundle;
 	}
 	private static void addKeyToBundle(I18NBundle bundle) {
 		//add new keys to each bundle

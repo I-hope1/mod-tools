@@ -149,10 +149,23 @@ public class Constants {
 		Method loadMod = method(Mods.class, "loadMod", Fi.class, boolean.class, boolean.class);
 	}
 	public interface STRING {
-		/** @see String#value */
-		long VALUE = fieldOffset(String.class, "value");
-		/** @see String#coder */
-		long CODER = fieldOffset(String.class, "coder");
+		/**
+		 * 取不到时是 -1。桌面 JDK 8 的 value 是 {@code char[]}（没有 coder）；
+		 * Android 8.0+ 把字符<b>内联</b>进 String 对象，Java 层根本没有 value 字段。
+		 * @see String#value
+		 */
+		long VALUE = fieldOffset(String.class, "value", -1);
+		/** 桌面专有（JDK 9+）。Android 的 coder 是个方法 {@code byte coder()}，不是字段。 @see String#coder */
+		long CODER = fieldOffset(String.class, "coder", -1);
+		/**
+		 * Android 专有：{@code (length << 1) | 压缩标志}。桌面 JDK 9+ 已没有这个字段。
+		 * @see String#length
+		 */
+		long COUNT = fieldOffset(String.class, "count", -1);
+		/** hashCode 缓存，JDK 8 起存在。 @see String#hash */
+		long HASH = fieldOffset(String.class, "hash", -1);
+		/** 与 {@link #HASH} 配对的「算出 0 也算过」标记，桌面 JDK 13 起才有。 @see String#hashIsZero */
+		long HASH_IS_ZERO = fieldOffset(String.class, "hashIsZero", -1);
 	}
 	public interface CURL {
 		/** @see URL#host */

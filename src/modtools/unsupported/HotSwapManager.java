@@ -75,6 +75,11 @@ public class HotSwapManager {
 	/**
 	 * 挂 dispatcher 与 arc 插件。
 	 *
+	 * <p>plugin-arc 正常情况下由 core 的插件加载器按 {@code -Dremold.plugin.jars}
+	 * 追加并注册（清单 {@code Remold-Plugin-Class} + {@code META-INF/services}），
+	 * {@link RemoldAgent#registerPlugin} 按类去重，这里再注册一次只是兜底：
+	 * 覆盖「插件类被别人挂到了 classpath、但没有走过 core 的注册流程」的情形。
+	 *
 	 * <p>plugin-arc 缺失时（第三方 {@code -javaagent} 只带 core）只保留 core 能力：
 	 * {@code ArcHotswapPlugin} 属于 plugin-arc，直接 new 会以 NoClassDefFoundError
 	 * 打断整个 {@link #start()}，连带后面的 libtool 初始化也跑不到。

@@ -15,10 +15,6 @@ group 'com.github.I-hope1.' + modName
 ext {
 	sdkRoot = System.getenv("ANDROID_HOME") ?: "/opt/android-sdk-linux"
 	compilerJar = "$rootDir/_libs/compiler.jar"
-	// 本地复合构建会把 remold 依赖替换成 project(':core')，此时 classifier 会被一并带过去
-	// 而找不到 core-all.jar；反过来 JitPack 上 core 的 pom 是 packaging=pom，只有 shadow
-	// 产物才有 jar。所以「用不用 :all」必须跟着有没有复合构建走。
-	compositeRemold = file('../nipx-hotswap').exists() || file('../Remold').exists()
 }
 def archivesName = base.archivesName.get()
 def platformRoot = new File("$sdkRoot/platforms/").listFiles().sort().reverse().find { f -> new File(f, "android.jar").exists() }
@@ -153,12 +149,12 @@ dependencies {
 	compileOnly project(":annotations")
 	annotationProcessor project(":compiler")
 	compileOnly "io.github.i-hope1.remold:api:$remoldVersion"
-	compileOnly "io.github.i-hope1.remold:core:$remoldVersion" + (compositeRemold ? "" : ":all")
+	compileOnly "io.github.i-hope1.remold:core:$remoldVersion"
 	compileOnly "io.github.i-hope1.remold:plugin-arc:$remoldVersion"
 	compileOnly "io.github.i-hope1.remold:panama:$remoldVersion"
 	compileOnly project(":utils-agent")
 
-	remoldAgentLib "io.github.i-hope1.remold:core:$remoldVersion" + (compositeRemold ? "" : ":all")
+	remoldAgentLib "io.github.i-hope1.remold:core:$remoldVersion"
 	remoldPluginArcLib "io.github.i-hope1.remold:plugin-arc:$remoldVersion"
 	remoldAsmLib "org.ow2.asm:asm:9.11"
 	remoldAsmLib "org.ow2.asm:asm-commons:9.11"
@@ -274,32 +270,33 @@ task jarAndroid(type: JavaExec) {
 }
 
 /*
- * remold 的 agent 必须是一个自包含的 jar：
- * 1) HotSwapManager.getAgentPath() 只认 libs/remold-agent.jar；
- * 2) agent jar 由 system classloader 加载，拆成多个 jar 时 plugin-arc 里的
- *    remold/arc、remold/ref、remold/profiler 在 agent 侧不可见（NoClassDefFoundError）。
- * core 与 plugin-arc 的类不重叠，直接合并即可；清单里的 Agent-Class 显式写死。
+ * remold 的三个 jar 按上游原样分发，不再合成一个「自包含」agent jar。
+ *
+ * 1) remold-agent.jar = core 的 shadow 产物：ASM 已重定位到 remold.internal.asm，
+ *    清单里的 Agent-Class 由 core 自己声明，直接拷文件即可。
+ * 2) remold-plugin-arc.jar = plugin-arc 原样：清单里的 Remold-Plugin-Class /
+ *    Remold-Plugin-Name 是它的插件描述，META-INF/services/remold.HotswapPlugin 是
+ *    第二条发现路径。core 在 initConfig 里读 -Dremold.plugin.jars，把每个 jar
+ *    appendToSystemClassLoaderSearch 之后再实例化注册 —— 插件是「加载」出来的，
+ *    不是「链接」出来的。
+ * 3) remold-asm.jar = 未重定位的 ASM。plugin-arc 把 ASM 声明成 compileOnly
+ *    （正常部署由宿主应用的 classpath 提供），Mindustry 里没有这份 classpath，
+ *    所以单独打一份，和 plugin-arc 一起交给 remold.plugin.jars。
+ *
+ * 把 2/3 塞进 1 会覆盖 agent 的清单（Agent-Class 得手写）、丢掉插件的
+ * Remold-Plugin-Class 描述，agent jar 也不再等于上游产物；raw ASM 还会跟着 agent
+ * 一起落到 system classloader 上，和宿主已有的 ASM 撞版本。
  */
-def remoldAgentJar = tasks.register("remoldAgentJar", Jar) {
-	archiveFileName = "remold-agent.jar"
+def remoldAsmJar = tasks.register("remoldAsmJar", Jar) {
+	archiveFileName = "remold-asm.jar"
 	destinationDirectory = layout.buildDirectory.dir("remold")
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-	dependsOn configurations.remoldAgentLib, configurations.remoldPluginArcLib, configurations.remoldAsmLib
+	dependsOn configurations.remoldAsmLib
 	// zipTree 会让 Gradle 丢失产物间的任务依赖，所以上面显式 dependsOn
-	from({ configurations.remoldAgentLib.collect { zipTree(it) } })
-	from({ configurations.remoldPluginArcLib.collect { zipTree(it) } })
 	from({ configurations.remoldAsmLib.collect { zipTree(it) } })
 	exclude "META-INF/MANIFEST.MF"
 	exclude "META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA"
 	exclude "**/module-info.class"
-	manifest {
-		attributes(
-				"Agent-Class"            : "remold.RemoldAgent",
-				"Premain-Class"          : "remold.RemoldAgent",
-				"Can-Retransform-Classes": "true",
-				"Can-Redefine-Classes"   : "true"
-		)
-	}
 }
 
 jar {
@@ -322,7 +319,17 @@ jar {
 	}
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 	includeLib.accept("utils-agent")
-	from(remoldAgentJar) { into "libs" }
+	// 拷贝而不是 zipTree 重打包：三个 jar 的清单各自带信息（Agent-Class /
+	// Remold-Plugin-Class），重新打包会把它们覆盖掉
+	from(configurations.remoldAgentLib) {
+		into "libs"
+		rename { String name -> "remold-agent.jar" }
+	}
+	from(configurations.remoldPluginArcLib) {
+		into "libs"
+		rename { String name -> "remold-plugin-arc.jar" }
+	}
+	from(remoldAsmJar) { into "libs" }
 	from(configurations.remoldPanamaLib) {
 		into "libs"
 		rename { String name -> "remold-panama.jar" }

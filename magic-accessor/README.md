@@ -186,6 +186,6 @@ public class Main {
 
 ## 子模块导航
 
-* [**`magic-js`**](file:///E:/Users/ASUS/Desktop/Mods/mod-tools136/magic-accessor/magic-js/README.md)：专为高性能 JVM 打造的高性能现代 JavaScript 运行时引擎（ASM 动态编译、indy 多态内联缓存、隐藏类体系与工业级浮点转换支持）。
+* [**`magic-js`**](https://github.com/I-hope1/magic-js)：专为高性能 JVM 打造的高性能现代 JavaScript 运行时引擎（ASM 动态编译、indy 多态内联缓存、隐藏类体系与工业级浮点转换支持）。
 
 

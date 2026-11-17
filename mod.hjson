@@ -36,7 +36,7 @@ Version 1.7.0
 	- Android: HiddenApi trimmed in favour of the bundled bypass.
 
 ## Dependencies
-	- ASM 9.11 (security advisories), Remold 0.1.2.
+	- ASM 9.11 (security advisories), Remold 0.2.8.
 
 -----------------
 WIKI: https://i-hope1.github.io/mod-tools

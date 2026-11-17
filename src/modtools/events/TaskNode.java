@@ -44,8 +44,16 @@ public class TaskNode {
 
 	public @Nullable TaskNode parent;
 
-	public Status          status;
+	private Status         status;
 	public MySet<TaskNode> children = new MySet<>();
+
+	public Status status() {
+		return status;
+	}
+	private void setStatus(Status status) {
+		this.status = status;
+		ExecuteTree.statusChanged();
+	}
 
 	float intervalSeconds = perTick;
 	public TaskNode intervalSeconds(float intervalSeconds) {
@@ -85,9 +93,10 @@ public class TaskNode {
 		this.run = run;
 		this.icon = icon;
 		this.source = source;
-		this.status = run == null ? NoTask.INSTANCE : new Paused();
+		setStatus(run == null ? NoTask.INSTANCE : new Paused());
 		task = run == null ? null : new MyTask(run, source);
 		ExecuteTree.all.add(this);
+		ExecuteTree.structureChanged();
 	}
 	public void apply() {
 		apply(false);
@@ -105,24 +114,29 @@ public class TaskNode {
 		IntVars.EXECUTOR.get().execute(newRun);
 	}
 	public boolean running() {
-		return task.isScheduled() || (task instanceof MyTask t && t.delegate != null);
+		return task != null && (task.isScheduled() || (task instanceof MyTask t && t.delegate != null));
 	}
 	public boolean editable() {
 		return editable;
 	}
 	public void clear() {
 		interrupt();
-		children.clear();
+		while (!children.isEmpty()) {
+			TaskNode child = children.first();
+			children.remove(child); // 先摘除，保证即使 parent 指针损坏也不会死循环
+			child.clear();
+		}
 		if (parent != null) parent.children.remove(this);
 		else ExecuteTree.roots.remove(this);
 		ExecuteTree.all.remove(this);
+		ExecuteTree.structureChanged();
 	}
 	public void interrupt() {
 		if (task != null) {
 			if (task instanceof MyTask t && t.delegate != null) {
 				t.delegate.stop();
 			} else task.cancel();
-			status = new Paused();
+			setStatus(new Paused());
 		}
 
 	}
@@ -141,16 +155,16 @@ public class TaskNode {
 		}
 		public void run() {
 			try {
-				if (status instanceof Paused paused) status = paused.run();
+				if (status() instanceof Paused paused) setStatus(paused.run());
 				run.run();
 				repeatCount--;
-				if (repeatCount == -1 && status instanceof Running running) {
-					status = running.finish();
+				if (repeatCount == -1 && status() instanceof Running running) {
+					setStatus(running.finish());
 				}
 			} catch (Throwable th) {
 				Error error = new Error(th);
 				error.print(source);
-				status = error;
+				setStatus(error);
 				cancel();
 			}
 		}

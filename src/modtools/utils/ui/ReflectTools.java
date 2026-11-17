@@ -298,6 +298,7 @@ public interface ReflectTools {
 	static Cell<TextButton> addCodedBtn(
 	 Table t, String text, int cols,
 	 Intc cons, Intp prov, IntTf<String> stringify, MarkedCode... seq) {
+		int[] last = {Integer.MIN_VALUE};
 		return t.button("", HopeStyles.flatt, null).with(tbtn -> {
 			tbtn.clicked(() -> IntUI.showSelectTable(tbtn, (p, _, _) -> {
 				buildModifier(p, cols, cons, prov, seq);
@@ -306,7 +307,12 @@ public interface ReflectTools {
 			fill.top().add(text, 0.6f).growX().labelAlign(Align.left).color(Color.lightGray);
 			tbtn.getCell(fill).colspan(0);
 			tbtn.getCells().reverse();
-		}).size(85, 32).update(b -> b.setText(stringify.get(prov.get())));
+		}).size(85, 32).update(b -> {
+			int value = prov.get();
+			if (value == last[0]) return;
+			last[0] = value;
+			b.setText(stringify.get(value));
+		});
 	}
 	static void buildModifier(Table p, int cols, Intc cons, Intp prov, MarkedCode... seq) {
 		p.button("All", HopeStyles.flatToggleMenut,

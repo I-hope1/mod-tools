@@ -18,6 +18,18 @@ public class ExecuteTree {
 	public static MySet<TaskNode> all   = new MySet<>();
 	public static MySet<TaskNode> roots = new MySet<>();
 
+	/** 任务树结构变化的版本号（节点新增/删除）；UI 只在版本变化时重建列表。
+	 * <p>版本号在主线程读写：Arc Timer 会把 Task post 回 {@code Core.app}，状态变更也在主线程。 */
+	public static int structureVersion;
+	/** 任一节点状态变化的版本号；UI 只在版本变化时重新应用状态过滤 */
+	public static int statusVersion;
+	public static void structureChanged() {
+		structureVersion++;
+	}
+	public static void statusChanged() {
+		statusVersion++;
+	}
+
 	public static TaskNode nodeRoot(Runnable task, String name, String source, Drawable icon, Runnable children) {
 		var root = node(task, name, source, icon, children);
 		root.name = name;

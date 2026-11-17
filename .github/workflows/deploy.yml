@@ -27,14 +27,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4.1.1
+    - uses: actions/checkout@v7
 
     - name: Set up PATH
       run: |
         echo "${ANDROID_HOME}/build-tools/30.0.1" >> $GITHUB_PATH
 
     - name: Set up JDK 25
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v6
       with:
         java-version: '25'
         distribution: temurin
@@ -56,7 +56,7 @@ jobs:
         unzip build/libs/${{ github.event.repository.name }}-deploy.jar -d build/unpacked
 
     - name: Upload unpacked jar contents
-      uses: actions/upload-artifact@v4.3.0
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ github.event.repository.name }}[${{ env.LATEST_VERSION }}]
         path: build/unpacked

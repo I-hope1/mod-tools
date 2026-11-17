@@ -19,3 +19,7 @@
 ## Build
 if you receive an exception when building the project, please flush the gradle.
 Some code of the project is dependent on JavaDoc. Don't remove the JavaDoc.
+
+
+## HotSwap
+See [Remold](https://github.com/I-hope1/Remold)

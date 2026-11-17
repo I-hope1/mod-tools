@@ -1,5 +1,3 @@
-[← 文档导航](../index.md)
-
 # 扩展与实验性设置
 
 > 入口：mod-tools 设置 → **Extensions** / 对应开关

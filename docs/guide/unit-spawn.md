@@ -1,10 +1,8 @@
-[← 文档导航](../index.md)
-
 # UnitSpawn：单位生成
 
 > 入口：mod-tools 菜单 → **UnitSpawn** · 平台：桌面端 / Android
 
-![UnitSpawn](../screenshots/unit_spawn.png)
+![UnitSpawn](/screenshots/unit_spawn.png)
 
 UnitSpawn 用来快速在指定位置生成单位：选队伍、选单位、填坐标和数量，也可以把这次生成配置提交成 Executor 任务，便于重复执行或定时批量生成。
 

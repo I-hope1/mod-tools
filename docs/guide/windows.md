@@ -1,5 +1,3 @@
-[← 文档导航](../index.md)
-
 # 窗口：Frag / Window / WindowManager
 
 > 入口：mod-tools 菜单 → 各工具窗口；**WindowManager** 单独一个内容

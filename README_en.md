@@ -17,16 +17,16 @@ English | [简体中文](README.md) · [Docs site](https://i-hope1.github.io/mod
 
 | Module | What it does | Docs |
 |:--|:--|:--|
-| **Tester** | In-game Rhino JS editor/executor: history, startup scripts, `$` shortcuts, completion and syntax highlighting | [Tester](docs/features/01-tester.md) |
-| **Executor** | Task-tree executor: run once, loop, interrupt, edit; custom JS tasks; status filters; startup-script and UnitSpawn integration | [Executor](docs/features/02-executor.md) |
-| **Selection** | Select `Tile` / `Building` / `Bullet` / `Unit` and run built-in commands on the selection | [Selection](docs/features/03-selection.md) |
-| **UnitSpawn** | Spawn units by team, position and amount; submit the spawn setup as an Executor task | [UnitSpawn](docs/features/04-unit-spawn.md) |
-| **ReviewElement** | Inspect the UI element tree, edit fields live, copy elements as JS variables, run layout checks and inspect Cells | [ReviewElement](docs/features/05-review-element.md) |
-| **ShowUIList / ShowInfoWindow** | Browse icons, textures, styles, colors, interps and actions; inspect any object and custom viewers | [UI tools](docs/features/06-ui-inspector.md) |
-| **Windows** | Frag, Window and WindowManager: switch, minimize, snap and force-show windows | [Windows](docs/features/07-windows.md) |
-| **ContentList / LogDisplay / Profiler / Pause** | Content browser, in-game logs, method probes/flame graph/deadlock checks and an experimental pause tool | [Other tools](docs/features/08-misc.md) |
-| **Extensions** | Override Scene and HTTP redirect | [Extensions](docs/features/09-extensions.md) |
-| **Hot reload** | Swap compiled classes into a running game on desktop JBR, powered by [Remold](https://github.com/I-hope1/Remold) | [Hot reload](docs/hotswap.md) |
+| **Tester** | In-game Rhino JS editor/executor: history, startup scripts, `$` shortcuts, completion and syntax highlighting | [Tester](docs/guide/tester.md) |
+| **Executor** | Task-tree executor: run once, loop, interrupt, edit; custom JS tasks; status filters; startup-script and UnitSpawn integration | [Executor](docs/guide/executor.md) |
+| **Selection** | Select `Tile` / `Building` / `Bullet` / `Unit` and run built-in commands on the selection | [Selection](docs/guide/selection.md) |
+| **UnitSpawn** | Spawn units by team, position and amount; submit the spawn setup as an Executor task | [UnitSpawn](docs/guide/unit-spawn.md) |
+| **ReviewElement** | Inspect the UI element tree, edit fields live, copy elements as JS variables, run layout checks and inspect Cells | [ReviewElement](docs/guide/review-element.md) |
+| **ShowUIList / ShowInfoWindow** | Browse icons, textures, styles, colors, interps and actions; inspect any object and custom viewers | [UI tools](docs/guide/ui-inspector.md) |
+| **Windows** | Frag, Window and WindowManager: switch, minimize, snap and force-show windows | [Windows](docs/guide/windows.md) |
+| **ContentList / LogDisplay / Profiler / Pause** | Content browser, in-game logs, method probes/flame graph/deadlock checks and an experimental pause tool | [Other tools](docs/guide/misc.md) |
+| **Extensions** | Override Scene and HTTP redirect | [Extensions](docs/guide/extensions.md) |
+| **Hot reload** | Swap compiled classes into a running game on desktop JBR, powered by [Remold](https://github.com/I-hope1/Remold) | [Hot reload](docs/guide/hotswap.md) |
 
 ## Installation
 
@@ -34,7 +34,7 @@ English | [简体中文](README.md) · [Docs site](https://i-hope1.github.io/mod
 2. Put it into Mindustry's `mods/` directory (the in-game mod page can open that folder).
 3. Restart the game, enable **mod-tools** and open the tools from the mod-tools menu.
 
-Requires **Mindustry v7** (`minGameVersion` 159.2). Desktop is fully supported; Android also works, but hot reload and a few desktop-only tools are unavailable. Hot reload additionally requires **JetBrains Runtime (JBR 17/21/25+)**, see [Hot reload](docs/hotswap.md).
+Requires **Mindustry v7** (`minGameVersion` 159.2). Desktop is fully supported; Android also works, but hot reload and a few desktop-only tools are unavailable. Hot reload additionally requires **JetBrains Runtime (JBR 17/21/25+)**, see [Hot reload](docs/guide/hotswap.md).
 
 ## Quick start
 
@@ -46,21 +46,21 @@ Log.info("Hello from mod-tools!");
 
 Press `Ctrl` + `Shift` + `Enter` to execute. To see how a button or label is built, press `Ctrl` + `Shift` + `C` to open **ReviewElement**, then `Ctrl` + `Alt` + `D` to show element bounds.
 
-The full documentation hub is [here](docs/index_en.md).
+The full documentation hub is [here](docs/index_en.md); the online book is at <https://i-hope1.github.io/mod-tools/guide/>.
 
 ## Documentation
 
 | Document | Contents |
 |:--|:--|
 | [Documentation index](docs/index_en.md) | Entry point for all topic pages |
-| [Tester](docs/features/01-tester.md) | JS editor, shortcuts, `$` API, startup scripts |
-| [Executor](docs/features/02-executor.md) | Task states, run/loop/interrupt, status filters, custom tasks |
-| [Selection](docs/features/03-selection.md) / [UnitSpawn](docs/features/04-unit-spawn.md) | Selector and unit spawning |
-| [ReviewElement](docs/features/05-review-element.md) | UI inspection, live field editing, layout checks |
-| [UI tools](docs/features/06-ui-inspector.md) / [Windows](docs/features/07-windows.md) | ShowUIList, ShowInfoWindow, Frag/Window |
-| [Other tools](docs/features/08-misc.md) / [Extensions](docs/features/09-extensions.md) | Content browser, logs, Profiler, Pause, Override Scene, etc. |
-| [Hot reload](docs/hotswap.md) | Remold setup and settings |
-| [Development](docs/development.md) | Repository layout, build, run and tests |
+| [Tester](docs/guide/tester.md) | JS editor, shortcuts, `$` API, startup scripts |
+| [Executor](docs/guide/executor.md) | Task states, run/loop/interrupt, status filters, custom tasks |
+| [Selection](docs/guide/selection.md) / [UnitSpawn](docs/guide/unit-spawn.md) | Selector and unit spawning |
+| [ReviewElement](docs/guide/review-element.md) | UI inspection, live field editing, layout checks |
+| [UI tools](docs/guide/ui-inspector.md) / [Windows](docs/guide/windows.md) | ShowUIList, ShowInfoWindow, Frag/Window |
+| [Other tools](docs/guide/misc.md) / [Extensions](docs/guide/extensions.md) | Content browser, logs, Profiler, Pause, Override Scene, etc. |
+| [Hot reload](docs/guide/hotswap.md) | Remold setup and settings |
+| [Development](docs/guide/development.md) | Repository layout, build, run and tests |
 
 > Topic pages are currently maintained in Chinese (matching the upstream docs); this English page and the English index cover the overview.
 
@@ -86,11 +86,11 @@ For local development, point `MdtDataDir` in `gradle.properties` at your Mindust
 ./gradlew playGameDirect    # launch with the already deployed jar
 ```
 
-Some code depends on JavaDoc (annotation processors read comments), so **do not remove JavaDoc**. More details in [Development](docs/development.md).
+Some code depends on JavaDoc (annotation processors read comments), so **do not remove JavaDoc**. More details in [Development](docs/guide/development.md).
 
 ## Hot reload
 
-Since 1.7, hot reload is provided by [Remold](https://github.com/I-hope1/Remold): `remold-agent.jar` is attached to the system classloader at startup and `remold-plugin-arc` hooks Arc UI hot-swap, texture/asset refresh and InitFix. On desktop, enable `hot_swap` and configure the watch paths; see [Hot reload](docs/hotswap.md).
+Since 1.7, hot reload is provided by [Remold](https://github.com/I-hope1/Remold): `remold-agent.jar` is attached to the system classloader at startup and `remold-plugin-arc` hooks Arc UI hot-swap, texture/asset refresh and InitFix. On desktop, enable `hot_swap` and configure the watch paths; see [Hot reload](docs/guide/hotswap.md).
 
 ## License
 

@@ -1,5 +1,3 @@
-[← 文档导航](../index.md)
-
 # Executor：任务执行器
 
 > 入口：mod-tools 菜单 → **Executor** · 平台：桌面端 / Android

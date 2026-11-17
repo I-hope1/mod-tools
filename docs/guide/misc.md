@@ -1,5 +1,3 @@
-[← 文档导航](../index.md)
-
 # 其他工具
 
 > 入口：mod-tools 菜单 → 对应工具
@@ -20,7 +18,7 @@
 
 ## Profiler（性能分析）
 
-> 仅桌面端；需要热重载 agent 已加载（见 [热重载](../hotswap.md)）。
+> 仅桌面端；需要热重载 agent 已加载（见 [热重载](/guide/hotswap)）。
 
 Profiler 提供：
 

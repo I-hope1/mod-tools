@@ -1,12 +1,10 @@
-[← 文档导航](../index.md)
-
 # UI 工具：ShowUIList / ShowInfoWindow
 
 > 入口：mod-tools 菜单 → **ShowUIList**；ShowInfoWindow 可从 ReviewElement 按 `i` 打开
 
 ## ShowUIList（UI 列表）
 
-![ShowUIList](../screenshots/UIList.png)
+![ShowUIList](/screenshots/UIList.png)
 
 ShowUIList 把游戏里注册的 UI 资源列成可搜索的标签页，用来找贴图名、样式、颜色和 action：
 
@@ -35,6 +33,6 @@ ShowInfoWindow 用表格/树展示任意 Java 对象的字段、方法、数组/
 
 把自定义 viewer 文件放到 `%MindustryData%/mod_tools/` 下即可被加载；格式见仓库中的 viewer 示例与注释。
 
-![Custom viewers](../screenshots/custom_viewers.png)
+![Custom viewers](/screenshots/custom_viewers.png)
 
 > ShowInfoWindow 也用于 ReviewElement 的 `i` 详情、Cell 详情等场景，是排查 UI 数据的主要窗口。

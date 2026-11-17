@@ -1,10 +1,8 @@
-[← 文档导航](../index.md)
-
 # Tester：游戏内 JS 编辑器
 
 > 入口：mod-tools 菜单 → **Tester** · 平台：桌面端 / Android（部分快捷键仅桌面端）
 
-![Tester](../screenshots/tester.png)
+![Tester](/screenshots/tester.png)
 
 Tester 用 Rhino 在游戏进程内执行 JavaScript，可以直接访问 Mindustry / Arc 的类和当前游戏状态，适合快速试 API、改 UI、写启动脚本。
 
@@ -50,6 +48,6 @@ Tester 用 Rhino 在游戏进程内执行 JavaScript，可以直接访问 Mindus
 - 收藏夹里长按代码可加入启动项；加入后会生成启动任务，显示在 Executor 的 **JS startup** 节点下。
 - 启动脚本添加后**不要改文件名**：启动项按文件名记录；改文件名会导致配置对不上。
 
-![startup](../screenshots/startup.png)
+![startup](/screenshots/startup.png)
 
-> 启动脚本和自定义任务都由 [Executor](02-executor.md) 调度，可以在那里查看状态、打断或删除。
+> 启动脚本和自定义任务都由 [Executor](/guide/executor) 调度，可以在那里查看状态、打断或删除。

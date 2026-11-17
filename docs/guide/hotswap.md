@@ -1,5 +1,3 @@
-[← 文档导航](index.md)
-
 # 热重载（HotSwap / Remold）
 
 > 平台：**仅桌面端**（Android 端不加载 agent） · 需要：**JetBrains Runtime (JBR 17/21/25+)** + `-XX:+AllowEnhancedClassRedefinition`

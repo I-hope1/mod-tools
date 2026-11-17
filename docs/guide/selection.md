@@ -1,10 +1,8 @@
-[← 文档导航](../index.md)
-
 # Selection：选择器
 
 > 入口：mod-tools 菜单 → **Selection** · 平台：桌面端 / Android
 
-![Selection](../screenshots/selection.png)
+![Selection](/screenshots/selection.png)
 
 选择器用来在游戏里框选目标，并对选中项批量执行内置命令；例如改地板、给建筑塞物品、给单位回血/上状态、批量清除。
 

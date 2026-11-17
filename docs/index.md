@@ -1,42 +1,59 @@
-[English](index_en.md) | 简体中文
+---
+layout: home
 
-# Mod Tools 文档导航
+hero:
+  name: Mod Tools
+  text: Mindustry v7 开发者工具箱
+  tagline: 游戏内 JS 编辑器、UI 审查器、内容浏览器、单位生成器、任务执行器，以及桌面端热重载。
+  image:
+    src: /assets/icon.png
+    alt: Mod Tools
+  actions:
+    - theme: brand
+      text: 开始阅读
+      link: /guide/
+    - theme: alt
+      text: GitHub
+      link: https://github.com/I-hope1/mod-tools
 
-> 面向 **Mindustry v7** 的开发工具集。这里只做导航；每个工具的具体用法见对应专题页。
+features:
+  - icon: 🧪
+    title: Tester
+    details: 游戏内 Rhino JS 编辑器与执行器，支持历史、启动脚本和 `$` 快捷 API。
+    link: /guide/tester
+    linkText: 阅读
+  - icon: 🧵
+    title: Executor
+    details: 任务树执行器：执行、循环、打断、状态过滤和自定义 JS 任务。
+    link: /guide/executor
+    linkText: 阅读
+  - icon: 🔍
+    title: ReviewElement
+    details: 审查 Arc UI 元素树，实时改字段，复制为 JS 变量，跑布局体检。
+    link: /guide/review-element
+    linkText: 阅读
+  - icon: 🧱
+    title: Selection & UnitSpawn
+    details: 框选地块/建筑/单位并执行命令，或按队伍和坐标批量生成单位。
+    link: /guide/selection
+    linkText: 阅读
+  - icon: 🧰
+    title: 更多工具
+    details: 内容浏览器、游戏内日志、性能分析、窗口管理和实验性暂停。
+    link: /guide/misc
+    linkText: 阅读
+  - icon: ⚡
+    title: HotSwap / Remold
+    details: 桌面端 JBR 下把编译产物热替换进游戏，由 Remold 提供。
+    link: /guide/hotswap
+    linkText: 阅读
+---
 
-如果你还没安装，先看 [README 的安装与快速开始](https://github.com/I-hope1/mod-tools#安装)。
+## 为什么用它
 
-## 工具索引
+- **改 UI 不用重启**：ReviewElement 可以直接改 `Element` 字段，改完立即生效。
+- **试 API 不用写完整模组**：Tester 里一段 JS 就能访问 Mindustry/Arc 的类。
+- **任务可观察**：Executor 把启动脚本、自定义任务和 UnitSpawn 任务放在同一棵树上，状态和异常一目了然。
+- **热重载**：桌面端 JBR 下由 [Remold](https://github.com/I-hope1/Remold) 负责类/资源热替换与存量实例初始化。
 
-| 工具 | 一句话说明 | 文档 |
-|:--|:--|:--|
-| **Tester** | 游戏内 JS 编辑器/执行器，支持历史、启动脚本与 `$` 快捷 API | [Tester](features/01-tester.md) |
-| **Executor** | 任务树执行器：执行、循环、打断、状态过滤与自定义 JS 任务 | [Executor](features/02-executor.md) |
-| **Selection** | 选择地块/建筑/子弹/单位，并对选中项执行命令 | [Selection](features/03-selection.md) |
-| **UnitSpawn** | 按队伍、坐标、数量生成单位，可提交为 Executor 任务 | [UnitSpawn](features/04-unit-spawn.md) |
-| **ReviewElement** | 审查 UI 元素树、实时改字段、布局体检、复制为 JS 变量 | [ReviewElement](features/05-review-element.md) |
-| **ShowUIList / ShowInfoWindow** | 浏览 UI 资源与任意对象详情 | [UI 工具](features/06-ui-inspector.md) |
-| **Frag / Window / WindowManager** | 窗口切换、最小化、贴边与强制显示 | [窗口](features/07-windows.md) |
-| **ContentList / LogDisplay / Profiler / Pause** | 内容浏览器、游戏内日志、性能分析、实验性暂停 | [其他工具](features/08-misc.md) |
-| **扩展** | Override Scene、HTTP 重定向 | [扩展](features/09-extensions.md) |
-
-## 热重载
-
-从 1.7 开始，热重载由 [Remold](https://github.com/I-hope1/Remold) 提供。桌面端 JBR 下可以监听编译输出目录，把 `.class`/资源变化原位替换进运行中的游戏。
-
-- 启用方式、监视路径与设置项：[热重载](hotswap.md)
-- Remold 的完整原理、限制与状态：[Remold README](https://github.com/I-hope1/Remold#readme)
-
-## 开发与构建
-
-- 仓库结构、JDK 版本、构建/运行/测试命令：[开发与构建](development.md)
-- 构建与 CI 配置：[build.gradle](https://github.com/I-hope1/mod-tools/blob/main/build.gradle)、[.github/workflows](https://github.com/I-hope1/mod-tools/tree/main/.github/workflows)
-
-## 截图
-
-| | |
-|:--:|:--:|
-| ![Tester](screenshots/tester.png) | ![Selection](screenshots/selection.png) |
-| ![ReviewElement](screenshots/review_element.png) | ![UnitSpawn](screenshots/unit_spawn.png) |
-
-> 专题页目前以中文维护；英文入口与概览见 [English index](index_en.md)。
+> 从左侧「快速开始」进入正文；右上角可以切换明暗主题或搜索。

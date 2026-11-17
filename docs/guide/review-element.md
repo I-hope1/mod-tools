@@ -1,10 +1,8 @@
-[← 文档导航](../index.md)
-
 # ReviewElement：审查元素
 
 > 入口：mod-tools 菜单 → **ReviewElement**（或按 `Ctrl` + `Shift` + `C` 直接审查鼠标下的元素） · 平台：桌面端 / Android
 
-![ReviewElement](../screenshots/review_element.png)
+![ReviewElement](/screenshots/review_element.png)
 
 ReviewElement 用来拆 Arc 的 UI 树：查看元素的层级、位置、样式、Cell 属性和字段值，实时改字段看效果，把元素复制成 JS 变量，或者跑一次布局体检。
 
@@ -43,6 +41,6 @@ ReviewElement 用来拆 Arc 的 UI 树：查看元素的层级、位置、样式
 
 ## 自定义 Viewer
 
-ShowInfoWindow 可以按类型注册自定义 Viewer，把不友好的对象渲染成表格/树。文件放在 `%MindustryData%/mod_tools/` 下，具体格式见 [ShowInfoWindow](06-ui-inspector.md)。
+ShowInfoWindow 可以按类型注册自定义 Viewer，把不友好的对象渲染成表格/树。文件放在 `%MindustryData%/mod_tools/` 下，具体格式见 [ShowInfoWindow](/guide/ui-inspector)。
 
-![custom viewers](../screenshots/custom_viewers.png)
+![custom viewers](/screenshots/custom_viewers.png)

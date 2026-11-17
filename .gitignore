@@ -194,3 +194,8 @@ scratch/layoutprobe/layout-agent.jar
 /extract_java.py
 /annotations/annotations.md
 *.java1
+
+# VitePress docs site
+/node_modules/
+docs/.vitepress/dist/
+docs/.vitepress/cache/

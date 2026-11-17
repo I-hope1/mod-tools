@@ -1,5 +1,3 @@
-[← 文档导航](index.md)
-
 # 开发与构建
 
 > 适用：修改 mod-tools 源码、打包发布、跑测试
@@ -47,6 +45,18 @@
 | `docs/` | 本目录 |
 
 本地想跳转 Mindustry/Arc 源码时，可以把上游源码放到 `.sources/mindustry`（仓库已忽略该目录）。
+
+## 文档站
+
+文档站用 [VitePress](https://vitepress.dev/) 构建，源码在 `docs/`，输出到 `docs/.vitepress/dist`：
+
+```bash
+pnpm install
+pnpm docs:dev      # 本地预览
+pnpm docs:build    # 构建静态站点
+```
+
+推送到 `main` 且改动 `docs/**` / `package.json` / `pnpm-lock.yaml` 时，`.github/workflows/docs.yml` 会构建并部署到 GitHub Pages。
 
 ## 测试与 CI
 

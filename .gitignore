@@ -172,7 +172,6 @@ a.txt
 /.workbuddy-ai/
 /.zig-cache/
 /.zed/
-hstest-reports.zip
 # magic-accessor 的反汇编导出
 magic-accessor/magic-js/*poly_disasm.txt
 # IDEA 的模块输出目录

@@ -2,8 +2,24 @@ name: Build project
 
 on: 
   push:
-    paths-ignore:
-      - 'docs/**'
+    # 只有参与构建/打包的路径变化才重建，避免改文档/README 也跑 jar 构建
+    paths:
+      - 'src/**'
+      - 'annotations/**'
+      - 'compiler/**'
+      - 'utils-agent/**'
+      - 'magic-accessor/**'
+      - 'assets/**'
+      - '_libs/**'
+      - 'gradle/**'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'build.gradle'
+      - 'settings.gradle'
+      - 'gradle.properties'
+      - 'mod.hjson'
+      - 'jitpack.yml'
+      - '.github/workflows/deploy.yml'
   workflow_call:
 
 jobs:

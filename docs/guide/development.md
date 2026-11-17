@@ -7,7 +7,7 @@
 - **JDK 25**：`build.gradle` 的 `sourceCompatibility` / `targetCompatibility` 是 25，CI 也用 25。
 - **Android SDK**：只有 `jarAndroid` / `ZCompileAll`（发布包里的 `classes.dex`）需要，配置 `ANDROID_HOME` 或 `local.properties`。
 - **Gradle**：使用仓库自带的 `gradlew`。
-- **Mindustry v7 运行期依赖**：由 `build.gradle` 的 Mindustry/Arc 依赖与 `hstestImplementation` 提供；普通构建和 `playGame` 使用本地 `MdtDataDir`。
+- **Mindustry v7 运行期依赖**：由 `build.gradle` 中的 Mindustry/Arc 依赖提供；普通构建和 `playGame` 使用本地 `MdtDataDir`。
 
 ## 常用命令
 
@@ -18,7 +18,7 @@
 ./gradlew playGameDirect # 直接使用已部署的 jar 启动（Mindustry.jar）
 ./gradlew playAndroid    # 通过 adb 安装到 Android 设备（需要 Android SDK/adb）
 ./gradlew ZCompileAll    # 发布包：桌面 jar + Android classes.dex
-./gradlew jmh -PjmhIncludes=AlignBenchmark -PjmhProfilers=gc  # JMH
+./gradlew jmh -PjmhIncludes=MethodBenchmark -PjmhProfilers=gc  # JMH
 ./gradlew runTest -PmainClass=JSSyntaxTest                   # 跑带 main 的手动入口
 ```
 
@@ -62,10 +62,10 @@ pnpm docs:build    # 构建静态站点
 
 - 根项目 `./gradlew test` 跑 JUnit；`runTest -PmainClass=...` 跑 `test/` 下带 `main` 的手动用例。
 - GitHub Actions：
-  - `.github/workflows/deploy.yml`：推送时构建发布产物；
-  - `.github/workflows/hstest.yml`：JUnit / javac 多版本矩阵；
-  - `.github/workflows/onpublish.yml`：Release 上传；
-  - `.github/workflows/release-upload.yml`、`agent.yml`：发布与 agent 相关流程。
+  - `.github/workflows/deploy.yml`：`src/**`、`assets/**`、`_libs/**`、Gradle 配置等构建相关路径变化时构建发布产物；
+  - `.github/workflows/test.yml`：源码/测试/Gradle 配置变化时在 push 与 PR 上跑 `./gradlew check`；
+  - `.github/workflows/docs.yml`：`docs/**`、`package.json`、锁文件变化时构建并部署 VitePress 到 GitHub Pages；
+  - `.github/workflows/onpublish.yml`：Release 发布后构建并上传附件。
 
 ## 提交前检查
 

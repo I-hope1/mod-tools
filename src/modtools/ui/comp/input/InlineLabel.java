@@ -85,7 +85,11 @@ public class InlineLabel extends NoMarkupLabel {
 		float    currentX = item.x;
 		for (int i = 1; i < colorKeys.size; i++) {
 			final int endIndex = colorKeys.get(i);
-			if (currentIndex == endIndex) {
+			// 自动换行对齐可能一次跳过多个字符（\n、缩进空格等），currentIndex 会越过
+			// 落在被跳过区间里的颜色边界。此时这段边界没有可见字形，直接换色后跳过；
+			// 若只判 ==，currentIndex > endIndex 会跌进下面的 else 分支算出负的 nextIndex，
+			// 把 itemIndex 写成负数，后续 adv.get(-1) 直接抛 AIOOBE。
+			if (currentIndex >= endIndex) {
 				color = colorMap.get(endIndex);
 				continue;
 			}

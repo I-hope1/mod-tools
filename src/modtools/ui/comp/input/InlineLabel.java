@@ -117,9 +117,13 @@ public class InlineLabel extends NoMarkupLabel {
 
 					itemIndex = 0;
 					currentX = item.x;
-					// 对自动换行偏移
-					while (currentIndex < text.length() && (char) item.glyphs.first().id != text.charAt(currentIndex)) {
-						currentIndex++;
+					// 末尾几个 run 可能全是空的（如文本以换行符结束），此时没有 glyph 可用于对齐，
+					// 直接跳过；否则 item.glyphs.first() 会抛 IllegalStateException
+					if (!item.glyphs.isEmpty()) {
+						// 对自动换行偏移
+						while (currentIndex < text.length() && (char) item.glyphs.first().id != text.charAt(currentIndex)) {
+							currentIndex++;
+						}
 					}
 				} else {
 					itemIndex = item.glyphs.size; // ??
@@ -448,8 +452,10 @@ public class InlineLabel extends NoMarkupLabel {
 			lineStart = start + run.glyphs.size;
 		}
 
-		// Handle the case where the region ends at the last character of the text
-		if (startFound && lineStart >= region.y) {
+		// Handle the case where the region ends at the last character of the text.
+		// startX == -1 表示最后一个 run 的末字已在上面按整行回调过（选区延续到文本末尾）：
+		// 此时 currentX 是末字起点，再回调只会画出一个 x = -1 的错位矩形。
+		if (startFound && startX != -1 && lineStart >= region.y) {
 			endX = currentX;
 			if (!Mathf.equal(startX, endX)) {
 				callback.get(Tmp.r1.set(startX, currentY - lineHeight, endX - startX, lineHeight));
@@ -482,9 +488,10 @@ public class InlineLabel extends NoMarkupLabel {
 		clicks.clear();
 		hovers.clear();
 	}
-	/** 可点击区域。初始容量给小：默认容量 51 要 608 字节，而一个标签通常只注册 1~3 个区域 */
+	/** 可点击区域，左闭右开 [x, y)：与 {@link #getRect} 的高亮区间一致（不含下标 y 本身）。
+	 * <p>初始容量给小：默认容量 51 要 608 字节，而一个标签通常只注册 1~3 个区域 */
 	public final ObjectMap<Prov<Point2>, Runnable> clicks = new ObjectMap<>(4);
-	/** 悬停区域，同上 */
+	/** 悬停区域，同上：也是左闭右开 [x, y) */
 	public final ObjectMap<Prov<Point2>, Runnable> hovers = new ObjectMap<>(4);
 	/** {@link #clicks} 命中的回调：遍历完再执行，因为回调里可能重新注册区域。按需分配，通常 0~1 个 */
 	private Seq<Runnable> pendingRuns;
@@ -509,7 +516,7 @@ public class InlineLabel extends NoMarkupLabel {
 						if (point2.equals(UNSET_P)) continue;
 
 						int start = point2.x, end = point2.y;
-						if (start <= cursor && cursor <= end) {
+						if (start <= cursor && cursor < end) {
 							InlineLabel.downChunk.set(point2);
 							event.cancel();
 							return true;
@@ -536,7 +543,7 @@ public class InlineLabel extends NoMarkupLabel {
 					if (point2.equals(UNSET_P)) continue;
 
 					int start = point2.x, end = point2.y;
-					if (start <= cursor && cursor <= end) {
+					if (start <= cursor && cursor < end) {
 						pendingRuns.add(entry.value);
 					}
 				}
@@ -546,6 +553,8 @@ public class InlineLabel extends NoMarkupLabel {
 			public void exit(InputEvent event, float x, float y, int pointer, Element toActor) {
 				super.exit(event, x, y, pointer, toActor);
 				InlineLabel.overChunk.set(UNSET_P);
+				// 直接划出整个 Label 时不会再收到未命中的 mouseMoved，这里必须自己复原手型
+				Core.graphics.cursor(SystemCursor.arrow);
 			}
 			public boolean mouseMoved(InputEvent event, float x, float y) {
 				int cursor = getCursor(x, y);
@@ -556,7 +565,7 @@ public class InlineLabel extends NoMarkupLabel {
 						Point2 point2 = entry.key.get();
 						if (point2.equals(UNSET_P)) continue;
 
-						if (point2.x <= cursor && cursor <= point2.y) {
+						if (point2.x <= cursor && cursor < point2.y) {
 							hit = point2;
 							break;
 						}
@@ -581,7 +590,7 @@ public class InlineLabel extends NoMarkupLabel {
 					if (point2.equals(UNSET_P)) continue;
 
 					int start = point2.x, end = point2.y;
-					if (start <= cursor && cursor <= end) {
+					if (start <= cursor && cursor < end) {
 						InlineLabel.overChunk.set(point2);
 						entry.value.run();
 					}

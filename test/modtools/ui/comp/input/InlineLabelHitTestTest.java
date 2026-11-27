@@ -141,6 +141,30 @@ class InlineLabelHitTestTest {
 		assertEquals("ab", glyphsOf(runs.first()), "colorization must keep every glyph");
 	}
 
+	@Test
+	@DisplayName("a color boundary inside auto-wrap skipped whitespace does not corrupt the split")
+	void colorBoundaryInsideSkippedWhitespace() {
+		// "ab\n  cd": the second line's run starts at 'c' (index 5), so aligning it skips "\n  "
+		// (indices 2..4). Color boundaries at 3 and 4 fall inside that skipped gap.
+		Seq<GlyphRun> runs = buildRuns("ab", "cd");
+
+		IntMap<Color> colors = new IntMap<>();
+		colors.put(0, new Color(Color.white));
+		colors.put(3, new Color(Color.red));
+		colors.put(4, new Color(Color.green));
+		colors.put(6, new Color(Color.blue));
+
+		assertDoesNotThrow(() -> InlineLabel.splitAndColorize(runs, colors, new StringBuilder("ab\n  cd")));
+		assertEquals("abcd", allGlyphsOf(runs), "every glyph must survive the split");
+		assertEquals(3, runs.size, "the visible text must be split at indices 4 and 6");
+		assertTrue(runs.get(0).color.equals(colors.get(0)), "indices 0..1 keep the first color");
+		assertTrue(runs.get(1).color.equals(colors.get(4)), "index 5 starts the color after the skipped gap");
+		assertTrue(runs.get(2).color.equals(colors.get(6)), "index 6 starts the last color");
+		GlyphRun last = runs.get(2);
+		assertEquals(10f, last.x + last.xAdvances.first(), 1e-3f,
+		 "the glyph after the skipped gap must keep its pen position");
+	}
+
 	// region helpers
 
 	/** A label whose layout is overridden with hand-built runs for {@link #TEXT}. */
@@ -245,6 +269,12 @@ class InlineLabelHitTestTest {
 	private static String glyphsOf(GlyphRun run) {
 		StringBuilder builder = new StringBuilder(run.glyphs.size);
 		for (Font.Glyph glyph : run.glyphs) builder.append((char) glyph.id);
+		return builder.toString();
+	}
+
+	private static String allGlyphsOf(Seq<GlyphRun> runs) {
+		StringBuilder builder = new StringBuilder();
+		for (GlyphRun run : runs) builder.append(glyphsOf(run));
 		return builder.toString();
 	}
 
